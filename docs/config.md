@@ -606,8 +606,10 @@ orchestrator; with groups set, `allow`, `deny` and `lock:R` rows are checked for
 orchestrator "command"` shows what the orchestrator would get.
 
 The yes comes only from the owner: foreman's hooks module asks in the orchestrator's chat (Claude Code's own
-question, which the model cannot answer) when the orchestrator runs a command of a group with no live grant, and
-records the answer through `foreman hook mod grant` (hooks_mod.py). The question shows wherever the owner follows
+question, which the model cannot answer) when the orchestrator runs a command of a group with no live grant, or
+makes a call of any other tool that names a place or a command of one (a Read of a group's file, a WebFetch of its
+URL, a Monitor running its command: docs/internals.md, «Any other tool»; the question names the tool and what
+matched), and records the answer through `foreman hook mod grant` (hooks_mod.py). The question shows wherever the owner follows
 that chat: the terminal, the desktop app, an SDK host's chat, and the phone through Remote Control (the phone does not
 notify: open the session to see it). Its options are «Yes, for N min» and «No»; anything but the yes is a no, and
 closing it (Esc, «Chat about this») refuses the call without counting as a no. Where nobody can be asked (`claude

@@ -30,6 +30,12 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   never the rest of the input. Without a Python foreman can use, every tool call is refused while a registry exists
   (before, only Bash and the write tools were). Cost: one more hook process per call of the other tools, about
   40 ms each.
+- The orchestrator is asked for the owner's yes in the chat for any tool, not only Bash: a Read, WebFetch, Monitor
+  or any other call of its main loop that names a place or a command of a `[deny.grants]` group gets the same
+  question a Bash command of the group gets (before, it was refused with no question). The question names the tool
+  and what matched; the answer's record in `approved.jsonl` carries `tool`. In a project with groups, every call of
+  another tool than Bash in a session's main loop costs one more `foreman hook mod grant` process, as a Bash call
+  already did.
 
 ### Config
 
