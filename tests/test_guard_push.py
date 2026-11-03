@@ -77,8 +77,18 @@ class PushCase(ProjectCase):
 
     def setUp(self):
         super().setUp()
+        # a global file of the test's own (its aliases), so the identity of helpers' gitconfig is gone: one for the
+        # fixture commits, as a CI runner has none to guess from
         self.git_env = mock.patch.dict(
-            os.environ, {"GIT_CONFIG_GLOBAL": str(self.tmp / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"}
+            os.environ,
+            {
+                "GIT_CONFIG_GLOBAL": str(self.tmp / "gitconfig"),
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_AUTHOR_NAME": "Foreman Tests",
+                "GIT_AUTHOR_EMAIL": "tests@example.test",
+                "GIT_COMMITTER_NAME": "Foreman Tests",
+                "GIT_COMMITTER_EMAIL": "tests@example.test",
+            },
         )
         self.git_env.start()
         self.addCleanup(self.git_env.stop)

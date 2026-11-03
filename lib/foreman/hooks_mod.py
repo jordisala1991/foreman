@@ -48,7 +48,8 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
   reads as «cannot tell», renew._live): that is how foreman tells whether the session still runs.
   Every answer in an active project also carries "grants": true|false, whether the project has `[deny.grants]`
   groups, read again at each tick as `start` reads it: the module sets its check of main-loop Bash calls (`grant`)
-  from it, so a group added to or taken from ops/foreman.toml while the session runs counts from the next tick on.
+  from it, so a group added to or taken from the project's foreman.toml while the session runs counts from the next
+  tick on.
   With `hold` true (a pass of this session is under way) that is all: {"marked": bool, "grants": bool}. Otherwise
   {"marked": false} outside an active project (no "grants": the module keeps what it had) or when the session is
   not the marked orchestrator (the module does nothing more: the mark is read at every tick, so a relieved session

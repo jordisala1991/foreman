@@ -1,9 +1,11 @@
 # Development tools only: foreman itself is not a pip package (no [project] table) and needs nothing but the
 # standard library at run time. `bin/foreman selftest` reads the pins below and runs the tools through uv
 # (lib/foreman/quality.py); without uv, `pip install --group dev` (pip 25.1+) installs the same versions.
+# coverage 7.17 needs Python 3.11+, so pip leaves it out on older ones (the CI's 3.9); the selftest's checks do not
+# use it, and `--coverage` runs it through uv.
 
 [dependency-groups]
-dev = ["ruff==0.17.3", "pyright[nodejs]==1.1.414", "coverage==7.17.0"]
+dev = ["ruff==0.17.3", "pyright[nodejs]==1.1.414", "coverage==7.17.0; python_version >= '3.11'"]
 
 # Which quality checks the selftest runs (lib/foreman/quality.py): "ruff" (lint), "format" (ruff format --check),
 # "pyright" (types, standard mode on lib/foreman and the developer tool, dev/foreman_dev).

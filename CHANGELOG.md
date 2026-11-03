@@ -13,6 +13,14 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 - First public release of foreman.
 
+### Changed
+
+- The test suite covers a whole loop pass (the hook's tick and `loop.jsonl`) when all the ready work waits for a
+  pending decision: the WIP notice is information only, says which decision each issue waits for, and the pass is
+  skipped; one ready issue that can be launched next to them sends the pass to the model. No behaviour changes: a
+  ready issue whose remaining sub-issues are measurements (`kind = "measure"`) still counts as launchable, since an
+  agent can run them.
+
 ## [0.55.0]
 
 The version the public history starts from; the changes before it were not published.

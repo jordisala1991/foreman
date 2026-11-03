@@ -500,10 +500,12 @@ worktree = "{{worktrees}}/{{repo}}-{{name}}"
         hits = []
         for rel, text in self.published_files(root):
             for n, line in enumerate(text.splitlines(), 1):
-                if pat.search(line):
+                if pat.search(line.replace(self.PUBLIC_REPO, "")):
                     hits.append(f"{rel}:{n}: {line.strip()[:80]}")
         return hits
 
+    # The public repository's own address (README's install line) is the one place the owner's account may appear.
+    PUBLIC_REPO = "github.com/" + "jordi" + "sala1991/foreman"
     PROJECT_PATHS = re.compile(
         "|".join(("local" + "-llm", "ing" + "ot", "cop" + "ets", "Jor" + "di", "/Us" + "ers/")), re.I
     )

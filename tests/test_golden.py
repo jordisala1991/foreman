@@ -18,7 +18,8 @@ from pathlib import Path
 import golden
 from helpers import ROOT
 
-FIXED_DATE = "2020-01-15T10:00:00"  # the commits of the fixture repos (their hashes do not depend on the run)
+# The commits of the fixture repos: a fixed date with its offset, so their hashes depend neither on the run nor on TZ
+FIXED_DATE = "2020-01-15T10:00:00 +0100"
 
 # What the guard of `faro` denies: the foreman product's own list (ops/foreman.toml [deny]), frozen here with
 # tests/golden_guard.tsv, the table run against it.

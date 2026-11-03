@@ -4,9 +4,13 @@ Python 3.11+ has tomllib in the standard library; on 3.9 and 3.10 foreman uses i
 same parser tomllib was made from, MIT, provenance in its files), so foreman needs nothing from pip.
 """
 
-try:
+import sys
+
+# A version test, not try/except ImportError: pyright, set to 3.9, then skips the tomllib branch instead of looking
+# for the module in whichever Python it finds on the machine (found on a newer one, missing on a 3.9).
+if sys.version_info >= (3, 11):
     from tomllib import TOMLDecodeError, loads
-except ImportError:  # Python < 3.11
+else:
     from ._tomli import TOMLDecodeError, loads
 
 __all__ = ("TOMLDecodeError", "loads")
