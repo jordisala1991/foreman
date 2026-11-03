@@ -51,7 +51,7 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
           In any other session of the product (not its subagents) a prompt gets `who_gone` / `who_silent` once per
           case (sessions already open, which SessionStart never reached; from the marked session's heartbeat, which
           foreman's hooks module writes each minute, and the `loop` heartbeat); the pause changes nothing.
-- guard   (PreToolUse on Bash, on Write|Edit|MultiEdit|NotebookEdit and on any other tool; guard.check_call): on
+- guard   (PreToolUse on every tool, with no matcher in hooks/classic.json; guard.check_call): on
           any other tool, the places and commands its call names (guard.check_tool: a path as `cat PATH`, a command
           as in Bash, the pause too; a call that names neither leaves at once). On a write tool first the reserved
           files (guard.check_file, by the call's file_path or notebook_path: no caller record, no pause), then the
