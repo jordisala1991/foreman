@@ -15,7 +15,7 @@ faro: <TMP>/faro (active); state <TMP>/state/faro
   repo app: <TMP>/faro-app merge=squash
   resource widget: this project, foreman lock, guard 2
   rules <TMP>/faro/normas.md: ok
-  guard table <TMP>/faro/guard.tsv: ok (150 deny, 0 lock, 81 allow, 14 orchestrator)
+  guard table <TMP>/faro/guard.tsv: ok (157 deny, 0 lock, 88 allow, 14 orchestrator)
   backlog <TMP>/faro/backlog.json: ok
 
 Next: open a new Claude Code session in <TMP>/faro and type `/foreman:setup` there for a guided first pass (or run `foreman start`).

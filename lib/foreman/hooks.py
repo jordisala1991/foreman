@@ -51,7 +51,9 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
           In any other session of the product (not its subagents) a prompt gets `who_gone` / `who_silent` once per
           case (sessions already open, which SessionStart never reached; from the marked session's heartbeat, which
           foreman's hooks module writes each minute, and the `loop` heartbeat); the pause changes nothing.
-- guard   (PreToolUse on Bash, and on Write|Edit|MultiEdit|NotebookEdit): on a write tool only the reserved files
+- guard   (PreToolUse on Bash, on Write|Edit|MultiEdit|NotebookEdit and on any other tool; guard.check_call): on
+          any other tool, the places and commands its call names (guard.check_tool: a path as `cat PATH`, a command
+          as in Bash, the pause too; a call that names neither leaves at once). On a write tool only the reserved files
           (guard.check_file, by the call's file_path or notebook_path: no caller record, no pause); a refusal of an
           agent or another session goes to <state>/approved.jsonl with the file (notice orchestrator_only_denied),
           every one to <state>/guard.jsonl. The ctx carries the event's tool_use_id: a main-thread write of Claude
@@ -496,29 +498,16 @@ def hook_loop(project: Project, ev: Event) -> None:
 
 
 def hook_guard(project: Project, ev: Event) -> int:
-    path = guard.tool_path(ev.get("tool_name"), ev.get("tool_input"))
-    if path is not None:
-        return guard_file(project, ev, path)
-    if ev.get("tool_name") not in (None, "Bash"):
-        return 0
+    tool = ev.get("tool_name")
+    if tool not in (None, "Bash"):
+        return guard_tool(project, ev, tool)
     cmd = (ev.get("tool_input") or {}).get("command", "")
     if cmd:
         identity.record_call(project, ev)  # who runs its foreman calls (never fails)
-    ctx: guard.Ctx = {
-        "session": ev.get("session_id"),
-        "agent": ev.get("agent_id") or None,
-        "cwd": ev.get("cwd"),
-        "tool_use_id": ev.get("tool_use_id") or None,
-    }
+    ctx = _guard_ctx(ev)
     verdict = guard.check(project, cmd, ctx) if cmd else None
     if verdict:
-        if verdict[0] == "orchestrator" or (verdict[0] == "file" and verdict[1].why):  # a reserved file: as Write
-            approved.decided(project, ev, verdict[1], allowed=False)
-        from . import permissions  # only on a refusal: the allowed path stays as it was
-
-        permissions.log_refusal(project, ev, verdict)
-        print(guard.message(project, verdict), file=sys.stderr)
-        return 2
+        return _refuse(project, ev, verdict)
     held = pause.guard_check(project, cmd) if cmd else None
     if held:
         print(pause.guard_message(project, held), file=sys.stderr)
@@ -528,26 +517,48 @@ def hook_guard(project: Project, ev: Event) -> int:
     return 0
 
 
-def guard_file(project: Project, ev: Event, path: str) -> int:
-    """The guard on a Write/Edit/MultiEdit/NotebookEdit call (guard.check_file): exit 2 with the reason when it
-    writes a reserved file; the refusal of an agent or another session goes to approved.jsonl (the orchestrator's
-    notice), every refusal to guard.jsonl."""
-    ctx: guard.Ctx = {
+def _guard_ctx(ev: Event) -> guard.Ctx:
+    return {
         "session": ev.get("session_id"),
         "agent": ev.get("agent_id") or None,
         "cwd": ev.get("cwd"),
         "tool_use_id": ev.get("tool_use_id") or None,
     }
-    verdict = guard.check_file(project, path, ctx)
-    if not verdict:
-        return 0
-    from . import permissions
 
-    if verdict[0] == "file" and verdict[1].why:
+
+def _refuse(project: Project, ev: Event, verdict: guard.Verdict) -> int:
+    """Exit 2 with the reason; the refusal of a [deny.grants] rule or a reserved file for an agent or another session
+    goes to approved.jsonl (the orchestrator's notice), every refusal to guard.jsonl."""
+    if verdict[0] == "orchestrator" or (verdict[0] == "file" and verdict[1].why):
         approved.decided(project, ev, verdict[1], allowed=False)
+    from . import permissions  # only on a refusal: the allowed path stays as it was
+
     permissions.log_refusal(project, ev, verdict)
     print(guard.message(project, verdict), file=sys.stderr)
     return 2
+
+
+def guard_tool(project: Project, ev: Event, tool: str) -> int:
+    """The guard on a call of any tool but Bash (guard.check_call): a FILE_TOOLS tool by the file it writes
+    (check_file), any other by the places and commands it names (check_tool); a command it runs also waits while the
+    product is paused, as in Bash. A call that names nothing leaves before anything is built."""
+    ti = ev.get("tool_input")
+    path = guard.tool_path(tool, ti if isinstance(ti, dict) else None)
+    places, commands = ([], []) if path is not None else guard.tool_texts(tool, ti)
+    if path is None and not places and not commands:
+        return 0
+    ctx = _guard_ctx(ev)
+    verdict = guard.check_call(project, tool, ti, ctx)
+    if verdict:
+        return _refuse(project, ev, verdict)
+    for cmd in commands:
+        held = pause.guard_check(project, cmd)
+        if held:
+            print(pause.guard_message(project, held), file=sys.stderr)
+            return 2
+    if "passed" in ctx:
+        approved.decided(project, ev, ctx["passed"], allowed=True)
+    return 0
 
 
 def hook_pause_agents(project: Project, ev: Event) -> None:

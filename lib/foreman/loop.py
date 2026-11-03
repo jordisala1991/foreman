@@ -1117,8 +1117,9 @@ def orchestrator_only_notices(project: Project, mark: bool = True) -> list[Notic
         if r.get("file"):  # a reserved file (guard.check_file)
             tried.append(f"{who} tried to write `{str(r['file'])[-80:]}` at {at}")
             continue
-        cmd = " ".join(str(r.get("command") or "").split())
-        tried.append(f"{who} tried `{cmd[:80]}` at {at}")
+        cmd = " ".join(str(r.get("command") or r.get("place") or "").split())
+        tool = f" with {r['tool']}" if r.get("tool") else ""  # another tool than Bash (guard.check_tool)
+        tried.append(f"{who} tried `{cmd[:80]}`{tool} at {at}")
     files = any(r.get("file") for r in new)
     return [
         notice(

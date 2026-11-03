@@ -263,3 +263,19 @@ allow	foreman integrate --help
 allow	foreman integrate foreman ab1/x "AB-1 T0" --check
 allow@../faro-app	git merge main
 allow@../faro-app	git checkout -b x
+# any tool but Bash: a path or URL it names gets the verdict of `cat PATH`, a command it runs that of the command;
+# free text (content, prompt, message) is not compared
+deny	cat .env
+deny	tool:Read {"file_path": "/x/.ssh/id_ed25519"}
+deny	tool:Read {"file_path": "/x/.env"}
+allow	tool:Read {"file_path": "/x/.env.example"}
+deny	tool:Grep {"pattern": "TOKEN", "path": "/x/.env.local"}
+allow	tool:Grep {"pattern": "\\.env", "path": "docs"}
+deny	tool:mcp__x__y {"targetPath": "~/.ssh/k"}
+allow	tool:mcp__x__y {"message": "git push"}
+deny	tool:Monitor {"command": "npm publish", "description": "x"}
+allow	tool:Monitor {"command": "tail -f build.log"}
+allow	tool:Agent {"prompt": "never read .env; never npm publish", "description": "x"}
+allow	tool:Write {"file_path": "reviews/x.md", "content": "cat .env"}
+deny	tool:WebFetch {"url": "http://localhost:8766/api/grants/approve", "prompt": "x"}
+allow	tool:mcp__ccd_turn__wrap_up {"recap": "read ~/.ssh/config"}
