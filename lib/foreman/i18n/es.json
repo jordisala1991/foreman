@@ -67,6 +67,7 @@
   "guard_file_how_git": "Lo que un agente deje ahí correría con el poder de quien use git después en ese repo (el orquestador cuando integra, o {owner}), sin aparecer en ningún cambio revisado. Para una orden, usa `git -c CLAVE=VALOR …`; si tu tarea necesita un hook o un ajuste del repo, dilo en tu informe (lo pone el orquestador o {owner}).",
   "approved_note_grant": " (grupo «{group}» permitido por {owner} a las {at}, {via})",
   "grant_question": "{orchestrator}, el orquestador de {project}, quiere ejecutar una orden del grupo «{group}»: `{command}`. ¿Le dejas ejecutar las órdenes de «{group}» durante {minutes} minutos?",
+  "grant_question_tool": "{orchestrator}, el orquestador de {project}, quiere usar {tool} con `{command}`, que cubre el grupo «{group}». ¿Le dejas ejecutar las órdenes de «{group}» y llegar a lo que nombran durante {minutes} minutos?",
   "grant_yes": "Sí, {minutes} min",
   "grant_no": "No",
   "grant_header": "foreman",

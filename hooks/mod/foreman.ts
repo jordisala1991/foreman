@@ -15,8 +15,8 @@
 // - What the module keeps between events (notices, the version notice, the reviewer's reminder, a pass to retry, the
 //   grants it heard the owner give) lives in memory only: a /reload-plugins or a relief loses it, and the next pass
 //   says what is still pending (a grant lost is asked again).
-// - The one hook that waits on the owner: `tool.call` holds a main-loop Bash call of a [deny.grants] group, or a
-//   main-loop call that writes Claude Code's settings or the registry, while $.ui.ask waits (one question per group
+// - The one hook that waits on the owner: `tool.call` holds a main-loop call of a [deny.grants] group (a Bash
+//   command, or a call of any other tool by the places and commands it names), or a main-loop call that writes Claude Code's settings or the registry, while $.ui.ask waits (one question per group
 //   or class of file, at most `ask_ms`); every other call goes straight on.
 
 import type {
@@ -162,8 +162,8 @@ let interactive = false
 let epoch = 0
 // The ops whose last call failed, each with its status line, the newest last: the line shows the newest.
 const failures = new Map<string, string>()
-// Whether the project has [deny.grants] groups (start's `grants`, then each tick's): only then is a main-loop Bash
-// call checked (besides `permissions apply … --opens`, opensPermissions). A tick refreshes it, so a group added to the project's toml while the session runs counts.
+// Whether the project has [deny.grants] groups (start's `grants`, then each tick's): only then is a main-loop call
+// checked (Bash, or any other tool but the module's own question) (besides `permissions apply … --opens`, opensPermissions). A tick refreshes it, so a group added to the project's toml while the session runs counts.
 let hasGrants = false
 // The grants this module heard the owner give in this conversation, by group: the `until` Python answered. A live
 // grant of grants.json lets a call on only when it is one of these, so a file written by hand is asked again.
@@ -668,8 +668,9 @@ async function answered($: EngineInterface, group: string, input: Record<string,
   }
 }
 
-// A main-loop Bash call in a project with [deny.grants] groups: `hook mod grant` checks it and, when the one thing it
-// lacks is the owner's yes, the owner is asked with $.ui.ask, the call waiting (the engine sets no time limit; the
+// A main-loop call in a project with [deny.grants] groups: `hook mod grant` checks it (a Bash call by its
+// `command`; any other tool by its `input`, the event without its envelope, which Python reads for the places and
+// commands it names, as the classic guard does) and, when the one thing it lacks is the owner's yes, the owner is asked with $.ui.ask, the call waiting (the engine sets no time limit; the
 // module's is `ask_ms`). Resolves to the refusal for the call, or null when it may go on: then the classic guard
 // still decides, so a failure here leaves it to the guard, which refuses a group's command with no grant.
 // The same for a main-loop call in any session of the project that writes Claude Code's settings or the registry
@@ -695,6 +696,17 @@ function filePath(e: Record<string, unknown>): string {
   return typeof path === 'string' ? path : ''
 }
 
+// The keys of a tool.call event that are not the tool's input (the tool's arguments ride beside them).
+const NOT_INPUT: readonly string[] = ['tool', 'tool_use_id', 'agentId', 'requestMeta']
+
+// The tool's input of a call: the event without its envelope.
+function toolInput(e: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(e).filter(([k]) => !NOT_INPUT.includes(k)))
+}
+
+// The tool $.ui.ask's question runs as: the module's own question, never checked.
+const ASK_TOOL = 'AskUserQuestion'
+
 // A file the owner may let one main-loop call write (Claude Code's settings, the registry: guard.ASK_KINDS), as
 // text: a loose test that only decides whether to ask Python; a path that reaches one otherwise is not asked about,
 // and the classic guard refuses it.
@@ -702,7 +714,7 @@ function namesAskable(text: string): boolean {
   return text.includes('.claude') || text.includes('.config/foreman') || text.includes('projects.toml')
 }
 
-async function grantFor($: EngineInterface, what: Record<string, string>, toolUseId: string): Promise<string | null> {
+async function grantFor($: EngineInterface, what: Record<string, unknown>, toolUseId: string): Promise<string | null> {
   const session = await $.session.id()
   const call = { cwd, session, ...what, tool_use_id: toolUseId }
   let q: GrantCheck
@@ -807,16 +819,18 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     if (mode === 'active' && e.agentId === undefined) {
-      let what: Record<string, string> | null = null
+      let what: Record<string, unknown> | null = null
       if (e.tool === 'Bash') {
         const command = String(e.command)
         if (hasGrants || opensPermissions(command) || namesAskable(command)) {
           what = { command }
         }
-      } else if (FILE_TOOLS.includes(e.tool)) {
-        const path = filePath(e as Record<string, unknown>)
+      } else if (e.tool !== ASK_TOOL) {
+        const path = FILE_TOOLS.includes(e.tool) ? filePath(e as Record<string, unknown>) : ''
         if (path && namesAskable(path)) {
           what = { tool: e.tool, path }
+        } else if (hasGrants) {
+          what = { tool: e.tool, input: toolInput(e as Record<string, unknown>) }
         }
       }
       const deny = what === null ? null : await grantFor($, what, e.tool_use_id)

@@ -21,6 +21,7 @@ type Case = {
     command?: string
     tool?: string
     file_path?: string
+    input?: Record<string, unknown>
     tool_use_id: string
     surfaces: string[]
     agentId?: string
@@ -210,7 +211,9 @@ for (const c of (cases as Case[]).filter(c => c.op === 'grant')) {
     const call = $.tool.call({
       ...(c.engine.tool === undefined
         ? { tool: 'Bash', command: c.engine.command ?? '' }
-        : { tool: c.engine.tool, file_path: c.engine.file_path ?? '' }),
+        : c.engine.input !== undefined
+          ? { tool: c.engine.tool, ...c.engine.input }
+          : { tool: c.engine.tool, file_path: c.engine.file_path ?? '' }),
       tool_use_id: c.engine.tool_use_id,
       ...(c.engine.agentId === undefined ? {} : { agentId: c.engine.agentId }),
     })
@@ -408,14 +411,35 @@ test('a check that works again clears the failure line', async ($, on) => {
   expect(w.statuses[1]).toBeUndefined()
 })
 
-test('only main-loop Bash calls are checked', async ($, on) => {
+test('only main-loop calls are checked, of any tool', async ($, on) => {
   const w = engine(on, ['{}\n'], [], [])
   await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
-  await $.tool.call({ tool: 'Read', file_path: '/p/x' })
   await $.tool.call({ tool: 'Bash', command: DEPLOY, agentId: 'a1' })
+  await $.tool.call({ tool: 'Read', file_path: '/srv/prod-api/config.json', agentId: 'a1' })
   expect(w.grants).toEqual([])
   await $.tool.call({ tool: 'Bash', command: 'ls' })
-  expect(phases(w.grants)).toEqual(['check'])
+  await $.tool.call({ tool: 'Read', file_path: '/p/x', limit: 5, tool_use_id: 't2' })
+  expect(phases(w.grants)).toEqual(['check', 'check'])
+  // any other tool goes with its arguments, the event's envelope left out
+  expect(w.grants[1]).toEqual({
+    phase: 'check',
+    cwd: '/p',
+    session: 'S-orch',
+    tool: 'Read',
+    input: { file_path: '/p/x', limit: 5 },
+    tool_use_id: 't2',
+  })
+})
+
+test("a Read the owner says yes to goes on; the module's own question is never checked", async ($, on) => {
+  const w = engine(on, [question()], [GRANTED], [{ answer: 'Yes, for 30 min' }])
+  await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
+  const read = { tool: 'Read', file_path: '/srv/prod-api/config.json', tool_use_id: 't1' } as const
+  expect((await $.tool.call(read)).result).toBe('ok')
+  expect(w.questions.length).toBe(1)
+  expect(phases(w.grants)).toEqual(['check', 'yes'])
+  expect(w.grants[1]!.input).toEqual({ file_path: '/srv/prod-api/config.json' })
+  expect(w.grants.some(g => g.tool === 'AskUserQuestion')).toBe(false)
 })
 
 test('a group added or taken away while the session runs counts from the next tick', async ($, on) => {
