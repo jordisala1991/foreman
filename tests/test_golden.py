@@ -21,14 +21,16 @@ from helpers import ROOT
 # The commits of the fixture repos: a fixed date with its offset, so their hashes depend neither on the run nor on TZ
 FIXED_DATE = "2020-01-15T10:00:00 +0100"
 
-# What the guard of `faro` denies: the foreman product's own list (ops/foreman.toml [deny]), frozen here with
-# tests/golden_guard.tsv, the table run against it.
+# What the guard of `faro` denies: the foreman product's own list (ops/foreman.toml [deny]) and its rules for reading
+# secrets (there a [deny.grants] group, here for everyone), frozen here with tests/golden_guard.tsv, the table run
+# against it.
 FARO_DENY = r"""
 [deny]
 patterns = ["git remote add", "gh repo create", "(^|\\s)git push", "twine upload", "(^|\\s)(uv|poetry) publish",
             "npm publish", "launchctl (load|bootstrap|enable|kickstart|bootout|unload|remove|disable)",
             "panel service (install|uninstall)", "(^|\\s)(cp|mv|ln|rm|tee)\\s.*Library/LaunchAgents",
-            "(^|\\s)rm -rf? .*\\.local/state/foreman", "(^|\\s)rm -rf? .*\\.config/foreman"]
+            "(^|\\s)rm -rf? .*\\.local/state/foreman", "(^|\\s)rm -rf? .*\\.config/foreman",
+            "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "\\.ssh/"]
 message = "Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina."
 """
 
@@ -56,6 +58,7 @@ production_types = ["dev"]
 
 [loop]
 prompt = "Bucle del orquestador de faro"
+disk_low_gb = 0  # the machine's free disk never decides a golden output (the disk_low notice)
 
 [repos.app]
 path = "{tmp}/faro-app"
@@ -102,6 +105,7 @@ ready_target = 1
 
 [loop]
 prompt = "harbor orchestrator loop"
+disk_low_gb = 0  # the machine's free disk never decides a golden output (the disk_low notice)
 
 [repos.api]
 path = "{tmp}/harbor-api"
@@ -675,6 +679,10 @@ class GoldenGuardHook(GoldenCase):
                 for k, v in subs.items():
                     path = path.replace(k, str(v))
                 tool, ti = "Write", {"file_path": path, "content": "x"}
+            elif cmd.startswith("tool:"):  # a call of that tool with that input (guard.row_tool)
+                from foreman import guard
+
+                tool, ti = guard.row_tool(cmd)
             else:  # a Bash command, with the same placeholders (guard.row_text)
                 text = cmd
                 for k, v in subs.items():

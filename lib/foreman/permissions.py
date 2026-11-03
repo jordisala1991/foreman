@@ -48,11 +48,12 @@ candidate's `[check] guard_table` says (--table with none there: exit 2). It pri
 copies as one more candidate, with the new base.
 
 The refusal log (log_refusal, from the guard hook): every refusal of the guard is a line of <state>/guard.jsonl,
-{at, kind: builtin|deny|orchestrator|lock|file|error, rule, group?, why?, resource?, file?, where, who:
+{at, kind: builtin|deny|orchestrator|lock|file|error, rule, group?, why?, resource?, file?, tool?, where, who:
 agent|orchestrator|other}, and never the command's text (some rules match commands that carry passwords). rule is the
 pattern (a built-in one for builtin, the resource's matching prefix for lock, file:<class> for a reserved file a
 Write/Edit call named, with its path in file and never what it would write), group the [deny.grants] group of an
-orchestrator refusal, why its guard reason, where the Hit's (the lock's: command); who is agent with an agent_id,
+orchestrator refusal, why its guard reason, where the Hit's (the lock's: command; tool for a place another tool
+names), tool the tool's name for any tool but Bash; who is agent with an agent_id,
 orchestrator for the marked session, else other. A failure to write it changes nothing; past LOG_BYTES it keeps its
 last LOG_LINES lines.
 `foreman permissions --refused [--since 7d] [--json]` counts it by rule; the view adds each rule's count of the last
@@ -805,6 +806,8 @@ def refusal(project: Project, ev: Event, verdict: guard.Verdict) -> dict[str, An
     """The log line of a refusal (module doc): what refused it and who, without the command's text."""
     kind, detail = verdict
     rec: dict[str, Any] = {"at": util.now().strftime("%Y-%m-%dT%H:%M:%S"), "kind": kind}
+    if ev.get("tool_name") not in (None, "Bash"):
+        rec["tool"] = ev.get("tool_name")  # a Write's file, a Read's path or a Monitor's command: never its text
     if kind == "lock":
         name, seg = detail
         res = project.resources.get(name) or {}

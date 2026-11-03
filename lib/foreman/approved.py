@@ -12,7 +12,8 @@ answer (yes | no | dismissed | timeout | unavailable), surfaces, session, orches
 (on a grant), cooldown_until (after a no), pending (the request kept for the panel), refused (session | process: a
 yes that came where it grants nothing)}; `foreman permissions grants off` writes {verdict: revoke, group, session}. A
 reserved file a Write/Edit call of an agent or another session tried (guard.check_file) is a deny line too, with pattern
-`file:<class>` and file (its path) instead of command. So who
+`file:<class>` and file (its path) instead of command. A call of another tool (guard.check_tool) adds tool (its
+name) and has place (the path or URL that matched) or command (the one it runs), never the rest of its input. So who
 approved what, and when, is foreman's own record of the owner's yes, never a text the orchestrator writes. The log
 holds no exit code: the guard runs before the command. Past TRIM_BYTES the log keeps its last LOG_DAYS days. The
 loop pass reads the refusals of agents, of other sessions and of other processes of a mark with one, commands and
@@ -73,6 +74,8 @@ def decided(project: Project, ev: Event, hit: Hit, allowed: bool) -> None:
 
     try:
         cmd = str((ev.get("tool_input") or {}).get("command") or "")
+        if hit.tool:  # another tool than Bash (guard.check_tool): the place or command it named, never its text
+            cmd = hit.call
         aid = ev.get("agent_id") or None
         who = (orchestrator.current(project) or {}).get("name") or None
         _append(
@@ -86,7 +89,14 @@ def decided(project: Project, ev: Event, hit: Hit, allowed: bool) -> None:
                 "agent": identity.agent_name(project.state, aid) if aid else None,
                 "orchestrator": who,
                 "pattern": str(hit),
-                **({"file": hit.path} if hit.where == "file" else {"command": cmd[:COMMAND_CHARS]}),
+                **({"tool": hit.tool} if hit.tool else {}),
+                **(
+                    {"file": hit.path}
+                    if hit.where == "file"
+                    else {"place": cmd[:COMMAND_CHARS]}
+                    if hit.where == "tool"
+                    else {"command": cmd[:COMMAND_CHARS]}
+                ),
                 "tool_use_id": ev.get("tool_use_id"),
                 **({"marked_pid": orchestrator.record(project).get("pid")} if hit.why == "process" else {}),
                 **({"group": hit.group} if hit.why == "grant" else {}),
@@ -95,7 +105,8 @@ def decided(project: Project, ev: Event, hit: Hit, allowed: bool) -> None:
         )
         if allowed:
             t = i18n.for_project(project)
-            line = t["approved_note"].format(who=who or "orchestrator", command=" ".join(cmd.split())[:COMMAND_CHARS])
+            what = f"{hit.tool} {cmd}" if hit.tool else cmd
+            line = t["approved_note"].format(who=who or "orchestrator", command=" ".join(what.split())[:COMMAND_CHARS])
             for g in hit.grant or []:
                 line += t["approved_note_grant"].format(
                     group=g.get("group"), owner=project.owner, at=str(g.get("at") or "")[11:16], via=g.get("via")
