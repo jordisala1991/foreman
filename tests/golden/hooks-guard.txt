@@ -1046,6 +1046,72 @@ $ foreman hook guard  # row 244: allow
 $ foreman hook guard  # row 245: allow
 < {"cwd": "<TMP>/faro-app", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git checkout -b x"}, "tool_name": "Bash", "tool_use_id": "toolu_245"}
 [exit 0]
+$ foreman hook guard  # row 246: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat .env"}, "tool_name": "Bash", "tool_use_id": "toolu_246"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|[\s/'"=])\.env(?!\.(example|sample|template|dist)\b)(\.[A-Za-z]+)?(['"\s;|&)]|$)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `cat .env`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 247: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"file_path": "/x/.ssh/id_ed25519"}, "tool_name": "Read", "tool_use_id": "toolu_247"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «\.ssh/» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `Read /x/.ssh/id_ed25519` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 248: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"file_path": "/x/.env"}, "tool_name": "Read", "tool_use_id": "toolu_248"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|[\s/'"=])\.env(?!\.(example|sample|template|dist)\b)(\.[A-Za-z]+)?(['"\s;|&)]|$)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `Read /x/.env` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 249: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"file_path": "/x/.env.example"}, "tool_name": "Read", "tool_use_id": "toolu_249"}
+[exit 0]
+$ foreman hook guard  # row 250: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"path": "/x/.env.local", "pattern": "TOKEN"}, "tool_name": "Grep", "tool_use_id": "toolu_250"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|[\s/'"=])\.env(?!\.(example|sample|template|dist)\b)(\.[A-Za-z]+)?(['"\s;|&)]|$)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `Grep /x/.env.local` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 251: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"path": "docs", "pattern": "\\.env"}, "tool_name": "Grep", "tool_use_id": "toolu_251"}
+[exit 0]
+$ foreman hook guard  # row 252: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"targetPath": "~/.ssh/k"}, "tool_name": "mcp__x__y", "tool_use_id": "toolu_252"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «\.ssh/» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `mcp__x__y ~/.ssh/k` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 253: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"message": "git push"}, "tool_name": "mcp__x__y", "tool_use_id": "toolu_253"}
+[exit 0]
+$ foreman hook guard  # row 254: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "npm publish", "description": "x"}, "tool_name": "Monitor", "tool_use_id": "toolu_254"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `npm publish`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 255: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "tail -f build.log"}, "tool_name": "Monitor", "tool_use_id": "toolu_255"}
+[exit 0]
+$ foreman hook guard  # row 256: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"description": "x", "prompt": "never read .env; never npm publish"}, "tool_name": "Agent", "tool_use_id": "toolu_256"}
+[exit 0]
+$ foreman hook guard  # row 257: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "cat .env", "file_path": "reviews/x.md"}, "tool_name": "Write", "tool_use_id": "toolu_257"}
+[exit 0]
+$ foreman hook guard  # row 258: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "A=1", "file_path": "/x/.env"}, "tool_name": "Write", "tool_use_id": "toolu_258"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|[\s/'"=])\.env(?!\.(example|sample|template|dist)\b)(\.[A-Za-z]+)?(['"\s;|&)]|$)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `Write /x/.env` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 259: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"file_path": "/x/.ssh/config", "new_string": "b", "old_string": "a"}, "tool_name": "Edit", "tool_use_id": "toolu_259"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «\.ssh/» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `Edit /x/.ssh/config` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 260: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"prompt": "x", "url": "http://localhost:8766/api/grants/approve"}, "tool_name": "WebFetch", "tool_use_id": "toolu_260"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: una petición pendiente de un grupo la aprueba el dueño a mano en el panel de foreman; ninguna llamada de Bash puede llegar a esa aprobación (tampoco las del orquestador). Casó en el sitio `WebFetch http://localhost:8766/api/grants/approve` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`).
+$ foreman hook guard  # row 261: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"recap": "read ~/.ssh/config"}, "tool_name": "mcp__ccd_turn__wrap_up", "tool_use_id": "toolu_261"}
+[exit 0]
 $ foreman hook guard
 < {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "tool_input": {"file_path": "x"}, "tool_name": "Read"}
 [exit 0]
@@ -1069,7 +1135,7 @@ $ foreman hook guard
 Blocked by the foreman guard: «(^|\s)git push» is on the list of things never done without Sam (harbor). Ask Sam first (foreman backlog decision add, or the inbox). It matched in the command `git push`. If it is only text, write it with the Write or Edit tool, or with `cat > FILE <<'EOF'`. Never without Sam (rules.md).
 $ foreman --project faro guard --table tests/golden_guard.tsv
 [exit 0]
-guard table <TMP>/faro/guard.tsv: ok (150 deny, 0 lock, 81 allow, 14 orchestrator)
+guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
 
 ######## state root: files under <TMP>/state
 === callers.json
@@ -1134,12 +1200,12 @@ guard table <TMP>/faro/guard.tsv: ok (150 deny, 0 lock, 81 allow, 14 orchestrato
 {"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?hook['\"]?\\s+['\"]?mod\\b", "where": "command", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?permissions['\"]?\\s(.*\\s)?['\"]?apply['\"]?(\\s|$)", "where": "command", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?permissions['\"]?\\s(.*\\s)?['\"]?apply['\"]?(\\s|$)", "where": "command", "who": "other"}
-{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
-{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/grants.json", "why": "session", "who": "other"}
-{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/callers.json", "why": "session", "who": "other"}
-{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:registry", "where": "file", "file": "<TMP>/projects.toml", "why": "session", "who": "other"}
-{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:claude", "where": "file", "file": ".claude/settings.local.json", "why": "session", "who": "other"}
-{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/board.md", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "tool": "Write", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "tool": "Write", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/grants.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "tool": "Write", "rule": "file:state", "where": "file", "file": "<TMP>/state/callers.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "tool": "Write", "rule": "file:registry", "where": "file", "file": "<TMP>/projects.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "tool": "Write", "rule": "file:claude", "where": "file", "file": ".claude/settings.local.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "tool": "Write", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/board.md", "why": "session", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:claude", "where": "file", "file": ".claude/settings.local.json", "why": "session", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
@@ -1270,6 +1336,15 @@ guard table <TMP>/faro/guard.tsv: ok (150 deny, 0 lock, 81 allow, 14 orchestrato
 {"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "unknown", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "orchestrator", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?\\s(?=(.*\\s)?['\"]?--opens['\"]?(\\s|$))", "where": "command", "group": "permissions", "why": "session", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "orchestrator", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?\\s(?=(.*\\s)?['\"]?--opens['\"]?(\\s|$))", "where": "command", "group": "permissions", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Read", "rule": "\\.ssh/", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Read", "rule": "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Grep", "rule": "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "mcp__x__y", "rule": "\\.ssh/", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Monitor", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Write", "rule": "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Edit", "rule": "\\.ssh/", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "builtin", "tool": "WebFetch", "rule": "api/grants/approve", "where": "tool", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?(?![^;&|\\n]*\\s(?P<q>['\"]?)(--help|-h|--check)(?P=q)(\\s|$))(\\s|$)", "where": "command", "who": "agent"}
 {"at": "<TODAY>T<TIME>", "kind": "lock", "rule": "make up", "resource": "widget", "where": "command", "who": "other"}
 === faro/guard.jsonl.lock

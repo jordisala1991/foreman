@@ -1,4 +1,4 @@
-"""The command guard (Claude Code PreToolUse hook on Bash): what a session of a registered project may not run.
+"""The command guard (Claude Code PreToolUse hook): what a session of a registered project may not run or reach.
 
 Forked from an earlier in-house version (a fixed list of build and engine commands). Two lists, both from
 foreman.toml:
@@ -129,6 +129,20 @@ For the resource prefixes quoted strings are dropped (a note that mentions `make
 command is split at && || ; | newlines and $(; leading VAR=value, env, time, nice, exec, command, sudo and the
 time-limit wrappers are skipped. Exit 2 = rejected, with the reason on stderr for the agent.
 
+Any other tool (check_tool, the same hook on every tool but Bash; check_call dispatches; a FILE_TOOLS call after
+check_file, so writing a secret gets the verdict of reading it, as `echo x > .env` does in Bash): one rule,
+with no list of tools, judges what the call names. tool_texts walks its input (TOOL_DEPTH levels, TOOL_STRINGS
+strings): a string under a field whose name ends, split at `_` and camelCase, in one of PLACE_WORDS (file_path,
+notebook_path, path, url, cwd, root, files, glob, targetPath…), or inside a list or map under one, is a place; a
+string under `command` or `cmd` is a command. A command gets the verdict check() gives it in Bash (the pause of the
+hook too); a place, the one check() gives `cat PLACE`, and for an absolute path under $HOME also `cat ~/…` (Read
+names absolute paths, rules are often written with `~`), never a lock (a place runs nothing). The first refusal wins;
+a place's Hit has where=tool and part `<tool> <place>`, and every Hit of such a call its tool and call. Every other
+string (content, old_string, prompt, message, query, pattern…) is free text and is not compared, as the text of a
+note is not. Reading a reserved file stays free. A failure of check() on a place compares its raw text (_whole);
+any other failure lets the call through: a failure of foreman never stops a Read. Not seen: a tool that runs code
+under another key (script, code), a glob's `pattern`.
+
 The reserved files (check_file, the same hook on Write, Edit, MultiEdit and NotebookEdit): the files no tool call
 writes, the same for every product and computed at each call (reserved()): config, the live foreman.toml of every
 project of the registry; table, the live guard table of each ([check] guard_table); state, the whole state root and
@@ -182,6 +196,7 @@ asked and never passes. config and table change only through `foreman permission
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -304,6 +319,8 @@ class Hit(str):
     path: str = ""  # where = file: the file as the call names it
     name: str = ""  # where = file: the project the file belongs to (config, table, state), else ""
     bash: bool = False  # where = file: a Bash command writes it (part: the command around its name)
+    tool: str = ""  # a call of another tool than Bash (check_tool): its name
+    call: str = ""  # with tool: the place or the command of that call that matched (or passed)
 
     def __new__(cls, pattern: str, where: str = "command", text: str = "") -> Hit:
         hit = super().__new__(cls, pattern)
@@ -1614,6 +1631,153 @@ def tool_path(tool: str | None, tool_input: dict[str, Any] | None) -> str | None
     return str(ti.get("file_path") or ti.get("notebook_path") or "")
 
 
+# ---------- any other tool: the places and commands its call names (module doc) ----------
+
+# The last word of a key (split at `_` and camelCase) that makes its strings places: what the call reads or reaches.
+PLACE_WORDS = frozenset(
+    {"path", "paths", "file", "files", "dir", "directory", "folder", "cwd", "root", "url", "urls", "uri", "glob"}
+)
+COMMAND_KEYS = frozenset({"command", "cmd"})  # a key whose string a tool runs as a command
+TOOL_DEPTH = 4  # how deep tool_texts walks the call's input
+TOOL_STRINGS = 64  # the strings it looks at, at most (an Agent prompt or a browser batch stays cheap)
+KEY_WORD = re.compile(r"[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])")
+IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")  # a key that names a field (a map's own keys, like paths, do not)
+
+
+def _key_kind(key: str) -> str:
+    """place, command or "" (free text) for a field name of a tool's input."""
+    if key.lower() in COMMAND_KEYS:
+        return "command"
+    found = KEY_WORD.findall(key)
+    return "place" if found and found[-1].lower() in PLACE_WORDS else ""
+
+
+def tool_texts(tool: str | None, tool_input: Any) -> tuple[list[str], list[str]]:
+    """(places, commands) a call of a tool names (module doc): a string under a field whose name ends in one of
+    PLACE_WORDS, or inside one (a list or a map under it), is a place; a string under `command` or `cmd` is a command
+    (not for Bash, whose command check() reads). Every other string is free text and is not compared. Walks at most
+    TOOL_DEPTH levels and TOOL_STRINGS strings."""
+    places: list[str] = []
+    commands: list[str] = []
+    seen = [0]
+
+    def walk(value: Any, kind: str, inside: bool, depth: int) -> None:
+        if seen[0] >= TOOL_STRINGS or depth > TOOL_DEPTH:
+            return
+        if isinstance(value, str):
+            seen[0] += 1
+            if kind == "command" and tool != "Bash":
+                commands.append(value)
+            elif (kind == "place" or inside) and value.strip():
+                places.append(value)
+            return
+        if isinstance(value, dict):
+            items: Iterable[tuple[Any, Any]] = value.items()
+        elif isinstance(value, list):
+            items = ((None, v) for v in value)
+        else:
+            return
+        for key, v in items:
+            k = kind
+            if isinstance(key, str) and IDENT.match(key):
+                k = _key_kind(key)
+            walk(v, k, inside or kind == "place", depth + 1)
+
+    walk(tool_input if isinstance(tool_input, (dict, list)) else {}, "", False, 0)
+    return places, commands
+
+
+def _home_form(path: str) -> str | None:
+    """`~/…` for an absolute path under $HOME (a rule is often written with `~`), else None."""
+    home = os.path.expanduser("~").rstrip("/")
+    if not home or home == "~" or not path.startswith(home + "/"):
+        return None
+    rest = path[len(home) + 1 :]
+    return "~/" + (shlex.quote(rest) if rest else "")
+
+
+def check_tool(project: Project, tool: str | None, tool_input: Any, ctx: Ctx | None = None) -> Verdict | None:
+    """The verdict of a call of any tool but Bash by what it names (tool_texts): each command as check() would give
+    it in Bash, each place as check() gives `cat PLACE` (and `cat ~/…` for a path under $HOME), the first refusal
+    winning; a place's Hit says where=tool, part `<tool> <place>`, tool and call. A place never gets a lock verdict
+    (it runs nothing). A failure of check() on a place compares its raw text with the deny lists (_whole), so a
+    failure of foreman never refuses a call that names nothing they match. Never raises."""
+    try:
+        places, commands = tool_texts(tool, tool_input)
+        before = (ctx or {}).get("passed")
+        for cmd in commands:
+            v = check(project, cmd, ctx)
+            if v is not None:
+                if isinstance(v[1], Hit):
+                    v[1].tool, v[1].call = str(tool), cmd
+                return v
+            _mark_passed(ctx, before, tool, cmd)
+        for place in places:
+            texts = ["cat " + shlex.quote(place)]
+            home = _home_form(place)
+            if home:
+                texts.append("cat " + home)
+            for text in texts:
+                v = check(project, text, ctx)
+                if v is None or v[0] == "lock":
+                    _mark_passed(ctx, before, tool, place, where="tool")
+                    continue
+                if not isinstance(v[1], Hit):  # check() itself failed
+                    v = _raw_place(project, place)
+                    if v is None:
+                        continue
+                hit = v[1]
+                hit.where, hit.part, hit.tool, hit.call = "tool", _excerpt(hit, f"{tool} {place}"), str(tool), place
+                return v
+        return None
+    except Exception:  # noqa: BLE001 (a failure of foreman never stops a call of another tool)
+        return None
+
+
+def _mark_passed(ctx: Ctx | None, before: Any, tool: str | None, call: str, where: str = "") -> None:
+    """Names the tool and the place or command in a group's hit that check() let through for this call."""
+    hit = (ctx or {}).get("passed")
+    if hit is None or hit is before or hit.tool:
+        return
+    hit.tool, hit.call = str(tool), call
+    if where:
+        hit.where, hit.part = where, _excerpt(hit, f"{tool} {call}")
+
+
+def _raw_place(project: Project, place: str) -> Verdict | None:
+    """A place's raw text against the deny lists, when check() failed on it: ("deny", Hit where=whole) or None."""
+    try:
+        from . import grants
+
+        pats = [*BUILTIN, *project.section("deny").get("patterns", []), *grants.patterns(project, internal=False)]
+        hit = _whole(pats, place)
+        return ("deny", hit) if hit else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_call(
+    project: Project,
+    tool: str | None,
+    tool_input: Any,
+    ctx: Ctx | None = None,
+    projects: Sequence[Project] | None = None,
+) -> Verdict | None:
+    """The guard's verdict on a call of any tool (the hook and a table's `tool:` row): Bash by its command
+    (check()); a FILE_TOOLS tool by the file it writes (check_file), then as any other tool, so writing a file gets
+    the verdict of reading it; any other tool by what it names (check_tool)."""
+    ti = tool_input if isinstance(tool_input, dict) else {}
+    if tool in (None, "Bash"):
+        cmd = ti.get("command")
+        return check(project, cmd, ctx) if isinstance(cmd, str) and cmd else None
+    path = tool_path(tool, ti)
+    if path is not None:
+        v = check_file(project, path, ctx, projects)
+        if v is not None:
+            return v
+    return check_tool(project, tool, tool_input, ctx)
+
+
 def row_path(project: Project, row: str, cwd: str) -> str:
     """The file of a table row `file:PATH`: {state}, {state_root} and {registry} replaced, `~` expanded, joined to
     cwd (the row's @DIR or the home) when relative."""
@@ -1638,6 +1802,8 @@ def _how(where: str) -> str:
     """The i18n key of how to avoid a refusal that matched in where."""
     if where in ("resolved", "unknown"):
         return "guard_how_resolved"
+    if where == "tool":
+        return "guard_how_tool"
     return "guard_how_code" if where in CODE_WHERE else "guard_how_text"
 
 
@@ -1719,9 +1885,10 @@ def message(project: Project, verdict: Verdict) -> str:
 def parse_table(text: str, base: PathLike | None = None) -> list[tuple[int, str, str, str | None]]:
     """A guard table: one `EXPECT<TAB>COMMAND` per line, EXPECT = allow | deny | orchestrator | lock:RESOURCE, or
     `EXPECT@DIR` for a row checked as if it ran in DIR (`~` expanded; a relative DIR is joined to `base`, the table's
-    folder); `#` lines and blank lines are skipped; `\\n` in COMMAND is a newline (heredocs). COMMAND `file:PATH` is
-    a write of that file with the Write or Edit tool (table_verdicts). Returns [(line number, expect, command, DIR or
-    None)]."""
+    folder); `#` lines and blank lines are skipped; `\\n` in COMMAND is a newline (heredocs), but in a tool row.
+    COMMAND `file:PATH` is a write of that file with the Write or Edit tool, and `tool:NAME JSON` a call of tool NAME
+    with that input (a JSON object, with its own escapes; row_tool); both table_verdicts. Returns [(line number,
+    expect, command, DIR or None)]."""
     rows: list[tuple[int, str, str, str | None]] = []
     for n, line in enumerate(text.splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
@@ -1738,8 +1905,27 @@ def parse_table(text: str, base: PathLike | None = None) -> list[tuple[int, str,
             if base is not None and not os.path.isabs(where):
                 where = os.path.join(os.fspath(base), where)
             where = os.path.normpath(where)
-        rows.append((n, expect, cmd.replace("\\n", "\n"), where))
+        if cmd.startswith("tool:"):
+            try:
+                row_tool(cmd)
+            except ValueError as e:
+                raise ValueError(f"line {n}: {e}") from None
+        else:
+            cmd = cmd.replace("\\n", "\n")  # a tool row's JSON keeps its own escapes
+        rows.append((n, expect, cmd, where))
     return rows
+
+
+def row_tool(row: str) -> tuple[str, dict[str, Any]]:
+    """(tool name, input) of a table row `tool:NAME JSON`; ValueError when it is not one."""
+    name, _, text = row[len("tool:") :].strip().partition(" ")
+    try:
+        ti = json.loads(text) if text.strip() else {}
+    except ValueError:
+        raise ValueError(f"expected 'tool:NAME {{JSON object}}', got {row[:60]!r}") from None
+    if not name or not isinstance(ti, dict):
+        raise ValueError(f"expected 'tool:NAME {{JSON object}}', got {row[:60]!r}")
+    return name, ti
 
 
 def _got(v: Verdict | None) -> str:
@@ -1758,13 +1944,14 @@ def table_verdicts(project: Project, path: Path, base: PathLike | None = None) -
     tells them apart). Each row runs in its @DIR (a relative one joined to `base`, else to the table's folder: a copy
     of a table read from git keeps the live one's), else in the project's home (so a `git push` is compared as git
     would do it from there, gitpush.py). A row `file:PATH` is a write of a Write/Edit call to that file (row_path,
-    check_file), in both roles. Raises OSError or ValueError (parse_table)."""
+    check_file), and a row `tool:NAME JSON` a call of that tool (row_tool, check_call; its JSON text with the same
+    placeholders), both in both roles. Raises OSError or ValueError (parse_table)."""
     from . import config, grants
 
     rows = parse_table(path.read_text(), base if base is not None else path.resolve().parent)
     groups = bool(grants.patterns(project, internal=False))
     projects: list[Project] | None = []
-    if any(r[2].startswith("file:") for r in rows):
+    if any(r[2].startswith(("file:", "tool:")) for r in rows):
         try:
             projects = config.registered_projects()  # once for every file row
         except config.ConfigError:
@@ -1776,6 +1963,12 @@ def table_verdicts(project: Project, path: Path, base: PathLike | None = None) -
             f = row_path(project, cmd, cwd)
             agent = _got(check_file(project, f, as_role("agent", cwd), projects))
             orch = _got(check_file(project, f, as_role("orchestrator", cwd), projects))
+            out.append((n, expect, cmd, folder, agent, orch))
+            continue
+        if cmd.startswith("tool:"):  # a call of any tool (check_call): always both roles
+            name, ti = row_tool(row_text(project, cmd))
+            agent = _got(check_call(project, name, ti, as_role("agent", cwd), projects))
+            orch = _got(check_call(project, name, ti, as_role("orchestrator", cwd), projects))
             out.append((n, expect, cmd, folder, agent, orch))
             continue
         text = row_text(project, cmd)
