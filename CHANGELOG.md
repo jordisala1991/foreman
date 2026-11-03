@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-11-03
+
 ### Added
 
 - Machine settings: a `[machine]` section in the registry (`~/.config/foreman/projects.toml`), shaped like a
@@ -54,6 +56,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Upgrade notes
 
+- The guard now runs before every tool call, so a `[deny]` pattern or grants group that names a domain, a path or
+  a script name also refuses reading that file or fetching that page with any tool, as `cat` of it in Bash already
+  did. Run `foreman check` and look at your rules that name documentation domains or scripts you read but do not
+  run; narrow them to the command that runs them.
 - Nothing to do: without a `[machine]` in the registry every product loads as before (`foreman check` adds «inherited
   from the machine (registry [machine]): 0 settings, 0 deny rules», `foreman permissions` «Rules from the
   machine (the registry's [machine.deny]): 0»). An older foreman ignores `[machine]` with
