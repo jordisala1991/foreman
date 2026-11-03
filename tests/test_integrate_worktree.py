@@ -880,8 +880,10 @@ class LocalIntegrateTest(ProjectCase):
         self.assertEqual(self.ci_runs(), [str(wt), str(self.repo)])
         self.assertFalse(wt.exists())
         self.assertEqual(self.b.issue(self.b.load(), "AB-1")["status"], "done")
-        note = next((self.home / "notes").glob("*.md")).read_text()
-        self.assertIn("home commits merged in first (2)", note)
+        # the integration's note, not the x.md the test committed (glob's order is the file system's)
+        notes = [f for f in sorted((self.home / "notes").glob("*.md")) if f.name != "x.md"]
+        self.assertEqual(len(notes), 1, notes)
+        self.assertIn("home commits merged in first (2)", notes[0].read_text())
 
     def test_main_moved_in_the_home_and_the_branch_too(self):
         wt = self.worktree(files={"feature.txt": "x\n", "ops/tests/t.tsv": "a\tb\n"})
