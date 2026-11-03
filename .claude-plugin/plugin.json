@@ -1,0 +1,17 @@
+{
+  "name": "foreman",
+  "version": "0.55.0",
+  "description": "Common core of an orchestrator method for Claude Code: backlog with acceptance criteria, notes, inbox, per-resource locks, worktrees, PR integration and the hooks that keep an orchestrator session on track. Inert outside projects registered in ~/.config/foreman/projects.toml.",
+  "author": {
+    "name": "Jordi Sala Morales"
+  },
+  "license": "MIT",
+  "hooks": "./hooks/classic.json",
+  "keywords": [
+    "orchestration",
+    "backlog",
+    "locks",
+    "worktrees",
+    "hooks"
+  ]
+}

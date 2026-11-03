@@ -1,0 +1,33 @@
+######## the session ends in an active project
+$ world
+- The session's heartbeat, as its module's ticks write it.
+$ foreman hook mod end
+< {"cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"ended": true}
+
+######## its state: files under <TMP>/worlds/the-session-ends-in-an-active-project
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>",
+ "ended": "<TODAY>T<TIME>"
+}
+
+######## a session with no heartbeat ends
+$ foreman hook mod end
+< {"cwd": "<TMP>/harbor", "session": "S-never"}
+[exit 0]
+{"ended": false}
+
+######## a session outside any project ends
+$ foreman hook mod end
+< {"cwd": "<TMP>/elsewhere", "session": "S-elsewhere"}
+[exit 0]
+{"ended": false}
+
+######## state root: files under <TMP>/state
+(missing)

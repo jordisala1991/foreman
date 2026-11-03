@@ -1,0 +1,746 @@
+######## harbor: writes
+$ foreman init <TMP>/harbor --name harbor
+[exit 0]
+foreman init <TMP>/harbor
+  foreman.toml: already there
+  rules.md: already there (kept as it is)
+  notes/: made
+  reviews/: already there
+  backlog.json: made, with its pages
+  <TMP>/projects.toml: harbor: already there
+
+harbor: <TMP>/harbor (active); state <TMP>/state/harbor
+  config schema 18 (this foreman knows 18): ok
+  claude code 2.1.300 (foreman needs >= 2.1.299): ok
+  repo api: <TMP>/harbor-api merge=squash
+  resource widget: this project, foreman lock, guard 1
+  rules <TMP>/harbor/rules.md: ok
+  backlog <TMP>/harbor/backlog.json: ok
+
+Next: open a new Claude Code session in <TMP>/harbor and type `/foreman:setup` there for a guided first pass (or run `foreman start`).
+$ foreman --project harbor backlog project add A1 --title "Berth booking" --intro "Book a berth from the phone." --status "in progress" --priority high
+[exit 0]
+$ foreman --project harbor backlog project add A2 --title "Tide tables" --intro "Show the tides."
+[exit 0]
+$ foreman --project harbor backlog add A1 --title "Booking form" --criterion "a booking takes under a minute" --plan reviews/2020-01-10-plan-HB-1.md
+[exit 2]
+--- stderr
+foreman backlog: no issue id matching ^HB-\d+$ to learn the prefix from: give the first one with --id
+$ foreman --project harbor backlog add A1 --id HB-1 --title "Booking form" --criterion "a booking takes under a minute" --plan reviews/2020-01-10-plan-HB-1.md
+[exit 0]
+issue HB-1
+$ foreman --project harbor backlog add A1 --title Payment --criterion "a card payment goes through" --status ready
+[exit 0]
+issue HB-2
+$ foreman --project harbor backlog add A2 --title "Tide feed" --criterion "the feed updates hourly"
+[exit 0]
+issue HB-3
+$ foreman --project harbor backlog add - --title "Tidy the notes" --criterion "notes tidy" --status triage
+[exit 0]
+issue HB-4
+$ foreman --project harbor backlog add A1 --title "missing criterion"
+[exit 0]
+issue HB-5
+$ foreman --project harbor backlog relate HB-2 blocked-by HB-1
+[exit 0]
+$ foreman --project harbor backlog relate HB-3 related HB-2
+[exit 0]
+$ foreman --project harbor backlog edit HB-1 --priority high --assignee ana
+[exit 0]
+$ foreman --project harbor backlog sub HB-1 T1 --title Form --status "in progress" --agent ag1 --branch a1/t1
+[exit 0]
+$ foreman --project harbor backlog sub HB-1 T2 --title "Form tests"
+[exit 0]
+$ foreman --project harbor backlog status HB-1 "in progress"
+[exit 0]
+$ foreman --project harbor backlog edit HB-1 --append "A note appended to the detail."
+[exit 0]
+$ foreman --project harbor backlog block HB-3 "waits for the booking form"
+[exit 0]
+$ foreman --project harbor backlog integrated HB-1 T1 --dry-run --commit abc1234 --branch a1/t1 --report reviews/2020-01-12-hb1-t1.md --result "a booking takes 40 s"
+[exit 0]
+would do: HB-1 T1 ✓ abc1234, report reviews/2020-01-12-hb1-t1.md
+would do: warning: result not saved: HB-1 is not closed by this integration (left: T2)
+$ foreman --project harbor backlog integrated HB-1 T1 --commit abc1234 --branch a1/t1 --report reviews/2020-01-12-hb1-t1.md --result "a booking takes 40 s"
+[exit 0]
+HB-1 T1 ✓ abc1234, report reviews/2020-01-12-hb1-t1.md
+warning: result not saved: HB-1 is not closed by this integration (left: T2)
+$ foreman --project harbor backlog integrated HB-1 T2 --commit def5678 --result "a booking takes 40 s" --verdict met
+[exit 0]
+HB-1 T2 ✓ def5678
+HB-1 done (met): a booking takes 40 s
+HB-2 unblocked (relation: HB-1 done)
+$ foreman --project harbor backlog show HB-1
+[exit 0]
+HB-1 · Booking form
+project A1 · status done · closed <TODAY>
+priority high · assignee ana · blocks HB-2
+Acceptance criterion: a booking takes under a minute
+Result (met): a booking takes 40 s
+relations: blocks HB-2
+plan: reviews/2020-01-10-plan-HB-1.md
+  T1 Form ✓ abc1234 agent ag1, branch `a1/t1` [report](../reviews/2020-01-12-hb1-t1.md)
+  T2 Form tests ✓ def5678
+detail: A note appended to the detail.
+$ foreman --project harbor backlog show A1
+[exit 0]
+## A1 · Berth booking  (1/3 done)
+in progress · priority high
+
+Book a berth from the phone.
+
+  HB-1    done         Booking form
+  HB-2    ready        Payment
+  HB-5    backlog      missing criterion
+$ foreman --project harbor backlog archive HB-1
+[exit 0]
+$ foreman --project harbor backlog decision add --issue HB-2 --title "Do we take cash at the berth?" --text "Some sailors ask to pay cash; taking it means a till and a daily count." --option "a: card only" --option "b: card and cash" --recommend "a, no till to count" --recommend-option "a: card only" --date 2020-01-17
+[exit 0]
+decision HB-2 J1
+$ foreman --project harbor backlog decision add --title "Close HB-2 with T1 of loop.py?" --text "HB-2 T1 asks for it." --option a --option b --date 2020-01-17
+[exit 2]
+--- stderr
+foreman backlog: decision not recorded: it names things the owner would have to ask about (foreman plain):
+  title: «HB-2» (an issue id with nothing beside it: say what it is, the id in brackets); «T1» (a sub-issue, decision or question id alone: say what it is, the id in brackets); «loop.py» (a file name: say what the file is, or leave it out)
+  text: «HB-2 T1» (a sub-issue, decision or question id alone: say what it is, the id in brackets)
+Rewrite it for the owner as docs/owner.md says (`foreman docs owner`): --title the question in one plain sentence; --text what it is about, why it comes now and what each option changes; --recommend the option and why. Or add --as-is to record it as it is (marked "as_is": true, a warning in foreman check).
+$ foreman --project harbor backlog decision add --title "Close HB-2 with T1 of loop.py?" --text "HB-2 T1 asks for it." --option a --option b --date 2020-01-18 --as-is
+[exit 0]
+decision DEC J1
+$ foreman --project harbor backlog decision resolve "HB-2 J1" --answer "a: card only"
+[exit 0]
+$ foreman --project harbor backlog page decisions --heading Decisions
+[exit 2]
+--- stderr
+foreman backlog: page decisions has no heading
+$ foreman --project harbor backlog page backlog --heading Decisions
+[exit 0]
+$ foreman --project harbor backlog move HB-4 --project A2
+[exit 0]
+$ foreman --project harbor backlog move HB-3 --before HB-2
+[exit 0]
+$ foreman --project harbor backlog unblock HB-3
+[exit 0]
+$ foreman --project harbor backlog status HB-99 done
+[exit 2]
+--- stderr
+foreman backlog: HB-99 is not an issue of the backlog (archived issues are read-only)
+$ foreman --project harbor backlog status HB-4 nonsense
+[exit 2]
+--- stderr
+foreman backlog: bad status 'nonsense': triage, backlog, refining, ready, in progress, done, canceled, duplicate
+$ foreman --project harbor backlog render --check
+[exit 0]
+
+######## harbor: reads
+$ foreman --project harbor backlog show
+[exit 0]
+## A1 · Berth booking
+  HB-3    backlog             Tide feed
+  HB-2    ready               Payment
+  HB-5    backlog             missing criterion
+## A2 · Tide tables
+  HB-4    triage              Tidy the notes
+## Pending decisions (Sam)
+  DEC J1  2020-01-18  Close HB-2 with T1 of loop.py?
+$ foreman --project harbor backlog show --json
+[exit 0]
+## A1 · Berth booking
+  HB-3    backlog             Tide feed
+  HB-2    ready               Payment
+  HB-5    backlog             missing criterion
+## A2 · Tide tables
+  HB-4    triage              Tidy the notes
+## Pending decisions (Sam)
+  DEC J1  2020-01-18  Close HB-2 with T1 of loop.py?
+$ foreman --project harbor backlog render
+[exit 0]
+$ foreman --project harbor backlog show A1
+[exit 0]
+## A1 · Berth booking  (0/3 done)
+in progress · priority high
+
+Book a berth from the phone.
+
+  HB-3    backlog      Tide feed
+  HB-2    ready        Payment
+  HB-5    backlog      missing criterion
+$ foreman --project harbor backlog show A1 --json
+[exit 0]
+{
+  "id": "A1",
+  "title": "Berth booking",
+  "intro": "Book a berth from the phone.",
+  "status": "in progress",
+  "priority": "high",
+  "issues": [
+    {
+      "id": "HB-3",
+      "title": "Tide feed",
+      "status": "backlog",
+      "blocked": "",
+      "plan": [],
+      "subs": [],
+      "detail": "",
+      "acceptance": {
+        "criterion": "the feed updates hourly"
+      },
+      "relations": {
+        "related": [
+          "HB-2"
+        ]
+      }
+    },
+    {
+      "id": "HB-2",
+      "title": "Payment",
+      "status": "ready",
+      "blocked": "",
+      "plan": [],
+      "subs": [],
+      "detail": "",
+      "acceptance": {
+        "criterion": "a card payment goes through"
+      }
+    },
+    {
+      "id": "HB-5",
+      "title": "missing criterion",
+      "status": "backlog",
+      "blocked": "",
+      "plan": [],
+      "subs": [],
+      "detail": ""
+    }
+  ]
+}
+$ foreman --project harbor backlog show A2
+[exit 0]
+## A2 · Tide tables  (0/0 done)
+
+Show the tides.
+
+  HB-4    triage       Tidy the notes
+$ foreman --project harbor backlog show A2 --json
+[exit 0]
+{
+  "id": "A2",
+  "title": "Tide tables",
+  "intro": "Show the tides.",
+  "issues": [
+    {
+      "id": "HB-4",
+      "title": "Tidy the notes",
+      "status": "triage",
+      "blocked": "",
+      "plan": [],
+      "subs": [],
+      "detail": "",
+      "acceptance": {
+        "criterion": "notes tidy"
+      }
+    }
+  ]
+}
+$ foreman --project harbor backlog show "DEC J1"
+[exit 0]
+- **DEC J1, Close HB-2 with T1 of loop.py?** (2020-01-18): HB-2 T1 asks for it. Options: a · b
+$ foreman --project harbor backlog show "DEC J1" --json
+[exit 0]
+{
+  "id": "DEC J1",
+  "title": "Close HB-2 with T1 of loop.py?",
+  "date": "2020-01-18",
+  "text": "HB-2 T1 asks for it.",
+  "options": [
+    "a",
+    "b"
+  ],
+  "recommendation": "",
+  "as_is": true
+}
+$ foreman --project harbor backlog show "HB-2 J1"
+[exit 0]
+- **HB-2 J1, Do we take cash at the berth?** (2020-01-17): Some sailors ask to pay cash; taking it means a till and a daily count. Recommendation: a, no till to count Options: a: card only · b: card and cash
+resolved <TODAY>: «a: card only»
+$ foreman --project harbor backlog show "HB-2 J1" --json
+[exit 0]
+{
+  "id": "HB-2 J1",
+  "title": "Do we take cash at the berth?",
+  "date": "2020-01-17",
+  "text": "Some sailors ask to pay cash; taking it means a till and a daily count.",
+  "options": [
+    "a: card only",
+    "b: card and cash"
+  ],
+  "recommendation": "a, no till to count",
+  "recommended": "a: card only",
+  "resolved": "<TODAY>",
+  "answer": "a: card only"
+}
+$ foreman --project harbor backlog show HB-3
+[exit 0]
+HB-3 · Tide feed
+project A1 · status backlog
+related to HB-2
+Acceptance criterion: the feed updates hourly
+relations: related HB-2
+$ foreman --project harbor backlog show HB-3 --json
+[exit 0]
+{
+  "id": "HB-3",
+  "title": "Tide feed",
+  "status": "backlog",
+  "blocked": "",
+  "plan": [],
+  "subs": [],
+  "detail": "",
+  "acceptance": {
+    "criterion": "the feed updates hourly"
+  },
+  "relations": {
+    "related": [
+      "HB-2"
+    ]
+  }
+}
+$ foreman --project harbor backlog get HB-3 subs
+[exit 0]
+
+$ foreman --project harbor backlog get HB-3 plan
+[exit 0]
+
+$ foreman --project harbor backlog get HB-3 status
+[exit 0]
+backlog
+$ foreman --project harbor backlog get HB-3 blocked
+[exit 0]
+
+$ foreman --project harbor backlog get HB-3 detail
+[exit 0]
+
+$ foreman --project harbor backlog get HB-3 result
+[exit 0]
+
+$ foreman --project harbor backlog show HB-2
+[exit 0]
+HB-2 · Payment
+project A1 · status ready
+Acceptance criterion: a card payment goes through
+relations: blocked by HB-1 · related HB-3
+$ foreman --project harbor backlog show HB-2 --json
+[exit 0]
+{
+  "id": "HB-2",
+  "title": "Payment",
+  "status": "ready",
+  "blocked": "",
+  "plan": [],
+  "subs": [],
+  "detail": "",
+  "acceptance": {
+    "criterion": "a card payment goes through"
+  }
+}
+$ foreman --project harbor backlog get HB-2 subs
+[exit 0]
+
+$ foreman --project harbor backlog get HB-2 plan
+[exit 0]
+
+$ foreman --project harbor backlog get HB-2 status
+[exit 0]
+ready
+$ foreman --project harbor backlog get HB-2 blocked
+[exit 0]
+
+$ foreman --project harbor backlog get HB-2 detail
+[exit 0]
+
+$ foreman --project harbor backlog get HB-2 result
+[exit 0]
+
+$ foreman --project harbor backlog show HB-5
+[exit 0]
+HB-5 · missing criterion
+project A1 · status backlog
+$ foreman --project harbor backlog show HB-5 --json
+[exit 0]
+{
+  "id": "HB-5",
+  "title": "missing criterion",
+  "status": "backlog",
+  "blocked": "",
+  "plan": [],
+  "subs": [],
+  "detail": ""
+}
+$ foreman --project harbor backlog get HB-5 subs
+[exit 0]
+
+$ foreman --project harbor backlog get HB-5 plan
+[exit 0]
+
+$ foreman --project harbor backlog get HB-5 status
+[exit 0]
+backlog
+$ foreman --project harbor backlog get HB-5 blocked
+[exit 0]
+
+$ foreman --project harbor backlog get HB-5 detail
+[exit 0]
+
+$ foreman --project harbor backlog get HB-5 result
+[exit 0]
+
+$ foreman --project harbor backlog show HB-4
+[exit 0]
+HB-4 · Tidy the notes
+project A2 · status triage
+Acceptance criterion: notes tidy
+$ foreman --project harbor backlog show HB-4 --json
+[exit 0]
+{
+  "id": "HB-4",
+  "title": "Tidy the notes",
+  "status": "triage",
+  "blocked": "",
+  "plan": [],
+  "subs": [],
+  "detail": "",
+  "acceptance": {
+    "criterion": "notes tidy"
+  }
+}
+$ foreman --project harbor backlog get HB-4 subs
+[exit 0]
+
+$ foreman --project harbor backlog get HB-4 plan
+[exit 0]
+
+$ foreman --project harbor backlog get HB-4 status
+[exit 0]
+triage
+$ foreman --project harbor backlog get HB-4 blocked
+[exit 0]
+
+$ foreman --project harbor backlog get HB-4 detail
+[exit 0]
+
+$ foreman --project harbor backlog get HB-4 result
+[exit 0]
+
+$ foreman --project harbor backlog show HB-1
+[exit 0]
+HB-1 · Booking form
+project A1 · status done · closed <TODAY>
+priority high · assignee ana · blocks HB-2
+Acceptance criterion: a booking takes under a minute
+Result (met): a booking takes 40 s
+relations: blocks HB-2
+plan: reviews/2020-01-10-plan-HB-1.md
+  T1 Form ✓ abc1234 agent ag1, branch `a1/t1` [report](../reviews/2020-01-12-hb1-t1.md)
+  T2 Form tests ✓ def5678
+detail: A note appended to the detail.
+$ foreman --project harbor backlog show HB-1 --json
+[exit 0]
+{
+  "id": "HB-1",
+  "title": "Booking form",
+  "status": "done",
+  "blocked": "",
+  "plan": [
+    {
+      "label": "plan",
+      "path": "reviews/2020-01-10-plan-HB-1.md",
+      "note": ""
+    }
+  ],
+  "subs": [
+    {
+      "id": "T1",
+      "title": "Form",
+      "status": "done",
+      "commit": "abc1234",
+      "agent": "ag1",
+      "branch": "a1/t1",
+      "report": "reviews/2020-01-12-hb1-t1.md"
+    },
+    {
+      "id": "T2",
+      "title": "Form tests",
+      "status": "done",
+      "commit": "def5678"
+    }
+  ],
+  "detail": "A note appended to the detail.",
+  "acceptance": {
+    "criterion": "a booking takes under a minute",
+    "verdict": "met"
+  },
+  "result": "a booking takes 40 s",
+  "closed": "<TODAY>",
+  "priority": "high",
+  "relations": {
+    "blocks": [
+      "HB-2"
+    ]
+  },
+  "assignee": "ana"
+}
+$ foreman --project harbor backlog get HB-1 subs
+[exit 0]
+T1 Form ✓ abc1234 agent ag1, branch `a1/t1` [report](../reviews/2020-01-12-hb1-t1.md) · T2 Form tests ✓ def5678
+$ foreman --project harbor backlog get HB-1 plan
+[exit 0]
+reviews/2020-01-10-plan-HB-1.md
+$ foreman --project harbor backlog get HB-1 status
+[exit 0]
+done
+$ foreman --project harbor backlog get HB-1 blocked
+[exit 0]
+
+$ foreman --project harbor backlog get HB-1 detail
+[exit 0]
+A note appended to the detail.
+$ foreman --project harbor backlog get HB-1 result
+[exit 0]
+a booking takes 40 s
+$ foreman --project harbor backlog show NOPE-1
+[exit 2]
+--- stderr
+foreman backlog: NOPE-1 is not an issue of the backlog
+$ foreman --project harbor backlog get HB-2 nofield
+[exit 2]
+--- stderr
+foreman backlog: unknown field nofield
+
+######## harbor home: files under <TMP>/harbor
+=== .backlog.lock
+
+=== backlog.json
+{
+  "schema_version": 5,
+  "updated": "<TODAY>",
+  "pages": {
+    "backlog": {
+      "front_matter": [],
+      "heading": "Decisions",
+      "intro": [
+        ""
+      ]
+    },
+    "archive": {
+      "front_matter": [],
+      "heading": "Backlog archive",
+      "intro": []
+    },
+    "decisions": {
+      "intro": [
+        "Questions only Sam can answer; each one names its options."
+      ]
+    }
+  },
+  "projects": [
+    {
+      "id": "A1",
+      "title": "Berth booking",
+      "intro": "Book a berth from the phone.",
+      "status": "in progress",
+      "priority": "high",
+      "issues": [
+        {
+          "id": "HB-3",
+          "title": "Tide feed",
+          "status": "backlog",
+          "blocked": "",
+          "plan": [],
+          "subs": [],
+          "detail": "",
+          "acceptance": {
+            "criterion": "the feed updates hourly"
+          },
+          "relations": {
+            "related": [
+              "HB-2"
+            ]
+          }
+        },
+        {
+          "id": "HB-2",
+          "title": "Payment",
+          "status": "ready",
+          "blocked": "",
+          "plan": [],
+          "subs": [],
+          "detail": "",
+          "acceptance": {
+            "criterion": "a card payment goes through"
+          }
+        },
+        {
+          "id": "HB-5",
+          "title": "missing criterion",
+          "status": "backlog",
+          "blocked": "",
+          "plan": [],
+          "subs": [],
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "title": "Tide tables",
+      "intro": "Show the tides.",
+      "issues": [
+        {
+          "id": "HB-4",
+          "title": "Tidy the notes",
+          "status": "triage",
+          "blocked": "",
+          "plan": [],
+          "subs": [],
+          "detail": "",
+          "acceptance": {
+            "criterion": "notes tidy"
+          }
+        }
+      ]
+    }
+  ],
+  "issues": [],
+  "archive": [
+    {
+      "project": "A1",
+      "issues": [
+        {
+          "id": "HB-1",
+          "title": "Booking form",
+          "status": "done",
+          "blocked": "",
+          "plan": [
+            {
+              "label": "plan",
+              "path": "reviews/2020-01-10-plan-HB-1.md",
+              "note": ""
+            }
+          ],
+          "subs": [
+            {
+              "id": "T1",
+              "title": "Form",
+              "status": "done",
+              "commit": "abc1234",
+              "agent": "ag1",
+              "branch": "a1/t1",
+              "report": "reviews/2020-01-12-hb1-t1.md"
+            },
+            {
+              "id": "T2",
+              "title": "Form tests",
+              "status": "done",
+              "commit": "def5678"
+            }
+          ],
+          "detail": "A note appended to the detail.",
+          "acceptance": {
+            "criterion": "a booking takes under a minute",
+            "verdict": "met"
+          },
+          "result": "a booking takes 40 s",
+          "closed": "<TODAY>",
+          "priority": "high",
+          "relations": {
+            "blocks": [
+              "HB-2"
+            ]
+          },
+          "assignee": "ana"
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC J1",
+      "title": "Close HB-2 with T1 of loop.py?",
+      "date": "2020-01-18",
+      "text": "HB-2 T1 asks for it.",
+      "options": [
+        "a",
+        "b"
+      ],
+      "recommendation": "",
+      "as_is": true
+    }
+  ],
+  "decisions_resolved": [
+    {
+      "id": "HB-2 J1",
+      "title": "Do we take cash at the berth?",
+      "date": "2020-01-17",
+      "text": "Some sailors ask to pay cash; taking it means a till and a daily count.",
+      "options": [
+        "a: card only",
+        "b: card and cash"
+      ],
+      "recommendation": "a, no till to count",
+      "recommended": "a: card only",
+      "resolved": "<TODAY>",
+      "answer": "a: card only"
+    }
+  ]
+}
+=== notes/ (empty)
+=== pages/backlog-archive.md
+# Backlog archive
+
+> Generated by `foreman backlog` from `backlog.json`: do not edit by hand (`foreman backlog --help`).
+
+## A1 · Berth booking
+
+| ID | Issue | Status | Plan | Sub-issues | Blocked | Detail |
+|---|---|---|---|---|---|---|
+| HB-1 | Booking form | done | [plan](../reviews/2020-01-10-plan-HB-1.md) | T1 Form ✓ abc1234 agent ag1, branch `a1/t1` [report](../reviews/2020-01-12-hb1-t1.md) · T2 Form tests ✓ def5678 |  | priority high · assignee ana · blocks HB-2 · **Acceptance criterion**: a booking takes under a minute · **Result** (met): a booking takes 40 s · A note appended to the detail. |
+=== pages/backlog.md
+# Decisions
+
+> Generated by `foreman backlog` from `backlog.json`: do not edit by hand (`foreman backlog --help`).
+
+## A1 · Berth booking
+
+*in progress · priority high*
+
+Book a berth from the phone.
+
+| ID | Issue | Status | Plan | Sub-issues | Blocked | Detail |
+|---|---|---|---|---|---|---|
+| HB-3 | Tide feed | backlog |  |  |  | related to HB-2 · **Acceptance criterion**: the feed updates hourly |
+| HB-2 | Payment | ready |  |  |  | **Acceptance criterion**: a card payment goes through |
+| HB-5 | missing criterion | backlog |  |  |  |  |
+
+## A2 · Tide tables
+
+Show the tides.
+
+| ID | Issue | Status | Plan | Sub-issues | Blocked | Detail |
+|---|---|---|---|---|---|---|
+| HB-4 | Tidy the notes | triage |  |  |  | **Acceptance criterion**: notes tidy |
+=== pages/wiki.md
+# Harbor wiki
+
+Hand-written page; foreman rewrites only the section below.
+
+## Open decisions
+
+> Generated by `foreman backlog` from `backlog.json`: do not edit by hand (`foreman backlog --help`).
+
+Questions only Sam can answer; each one names its options.
+
+- **DEC J1, Close HB-2 with T1 of loop.py?** (2020-01-18): HB-2 T1 asks for it. Options: a · b
+
+## Notes
+
+Left as it is.

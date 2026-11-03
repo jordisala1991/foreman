@@ -1,0 +1,230 @@
+######## HB-2: through a pull request
+$ foreman --project harbor backlog sub HB-2 T1 --title "part 1"
+[exit 0]
+$ foreman --project harbor launch w1 --issue HB-2 --sub T1 --repo web --branch hb1/t1
+[exit 0]
+<TMP>/wt/web-w1 (hb1/t1 from main 1aebbb9)
+[foreman launch <TOKEN1>] w1 · HB-2 T1 · branch hb1/t1 · worktree <TMP>/wt/web-w1 · production
+$ foreman --project harbor integrate web hb1/t1 "HB-2 T1" --check
+[exit 0]
+== diff main...hb1/t1
+feature.txt | 1 +
+ 1 file changed, 1 insertion(+)
+== HB-2 has no plan linked in the backlog (small issue: the brief was the plan)
+== sub-issues of HB-2: T1 part 1 ▶ agent w1, branch `hb1/t1`
+== backlog after the merge (dry run):
+would do: HB-2 T1 ✓ <merge>
+would do: HB-2 done
+would do: warning: HB-2 closed without result: foreman backlog edit HB-2 --result "…"
+would do: warning: HB-2 closed without the verdict of its criterion: foreman backlog edit HB-2 --verdict …
+== local CI: 1 run (default) in <TMP>/wt/web-w1; log: <TMP>/state/harbor/integrate/hb1-t1-ci.log
+   1. test -f feature.txt && echo local-ci-ok
+== check only: hb1/t1 in <TMP>/wt/web-w1 is ready to integrate
+$ foreman --project harbor integrate web hb1/t1 "HB-2 T1" --title "HB-2: part 1" --body "What and why." --result "part 1 works"
+[exit 0]
+== diff main...hb1/t1
+feature.txt | 1 +
+ 1 file changed, 1 insertion(+)
+== HB-2 has no plan linked in the backlog (small issue: the brief was the plan)
+== sub-issues of HB-2: T1 part 1 ▶ agent w1, branch `hb1/t1`
+== local CI in <TMP>/wt/web-w1: test -f feature.txt && echo local-ci-ok (log: <TMP>/state/harbor/integrate/hb1-t1-ci.log)
+local-ci-ok
+== push hb1/t1 and open the PR
+== PR #1: https://github.com/acme/app/pull/1
+== remote checks
+lint	pass	1m	https://ci
+== merge (squash)
+== merged hb1/t1 as c02f313 (PR #1); remote branch, worktree and local branch removed
+== backlog (foreman backlog integrated):
+HB-2 T1 ✓ c02f313
+HB-2 done: part 1 works
+warning: HB-2 closed without the verdict of its criterion: foreman backlog edit HB-2 --verdict …
+$ foreman --project harbor backlog show HB-2
+[exit 0]
+HB-2 · Payment
+project A1 · status done · closed <TODAY>
+Acceptance criterion: a card payment goes through
+Result: part 1 works
+relations: blocked by HB-1 · related HB-3
+  T1 part 1 ✓ c02f313 agent w1, branch `hb1/t1`
+
+######## HB-3: through a pull request (its checks fail)
+$ foreman --project harbor backlog sub HB-3 T1 --title "part 2"
+[exit 0]
+$ foreman --project harbor launch w2 --issue HB-3 --sub T1 --repo web --branch hb2/t1
+[exit 0]
+<TMP>/wt/web-w2 (hb2/t1 from main c02f313)
+[foreman launch <TOKEN2>] w2 · HB-3 T1 · branch hb2/t1 · worktree <TMP>/wt/web-w2 · production
+$ foreman --project harbor integrate web hb2/t1 "HB-3 T1" --check
+[exit 0]
+== diff main...hb2/t1
+other.txt | 1 +
+ 1 file changed, 1 insertion(+)
+== HB-3 has no plan linked in the backlog (small issue: the brief was the plan)
+== sub-issues of HB-3: T1 part 2 ▶ agent w2, branch `hb2/t1`
+== backlog after the merge (dry run):
+would do: HB-3 T1 ✓ <merge>
+would do: HB-3 done
+would do: warning: HB-3 closed without result: foreman backlog edit HB-3 --result "…"
+would do: warning: HB-3 closed without the verdict of its criterion: foreman backlog edit HB-3 --verdict …
+== local CI: 1 run (default) in <TMP>/wt/web-w2; log: <TMP>/state/harbor/integrate/hb2-t1-ci.log
+   1. test -f feature.txt && echo local-ci-ok
+== check only: hb2/t1 in <TMP>/wt/web-w2 is ready to integrate
+$ FAKE_GH_CHECKS=fail foreman --project harbor integrate web hb2/t1 "HB-3 T1" --title "HB-3: part 2" --body "What and why." --result "part 2 works"
+[exit 1]
+== diff main...hb2/t1
+other.txt | 1 +
+ 1 file changed, 1 insertion(+)
+== HB-3 has no plan linked in the backlog (small issue: the brief was the plan)
+== sub-issues of HB-3: T1 part 2 ▶ agent w2, branch `hb2/t1`
+== local CI in <TMP>/wt/web-w2: test -f feature.txt && echo local-ci-ok (log: <TMP>/state/harbor/integrate/hb2-t1-ci.log)
+local-ci-ok
+== push hb2/t1 and open the PR
+== PR #2: https://github.com/acme/app/pull/2
+== remote checks
+lint	fail	1m	https://ci
+--- stderr
+foreman integrate: remote checks failed: the PR stays open (the PR stays open, nothing forced: https://github.com/acme/app/pull/2)
+$ foreman --project harbor backlog show HB-3
+[exit 0]
+HB-3 · Tide feed
+project A1 · status in progress
+related to HB-2
+Acceptance criterion: the feed updates hourly
+relations: related HB-2
+  T1 part 2 ▶ agent w2, branch `hb2/t1`
+
+######## HB-4: through a pull request
+$ foreman --project harbor backlog sub HB-4 T1 --title "part 3"
+[exit 0]
+$ foreman --project harbor launch w3 --issue HB-4 --sub T1 --repo web --branch hb3/t1
+[exit 0]
+<TMP>/wt/web-w3 (hb3/t1 from main c02f313)
+[foreman launch <TOKEN3>] w3 · HB-4 T1 · branch hb3/t1 · worktree <TMP>/wt/web-w3 · production
+$ foreman --project harbor integrate web hb3/t1 "HB-4 T1" --check
+[exit 0]
+== diff main...hb3/t1
+migrations/001.sql | 1 +
+ 1 file changed, 1 insertion(+)
+== risky paths touched (the owner approves the merge): migrations/001.sql (migrations/)
+== HB-4 has no plan linked in the backlog (small issue: the brief was the plan)
+== sub-issues of HB-4: T1 part 3 ▶ agent w3, branch `hb3/t1`
+== backlog after the merge (dry run):
+would do: HB-4 T1 ✓ <merge>
+would do: HB-4 done
+would do: warning: HB-4 closed without result: foreman backlog edit HB-4 --result "…"
+would do: warning: HB-4 closed without the verdict of its criterion: foreman backlog edit HB-4 --verdict …
+== the merge will need the owner's approval: risky paths: migrations/001.sql (migrations/)
+== local CI: 1 run (default) in <TMP>/wt/web-w3; log: <TMP>/state/harbor/integrate/hb3-t1-ci.log
+   1. test -f feature.txt && echo local-ci-ok
+== check only: hb3/t1 in <TMP>/wt/web-w3 is ready to integrate
+$ foreman --project harbor integrate web hb3/t1 "HB-4 T1" --title "HB-4: part 3" --body "What and why." --result "part 3 works"
+[exit 3]
+== diff main...hb3/t1
+migrations/001.sql | 1 +
+ 1 file changed, 1 insertion(+)
+== risky paths touched (the owner approves the merge): migrations/001.sql (migrations/)
+== HB-4 has no plan linked in the backlog (small issue: the brief was the plan)
+== sub-issues of HB-4: T1 part 3 ▶ agent w3, branch `hb3/t1`
+== local CI in <TMP>/wt/web-w3: test -f feature.txt && echo local-ci-ok (log: <TMP>/state/harbor/integrate/hb3-t1-ci.log)
+local-ci-ok
+== push hb3/t1 and open the PR
+== PR #3: https://github.com/acme/app/pull/3
+== remote checks
+lint	pass	1m	https://ci
+--- stderr
+foreman integrate: awaiting the owner's approval (risky paths: migrations/001.sql (migrations/)): PR open and green, https://github.com/acme/app/pull/3; rerun with --approved "who, when" once approved
+$ foreman --project harbor backlog show HB-4
+[exit 0]
+HB-4 · Tidy the notes
+project A2 · status in progress
+Acceptance criterion: notes tidy
+  T1 part 3 ▶ agent w3, branch `hb3/t1`
+$ gh calls (fake gh's log)
+["pr", "view", "hb1/t1", "--json", "number,url,state"]
+["pr", "create", "--base", "main", "--head", "hb1/t1", "--title", "HB-2: part 1", "--body", "What and why."]
+["pr", "checks", "1", "--watch"]
+["pr", "comment", "1", "--body", "Local CI passed on 764bd9c in <SECONDS> s."]
+["pr", "merge", "1", "--squash", "--match-head-commit", "764bd9cd185a3dbbec75380d35900aa28a910a1b", "--subject", "HB-2: part 1", "--body", "What and why."]
+["pr", "view", "1", "--json", "mergeCommit", "--jq", ".mergeCommit.oid"]
+["pr", "view", "hb2/t1", "--json", "number,url,state"]
+["pr", "create", "--base", "main", "--head", "hb2/t1", "--title", "HB-3: part 2", "--body", "What and why."]
+["pr", "checks", "2", "--watch"]
+["pr", "view", "hb3/t1", "--json", "number,url,state"]
+["pr", "create", "--base", "main", "--head", "hb3/t1", "--title", "HB-4: part 3", "--body", "What and why."]
+["pr", "checks", "3", "--watch"]
+["pr", "comment", "3", "--body", "Local CI passed on 0ce76d5 in <SECONDS> s."]
+$ remote main
+c02f313 HB-2: part 1
+1aebbb9 initial
+
+######## state root: files under <TMP>/state
+=== harbor/integrate/hb1-t1-ci.log
+== <TODAY> <TIME> in <TMP>/wt/web-w1: test -f feature.txt && echo local-ci-ok
+local-ci-ok
+== rc 0 in <SECONDS> s
+=== harbor/integrate/hb2-t1-ci.log
+== <TODAY> <TIME> in <TMP>/wt/web-w2: test -f feature.txt && echo local-ci-ok
+local-ci-ok
+== rc 0 in <SECONDS> s
+=== harbor/integrate/hb3-t1-ci.log
+== <TODAY> <TIME> in <TMP>/wt/web-w3: test -f feature.txt && echo local-ci-ok
+local-ci-ok
+== rc 0 in <SECONDS> s
+=== harbor/launches.json
+{
+ "<TOKEN1>": {
+  "name": "w1",
+  "issue": "HB-2",
+  "sub": "T1",
+  "repo": "web",
+  "branch": "hb1/t1",
+  "worktree": "<TMP>/wt/web-w1",
+  "type": null,
+  "production": true,
+  "at": "<TODAY>T<TIME>",
+  "session": null,
+  "agent": null
+ },
+ "<TOKEN2>": {
+  "name": "w2",
+  "issue": "HB-3",
+  "sub": "T1",
+  "repo": "web",
+  "branch": "hb2/t1",
+  "worktree": "<TMP>/wt/web-w2",
+  "type": null,
+  "production": true,
+  "at": "<TODAY>T<TIME>",
+  "session": null,
+  "agent": null
+ },
+ "<TOKEN3>": {
+  "name": "w3",
+  "issue": "HB-4",
+  "sub": "T1",
+  "repo": "web",
+  "branch": "hb3/t1",
+  "worktree": "<TMP>/wt/web-w3",
+  "type": null,
+  "production": true,
+  "at": "<TODAY>T<TIME>",
+  "session": null,
+  "agent": null
+ }
+}
+=== harbor/launches.json.lock
+
+=== harbor/locks-notes/<TODAY>.md.lock
+
+=== harbor/progress.jsonl
+{"time": "<TODAY> <TIME>", "agent": "orchestrator", "text": "PR #3 (web:hb3/t1) green, awaiting approval: risky paths: migrations/001.sql (migrations/)"}
+=== harbor/progress.jsonl.lock
+
+
+######## harbor notes: files under <TMP>/harbor/notes
+=== <TODAY>.md
+# Notes <TODAY>
+
+## <TIME> Integrated web:hb1/t1 (HB-2 T1)
+Merged into main by PR #1 (squash).  (main c02f313; Local CI passed on 764bd9c in <SECONDS> s.)

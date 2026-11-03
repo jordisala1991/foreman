@@ -1,0 +1,113 @@
+######## an active project
+$ foreman hook mod start
+< {"claude_code": "2.1.314", "cwd": "<TMP>/harbor", "interactive": true, "root": "<FOREMAN>", "session": "S-active"}
+[exit 0]
+{"active": true, "below": false, "min": "2.1.299"}
+
+######## a new conversation in the same process (/clear, resume): the old id goes as previous
+$ foreman hook mod start
+< {"claude_code": "2.1.314", "cwd": "<TMP>/harbor", "interactive": true, "previous": "S-active", "root": "<FOREMAN>", "session": "S-cleared"}
+[exit 0]
+{"active": true, "below": false, "min": "2.1.299"}
+
+######## outside any project
+$ foreman hook mod start
+< {"claude_code": "2.1.314", "cwd": "<TMP>/elsewhere", "interactive": true, "root": "<FOREMAN>", "session": "S-elsewhere"}
+[exit 0]
+{"active": false}
+
+######## below the minimum Claude Code
+$ foreman hook mod start
+< {"claude_code": "2.1.200", "cwd": "<TMP>/harbor", "interactive": true, "root": "<FOREMAN>", "session": "S-old"}
+[exit 0]
+{"active": true, "below": true, "min": "2.1.299", "status": "foreman needs Claude Code ≥ 2.1.299 but this session runs 2.1.200: run `claude update`."}
+
+######## state root: files under <TMP>/state
+=== harbor/measure/S-fresh.json
+{
+ "tokens": null,
+ "window": 200000,
+ "percent": null,
+ "cost_usd": null,
+ "rate_limits": [],
+ "at": "<TODAY>T<TIME>"
+}
+=== harbor/measure/S-measure.json
+{
+ "tokens": 61000,
+ "window": 200000,
+ "percent": 31,
+ "cost_usd": 1.25,
+ "rate_limits": [
+  {
+   "kind": "five_hour",
+   "percent_used": 23.5,
+   "resets_at": "2020-01-15T<TIME>"
+  },
+  {
+   "kind": "seven_day",
+   "percent_used": 7,
+   "resets_at": null
+  }
+ ],
+ "at": "<TODAY>T<TIME>"
+}
+=== harbor/sessions/S-active.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "interactive": true,
+ "ended": "<TODAY>T<TIME>"
+}
+=== harbor/sessions/S-cleared.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "interactive": true
+}
+=== install/sessions.json
+{
+ "S-active": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "claude_code": "2.1.314",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ },
+ "S-cleared": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "claude_code": "2.1.314",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ },
+ "S-old": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "claude_code": "2.1.200",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ }
+}
+=== install/sessions.json.lock
+

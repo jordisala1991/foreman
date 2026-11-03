@@ -1,0 +1,1280 @@
+######## faro: the guard hook on each row of tests/golden_guard.tsv
+$ foreman hook guard  # row 1: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git remote add origin git@github.com:example-owner/foreman.git"}, "tool_name": "Bash", "tool_use_id": "toolu_001"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «git remote add» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git remote add origin git@github.com:example-owner/foreman.git`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 2: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "gh repo create example-owner/foreman --private --source ."}, "tool_name": "Bash", "tool_use_id": "toolu_002"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «gh repo create» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `gh repo create example-owner/foreman --private --source .`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 3: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git push -u origin main"}, "tool_name": "Bash", "tool_use_id": "toolu_003"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push -u origin main`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 4: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cd ~/Projects/foreman && git push"}, "tool_name": "Bash", "tool_use_id": "toolu_004"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 5: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "twine upload dist/*"}, "tool_name": "Bash", "tool_use_id": "toolu_005"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «twine upload» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `twine upload dist/*`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 6: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "uv publish"}, "tool_name": "Bash", "tool_use_id": "toolu_006"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)(uv|poetry) publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `uv publish`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 7: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "npm publish"}, "tool_name": "Bash", "tool_use_id": "toolu_007"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `npm publish`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 8: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "launchctl load ~/Library/LaunchAgents/com.example.foreman-panel.plist"}, "tool_name": "Bash", "tool_use_id": "toolu_008"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «launchctl (load|bootstrap|enable|kickstart|bootout|unload|remove|disable)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `launchctl load ~/Library/LaunchAgents/com.example.foreman-panel.plist`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 9: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "launchctl bootstrap gui/501 x.plist"}, "tool_name": "Bash", "tool_use_id": "toolu_009"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «launchctl (load|bootstrap|enable|kickstart|bootout|unload|remove|disable)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `launchctl bootstrap gui/501 x.plist`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 10: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cp panel.plist ~/Library/LaunchAgents/"}, "tool_name": "Bash", "tool_use_id": "toolu_010"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)(cp|mv|ln|rm|tee)\s.*Library/LaunchAgents» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `cp panel.plist ~/Library/LaunchAgents/`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 11: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "launchctl bootout gui/501/dev.foreman.panel"}, "tool_name": "Bash", "tool_use_id": "toolu_011"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «launchctl (load|bootstrap|enable|kickstart|bootout|unload|remove|disable)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `launchctl bootout gui/501/dev.foreman.panel`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 12: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman panel service install --host 0.0.0.0 --port 8766 --label dev.foreman.panel"}, "tool_name": "Bash", "tool_use_id": "toolu_012"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «panel service (install|uninstall)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `foreman panel service install --host 0.0.0.0 --port 8766 --label dev.foreman.pan…`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 13: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bin/foreman panel service uninstall"}, "tool_name": "Bash", "tool_use_id": "toolu_013"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «panel service (install|uninstall)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `bin/foreman panel service uninstall`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 14: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman --project foreman panel service install"}, "tool_name": "Bash", "tool_use_id": "toolu_014"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «panel service (install|uninstall)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `foreman --project foreman panel service install`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 15: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "rm -rf ~/.local/state/foreman/quayside"}, "tool_name": "Bash", "tool_use_id": "toolu_015"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)rm -rf? .*\.local/state/foreman» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `rm -rf ~/.local/state/foreman/quayside`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 16: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "rm -r ~/.config/foreman"}, "tool_name": "Bash", "tool_use_id": "toolu_016"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)rm -rf? .*\.config/foreman» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `rm -r ~/.config/foreman`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 17: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo '{}' | foreman hook mod grant"}, "tool_name": "Bash", "tool_use_id": "toolu_017"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `foreman hook mod` solo lo ejecuta el módulo de hooks de foreman, nunca una llamada a Bash (ni siquiera del orquestador). Casó en la orden `foreman hook mod grant`.
+$ foreman hook guard  # row 18: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bin/foreman hook mod status"}, "tool_name": "Bash", "tool_use_id": "toolu_018"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `foreman hook mod` solo lo ejecuta el módulo de hooks de foreman, nunca una llamada a Bash (ni siquiera del orquestador). Casó en la orden `bin/foreman hook mod status`.
+$ foreman hook guard  # row 19: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman --project foreman permissions apply /tmp/cand.toml --table /tmp/guard.tsv"}, "tool_name": "Bash", "tool_use_id": "toolu_019"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `foreman permissions apply` cambia los permisos de faro; solo lo ejecuta su orquestador (?), desde el hilo principal y el proceso de la sesión marcada, tras el sí de Marta; nunca un agente ni un subagente, ni otra sesión. Si tu tarea necesita cambiar permisos, propónlo en tu informe (un candidato probado con `foreman permissions --candidate`). Casó en la orden `foreman --project foreman permissions apply /tmp/cand.toml --table /tmp/guard.ts…`.
+$ foreman hook guard  # row 20: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bin/foreman permissions apply cand.toml --base 0123456789abcdef --opens"}, "tool_name": "Bash", "tool_use_id": "toolu_020"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `foreman permissions apply` cambia los permisos de faro; solo lo ejecuta su orquestador (?), desde el hilo principal y el proceso de la sesión marcada, tras el sí de Marta; nunca un agente ni un subagente, ni otra sesión. Si tu tarea necesita cambiar permisos, propónlo en tu informe (un candidato probado con `foreman permissions --candidate`). Casó en la orden `bin/foreman permissions apply cand.toml --base 0123456789abcdef --opens`.
+$ foreman hook guard  # row 21: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bin/foreman permissions --candidate /tmp/cand.toml --table /tmp/guard.tsv"}, "tool_name": "Bash", "tool_use_id": "toolu_021"}
+[exit 0]
+$ foreman hook guard  # row 22: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman note \"permissions apply\" \"tested the candidate\""}, "tool_name": "Bash", "tool_use_id": "toolu_022"}
+[exit 0]
+$ foreman hook guard  # row 23: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "foreman.toml"}, "tool_name": "Write", "tool_use_id": "toolu_023"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `foreman.toml` es la configuración de foreman de faro, que ninguna llamada a Write o Edit cambia. Solo la cambia el orquestador de faro, con `foreman permissions apply`, que prueba antes el cambio. Si tu tarea necesita uno, escribe una copia candidata en tu carpeta, pruébala con `foreman permissions --candidate FICHERO` y dilo en tu informe.
+$ foreman hook guard  # row 24: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "<TMP>/state/faro/grants.json"}, "tool_name": "Write", "tool_use_id": "toolu_024"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `<TMP>/state/faro/grants.json` es el estado de foreman, que ninguna llamada a Write o Edit cambia. Solo lo escribe foreman (y el orquestador su pizarra); un script de trabajo o un fichero suelto van en tu carpeta de scratch.
+$ foreman hook guard  # row 25: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "<TMP>/state/callers.json"}, "tool_name": "Write", "tool_use_id": "toolu_025"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `<TMP>/state/callers.json` es el estado de foreman, que ninguna llamada a Write o Edit cambia. Solo lo escribe foreman (y el orquestador su pizarra); un script de trabajo o un fichero suelto van en tu carpeta de scratch.
+$ foreman hook guard  # row 26: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "<TMP>/projects.toml"}, "tool_name": "Write", "tool_use_id": "toolu_026"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `<TMP>/projects.toml` es la lista de proyectos de foreman de este ordenador (el registro), que ninguna llamada a Write o Edit cambia. Solo lo cambia Marta: a mano, o con su Sí a la pregunta que foreman le hace en este chat, para ese cambio solo. Si no salió la pregunta, dile a Marta en el chat qué cambiar y dónde.
+$ foreman hook guard  # row 27: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": ".claude/settings.local.json"}, "tool_name": "Write", "tool_use_id": "toolu_027"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `.claude/settings.local.json` es la configuración propia de Claude Code, que ninguna llamada a Write o Edit cambia. Solo lo cambia Marta: a mano, o con su Sí a la pregunta que foreman le hace en este chat, para ese cambio solo. Si no salió la pregunta, dile a Marta en el chat qué cambiar y dónde.
+$ foreman hook guard  # row 28: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "<TMP>/state/faro/board.md"}, "tool_name": "Write", "tool_use_id": "toolu_028"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `<TMP>/state/faro/board.md` es el estado de foreman, que ninguna llamada a Write o Edit cambia. Solo lo escribe foreman (y el orquestador su pizarra); un script de trabajo o un fichero suelto van en tu carpeta de scratch.
+$ foreman hook guard  # row 29: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "reviews/2020-01-01-x.md"}, "tool_name": "Write", "tool_use_id": "toolu_029"}
+[exit 0]
+$ foreman hook guard  # row 30: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": ".claude/worktrees/w/x.py"}, "tool_name": "Write", "tool_use_id": "toolu_030"}
+[exit 0]
+$ foreman hook guard  # row 31: allow
+< {"cwd": "<TMP>/wt", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "foreman.toml"}, "tool_name": "Write", "tool_use_id": "toolu_031"}
+[exit 0]
+$ foreman hook guard  # row 32: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "../faro-app/.git/hooks/post-merge"}, "tool_name": "Write", "tool_use_id": "toolu_032"}
+[exit 0]
+$ foreman hook guard  # row 33: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "../harbor-api/.git/config"}, "tool_name": "Write", "tool_use_id": "toolu_033"}
+[exit 0]
+$ foreman hook guard  # row 34: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "../faro-app/.git/info/attributes"}, "tool_name": "Write", "tool_use_id": "toolu_034"}
+[exit 0]
+$ foreman hook guard  # row 35: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "../gitconfig"}, "tool_name": "Write", "tool_use_id": "toolu_035"}
+[exit 0]
+$ foreman hook guard  # row 36: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "x", "file_path": "../faro-app/.git/COMMIT_EDITMSG"}, "tool_name": "Write", "tool_use_id": "toolu_036"}
+[exit 0]
+$ foreman hook guard  # row 37: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cp /tmp/h ../faro-app/.git/hooks/pre-commit"}, "tool_name": "Bash", "tool_use_id": "toolu_037"}
+[exit 0]
+$ foreman hook guard  # row 38: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat ../faro-app/.git/config"}, "tool_name": "Bash", "tool_use_id": "toolu_038"}
+[exit 0]
+$ foreman hook guard  # row 39: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo '{}' > .claude/settings.local.json"}, "tool_name": "Bash", "tool_use_id": "toolu_039"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `.claude/settings.local.json`, que es la configuración propia de Claude Code, y ese fichero no lo cambia ninguna llamada ni orden (`echo '{}' > .claude/settings.local.json`). Solo lo cambia Marta: a mano, o con su Sí a la pregunta que foreman le hace en este chat, para ese cambio solo. Si no salió la pregunta, dile a Marta en el chat qué cambiar y dónde.
+$ foreman hook guard  # row 40: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cp /tmp/cand.toml foreman.toml"}, "tool_name": "Bash", "tool_use_id": "toolu_040"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `foreman.toml`, que es la configuración de foreman de faro, y ese fichero no lo cambia ninguna llamada ni orden (`cp /tmp/cand.toml foreman.toml`). Solo la cambia el orquestador de faro, con `foreman permissions apply`, que prueba antes el cambio. Si tu tarea necesita uno, escribe una copia candidata en tu carpeta, pruébala con `foreman permissions --candidate FICHERO` y dilo en tu informe.
+$ foreman hook guard  # row 41: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "sed -i '' 's/a/b/' foreman.toml"}, "tool_name": "Bash", "tool_use_id": "toolu_041"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `foreman.toml`, que es la configuración de foreman de faro, y ese fichero no lo cambia ninguna llamada ni orden (`sed -i '' 's/a/b/' foreman.toml`). Solo la cambia el orquestador de faro, con `foreman permissions apply`, que prueba antes el cambio. Si tu tarea necesita uno, escribe una copia candidata en tu carpeta, pruébala con `foreman permissions --candidate FICHERO` y dilo en tu informe.
+$ foreman hook guard  # row 42: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "tee -a <TMP>/state/faro/grants.json < /dev/null"}, "tool_name": "Bash", "tool_use_id": "toolu_042"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `<TMP>/state/faro/grants.json`, que es el estado de foreman, y ese fichero no lo cambia ninguna llamada ni orden (`tee -a …/grants.json < /dev/null`). Solo lo escribe foreman (y el orquestador su pizarra); un script de trabajo o un fichero suelto van en tu carpeta de scratch.
+$ foreman hook guard  # row 43: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "mv /tmp/projects.toml <TMP>/projects.toml"}, "tool_name": "Bash", "tool_use_id": "toolu_043"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `<TMP>/projects.toml`, que es la lista de proyectos de foreman de este ordenador (el registro), y ese fichero no lo cambia ninguna llamada ni orden (`mv /tmp/projects.toml …/projects.toml`). Solo lo cambia Marta: a mano, o con su Sí a la pregunta que foreman le hace en este chat, para ese cambio solo. Si no salió la pregunta, dile a Marta en el chat qué cambiar y dónde.
+$ foreman hook guard  # row 44: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "sh -c 'cat /tmp/cand.toml > foreman.toml'"}, "tool_name": "Bash", "tool_use_id": "toolu_044"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `foreman.toml`, que es la configuración de foreman de faro, y ese fichero no lo cambia ninguna llamada ni orden (`sh -c 'cat /tmp/cand.toml > foreman.toml'`). Solo la cambia el orquestador de faro, con `foreman permissions apply`, que prueba antes el cambio. Si tu tarea necesita uno, escribe una copia candidata en tu carpeta, pruébala con `foreman permissions --candidate FICHERO` y dilo en tu informe.
+$ foreman hook guard  # row 45: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "f=<TMP>/state/faro/x.json; echo '{}' > \"$f\""}, "tool_name": "Bash", "tool_use_id": "toolu_045"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `"$f"`, que es el estado de foreman, y ese fichero no lo cambia ninguna llamada ni orden (`…x.json; echo '{}' > "$f"`). Solo lo escribe foreman (y el orquestador su pizarra); un script de trabajo o un fichero suelto van en tu carpeta de scratch.
+$ foreman hook guard  # row 46: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > <TMP>/state/faro/board.md <<'EOF'\n# board\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_046"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: esta orden escribe `<TMP>/state/faro/board.md`, que es el estado de foreman, y ese fichero no lo cambia ninguna llamada ni orden (`cat > …/board.md <<'EOF' # board EOF`). Solo lo escribe foreman (y el orquestador su pizarra); un script de trabajo o un fichero suelto van en tu carpeta de scratch.
+$ foreman hook guard  # row 47: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cp foreman.toml $TMPDIR/cand.toml"}, "tool_name": "Bash", "tool_use_id": "toolu_047"}
+[exit 0]
+$ foreman hook guard  # row 48: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat foreman.toml guard.tsv"}, "tool_name": "Bash", "tool_use_id": "toolu_048"}
+[exit 0]
+$ foreman hook guard  # row 49: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "diff foreman.toml /tmp/cand.toml"}, "tool_name": "Bash", "tool_use_id": "toolu_049"}
+[exit 0]
+$ foreman hook guard  # row 50: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat <<'EOF' > /tmp/notes.md\ncp /tmp/cand.toml foreman.toml\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_050"}
+[exit 0]
+$ foreman hook guard  # row 51: allow
+< {"cwd": "<TMP>/wt", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cp /tmp/cand.toml foreman.toml"}, "tool_name": "Bash", "tool_use_id": "toolu_051"}
+[exit 0]
+$ foreman hook guard  # row 52: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bin/foreman selftest"}, "tool_name": "Bash", "tool_use_id": "toolu_052"}
+[exit 0]
+$ foreman hook guard  # row 53: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cd ~/Projects/foreman-wt/foreman-fo11 && bin/foreman selftest"}, "tool_name": "Bash", "tool_use_id": "toolu_053"}
+[exit 0]
+$ foreman hook guard  # row 54: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git -C ~/Projects/foreman merge --ff-only fo11/x"}, "tool_name": "Bash", "tool_use_id": "toolu_054"}
+[exit 0]
+$ foreman hook guard  # row 55: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git worktree add -b fo11/x ~/Projects/foreman-wt/foreman-fo11 main"}, "tool_name": "Bash", "tool_use_id": "toolu_055"}
+[exit 0]
+$ foreman hook guard  # row 56: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman --project foreman backlog show"}, "tool_name": "Bash", "tool_use_id": "toolu_056"}
+[exit 0]
+$ foreman hook guard  # row 57: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman panel --host 0.0.0.0 --port 8766"}, "tool_name": "Bash", "tool_use_id": "toolu_057"}
+[exit 0]
+$ foreman hook guard  # row 58: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git log --oneline -5"}, "tool_name": "Bash", "tool_use_id": "toolu_058"}
+[exit 0]
+$ foreman hook guard  # row 59: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "launchctl list"}, "tool_name": "Bash", "tool_use_id": "toolu_059"}
+[exit 0]
+$ foreman hook guard  # row 60: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman panel service print --host 0.0.0.0 --label dev.foreman.panel"}, "tool_name": "Bash", "tool_use_id": "toolu_060"}
+[exit 0]
+$ foreman hook guard  # row 61: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman panel service status"}, "tool_name": "Bash", "tool_use_id": "toolu_061"}
+[exit 0]
+$ foreman hook guard  # row 62: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat ~/Library/LaunchAgents/com.example.panel.plist"}, "tool_name": "Bash", "tool_use_id": "toolu_062"}
+[exit 0]
+$ foreman hook guard  # row 63: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman --project foreman note \"t\" \"nunca git remote add sin Owner\""}, "tool_name": "Bash", "tool_use_id": "toolu_063"}
+[exit 0]
+$ foreman hook guard  # row 64: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "FOREMAN_WHO=fo28 foreman --project foreman progress \"hecho; git push es de Owner\""}, "tool_name": "Bash", "tool_use_id": "toolu_064"}
+[exit 0]
+$ foreman hook guard  # row 65: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman --project foreman backlog add E1 --id AB-99 --title \"x\" --detail \"a; uv publish; b\""}, "tool_name": "Bash", "tool_use_id": "toolu_065"}
+[exit 0]
+$ foreman hook guard  # row 66: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate foreman fo28/x \"AB-28 T1\" --note \"sin npm publish ni git push\" --result \"ok\""}, "tool_name": "Bash", "tool_use_id": "toolu_066"}
+[exit 0]
+$ foreman hook guard  # row 67: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman guard \"git remote add origin x\""}, "tool_name": "Bash", "tool_use_id": "toolu_067"}
+[exit 0]
+$ foreman hook guard  # row 68: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bin/foreman --project foreman note \"t\" \"git push -u origin main\""}, "tool_name": "Bash", "tool_use_id": "toolu_068"}
+[exit 0]
+$ foreman hook guard  # row 69: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman note \"t\" \"$(cat <<'EOF'\ngit remote add origin x\ngit push\nEOF\n)\""}, "tool_name": "Bash", "tool_use_id": "toolu_069"}
+[exit 0]
+$ foreman hook guard  # row 70: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git commit -m \"docs: never git push here\""}, "tool_name": "Bash", "tool_use_id": "toolu_070"}
+[exit 0]
+$ foreman hook guard  # row 71: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman --project foreman note t x; git push"}, "tool_name": "Bash", "tool_use_id": "toolu_071"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 72: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman note t x & git push"}, "tool_name": "Bash", "tool_use_id": "toolu_072"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 73: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman note \"t\" \"$(git push)\""}, "tool_name": "Bash", "tool_use_id": "toolu_073"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 74: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git commit -m \"`git push`\""}, "tool_name": "Bash", "tool_use_id": "toolu_074"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 75: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman note t \\\"; git push; echo \\\""}, "tool_name": "Bash", "tool_use_id": "toolu_075"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 76: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman backlog add E1 --id X --title \"npm publish\" | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_076"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`backlog add E1 --id X --title npm publish`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 77: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate foreman \"$(git push)\" AB-1"}, "tool_name": "Bash", "tool_use_id": "toolu_077"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 78: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman note x <(git push -u origin main)"}, "tool_name": "Bash", "tool_use_id": "toolu_078"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push -u origin main`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 79: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman note t 'git remote add origin x"}, "tool_name": "Bash", "tool_use_id": "toolu_079"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «git remote add» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). No se pudo leer la orden (una comilla sin cerrar, $'…', $((…))), así que se comparó todo su texto (`foreman note t 'git remote add origin x`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 80: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bash -c \"git push\""}, "tool_name": "Bash", "tool_use_id": "toolu_080"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 81: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "sh -c 'cd ~/Projects/foreman && git push'"}, "tool_name": "Bash", "tool_use_id": "toolu_081"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 82: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "eval \"git push\""}, "tool_name": "Bash", "tool_use_id": "toolu_082"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 83: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bash <<'EOF'\ngit push\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_083"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 84: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat <<EOF | sh\ngit push\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_084"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 85: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bash <<< \"git push\""}, "tool_name": "Bash", "tool_use_id": "toolu_085"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 86: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "find . -name x -exec git push \\;"}, "tool_name": "Bash", "tool_use_id": "toolu_086"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `find . -name x -exec git push \;`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 87: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "find . -name x -exec sh -c 'git push' \\;"}, "tool_name": "Bash", "tool_use_id": "toolu_087"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 88: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "ls | xargs -I{} sh -c 'git push {}'"}, "tool_name": "Bash", "tool_use_id": "toolu_088"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push {}`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 89: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "ssh host \"git push\""}, "tool_name": "Bash", "tool_use_id": "toolu_089"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 90: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" | bash"}, "tool_name": "Bash", "tool_use_id": "toolu_090"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 91: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "$(cat <<'EOF'\ngit push\nEOF\n)"}, "tool_name": "Bash", "tool_use_id": "toolu_091"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `$(cat <<'EOF' git push EOF )`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 92: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bash -c \"foreman note t 'git remote add origin x'\""}, "tool_name": "Bash", "tool_use_id": "toolu_092"}
+[exit 0]
+$ foreman hook guard  # row 93: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat <<'EOF' > ops/reviews/x.md\ngit push\ngit remote add origin x\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_093"}
+[exit 0]
+$ foreman hook guard  # row 94: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git commit -F - <<'EOF'\ndocs: git push stays with Owner\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_094"}
+[exit 0]
+$ foreman hook guard  # row 95: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport os; os.system(\"git push\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_095"}
+[exit 0]
+$ foreman hook guard  # row 96: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport os; os.system(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_096"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`import os; os.system("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 97: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ foreman note t \"git push\"; } | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_097"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`note t git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 98: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ git commit -m \"git push\"; } | bash"}, "tool_name": "Bash", "tool_use_id": "toolu_098"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`commit -m git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 99: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "if true; then foreman note t \"git push\"; fi | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_099"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`note t git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 100: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ echo \"git push\"; } | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_100"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 101: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "for x in 1; do echo \"git push\"; done | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_101"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 102: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ foreman note t \"git push\"; } | python3 -"}, "tool_name": "Bash", "tool_use_id": "toolu_102"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`note t git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 103: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" | if true; then sh; fi"}, "tool_name": "Bash", "tool_use_id": "toolu_103"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 104: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" | ( sh )"}, "tool_name": "Bash", "tool_use_id": "toolu_104"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 105: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ sh; } <<< \"git push\""}, "tool_name": "Bash", "tool_use_id": "toolu_105"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 106: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "f(){ sh; }; echo \"git push\" | f"}, "tool_name": "Bash", "tool_use_id": "toolu_106"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 107: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" > >(sh)"}, "tool_name": "Bash", "tool_use_id": "toolu_107"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 108: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "x=\"git push\"; $x"}, "tool_name": "Bash", "tool_use_id": "toolu_108"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 109: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "printf -v x \"git push\"; $x"}, "tool_name": "Bash", "tool_use_id": "toolu_109"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 110: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "for c in \"git push\"; do $c; done"}, "tool_name": "Bash", "tool_use_id": "toolu_110"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 111: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "x=$(echo \"git push\"); $x"}, "tool_name": "Bash", "tool_use_id": "toolu_111"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 112: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "read x <<< \"git push\"; $x"}, "tool_name": "Bash", "tool_use_id": "toolu_112"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 113: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "x=\"git push\"; sh -c \"$x\""}, "tool_name": "Bash", "tool_use_id": "toolu_113"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 114: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "x=\"git push\"; echo \"$x\" | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_114"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 115: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "trap 'git push' EXIT"}, "tool_name": "Bash", "tool_use_id": "toolu_115"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 116: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ bash -c \"git push\"; }"}, "tool_name": "Bash", "tool_use_id": "toolu_116"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 117: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "f(){ sh -c \"$1\"; }; f \"git push\""}, "tool_name": "Bash", "tool_use_id": "toolu_117"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 118: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\"; $_"}, "tool_name": "Bash", "tool_use_id": "toolu_118"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 119: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "S=/tmp/s; git commit -m \"never npm publish\"; $S/run.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_119"}
+[exit 0]
+$ foreman hook guard  # row 120: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "x=1; cat > ops/reviews/x.md <<'EOF'\nnpm publish\nEOF\n$EDITOR ops/reviews/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_120"}
+[exit 0]
+$ foreman hook guard  # row 121: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "$DC exec app ls"}, "tool_name": "Bash", "tool_use_id": "toolu_121"}
+[exit 0]
+$ foreman hook guard  # row 122: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ foreman note t \"git push\"; } | grep x"}, "tool_name": "Bash", "tool_use_id": "toolu_122"}
+[exit 0]
+$ foreman hook guard  # row 123: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "for f in a b; do echo \"$f\"; done | sort"}, "tool_name": "Bash", "tool_use_id": "toolu_123"}
+[exit 0]
+$ foreman hook guard  # row 124: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_124"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 125: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" |& bash"}, "tool_name": "Bash", "tool_use_id": "toolu_125"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 126: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "printf 'git push\n' | tee f.sh | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_126"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 127: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" | xargs -I{} sh -c {}"}, "tool_name": "Bash", "tool_use_id": "toolu_127"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`git push`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 128: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"$(git push)\" > notes.md"}, "tool_name": "Bash", "tool_use_id": "toolu_128"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 129: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo `git push` > notes.md"}, "tool_name": "Bash", "tool_use_id": "toolu_129"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 130: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "$(echo git push)"}, "tool_name": "Bash", "tool_use_id": "toolu_130"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `$(echo git push)`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 131: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "eval \"$(echo git push)\""}, "tool_name": "Bash", "tool_use_id": "toolu_131"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `$(echo git push)`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 132: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"npm publish\" > >(sh)"}, "tool_name": "Bash", "tool_use_id": "toolu_132"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`npm publish`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 133: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"npm publish\" >&3"}, "tool_name": "Bash", "tool_use_id": "toolu_133"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `echo "npm publish" >& 3`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 134: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "printf \"npm publish\" > /dev/fd/3"}, "tool_name": "Bash", "tool_use_id": "toolu_134"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `printf "npm publish" > /dev/fd/3`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 135: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"npm publish\" > /dev/tcp/127.0.0.1/9"}, "tool_name": "Bash", "tool_use_id": "toolu_135"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `echo "npm publish" > /dev/tcp/127.0.0.1/9`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 136: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo() { git push; }; echo x"}, "tool_name": "Bash", "tool_use_id": "toolu_136"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `{ git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 137: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "alias e=echo; e \"npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_137"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `e "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 138: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "rg --pre git push src"}, "tool_name": "Bash", "tool_use_id": "toolu_138"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `rg --pre git push src`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 139: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git grep -O\"npm publish\" x"}, "tool_name": "Bash", "tool_use_id": "toolu_139"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git grep -O"npm publish" x`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 140: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "grep -e \"npm publish\" f | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_140"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que ejecuta un shell (`-e npm publish f`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 141: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "gh pr create --title t --body \"$(git push)\""}, "tool_name": "Bash", "tool_use_id": "toolu_141"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 142: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat <<'EOF' | sh\ngit push\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_142"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 143: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bash -s <<'EOF'\ngit push\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_143"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 144: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" > x.sh; sh x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_144"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 145: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" > x.sh && chmod +x x.sh && ./x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_145"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 146: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "printf 'git push\n' | tee x.sh; bash x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_146"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 147: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" | cat > x.sh && sh x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_147"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 148: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" > x.sh; sh *.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_148"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 149: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push\" > $T; sh $T"}, "tool_name": "Bash", "tool_use_id": "toolu_149"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 150: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ echo \"npm publish\"; } >&3"}, "tool_name": "Bash", "tool_use_id": "toolu_150"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `{ echo "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 151: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ echo \"npm publish\"; } > x.sh; source x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_151"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`npm publish`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 152: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"npm publish\" > .git/hooks/pre-commit"}, "tool_name": "Bash", "tool_use_id": "toolu_152"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `echo "npm publish" > .git/hooks/pre-commit`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 153: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"npm publish\" | sudo tee /dev/fd/3"}, "tool_name": "Bash", "tool_use_id": "toolu_153"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `echo "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 154: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "./echo \"npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_154"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `./echo "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 155: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "printf \"$f\" \"npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_155"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `printf "$f" "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 156: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "grep \"a\" f -e \"npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_156"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `grep "a" f -e "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 157: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git -c core.fsmonitor=sh grep \"npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_157"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git -c core.fsmonitor=sh grep "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 158: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "rg -z \"npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_158"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `rg -z "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 159: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "printf 'nunca git push sin Owner\n' > ops/notes/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_159"}
+[exit 0]
+$ foreman hook guard  # row 160: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "printf '%s\n' \"git remote add origin x\" >> ops/reviews/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_160"}
+[exit 0]
+$ foreman hook guard  # row 161: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"git push es de Owner\" > ops/reviews/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_161"}
+[exit 0]
+$ foreman hook guard  # row 162: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"no npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_162"}
+[exit 0]
+$ foreman hook guard  # row 163: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"uv publish\" | grep publish"}, "tool_name": "Bash", "tool_use_id": "toolu_163"}
+[exit 0]
+$ foreman hook guard  # row 164: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "grep -n \"git push\" ops/rules.md"}, "tool_name": "Bash", "tool_use_id": "toolu_164"}
+[exit 0]
+$ foreman hook guard  # row 165: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "grep -rn -e \"npm publish\" docs"}, "tool_name": "Bash", "tool_use_id": "toolu_165"}
+[exit 0]
+$ foreman hook guard  # row 166: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "rg -n \"launchctl load\" lib"}, "tool_name": "Bash", "tool_use_id": "toolu_166"}
+[exit 0]
+$ foreman hook guard  # row 167: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git grep -n \"gh repo create\""}, "tool_name": "Bash", "tool_use_id": "toolu_167"}
+[exit 0]
+$ foreman hook guard  # row 168: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git -C ~/Projects/foreman grep -c \"twine upload\""}, "tool_name": "Bash", "tool_use_id": "toolu_168"}
+[exit 0]
+$ foreman hook guard  # row 169: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git tag -a v1.0.0 -m \"sin git push todavía\""}, "tool_name": "Bash", "tool_use_id": "toolu_169"}
+[exit 0]
+$ foreman hook guard  # row 170: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "gh pr create --title \"x\" --body \"after merge: npm publish\""}, "tool_name": "Bash", "tool_use_id": "toolu_170"}
+[exit 0]
+$ foreman hook guard  # row 171: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "gh issue comment 3 --body \"git push stays with Owner\""}, "tool_name": "Bash", "tool_use_id": "toolu_171"}
+[exit 0]
+$ foreman hook guard  # row 172: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "bash -c \"echo 'git push' > ops/reviews/x.md\""}, "tool_name": "Bash", "tool_use_id": "toolu_172"}
+[exit 0]
+$ foreman hook guard  # row 173: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"npm publish\" | tee -a ops/notes/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_173"}
+[exit 0]
+$ foreman hook guard  # row 174: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"npm publish\" >&2"}, "tool_name": "Bash", "tool_use_id": "toolu_174"}
+[exit 0]
+$ foreman hook guard  # row 175: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "{ echo \"npm publish\"; echo b; } > ops/notes/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_175"}
+[exit 0]
+$ foreman hook guard  # row 176: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "gh pr edit 3 --title=\"npm publish done\""}, "tool_name": "Bash", "tool_use_id": "toolu_176"}
+[exit 0]
+$ foreman hook guard  # row 177: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git tag -am \"npm publish\" v2"}, "tool_name": "Bash", "tool_use_id": "toolu_177"}
+[exit 0]
+$ foreman hook guard  # row 178: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "echo \"$(echo 'npm publish')\" > ops/notes/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_178"}
+[exit 0]
+$ foreman hook guard  # row 179: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "egrep -A3 \"npm publish|twine upload\" ops/rules.md"}, "tool_name": "Bash", "tool_use_id": "toolu_179"}
+[exit 0]
+$ foreman hook guard  # row 180: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "rg -n --glob '*.md' -e \"npm publish\" docs"}, "tool_name": "Bash", "tool_use_id": "toolu_180"}
+[exit 0]
+$ foreman hook guard  # row 181: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<'EOF'\ngit push\nEOF\nsh x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_181"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 182: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "tee x.sh <<EOF >/dev/null && bash x.sh\nnpm publish\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_182"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`npm publish`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 183: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat <<'EOF' > x.sh; . x.sh\nnpm publish\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_183"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`npm publish`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 184: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<'EOF'\nnpm publish\nEOF\nsource ./x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_184"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`npm publish`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 185: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.py <<'EOF'\nimport os; os.system('npm publish')\nEOF\npython3 x.py"}, "tool_name": "Bash", "tool_use_id": "toolu_185"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`import os; os.system('npm publish')`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 186: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat <<'EOF' | tee x.sh\ngit push\nEOF\nchmod +x x.sh && ./x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_186"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 187: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<'EOF'\ngit push\nEOF\ncp x.sh y.sh; sh y.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_187"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 188: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<'EOF'\ngit push\nEOF\ncat x.sh | sh"}, "tool_name": "Bash", "tool_use_id": "toolu_188"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 189: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<'EOF'\ngit push\nEOF\nsh < x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_189"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 190: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > /tmp/x <<'EOF'\n0 * * * * npm publish\nEOF\ncrontab /tmp/x"}, "tool_name": "Bash", "tool_use_id": "toolu_190"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`0 * * * * npm publish`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 191: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > Makefile <<'EOF'\nall:\n\\tnpm publish\nEOF\nmake"}, "tool_name": "Bash", "tool_use_id": "toolu_191"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`\tnpm publish`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 192: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<< \"npm publish\"; sh x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_192"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `cat > x.sh <<< "npm publish"`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 193: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > $T <<'EOF'\nnpm publish\nEOF\nsh $T"}, "tool_name": "Bash", "tool_use_id": "toolu_193"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`npm publish`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 194: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": ". /dev/stdin <<< \"git push\""}, "tool_name": "Bash", "tool_use_id": "toolu_194"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 195: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > ops/notes/x.md <<'EOF'\ngit push\nEOF\ngit add ops/notes/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_195"}
+[exit 0]
+$ foreman hook guard  # row 196: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > ops/reviews/x.md <<'EOF'\nnpm publish\nEOF\nbin/foreman selftest > /tmp/out.log"}, "tool_name": "Bash", "tool_use_id": "toolu_196"}
+[exit 0]
+$ foreman hook guard  # row 197: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "tee ops/notes/x.md <<'EOF' >/dev/null\nnpm publish\nEOF\nwc -l ops/notes/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_197"}
+[exit 0]
+$ foreman hook guard  # row 198: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.py <<'EOF'\nprint(\"git push\")\nEOF\npython3 x.py"}, "tool_name": "Bash", "tool_use_id": "toolu_198"}
+[exit 0]
+$ foreman hook guard  # row 199: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<'EOF'\ngit push\nEOF\nchmod +x x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_199"}
+[exit 0]
+$ foreman hook guard  # row 200: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > /tmp/rows.tsv <<'EOF'\ngit push\nEOF\npython3 -I tools/check.py /tmp/rows.tsv"}, "tool_name": "Bash", "tool_use_id": "toolu_200"}
+[exit 0]
+$ foreman hook guard  # row 201: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > ops/notes/x.md <<'EOF'\nnpm publish\nEOF\ncat > x.sh <<'EOF'\nls\nEOF\nsh x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_201"}
+[exit 0]
+$ foreman hook guard  # row 202: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > l.txt <<'EOF'\ngit push\nEOF\nssh h 'tar czf b.tgz -T l.txt'"}, "tool_name": "Bash", "tool_use_id": "toolu_202"}
+[exit 0]
+$ foreman hook guard  # row 203: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cat > x.sh <<'EOF'\ngit push\nEOF\nssh h 'sh x.sh'"}, "tool_name": "Bash", "tool_use_id": "toolu_203"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en un texto que se escribe en un fichero que la misma línea ejecuta después (`git push`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 204: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom pathlib import Path\np = Path(\"ops/rules.md\")\np.write_text(p.read_text().replace(\"x\", \"nunca git push\"))\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_204"}
+[exit 0]
+$ foreman hook guard  # row 205: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 -I - <<'EOF'\nimport re\ns = open(\"CHANGELOG.md\").read()\nopen(\"CHANGELOG.md\", \"w\").write(re.sub(\"a\", \"panel service install\", s))\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_205"}
+[exit 0]
+$ foreman hook guard  # row 206: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\n# npm publish stays with Owner\nprint(f\"step {1}: npm publish later\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_206"}
+[exit 0]
+$ foreman hook guard  # row 207: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport re\nrows = re.compile(\"npm publish\").findall(open(\"ops/rules.md\").read())\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_207"}
+[exit 0]
+$ foreman hook guard  # row 208: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cd ops && python3 - <<'EOF' && git diff --stat\nfrom pathlib import Path\nPath(\"notes/x.md\").write_text(\"npm publish waits\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_208"}
+[exit 0]
+$ foreman hook guard  # row 209: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF' > ops/notes/x.md\nprint(\"twine upload is for Owner\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_209"}
+[exit 0]
+$ foreman hook guard  # row 210: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom pathlib import Path\nPath(\"ops/notes/x.md\").write_text(\"npm publish\")\nEOF\ngit add ops/notes/x.md"}, "tool_name": "Bash", "tool_use_id": "toolu_210"}
+[exit 0]
+$ foreman hook guard  # row 211: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(\"npm publish\", shell=True)\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_211"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`import subprocess subprocess.run("npm publish", shell=True)`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 212: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\n__import__(\"os\").system(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_212"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`__import__("os").system("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 213: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport sys\nsys.modules[\"os\"].system(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_213"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`import sys sys.modules["os"].system("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 214: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport importlib\nimportlib.import_module(\"os\").system(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_214"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`import importlib importlib.import_module("os").system("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 215: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport glob\nglob.os.system(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_215"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`import glob glob.os.system("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 216: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom pathlib import os\nos.popen(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_216"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`from pathlib import os os.popen("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 217: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nexec(\"print(1)\")\nx = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_217"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`exec("print(1)") x = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 218: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nprint(eval(\"1\"), \"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_218"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`print(eval("1"), "npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 219: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport string\nf = string.Formatter().get_field(\"0.os.system\", (0,), {})\nx = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_219"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`…em", (0,), {}) x = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 220: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nimport json\nx = json._default_encoder\ny = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_220"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`import json x = json._default_encoder y = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 221: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom . import x\ny = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_221"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`from . import x y = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 222: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<EOF\nx = \"$X npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_222"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`x = "$X npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 223: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "PYTHONPATH=lib python3 - <<'EOF'\nimport re\nx = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_223"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`import re x = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 224: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 -c 'pass' - <<'EOF'\nx = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_224"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`x = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 225: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 tools/x.py <<'EOF'\nx = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_225"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`x = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 226: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF' | sh\nprint(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_226"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`print("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 227: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF' > x.sh\nprint(\"npm publish\")\nEOF\nsh x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_227"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`print("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 228: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF' >&3\nprint(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_228"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`print("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 229: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom pathlib import Path\nPath(\"x.sh\").write_text(\"npm publish\")\nEOF\nsh x.sh"}, "tool_name": "Bash", "tool_use_id": "toolu_229"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`from pathlib import Path Path("x.sh").write_text("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 230: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom pathlib import Path\nPath(\"run\").write_text(\"npm publish\")\nEOF\nchmod +x run && ./run"}, "tool_name": "Bash", "tool_use_id": "toolu_230"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`from pathlib import Path Path("run").write_text("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 231: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom pathlib import Path\nPath(\"x\").write_text(\"npm publish\")\nEOF\nsh *"}, "tool_name": "Bash", "tool_use_id": "toolu_231"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`from pathlib import Path Path("x").write_text("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 232: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nfrom pathlib import Path\nPath(\"re.py\").write_text(\"x\")\ny = \"npm publish\"\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_232"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`from pathlib import Path Path("re.py").write_text("x") y = "npm publish"`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 233: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "x=$(python3 - <<'EOF'\nprint(\"npm publish\")\nEOF\n); $x"}, "tool_name": "Bash", "tool_use_id": "toolu_233"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el valor de una variable que se ejecuta (`$(python3 - <<'EOF' print("npm publish") EOF )`). Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 234: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "python3 - <<'EOF'\nif __name__ == \"__main__\":\n    print(\"npm publish\")\nEOF"}, "tool_name": "Bash", "tool_use_id": "toolu_234"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «npm publish» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el guion que lee un intérprete (`if __name__ == "__main__": print("npm publish")`). Si solo edita texto, usa la herramienta Edit, o escribe el guion en un fichero con Write y ejecútalo en otra llamada. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 235: deny
+< {"cwd": "<TMP>/faro-app", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git -C . push"}, "tool_name": "Bash", "tool_use_id": "toolu_235"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la subida tal como la haría git desde `<TMP>/faro-app`: `git push origin main:main`. El guardián mira adónde va una subida, no cómo se escribe. Para subir tu propia rama, nómbrala (`git push origin RAMA`); si la carpeta no se pudo saber, escríbela literal (`cd /ruta/al/repo && git push …` o `git -C /ruta/al/repo push …`). Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 236: deny
+< {"cwd": "<TMP>/faro-app", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "cd sub; git -C .. push origin HEAD:main"}, "tool_name": "Bash", "tool_use_id": "toolu_236"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). No se pudo saber la carpeta de esta subida (un `cd` a una variable, `cd -`, una carpeta que no existe), así que se comprobó contra cada repositorio del proyecto; casó tal como la haría git desde `<TMP>/faro`: `git push origin main:main`. El guardián mira adónde va una subida, no cómo se escribe. Para subir tu propia rama, nómbrala (`git push origin RAMA`); si la carpeta no se pudo saber, escríbela literal (`cd /ruta/al/repo && git push …` o `git -C /ruta/al/repo push …`). Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 237: allow
+< {"cwd": "<TMP>/faro-app", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git -C . status"}, "tool_name": "Bash", "tool_use_id": "toolu_237"}
+[exit 0]
+$ foreman hook guard  # row 238: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate foreman ab1/x \"AB-1 T0\" --opens"}, "tool_name": "Bash", "tool_use_id": "toolu_238"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|[\s/'"])foreman\S*['"]?\s+(--project[\s=]\S+\s+)?['"]?integrate['"]?\s(?=(.*\s)?['"]?--opens['"]?(\s|$))» solo lo ejecuta el orquestador de faro (?), y esta sesión no es la marcada. Si lo relevas, márcate antes: `foreman session ID --name NOMBRE`. Casó en la orden `foreman integrate foreman ab1/x "AB-1 T0" --opens`.
+$ foreman hook guard  # row 239: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate foreman ab1/x \"AB-1 T0\" '--opens'"}, "tool_name": "Bash", "tool_use_id": "toolu_239"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|[\s/'"])foreman\S*['"]?\s+(--project[\s=]\S+\s+)?['"]?integrate['"]?\s(?=(.*\s)?['"]?--opens['"]?(\s|$))» solo lo ejecuta el orquestador de faro (?), y esta sesión no es la marcada. Si lo relevas, márcate antes: `foreman session ID --name NOMBRE`. Casó en la orden `foreman integrate foreman ab1/x "AB-1 T0" '--opens'`.
+$ foreman hook guard  # row 240: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate foreman ab1/x \"AB-1 T0\" --note \"--opens\""}, "tool_name": "Bash", "tool_use_id": "toolu_240"}
+[exit 0]
+$ foreman hook guard  # row 241: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate foreman ab1/x \"AB-1 T0\""}, "tool_name": "Bash", "tool_use_id": "toolu_241"}
+[exit 0]
+$ foreman hook guard  # row 242: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate --help"}, "tool_name": "Bash", "tool_use_id": "toolu_242"}
+[exit 0]
+$ foreman hook guard  # row 243: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate foreman ab1/x \"AB-1 T0\" --check"}, "tool_name": "Bash", "tool_use_id": "toolu_243"}
+[exit 0]
+$ foreman hook guard  # row 244: allow
+< {"cwd": "<TMP>/faro-app", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git merge main"}, "tool_name": "Bash", "tool_use_id": "toolu_244"}
+[exit 0]
+$ foreman hook guard  # row 245: allow
+< {"cwd": "<TMP>/faro-app", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "git checkout -b x"}, "tool_name": "Bash", "tool_use_id": "toolu_245"}
+[exit 0]
+$ foreman hook guard
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "tool_input": {"file_path": "x"}, "tool_name": "Read"}
+[exit 0]
+$ foreman hook guard
+< {"agent_id": "a-1", "cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate faro ab1/x \"AB-1 T0\""}, "tool_name": "Bash"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `foreman integrate` mete una rama en main y cierra su issue del backlog; solo lo ejecuta el orquestador de faro (?), nunca un agente ni un subagente. Entrega con `foreman progress --done`; `foreman integrate … --check` y `--help` sí puedes. Casó en la orden `foreman integrate faro ab1/x "AB-1 T0"`.
+$ foreman hook guard
+< {"agent_id": "a-1", "cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman integrate faro ab1/x \"AB-1 T0\" --check"}, "tool_name": "Bash"}
+[exit 0]
+$ foreman hook guard
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "tool_input": {"command": "make up"}, "tool_name": "Bash"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: `make up` usa el recurso compartido «widget»; va dentro de `foreman lock widget run "qué" orden…` en la misma llamada.
+$ foreman hook guard
+< {"cwd": "<TMP>/harbor", "hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}, "tool_name": "Bash"}
+[exit 2]
+--- stderr
+Blocked by the foreman guard: «(^|\s)git push» is on the list of things never done without Sam (harbor). Ask Sam first (foreman backlog decision add, or the inbox). It matched in the command `git push`. If it is only text, write it with the Write or Edit tool, or with `cat > FILE <<'EOF'`. Never without Sam (rules.md).
+$ foreman --project faro guard --table tests/golden_guard.tsv
+[exit 0]
+guard table <TMP>/faro/guard.tsv: ok (150 deny, 0 lock, 81 allow, 14 orchestrator)
+
+######## state root: files under <TMP>/state
+=== callers.json
+{
+ "toolu_064": {
+  "at": <EPOCH>,
+  "session": "s-guard",
+  "agent": null,
+  "state": "<TMP>/state/faro",
+  "calls": [
+   [
+    "foreman",
+    "progress",
+    "hecho; git push es de Owner"
+   ]
+  ],
+  "background": false
+ }
+}
+=== callers.json.lock
+
+=== faro/approved.jsonl
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?permissions['\"]?\\s(.*\\s)?['\"]?apply['\"]?(\\s|$)", "command": "foreman --project foreman permissions apply /tmp/cand.toml --table /tmp/guard.tsv", "tool_use_id": "toolu_019"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?permissions['\"]?\\s(.*\\s)?['\"]?apply['\"]?(\\s|$)", "command": "bin/foreman permissions apply cand.toml --base 0123456789abcdef --opens", "tool_use_id": "toolu_020"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:config", "file": "foreman.toml", "tool_use_id": "toolu_023"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:state", "file": "<TMP>/state/faro/grants.json", "tool_use_id": "toolu_024"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:state", "file": "<TMP>/state/callers.json", "tool_use_id": "toolu_025"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:registry", "file": "<TMP>/projects.toml", "tool_use_id": "toolu_026"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:claude", "file": ".claude/settings.local.json", "tool_use_id": "toolu_027"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:state", "file": "<TMP>/state/faro/board.md", "tool_use_id": "toolu_028"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:claude", "file": ".claude/settings.local.json", "tool_use_id": "toolu_039"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:config", "file": "foreman.toml", "tool_use_id": "toolu_040"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:config", "file": "foreman.toml", "tool_use_id": "toolu_041"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:state", "file": "<TMP>/state/faro/grants.json", "tool_use_id": "toolu_042"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:registry", "file": "<TMP>/projects.toml", "tool_use_id": "toolu_043"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:config", "file": "foreman.toml", "tool_use_id": "toolu_044"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:state", "file": "\"$f\"", "tool_use_id": "toolu_045"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "file:state", "file": "<TMP>/state/faro/board.md", "tool_use_id": "toolu_046"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?\\s(?=(.*\\s)?['\"]?--opens['\"]?(\\s|$))", "command": "foreman integrate foreman ab1/x \"AB-1 T0\" --opens", "tool_use_id": "toolu_238"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "session", "session": "s-guard", "agent_id": null, "agent": null, "orchestrator": null, "pattern": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?\\s(?=(.*\\s)?['\"]?--opens['\"]?(\\s|$))", "command": "foreman integrate foreman ab1/x \"AB-1 T0\" '--opens'", "tool_use_id": "toolu_239"}
+{"at": "<TODAY>T<TIME>", "verdict": "deny", "why": "agent", "session": "s-guard", "agent_id": "a-1", "agent": "agent-a-1", "orchestrator": null, "pattern": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?(?![^;&|\\n]*\\s(?P<q>['\"]?)(--help|-h|--check)(?P=q)(\\s|$))(\\s|$)", "command": "foreman integrate faro ab1/x \"AB-1 T0\"", "tool_use_id": null}
+=== faro/approved.jsonl.lock
+
+=== faro/guard.jsonl
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "git remote add", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "gh repo create", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "twine upload", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)(uv|poetry) publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "launchctl (load|bootstrap|enable|kickstart|bootout|unload|remove|disable)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "launchctl (load|bootstrap|enable|kickstart|bootout|unload|remove|disable)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)(cp|mv|ln|rm|tee)\\s.*Library/LaunchAgents", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "launchctl (load|bootstrap|enable|kickstart|bootout|unload|remove|disable)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "panel service (install|uninstall)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "panel service (install|uninstall)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "panel service (install|uninstall)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)rm -rf? .*\\.local/state/foreman", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)rm -rf? .*\\.config/foreman", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?hook['\"]?\\s+['\"]?mod\\b", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?hook['\"]?\\s+['\"]?mod\\b", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?permissions['\"]?\\s(.*\\s)?['\"]?apply['\"]?(\\s|$)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?permissions['\"]?\\s(.*\\s)?['\"]?apply['\"]?(\\s|$)", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/grants.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/callers.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:registry", "where": "file", "file": "<TMP>/projects.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:claude", "where": "file", "file": ".claude/settings.local.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/board.md", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:claude", "where": "file", "file": ".claude/settings.local.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/grants.json", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:registry", "where": "file", "file": "<TMP>/projects.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:config", "where": "file", "file": "foreman.toml", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "\"$f\"", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "file", "rule": "file:state", "where": "file", "file": "<TMP>/state/faro/board.md", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "git remote add", "where": "whole", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "piped", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "written", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "variable", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "npm publish", "where": "script", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "resolved", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "unknown", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "orchestrator", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?\\s(?=(.*\\s)?['\"]?--opens['\"]?(\\s|$))", "where": "command", "group": "permissions", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "orchestrator", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?\\s(?=(.*\\s)?['\"]?--opens['\"]?(\\s|$))", "where": "command", "group": "permissions", "why": "session", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?(?![^;&|\\n]*\\s(?P<q>['\"]?)(--help|-h|--check)(?P=q)(\\s|$))(\\s|$)", "where": "command", "who": "agent"}
+{"at": "<TODAY>T<TIME>", "kind": "lock", "rule": "make up", "resource": "widget", "where": "command", "who": "other"}
+=== faro/guard.jsonl.lock
+
+=== harbor/guard.jsonl
+{"at": "<TODAY>T<TIME>", "kind": "deny", "rule": "(^|\\s)git push", "where": "command", "who": "other"}
+=== harbor/guard.jsonl.lock
+

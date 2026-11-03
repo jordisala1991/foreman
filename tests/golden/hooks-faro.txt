@@ -1,0 +1,428 @@
+######## faro: no orchestrator yet
+$ foreman hook who
+< {"cwd": "<TMP>/faro", "hook_event_name": "SessionStart", "session_id": "orq-session-1", "source": "startup"}
+[exit 0]
+{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "Este producto (faro) no tiene orquestador ahora (ninguna sesión marcada con `foreman session`): no tomes su backlog ni lances agentes de producción salvo que te lo pida el dueño. Los recursos compartidos, solo con `foreman lock RECURSO run \"qué\" orden…`."}}
+$ foreman hook loop
+< {"cwd": "<TMP>/faro", "hook_event_name": "UserPromptSubmit", "prompt": "Bucle del orquestador de faro: pass", "session_id": "orq-session-1"}
+[exit 0]
+
+######## faro: the orchestrator marks itself
+$ foreman --project faro session orq-session-1 --name orq
+[exit 0]
+faro: orchestrated by orq (session orq-session-1, since <TODAY>T<TIME>)
+  alive: last tick <TIME>, module running since <TIME> (idle); last loop pass none seen
+  foreman <VERSION> in that session (working copy)
+  context unknown (no measure from foreman's hooks module for this session yet)
+  renewals: none
+$ foreman hook who
+< {"cwd": "<TMP>/faro", "hook_event_name": "SessionStart", "session_id": "orq-session-1", "source": "startup"}
+[exit 0]
+$ foreman hook who
+< {"cwd": "<TMP>/faro", "hook_event_name": "SessionStart", "session_id": "other-session-2", "source": "startup"}
+[exit 0]
+{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "Este producto (faro) lo orquesta la sesión orq (desde <TIME>); tú no eres su orquestador: no toques su backlog ni lances agentes de producción (si el orquestador te dio un encargo, síguelo). Para coordinarte, escríbele con SendMessage a orq; los recursos compartidos, solo con `foreman lock RECURSO run \"qué\" orden…`."}}
+$ foreman hook who
+< {"cwd": "<TMP>/faro", "hook_event_name": "SessionStart", "session_id": "other-session-2", "source": "clear"}
+[exit 0]
+
+######## faro: an agent is launched, works, delivers and stops
+$ foreman --project faro launch ag2 --issue FA-2 --type dev
+[exit 0]
+[foreman launch <TOKEN1>] ag2 · FA-2 · production
+$ foreman hook pause-agents
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "orq-session-1", "tool_input": {"prompt": "[foreman launch <TOKEN1>] ag2 · FA-2 · production\nIssue FA-2.", "subagent_type": "dev"}, "tool_name": "Agent"}
+[exit 0]
+$ foreman hook agents
+< {"agent_id": "agent-aaa111", "agent_transcript_path": "<TMP>/tasks/agent-aaa111.output", "agent_type": "dev", "cwd": "<TMP>/faro", "hook_event_name": "SubagentStart", "session_id": "orq-session-1"}
+[exit 0]
+$ foreman hook agents
+< {"cwd": "<TMP>/faro", "hook_event_name": "PostToolUse", "session_id": "orq-session-1", "tool_input": {"prompt": "[foreman launch <TOKEN1>] ag2 · FA-2 · production\nIssue FA-2.", "subagent_type": "dev"}, "tool_name": "Agent", "tool_response": {"agentId": "agent-aaa111", "status": "async_launched"}}
+[exit 0]
+$ foreman hook agents
+< {"cwd": "<TMP>/faro", "hook_event_name": "PostToolUse", "session_id": "orq-session-1", "tool_input": {"prompt": "no launch line", "subagent_type": "dev"}, "tool_name": "Agent", "tool_response": {"agentId": "agent-bbb222", "status": "async_launched"}}
+[exit 0]
+{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "foreman: se ha lanzado un agente de producción (dev, agent-bbb222) sin línea de lanzamiento, así que foreman no puede unirlo a su nombre, issue y rama. Dásela ahora con `foreman agents --name agent-bbb222 NOMBRE --issue ID --sub Tn --branch RAMA`, y la próxima vez empieza el brief con la línea que imprime `foreman launch`."}}
+$ foreman hook guard
+< {"agent_id": "agent-aaa111", "cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "orq-session-1", "tool_input": {"command": "foreman --project faro progress 'halfway'"}, "tool_name": "Bash", "tool_use_id": "toolu_p1"}
+[exit 0]
+$ foreman --project faro progress halfway
+[exit 0]
+$ foreman hook agents
+< {"agent_id": "agent-aaa111", "cwd": "<TMP>/faro", "hook_event_name": "PostToolUse", "session_id": "orq-session-1", "tool_input": {"command": "foreman --project faro progress 'halfway'"}, "tool_name": "Bash", "tool_use_id": "toolu_p1"}
+[exit 0]
+$ foreman --project faro agents
+[exit 0]
+agent-aa ag2 working FA-2 - 0min -
+$ foreman --project faro loop
+[exit 0]
+- WIP (pipeline not full): unblocked ready 0/2 (refining 0): plans for the next ones (FA-3).
+- Agents still marked live that are dead (their session is gone, or Claude Code reports them failed or killed): ag2 (session gone): relaunch them or mark them stopped (`foreman agents --stop ID`).
+$ foreman hook agents
+< {"agent_id": "agent-aaa111", "cwd": "<TMP>/faro", "hook_event_name": "PostToolUse", "session_id": "orq-session-1", "tool_input": {"command": "foreman --project faro progress --done 'delivered'"}, "tool_name": "Bash", "tool_use_id": "toolu_p2"}
+[exit 0]
+$ foreman hook agents
+< {"agent_id": "agent-aaa111", "cwd": "<TMP>/faro", "hook_event_name": "SubagentStop", "last_assistant_message": "Delivered: branch ready.", "session_id": "orq-session-1"}
+[exit 0]
+$ foreman --project faro agents
+[exit 0]
+agent-aa ag2 delivered FA-2 - 0min - ok
+
+######## faro: the loop's prompts
+$ foreman hook mod tick
+< {"cwd": "<TMP>/faro", "session": "orq-session-1"}
+[exit 0]
+{"band": {"level": "ask", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 0, "role": "ask", "text": "1 pregunta para ti"}, {"prio": 2, "role": "plain", "text": "memoria —"}, {"prio": 4, "role": "plain", "text": "próxima pasada <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nada en marcha"}]]}, "due": true, "grants": false, "marked": true, "submit": "Bucle del orquestador de faro\n\nLoop pass <TIME> (heartbeat written, <SECONDS> s). Act on each line (those marked (info) only inform):\n- (info) WIP (pipeline not full): production 0/1: no unblocked `ready` issue to launch.\n- WIP (pipeline not full): unblocked ready 0/2 (refining 0): plans for the next ones (FA-3).\n- `in progress` with no live agent or branch: FA-2: back to `ready` (or relaunch)."}
+$ foreman hook mod tick
+< {"cwd": "<TMP>/faro", "session": "orq-session-1"}
+[exit 0]
+{"band": {"level": "ask", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 0, "role": "ask", "text": "1 pregunta para ti"}, {"prio": 2, "role": "plain", "text": "memoria —"}, {"prio": 4, "role": "plain", "text": "próxima pasada <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nada en marcha"}]]}, "due": false, "grants": false, "marked": true}
+$ foreman hook loop
+< {"cwd": "<TMP>/faro", "hook_event_name": "UserPromptSubmit", "prompt": "Bucle del orquestador de faro\n\nLoop pass <TIME> (heartbeat written, <SECONDS> s). Act on each line (those marked (info) only inform):\n- (info) WIP (pipeline not full): production 0/1: no unblocked `ready` issue to launch.\n- WIP (pipeline not full): unblocked ready 0/2 (refining 0): plans for the next ones (FA-3).\n- `in progress` with no live agent or branch: FA-2: back to `ready` (or relaunch).", "session_id": "orq-session-1"}
+[exit 0]
+$ foreman hook mod tick
+< {"cwd": "<TMP>/faro", "session": "other-session-2"}
+[exit 0]
+{"grants": false, "marked": false}
+$ foreman hook loop
+< {"cwd": "<TMP>/faro", "hook_event_name": "UserPromptSubmit", "prompt": "Bucle del orquestador de faro: pass", "session_id": "other-session-2"}
+[exit 0]
+$ foreman hook loop
+< {"cwd": "<TMP>/faro", "hook_event_name": "UserPromptSubmit", "prompt": "how is it going?", "session_id": "orq-session-1"}
+[exit 0]
+$ foreman hook mod tick
+< {"cwd": "<TMP>/faro", "session": "orq-session-1"}
+[exit 0]
+{"band": {"level": "ask", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 0, "role": "ask", "text": "1 pregunta para ti"}, {"prio": 2, "role": "plain", "text": "memoria —"}, {"prio": 4, "role": "plain", "text": "próxima pasada <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nada en marcha"}]]}, "due": false, "grants": false, "marked": true}
+
+######## faro: paused, then a compaction
+$ foreman hook pause-agents
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "orq-session-1", "tool_input": {"prompt": "x", "subagent_type": "dev"}, "tool_name": "Agent"}
+[exit 0]
+{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "Bloqueado por foreman: faro está pausado desde el panel (desde las <TIME>); no se lanzan agentes de producción (dev) hasta que Marta lo reanude allí. Los demás tipos (planificación, exploración) sí pueden."}}
+$ foreman hook pause-agents
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "orq-session-1", "tool_input": {"prompt": "x", "subagent_type": "Explore"}, "tool_name": "Agent"}
+[exit 0]
+$ foreman hook guard
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "orq-session-1", "tool_input": {"command": "foreman launch ag9 --issue FA-3"}, "tool_name": "Bash"}
+[exit 0]
+$ foreman --project faro loop
+[exit 0]
+- (info) PAUSADO desde el panel (desde las <TIME>): no lances agentes de producción ni integres (foreman worktree y foreman integrate están bloqueados) hasta que Marta lo reanude allí; atiende el buzón, toma notas y deja terminar a los agentes vivos.
+- `in progress` with no live agent or branch: FA-2: back to `ready` (or relaunch).
+$ foreman hook resume
+< {"cwd": "<TMP>/faro", "hook_event_name": "SessionStart", "session_id": "orq-session-1", "source": "compact"}
+[exit 0]
+# Paquete de foreman tras una compactación (<TIME>)
+
+La conversación de esta sesión se ha compactado a las <TIME> (la compactación automática de Claude Code o un /compact), y esto es el paquete de foreman. Sigues siendo orq, el orquestador marcado de faro: la marca, el repaso y tus agentes siguen como estaban. No ejecutes `foreman start` ni `foreman session`. En menos de un minuto llega un repaso: actúa sobre él como siempre. La conversación anterior entera está en (not known): búscala con grep si te falta un detalle. Este paquete, entero, está en <TMP>/state/faro/renewal-pack.md.
+
+## Los 0 últimos mensajes de Marta, tal cual (del más antiguo al más nuevo)
+
+(no hay ninguno en el transcript)
+
+Arranque de una sesión de orquestador: faro (<TODAY> <TIME>)
+
+Esta sesión: orq-session-1 (nombre orq; encontrada en $CLAUDE_CODE_SESSION_ID)
+Marcada ahora: esta sesión, desde <TODAY>T<TIME>
+EN PAUSA desde <TIME> (desde el panel): nada de integrate, worktree ni launch hasta que Marta la quite.
+
+## Esperando a Marta
+- decisión DEC J1 (2020-01-18): ¿Cerramos FA-2 con el T1 de loop.py?
+
+## Agentes
+ninguno vivo
+
+## Pizarra (<TMP>/state/faro/board.md)
+# Board
+
+- one line
+
+## Backlog activo (2 issues; `foreman backlog show ID` para uno)
+- FA-2 in progress: Pintar los faros
+- FA-3 backlog: Enviar avisos por radio
+triage: 1 (FA-4)
+
+## Recursos y cerrojos
+- widget: libre
+
+Normas: <TMP>/faro/normas.md (0.0 KB, ≈0 tokens): léelas una vez; mandan sobre el procedimiento. Secciones: -
+
+## Leer después, solo si hace falta
+- `foreman docs owner`: antes de tu primer mensaje a Marta.
+- `foreman docs orchestrator`: solo la sección que pida un aviso o un caso («Every pass», «Renewal», la tabla de avisos).
+- `foreman agents`, `foreman catchup --json`: detalle cuando una línea de arriba no basta.
+
+## Las normas (<TMP>/faro/normas.md)
+
+# Rules of faro
+$ foreman hook resume
+< {"cwd": "<TMP>/faro", "hook_event_name": "SessionStart", "session_id": "other-session-2", "source": "compact"}
+[exit 0]
+
+######## faro: the orchestrator's session is gone
+$ foreman hook mod end
+< {"cwd": "<TMP>/faro", "session": "orq-session-1"}
+[exit 0]
+{"ended": true}
+$ foreman hook who
+< {"cwd": "<TMP>/faro", "hook_event_name": "SessionStart", "session_id": "other-session-2", "source": "startup"}
+[exit 0]
+{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "Este producto (faro) tiene marcada como orquestadora la sesión orq (desde <TIME>), pero esa sesión no está viva: terminó, o el módulo de hooks de foreman no da latido desde ella hace 2 minutos (última pasada del bucle <TIME>). Si esta sesión viene a relevarla, márcate con `foreman --project faro session other-session-2 --name <tu nombre>` (la pasada del bucle llega entonces a esta sesión); si no, avisa a Marta y no tomes su backlog ni lances agentes de producción. Los recursos compartidos, solo con `foreman lock RECURSO run \"qué\" orden…`."}}
+$ foreman hook loop
+< {"cwd": "<TMP>/faro", "hook_event_name": "UserPromptSubmit", "prompt": "Bucle del orquestador de faro: pass", "session_id": "other-session-2"}
+[exit 0]
+$ foreman hook mod tick
+< {"cwd": "<TMP>/faro", "session": "other-session-2"}
+[exit 0]
+{"grants": false, "marked": false}
+
+######## faro: the delivery check stops an incomplete delivery twice, then lets it go
+$ foreman --project faro launch ag5 --issue FA-3 --sub T1 --repo app --branch fa3/t1 --no-backlog
+[exit 0]
+<TMP>/wt/app-ag5 (fa3/t1 from main 3e519db)
+[foreman launch <TOKEN2>] ag5 · FA-3 T1 · branch fa3/t1 · worktree <TMP>/wt/app-ag5 · production
+$ foreman hook agents
+< {"cwd": "<TMP>/faro", "hook_event_name": "PostToolUse", "session_id": "other-session-2", "tool_input": {"prompt": "[foreman launch <TOKEN2>] ag5 · FA-3 T1 · branch fa3/t1 · worktree <TMP>/wt/app-ag5 · production\nWork.", "subagent_type": "dev"}, "tool_name": "Agent", "tool_response": {"agentId": "agent-ccc333", "status": "async_launched"}}
+[exit 0]
+$ foreman hook agents
+< {"agent_id": "agent-ccc333", "agent_type": "dev", "cwd": "<TMP>/faro", "hook_event_name": "SubagentStop", "last_assistant_message": "Done.", "session_id": "other-session-2"}
+[exit 0]
+{"decision": "block", "reason": "foreman delivery check (try 1 of 2): your delivery is not complete yet.\n- no commits on fa3/t1 beyond main: commit your work in <TMP>/wt/app-ag5 (git -C <TMP>/wt/app-ag5 add -A && git -C <TMP>/wt/app-ag5 commit -m \"…\")\n- no report of yours under <TMP>/faro/reviews: write <TMP>/faro/reviews/YYYY-MM-DD-<task>.md (what changed, how it was checked, what is missing; it names your branch)\n- no delivery recorded: you have not run `foreman progress --done` since you started (or since your last stop was refused)\nFix it, then run `foreman --project faro progress --done \"<result in one line>\" --outcome ok|partial` as your last command and stop. If the task failed, say so with `foreman --project faro progress --done \"<what failed and why>\" --outcome failed`: a failed delivery needs no commits or report.\nIf your task only measured (a report, no code for main), add `--kind measure`: it needs no commits."}
+$ foreman hook agents
+< {"agent_id": "agent-ccc333", "agent_type": "dev", "cwd": "<TMP>/faro", "hook_event_name": "SubagentStop", "last_assistant_message": "Done.", "session_id": "other-session-2"}
+[exit 0]
+{"decision": "block", "reason": "foreman delivery check (try 2 of 2): your delivery is not complete yet.\n- no commits on fa3/t1 beyond main: commit your work in <TMP>/wt/app-ag5 (git -C <TMP>/wt/app-ag5 add -A && git -C <TMP>/wt/app-ag5 commit -m \"…\")\n- no report of yours under <TMP>/faro/reviews: write <TMP>/faro/reviews/YYYY-MM-DD-<task>.md (what changed, how it was checked, what is missing; it names your branch)\n- no delivery recorded: you have not run `foreman progress --done` since you started (or since your last stop was refused)\nFix it, then run `foreman --project faro progress --done \"<result in one line>\" --outcome ok|partial` as your last command and stop. If the task failed, say so with `foreman --project faro progress --done \"<what failed and why>\" --outcome failed`: a failed delivery needs no commits or report.\nIf your task only measured (a report, no code for main), add `--kind measure`: it needs no commits."}
+$ foreman hook agents
+< {"agent_id": "agent-ccc333", "agent_type": "dev", "cwd": "<TMP>/faro", "hook_event_name": "SubagentStop", "last_assistant_message": "Done.", "session_id": "other-session-2"}
+[exit 0]
+$ foreman --project faro agents
+[exit 0]
+agent-aa ag2 delivered FA-2 - 0min - ok
+agent-cc ag5 waiting FA-3/T1 fa3/t1 0min -
+$ foreman --project faro loop
+[exit 0]
+- (info) PAUSADO desde el panel (desde las <TIME>): no lances agentes de producción ni integres (foreman worktree y foreman integrate están bloqueados) hasta que Marta lo reanude allí; atiende el buzón, toma notas y deja terminar a los agentes vivos.
+- Stopped with an incomplete delivery (the delivery check let them go after 2 tries): ag5 (fa3/t1): missing commits, report, progress --done: resume the agent (SendMessage) with what is missing, or finish or drop it yourself.
+- Worktrees the backlog does not name: app:fa3/t1: note them in their sub-issue (`foreman backlog sub … --branch`) or remove them.
+- `in progress` with no live agent or branch: FA-2: back to `ready` (or relaunch).
+
+######## faro: outside any product, and unknown hooks
+$ foreman hook who (cwd outside the products)
+[exit 0]
+$ foreman hook nope
+[exit 0]
+--- stderr
+unknown hook nope (agents, resume, who, loop, guard, pause-agents)
+
+######## state root: files under <TMP>/state
+=== callers.json
+{}
+=== callers.json.lock
+
+=== faro/agents.json
+{
+ "agent-aaa111": {
+  "start": "<TODAY>T<TIME>",
+  "type": "dev",
+  "transcript": "<TMP>/tasks/agent-aaa111.output",
+  "name": "ag2",
+  "issue": "FA-2",
+  "production": true,
+  "launch": "<TOKEN1>",
+  "named_by": "launch",
+  "tool": "Bash",
+  "activity": "<TODAY>T<TIME>",
+  "delivered": "<TODAY>T<TIME>",
+  "outcome": "ok",
+  "end": "<TODAY>T<TIME>",
+  "final": "Delivered: branch ready.",
+  "final_chars": 24
+ },
+ "agent-ccc333": {
+  "start": "<TODAY>T<TIME>",
+  "type": "dev",
+  "name": "ag5",
+  "issue": "FA-3",
+  "sub": "T1",
+  "repo": "app",
+  "branch": "fa3/t1",
+  "worktree": "<TMP>/wt/app-ag5",
+  "production": true,
+  "launch": "<TOKEN2>",
+  "named_by": "launch",
+  "final": "Done.",
+  "final_chars": 5,
+  "delivery_blocks": 2,
+  "blocked_at": "<TODAY>T<TIME>",
+  "end": "<TODAY>T<TIME>",
+  "delivery_incomplete": {
+   "at": "<TODAY>T<TIME>",
+   "missing": [
+    "commits",
+    "report",
+    "progress --done"
+   ]
+  }
+ }
+}
+=== faro/agents.json.lock
+
+=== faro/board.md
+# Board
+
+- one line
+=== faro/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>"
+}
+=== faro/heartbeats.json.lock
+
+=== faro/launches.json
+{
+ "<TOKEN1>": {
+  "name": "ag2",
+  "issue": "FA-2",
+  "sub": null,
+  "repo": null,
+  "branch": null,
+  "worktree": null,
+  "type": "dev",
+  "production": true,
+  "at": "<TODAY>T<TIME>",
+  "session": null,
+  "agent": "agent-aaa111"
+ },
+ "<TOKEN2>": {
+  "name": "ag5",
+  "issue": "FA-3",
+  "sub": "T1",
+  "repo": "app",
+  "branch": "fa3/t1",
+  "worktree": "<TMP>/wt/app-ag5",
+  "type": null,
+  "production": true,
+  "at": "<TODAY>T<TIME>",
+  "session": null,
+  "agent": "agent-ccc333"
+ }
+}
+=== faro/launches.json.lock
+
+=== faro/loop.jsonl
+{"time": "<TODAY>T<TIME>", "session": "orq-session-1", "skipped": false, "notices": ["wip_production", "wip_ready", "orphan_in_progress"], "actionable": ["wip_ready", "orphan_in_progress"], "duration_s": <SECONDS>}
+=== faro/loop.jsonl.lock
+
+=== faro/notices-last
+wip_ready
+=== faro/orchestrator.json
+{
+ "session": "orq-session-1",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== faro/pause
+paused at <TIME>
+=== faro/progress.jsonl
+{"time": "<TODAY> <TIME>", "agent": "orchestrator", "text": "halfway"}
+=== faro/progress.jsonl.lock
+
+=== faro/renewal-pack.md
+# Paquete de foreman tras una compactación (<TIME>)
+
+La conversación de esta sesión se ha compactado a las <TIME> (la compactación automática de Claude Code o un /compact), y esto es el paquete de foreman. Sigues siendo orq, el orquestador marcado de faro: la marca, el repaso y tus agentes siguen como estaban. No ejecutes `foreman start` ni `foreman session`. En menos de un minuto llega un repaso: actúa sobre él como siempre. La conversación anterior entera está en (not known): búscala con grep si te falta un detalle. Este paquete, entero, está en <TMP>/state/faro/renewal-pack.md.
+
+## Los 0 últimos mensajes de Marta, tal cual (del más antiguo al más nuevo)
+
+(no hay ninguno en el transcript)
+
+Arranque de una sesión de orquestador: faro (<TODAY> <TIME>)
+
+Esta sesión: orq-session-1 (nombre orq; encontrada en $CLAUDE_CODE_SESSION_ID)
+Marcada ahora: esta sesión, desde <TODAY>T<TIME>
+EN PAUSA desde <TIME> (desde el panel): nada de integrate, worktree ni launch hasta que Marta la quite.
+
+## Esperando a Marta
+- decisión DEC J1 (2020-01-18): ¿Cerramos FA-2 con el T1 de loop.py?
+
+## Agentes
+ninguno vivo
+
+## Pizarra (<TMP>/state/faro/board.md)
+# Board
+
+- one line
+
+## Backlog activo (2 issues; `foreman backlog show ID` para uno)
+- FA-2 in progress: Pintar los faros
+- FA-3 backlog: Enviar avisos por radio
+triage: 1 (FA-4)
+
+## Recursos y cerrojos
+- widget: libre
+
+Normas: <TMP>/faro/normas.md (0.0 KB, ≈0 tokens): léelas una vez; mandan sobre el procedimiento. Secciones: -
+
+## Leer después, solo si hace falta
+- `foreman docs owner`: antes de tu primer mensaje a Marta.
+- `foreman docs orchestrator`: solo la sección que pida un aviso o un caso («Every pass», «Renewal», la tabla de avisos).
+- `foreman agents`, `foreman catchup --json`: detalle cuando una línea de arriba no basta.
+
+## Las normas (<TMP>/faro/normas.md)
+
+# Rules of faro
+=== faro/session
+orq-session-1
+=== faro/sessions/orq-session-1.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/faro",
+ "ended": "<TODAY>T<TIME>"
+}
+=== faro/sessions/other-session-2.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/faro"
+}
+=== faro/who-gone-notified.json
+{
+ "other-session-2": "orq-session-1:gone:<TODAY>T<TIME>"
+}
+=== faro/who-gone-notified.json.lock
+
+=== install/sessions.json
+{
+ "orq-session-1": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "faro",
+  "cwd": "<TMP>/faro",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ },
+ "other-session-2": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "faro",
+  "cwd": "<TMP>/faro",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ }
+}
+=== install/sessions.json.lock
+

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="{{LANG}}" data-v="{{V}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0e10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="foreman">
+<title>foreman</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- the font does not block the first paint (the system font shows until it arrives) -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<!-- styles and code live in app.css and app.js, served with the page's key and their version (v): the browser keeps
+     them until they change. Texts with data-s (and data-sp for placeholders) come from strings.<language>.json. -->
+<link rel="stylesheet" href="app.css?v={{V}}&t={{T}}">
+</head>
+<body>
+<header><h1><button class="hpick" id="hpick" onclick="openPicker()" aria-haspopup="dialog"><span id="hname">…</span><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></h1><span><span id="clock">…</span><button id="refresh" data-sa="refresh" aria-label="Refresh" onclick="refresh()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button></span></header>
+<div id="modal" class="modal" hidden onclick="if(event.target===this)closeModal()"><div class="mwrap"><div class="mbar"><button class="sec" id="mback" onclick="history.back()" data-s="back_btn">‹ Back</button><b id="mtit"></b><button class="sec" onclick="closeModal()" data-sa="close" aria-label="Close">✕</button></div><div class="mbody" id="mbody"></div></div></div>
+<div id="pal" class="pal" hidden onclick="if(event.target===this)closePalette()"><div class="pbox"><div class="pin"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="palq" type="search" data-sp="wiki_search_ph" placeholder="" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="palInput()" onkeydown="palKey(event)"><button class="sec sm" onclick="closePalette()" data-s="close_btn">Close</button></div><div id="palres" class="pres"></div></div></div>
+<div id="psheet" class="sheet" hidden onclick="if(event.target===this)closePicker()"><div class="panel"><div class="grab"></div><h2 class="sh" data-s="products">Products</h2><div id="plist"></div></div></div>
+<div id="ptr"></div>
+<div id="err" class="err"></div>
+<div id="broken"></div>
+
+<!-- Now: what is going on and whether I am needed -->
+<section class="tab on" id="t-now">
+<div id="headline"></div>
+<div id="chips" class="chips"></div>
+<div id="notices"></div>
+<div id="locks"></div>
+<div id="report"></div>
+</section>
+
+<!-- You: what I decide -->
+<section class="tab" id="t-you">
+<div id="grantreq"></div>
+<div id="dec"></div>
+<div id="msgs"></div>
+<div id="composer" class="card"><textarea id="txt" data-sp="write_here" placeholder=""></textarea>
+<div class="btns"><button onclick="send()" data-s="send">Send</button></div></div>
+</section>
+
+<!-- Work: what is being worked on -->
+<section class="tab" id="t-work">
+<div id="agents"></div>
+<div id="branches"></div>
+<div id="prs"></div>
+</section>
+
+<!-- Backlog: what comes next -->
+<section class="tab" id="t-backlog">
+<div class="seg" id="blseg" role="tablist"><button data-v="issues" onclick="setView('issues')" data-s="view_issues">Issues</button><button data-v="projects" onclick="setView('projects')" data-s="view_projects">Projects</button></div>
+<div id="filter" class="filterbar"></div>
+<div id="board"></div>
+<div id="moves"></div>
+<div id="sheet" class="sheet" hidden onclick="if(event.target===this)closeSheet()"><div class="panel"><div class="grab"></div><h2 class="sh" data-s="view_projects">Projects</h2><div id="sheetlist"></div></div></div>
+</section>
+
+<!-- Wiki: what we know (read-only); the pages open in the modal -->
+<section class="tab" id="t-wiki">
+<button class="wsearch" onclick="openPalette()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span data-s="wiki_search">Search the wiki</span><kbd>⌘K</kbd></button>
+<h2 class="sh"><span data-s="wiki_pages">Pages</span><span class="sa" id="wcount"></span></h2>
+<div id="wtree"></div>
+</section>
+
+<!-- System: whether everything is healthy -->
+<section class="tab" id="t-system">
+<div id="fwarn"></div>
+<div id="mac"></div>
+<div id="recurring"></div>
+<div id="lasthour"></div>
+<div id="errs"></div>
+<div id="prods"></div>
+<div id="fsess"></div>
+<div id="about"></div>
+</section>
+
+<nav id="nav"><button data-t="now" class="on"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span data-s="tab_now">Now</span></button><button data-t="you"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span data-s="tab_you">You</span><b class="badge" id="badge" hidden></b></button><button data-t="work"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M8 4h8"/><circle cx="9" cy="14" r="1.2" fill="currentColor"/><circle cx="15" cy="14" r="1.2" fill="currentColor"/></svg><span data-s="tab_work">Work</span></button><button data-t="backlog"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01" stroke-width="3"/></svg><span data-s="tab_backlog">Backlog</span></button><button data-t="system"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-s="tab_system">System</span></button><button data-t="wiki" id="navwiki"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg><span data-s="tab_wiki">Wiki</span></button></nav>
+
+<script src="app.js?v={{V}}&t={{T}}"></script>
+</body>
+</html>

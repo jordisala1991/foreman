@@ -1,0 +1,3052 @@
+######## reads
+$ GET /api/version
+[200]
+{
+  "version": <EPOCH>
+}
+$ GET /api/projects
+[200]
+{
+  "errors": [],
+  "foreman_follows": false,
+  "foreman_installed": null,
+  "foreman_root": "<FOREMAN>",
+  "foreman_version": "<VERSION>",
+  "foreman_warning": null,
+  "language": "es",
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ],
+  "mac": "<MACHINE>",
+  "projects": [
+    {
+      "active": true,
+      "agents": 0,
+      "counts": {
+        "ready": 1,
+        "refining": 0
+      },
+      "decisions": 1,
+      "language": "es",
+      "late": [],
+      "mode": "active",
+      "name": "faro",
+      "orchestrator": null,
+      "orchestrator_health": null,
+      "owner": "Marta",
+      "paused": null,
+      "teams": [
+        "app"
+      ],
+      "title": "faro",
+      "unread": 0,
+      "warnings": [],
+      "wiki": false,
+      "wiki_first": [],
+      "writable": true
+    },
+    {
+      "active": true,
+      "agents": 0,
+      "counts": {
+        "ready": 1,
+        "refining": 0
+      },
+      "decisions": 1,
+      "language": "es",
+      "late": [
+        "Weekly review"
+      ],
+      "mode": "active",
+      "name": "harbor",
+      "orchestrator": null,
+      "orchestrator_health": null,
+      "owner": "Sam",
+      "paused": null,
+      "teams": [
+        "api"
+      ],
+      "title": "Harbor",
+      "unread": 0,
+      "warnings": [],
+      "wiki": true,
+      "wiki_first": [],
+      "writable": true
+    }
+  ],
+  "sessions": [],
+  "version": <EPOCH>
+}
+$ GET /api/strings?lang=es
+[200]
+{
+  "activity": "Actividad",
+  "agent": "Agente",
+  "agent_status": {
+    "finished": "acabado",
+    "holds a lock": "con el cerrojo",
+    "maybe stuck": "posible atasco",
+    "waiting for a lock": "esperando el cerrojo",
+    "waiting for its task": "esperando su tarea",
+    "working": "trabajando"
+  },
+  "agents": "Agentes",
+  "agents_count_1": "{n} agente",
+  "agents_count_n": "{n} agentes",
+  "agents_running": "{names} en marcha",
+  "ago_d": "hace {n} días",
+  "ago_dur": "hace {dur}",
+  "ago_h": "hace {n} h",
+  "ago_min": "hace {n} min",
+  "all": "todos",
+  "all_fine": "Todo en marcha",
+  "all_products": "Todos los productos",
+  "all_projects": "Todos los proyectos",
+  "anchor": "Enlace a esta sección",
+  "answer": "Responder",
+  "answered": "Respondido: <b>{text}</b> · queda cerrada; se quita de aquí cuando el orquestador lo lea",
+  "answered_free": "Respondido con tus palabras: <b>{text}</b> · queda cerrada; el orquestador lo interpreta y se quita de aquí cuando lo lea",
+  "answered_free_lc": "respondido con tus palabras: {text}",
+  "answered_lc": "respondido: {text}",
+  "approve": "Aprobar",
+  "archived_lc": "archivado",
+  "asked": "Preguntado",
+  "asked_on": "preguntado el {date}",
+  "assignee": "Asignado",
+  "auto_release": "(se suelta solo)",
+  "back_btn": "‹ Volver",
+  "blocked_by": "Bloqueado por",
+  "blocked_by_issues": "Bloqueado por",
+  "blocked_lc": "bloqueado",
+  "blocks": "Bloquea a",
+  "branch": "Rama",
+  "branch_of": "Rama de {repo}",
+  "branches": "Ramas",
+  "busy_cut": "(cortado)",
+  "busy_error": "no se pudo saber quién lo usa: la comprobación falló",
+  "busy_more": "+{n} líneas más (en el detalle)",
+  "busy_none": "nadie",
+  "busy_pending": "comprobando…",
+  "busy_since": "sin cambios desde las {t}",
+  "busy_timeout": "no se pudo saber quién lo usa: la comprobación tardó demasiado",
+  "busy_title": "En uso fuera de foreman",
+  "cancel": "Cancelar",
+  "checks": "{ok} bien, {fail} mal, {pending} pendientes",
+  "checks_label": "Checks",
+  "chip_agents": "Agentes",
+  "chip_disk": "Disco",
+  "chip_memory": "Memoria",
+  "chip_prs": "PR",
+  "close": "Cerrar",
+  "close_btn": "Cerrar",
+  "col_pr": "Con PR",
+  "col_ready": "Lista, sin agente",
+  "col_today": "En main hoy",
+  "col_working": "En curso",
+  "config_broken_tag": "no carga",
+  "config_broken_text": "foreman deja fuera este producto hasta que se arregle: aquí no hay datos y foreman no vigila a sus agentes (no les impide nada). `foreman check` dice qué arreglar:",
+  "config_broken_title": "{name}: su configuración no carga",
+  "config_warning": "aviso de configuración: {text}",
+  "config_warnings_tag_1": "1 aviso de configuración",
+  "config_warnings_tag_n": "{n} avisos de configuración",
+  "confirm_answer": "¿Responder «{op}»?",
+  "confirm_approve": "¿Aprobar {branch}?",
+  "confirm_free": "¿Responder con «{text}»? La pregunta queda cerrada.",
+  "confirm_grant": "¿Dejas al orquestador ejecutar las órdenes de «{group}» durante {n} minutos?",
+  "confirm_reject": "¿Descartar {id}? Pasa a Cancelado (se puede recuperar desde el backlog).",
+  "contents": "Contenido",
+  "context": "Contexto",
+  "cpu_idle": "Nada tirando de la CPU.",
+  "criterion_lc": "criterio:",
+  "decision": "Decisión",
+  "decisions": "Decisiones pendientes",
+  "decisions_count_1": "{n} decisión",
+  "decisions_count_n": "{n} decisiones",
+  "decisions_wait_1": "{n} decisión espera tu respuesta",
+  "decisions_wait_n": "{n} decisiones esperan tu respuesta",
+  "declared_by": "Lo declaran",
+  "delivery_outcome": "Resultado",
+  "derived": "(de sus issues)",
+  "description": "Descripción",
+  "detail": "Detalle",
+  "disk_free": "libres en disco de {gb}",
+  "doc_failed": "No se pudo cargar {path}",
+  "done_lc": "hecho",
+  "draft": "borrador",
+  "drag": "Arrastrar para reordenar",
+  "duplicate_of": "Duplicado de",
+  "duplicates": "Duplicados",
+  "dur_h": "{h} h {m} min",
+  "dur_min": "{n} min",
+  "dur_s": "{n} s",
+  "error": "Error: {text}",
+  "errors": "Problemas del registro",
+  "every": "Cada",
+  "final": "Su entrega",
+  "finished_lc": "acabó",
+  "foreman_follows": "sigue a la versión instalada",
+  "foreman_running": "foreman {version}",
+  "foreman_update": "Versión instalada de foreman sin adoptar",
+  "fsess_behind_1": "{n} atrasada",
+  "fsess_behind_n": "{n} atrasadas",
+  "fsess_behind_tip": "Sesiones vivas de este producto que corren un foreman más viejo que el instalado: mira «foreman en las sesiones»",
+  "fsess_current_1": "{n} sesión en {version}",
+  "fsess_current_n": "{n} sesiones en {version}",
+  "fsess_estimated_tip": "≈ estimada: esta sesión no tiene registrada su versión (arrancó antes de que foreman la guardara), así que es la más alta instalada antes de que arrancara, o antes de su último /reload-plugins",
+  "fsess_orch": "foreman {version}",
+  "fsess_orch_tip": "{installed} instalada: /reload-plugins en esa sesión",
+  "fsess_reload": "/reload-plugins",
+  "fsess_tip": "Esta sesión corre foreman {mine} y la instalada es {installed}. Sigue en su versión hasta que el dueño teclee /reload-plugins en ella (solo él puede) o la reanude",
+  "fsess_title": "foreman en las sesiones",
+  "github": "GitHub",
+  "gone": "Ya no está en el panel.",
+  "grant_approve": "Aprobar {n} min",
+  "grant_live": "«{group}» permitido hasta las {until}",
+  "grant_req_title": "{who} pide ejecutar una orden de «{group}»",
+  "grant_req_when": "lo pidió a las {at} y nadie contestó en el chat · puedes aprobarlo hasta las {until}",
+  "grant_requests": "Esperan tu sí",
+  "grant_via_chat": "aprobado en el chat",
+  "grant_via_panel": "aprobado aquí",
+  "grant_why_expired": "esa petición es demasiado antigua: que el orquestador vuelva a pedirlo",
+  "grant_why_live": "ya está permitido",
+  "grant_why_none": "esa petición ya no espera (ya se aprobó o se quitó)",
+  "grant_why_process": "el orquestador que lo pidió ya no está en marcha: no se permitió nada",
+  "grant_why_session": "el orquestador que lo pidió ya no es el que lleva el producto: no se permitió nada",
+  "grants_allowed": "Permitido ahora",
+  "grants_wait_1": "{n} petición espera tu sí",
+  "grants_wait_n": "{n} peticiones esperan tu sí",
+  "hint_issues": "Arrastra ⋮⋮ para cambiar el orden de los issues activos: es su prioridad dentro del proyecto.",
+  "hint_projects": "Arrastra ⋮⋮ para cambiar la prioridad. Toca un proyecto para ver sus issues.",
+  "hits_1": "{n} vez",
+  "hits_n": "{n} veces",
+  "hypothesis": "Hipótesis",
+  "in_main_today": "En main hoy · {repo}",
+  "inactive": "Inactivo",
+  "inactive_product": "producto inactivo",
+  "issue": "Issue",
+  "issue_failed": "No se pudo cargar la ficha entera de {id}: {text}",
+  "lanes": {
+    "archive": "Archivo",
+    "backlog": "En espera",
+    "canceled": "Cancelado",
+    "done": "Hecho",
+    "duplicate": "Duplicado",
+    "in progress": "En curso",
+    "ready": "Por empezar",
+    "refining": "Por definir",
+    "triage": "Por clasificar"
+  },
+  "language_of": "Idioma: {lang}",
+  "last": "Última",
+  "last_commit": "Último commit",
+  "last_commit_msg": "Mensaje del último commit",
+  "last_hour": "Última hora",
+  "last_pass": "última pasada {when}",
+  "last_text": "Lo último que dijo",
+  "late": "Atrasada: {name}",
+  "late_count_1": "{n} atrasada",
+  "late_count_n": "{n} atrasadas",
+  "late_lc": "atrasada",
+  "link": "Enlace",
+  "load_cores": "carga, {n} núcleos",
+  "loading": "Cargando…",
+  "loading_lc": "cargando…",
+  "lock_free": "Libre",
+  "lock_free_lc": "libre",
+  "loop_active": "Bucle activo",
+  "loop_paused": "Bucle en pausa",
+  "mac": "El Mac",
+  "mem_used": "memoria usada de {gb} GB",
+  "merge": "Fusión",
+  "message": "Mensaje",
+  "messages": "Mensajes al orquestador",
+  "msg_from_orch": "Del orquestador",
+  "msg_yours": "Tuyo, al orquestador",
+  "n_blocked": "{n} con bloqueo",
+  "n_done": "{n}/{total} hechos",
+  "n_files": "{n} ficheros",
+  "n_in_progress": "{n} en curso",
+  "n_pages": "{n} páginas",
+  "n_queued": "{n} en cola",
+  "n_ready": "{n} por empezar",
+  "n_running": "{n} en marcha",
+  "needs_attention": "Te necesita",
+  "needs_you": "Te necesito para decidir",
+  "never": "nunca",
+  "no_agent_nor_branch": "sin agente ni rama",
+  "no_agents": "ningún agente en marcha",
+  "no_backlog": "Sin backlog.",
+  "no_commits_off_main": "sin commits fuera de main",
+  "no_connection": "Sin conexión",
+  "no_limit": "sin límite",
+  "no_messages": "Sin mensajes.",
+  "no_moves": "Sin movimientos en el buzón.",
+  "no_orchestrator": "Sin orquestador",
+  "no_products": "No hay productos en el registro.",
+  "no_project": "Sin proyecto",
+  "no_prs": "Ningún PR abierto.",
+  "no_report": "Aún no hay informe.",
+  "no_wiki": "Este producto no tiene wiki",
+  "nobody": "Nadie",
+  "none_f": "Ninguna.",
+  "none_m": "Ninguno.",
+  "not_found": "No existe",
+  "not_seen": "sin ver",
+  "not_takeable": "no desde este panel (con huecos o de ningún producto activo)",
+  "nothing": "nada",
+  "nothing_in_lane": "Nada en esta columna.",
+  "nothing_last_hour": "Nada en la última hora.",
+  "nothing_pending": "Nada pendiente.",
+  "offline": "Sin conexión con el Mac: {text}",
+  "on_time": "al día",
+  "options": "Opciones",
+  "orch_gone": "orquestador no vivo",
+  "orch_gone_tip": "La sesión de Claude Code del orquestador no está abierta: nadie atiende este producto hasta que otra sesión lo releve y se marque como orquestador",
+  "orch_no_loop_tip": "La sesión del orquestador está abierta, pero no da pasadas: la parte de foreman que la despierta no corre en esa sesión (se arregla recargando sus plugins o abriéndola de nuevo)",
+  "orch_no_pass": "sin pasadas desde {when}",
+  "orch_no_pass_seen": "sin pasadas vistas",
+  "orch_note": "Nota del orquestador",
+  "orch_session": "sesión {id}…",
+  "orch_silent_tip": "Sin pasadas del bucle, y no se puede comprobar si la sesión del orquestador sigue abierta: puede que se haya cerrado",
+  "orchestrated_by": "Orquesta {name} desde {since}",
+  "orchestrator": "Orquestador",
+  "orchestrator_lc": "orquestador",
+  "other_answer": "Otra respuesta",
+  "other_answer_ph": "Contesta con tus palabras; cierra la pregunta y el orquestador lo interpreta",
+  "outcome_failed": "falló",
+  "outcome_ok": "salió bien",
+  "outcome_partial": "hecho en parte",
+  "over_2h": "(pasa de 2 h)",
+  "pause": "Pausar",
+  "paused": "Bucle {text}: no lanzo agentes ni meto su trabajo en el producto",
+  "pending_decision": "Decisión pendiente",
+  "plan": "Plan",
+  "plus_30": "+30 min",
+  "plus_blocked": "+{n} con bloqueo",
+  "plus_no_agent": "+{n} sin agente",
+  "plus_no_branch": "+{n} sin rama",
+  "pr": "PR",
+  "pr_of": "Pull request de {repo}",
+  "priorities": {
+    "high": "Alta",
+    "low": "Baja",
+    "medium": "Media",
+    "none": "Sin prioridad",
+    "urgent": "Urgente"
+  },
+  "priority": "Prioridad",
+  "priority_lbl": "Urgencia",
+  "problems_1": "{n} problema",
+  "problems_n": "{n} problemas",
+  "products": "Productos",
+  "products_count_1": "{n} producto",
+  "products_count_n": "{n} productos",
+  "progress": "Avances",
+  "progress_one": "Avance",
+  "project": "Proyecto",
+  "project_filter": "Proyecto: {name}",
+  "project_status": {
+    "backlog": "En espera",
+    "canceled": "Cancelado",
+    "completed": "Completado",
+    "in progress": "En curso",
+    "paused": "En pausa",
+    "planned": "Planificado"
+  },
+  "prs": "Pull requests",
+  "ptr_loading": "Actualizando…",
+  "ptr_pull": "Tira para actualizar",
+  "ptr_release": "Suelta para actualizar",
+  "queue": "En cola",
+  "queue_me": "Ponerme en cola",
+  "rank": "puesto {k} de {n} en {epic}",
+  "read_here": "Leer aquí",
+  "read_lc": "leído",
+  "recent_moves": "Tus últimos movimientos",
+  "recommendation": "Recomendación",
+  "recommended_mark": "(recomendada)",
+  "recurring": "Tareas recurrentes",
+  "recurring_task": "Tarea recurrente",
+  "refresh": "Actualizar",
+  "reject_act": "La descartaste",
+  "reject_btn": "No la quiero",
+  "reject_reason": "el dueño la descartó desde el panel",
+  "related": "Relacionados",
+  "release": "Soltar",
+  "repo_missing": "No encuentro el repositorio {key}.",
+  "report": "Informe del orquestador",
+  "reports": "Informes",
+  "resource": "Recurso",
+  "resources": "Recursos",
+  "result": "Resultado",
+  "resume": "Reanudar",
+  "review": "Revisión",
+  "running_for": "Lleva",
+  "see": "Ver",
+  "seen": "visto",
+  "send": "Enviar",
+  "send_answer": "Enviar respuesta",
+  "sent_not_closed": "Tu respuesta «{text}» le llegó al orquestador, pero la pregunta no se pudo cerrar; la cierra él",
+  "short_job": "corto",
+  "show_older_1": "Ver la anterior",
+  "show_older_n": "Ver las {n} anteriores",
+  "since": "Desde",
+  "since_t": "desde las {t}",
+  "slots": "Huecos",
+  "sources": "Fuentes",
+  "status": "Estado",
+  "stuck": "{name}: sin actividad hace {dur}",
+  "sub_status": {
+    "doing": "en marcha",
+    "done": "hecho",
+    "dropped": "descartado",
+    "moved": "pasa a otro issue",
+    "todo": "por hacer",
+    "unknown": "sin confirmar"
+  },
+  "subs": "Partes",
+  "swap_used": "de swap en uso",
+  "tab_backlog": "Backlog",
+  "tab_now": "Ahora",
+  "tab_system": "Sistema",
+  "tab_wiki": "Wiki",
+  "tab_work": "Trabajo",
+  "tab_you": "Tú",
+  "take": "Tomar",
+  "take_in": "desde {p}: este producto está inactivo",
+  "task": "Encargo",
+  "team": "Equipo",
+  "teams": "Equipos",
+  "time": "Hora",
+  "title": "foreman",
+  "tokens": "{n} tokens",
+  "tool": "Herramienta",
+  "turn": "Turno siguiente",
+  "uncommitted": "Sin commit",
+  "unread": "sin leer",
+  "until": "Hasta",
+  "until_t": "hasta las {t}",
+  "unwant_btn": "Ya no la quiero hacer",
+  "updated_at": "actualizado {t}",
+  "updated_on": "actualizada el {date}",
+  "use": "Usar",
+  "view_issues": "Issues",
+  "view_projects": "Proyectos",
+  "waits_answer": "espera tu respuesta",
+  "waits_dur": "espera {dur}",
+  "want_btn": "La quiero hacer",
+  "want_hint": "Se lo dice al orquestador: la preparará para empezarla, con un plan si hace falta.",
+  "want_off_act": "Ya no la quieres hacer",
+  "want_on_act": "Pediste hacerla",
+  "wanted_lbl": "La quieres hacer",
+  "wanted_since": "desde {when}",
+  "wanted_tag": "la quieres",
+  "what": "Qué",
+  "wiki_failed": "No se pudo cargar la wiki: {text}",
+  "wiki_general": "Generales",
+  "wiki_groups": {
+    "comparison": "Comparaciones",
+    "concept": "Conceptos",
+    "engine": "Motores",
+    "howto": "Procedimientos",
+    "model": "Modelos",
+    "overview": "General"
+  },
+  "wiki_in_text": "En el texto",
+  "wiki_no_page": "No hay página «{n}»",
+  "wiki_nothing": "Nada con eso.",
+  "wiki_pages": "Páginas",
+  "wiki_search": "Buscar en la wiki",
+  "wiki_search_ph": "Buscar páginas y texto…",
+  "wiki_searching": "Buscando en el texto…",
+  "wiki_types": {
+    "comparison": "Comparación",
+    "concept": "Concepto",
+    "engine": "Motor",
+    "howto": "Procedimiento",
+    "model": "Modelo",
+    "overview": "General",
+    "page": "Página"
+  },
+  "with_notices": "En marcha, con avisos",
+  "with_plan": "con plan",
+  "worktree": "Worktree",
+  "write_here": "Escribe algo; lo leo en la próxima pasada (30 min como mucho)",
+  "wrong_key": "Clave incorrecta en el enlace",
+  "you": "Tú",
+  "you_lc": "tú",
+  "you_next": "eres el siguiente",
+  "you_wait": "en cola, el primero: lo tomas en cuanto lo suelte quien lo tiene"
+}
+$ GET /api/strings?lang=en
+[200]
+{
+  "activity": "Activity",
+  "agent": "Agent",
+  "agent_status": {
+    "finished": "finished",
+    "holds a lock": "holds a lock",
+    "maybe stuck": "maybe stuck",
+    "waiting for a lock": "waiting for a lock",
+    "waiting for its task": "waiting for its task",
+    "working": "working"
+  },
+  "agents": "Agents",
+  "agents_count_1": "{n} agent",
+  "agents_count_n": "{n} agents",
+  "agents_running": "{names} running",
+  "ago_d": "{n} days ago",
+  "ago_dur": "{dur} ago",
+  "ago_h": "{n} h ago",
+  "ago_min": "{n} min ago",
+  "all": "all",
+  "all_fine": "All running",
+  "all_products": "All products",
+  "all_projects": "All projects",
+  "anchor": "Link to this section",
+  "answer": "Answer",
+  "answered": "Answered: <b>{text}</b> · closed; it leaves this list once the orchestrator reads it",
+  "answered_free": "Answered in your words: <b>{text}</b> · closed; the orchestrator interprets it, and it leaves this list once read",
+  "answered_free_lc": "answered in your words: {text}",
+  "answered_lc": "answered: {text}",
+  "approve": "Approve",
+  "archived_lc": "archived",
+  "asked": "Asked",
+  "asked_on": "asked on {date}",
+  "assignee": "Assignee",
+  "auto_release": "(released by itself)",
+  "back_btn": "‹ Back",
+  "blocked_by": "Blocked by",
+  "blocked_by_issues": "Blocked by",
+  "blocked_lc": "blocked",
+  "blocks": "Blocks",
+  "branch": "Branch",
+  "branch_of": "Branch of {repo}",
+  "branches": "Branches",
+  "busy_cut": "(cut)",
+  "busy_error": "could not tell who uses it: the check failed",
+  "busy_more": "+{n} more lines (in the detail)",
+  "busy_none": "nobody",
+  "busy_pending": "checking…",
+  "busy_since": "unchanged since {t}",
+  "busy_timeout": "could not tell who uses it: the check took too long",
+  "busy_title": "In use outside foreman",
+  "cancel": "Cancel",
+  "checks": "{ok} ok, {fail} failed, {pending} pending",
+  "checks_label": "Checks",
+  "chip_agents": "Agents",
+  "chip_disk": "Disk",
+  "chip_memory": "Memory",
+  "chip_prs": "PRs",
+  "close": "Close",
+  "close_btn": "Close",
+  "col_pr": "With a PR",
+  "col_ready": "Ready, no agent",
+  "col_today": "In main today",
+  "col_working": "In progress",
+  "config_broken_tag": "does not load",
+  "config_broken_text": "foreman leaves this product out until it is fixed: no data here, and foreman does not watch its agents (it stops nothing). `foreman check` says what to fix:",
+  "config_broken_title": "{name}: its configuration does not load",
+  "config_warning": "config warning: {text}",
+  "config_warnings_tag_1": "1 config warning",
+  "config_warnings_tag_n": "{n} config warnings",
+  "confirm_answer": "Answer «{op}»?",
+  "confirm_approve": "Approve {branch}?",
+  "confirm_free": "Answer «{text}»? The question gets closed.",
+  "confirm_grant": "Let the orchestrator run the commands of «{group}» for {n} minutes?",
+  "confirm_reject": "Discard {id}? It moves to Canceled (it can be brought back from the backlog).",
+  "contents": "Contents",
+  "context": "Context",
+  "cpu_idle": "Nothing pulling on the CPU.",
+  "criterion_lc": "criterion:",
+  "decision": "Decision",
+  "decisions": "Pending decisions",
+  "decisions_count_1": "{n} decision",
+  "decisions_count_n": "{n} decisions",
+  "decisions_wait_1": "{n} decision waits for your answer",
+  "decisions_wait_n": "{n} decisions wait for your answer",
+  "declared_by": "Declared by",
+  "delivery_outcome": "Outcome",
+  "derived": "(from its issues)",
+  "description": "Description",
+  "detail": "Detail",
+  "disk_free": "free on disk of {gb}",
+  "doc_failed": "Could not load {path}",
+  "done_lc": "done",
+  "draft": "draft",
+  "drag": "Drag to reorder",
+  "duplicate_of": "Duplicate of",
+  "duplicates": "Duplicates",
+  "dur_h": "{h} h {m} min",
+  "dur_min": "{n} min",
+  "dur_s": "{n} s",
+  "error": "Error: {text}",
+  "errors": "Registry problems",
+  "every": "Every",
+  "final": "Its hand-back",
+  "finished_lc": "finished",
+  "foreman_follows": "follows the installed version",
+  "foreman_running": "foreman {version}",
+  "foreman_update": "Installed foreman not adopted",
+  "fsess_behind_1": "{n} behind",
+  "fsess_behind_n": "{n} behind",
+  "fsess_behind_tip": "Live sessions of this product that run an older foreman than the installed one: see «foreman in the sessions»",
+  "fsess_current_1": "{n} session on {version}",
+  "fsess_current_n": "{n} sessions on {version}",
+  "fsess_estimated_tip": "≈ estimated: this session has no record of its version (it started before foreman kept one), so it is the highest version installed before it started, or before its last /reload-plugins",
+  "fsess_orch": "foreman {version}",
+  "fsess_orch_tip": "{installed} installed: /reload-plugins in that session",
+  "fsess_reload": "/reload-plugins",
+  "fsess_tip": "This session runs foreman {mine}; {installed} is installed. It keeps its version until the owner types /reload-plugins in it (only they can) or resumes it",
+  "fsess_title": "foreman in the sessions",
+  "github": "GitHub",
+  "gone": "No longer in the panel.",
+  "grant_approve": "Approve for {n} min",
+  "grant_live": "«{group}» allowed until {until}",
+  "grant_req_title": "{who} asks to run a command of «{group}»",
+  "grant_req_when": "asked at {at}, nobody answered in the chat · you can approve it until {until}",
+  "grant_requests": "Waiting for your yes",
+  "grant_via_chat": "approved in the chat",
+  "grant_via_panel": "approved here",
+  "grant_why_expired": "that request is too old: let the orchestrator ask again",
+  "grant_why_live": "it is already allowed",
+  "grant_why_none": "that request is no longer waiting (already approved or taken away)",
+  "grant_why_process": "the orchestrator that asked is not running any more: nothing was allowed",
+  "grant_why_session": "the orchestrator that asked is no longer the one in charge: nothing was allowed",
+  "grants_allowed": "Allowed now",
+  "grants_wait_1": "{n} request waits for your yes",
+  "grants_wait_n": "{n} requests wait for your yes",
+  "hint_issues": "Drag ⋮⋮ to reorder the active issues: it is their priority within the project.",
+  "hint_projects": "Drag ⋮⋮ to change the priority. Tap a project to see its issues.",
+  "hits_1": "{n} hit",
+  "hits_n": "{n} hits",
+  "hypothesis": "Hypothesis",
+  "in_main_today": "In main today · {repo}",
+  "inactive": "Inactive",
+  "inactive_product": "inactive product",
+  "issue": "Issue",
+  "issue_failed": "Could not load the whole issue {id}: {text}",
+  "lanes": {
+    "archive": "Archive",
+    "backlog": "Backlog",
+    "canceled": "Canceled",
+    "done": "Done",
+    "duplicate": "Duplicate",
+    "in progress": "In progress",
+    "ready": "Ready",
+    "refining": "Refining",
+    "triage": "Triage"
+  },
+  "language_of": "Language: {lang}",
+  "last": "Last",
+  "last_commit": "Last commit",
+  "last_commit_msg": "Last commit message",
+  "last_hour": "Last hour",
+  "last_pass": "last pass {when}",
+  "last_text": "The last thing it said",
+  "late": "Late: {name}",
+  "late_count_1": "{n} late",
+  "late_count_n": "{n} late",
+  "late_lc": "late",
+  "link": "Link",
+  "load_cores": "load, {n} cores",
+  "loading": "Loading…",
+  "loading_lc": "loading…",
+  "lock_free": "Free",
+  "lock_free_lc": "free",
+  "loop_active": "Loop active",
+  "loop_paused": "Loop paused",
+  "mac": "The Mac",
+  "mem_used": "memory used of {gb} GB",
+  "merge": "Merge",
+  "message": "Message",
+  "messages": "Messages to the orchestrator",
+  "msg_from_orch": "From the orchestrator",
+  "msg_yours": "Yours, to the orchestrator",
+  "n_blocked": "{n} blocked",
+  "n_done": "{n}/{total} done",
+  "n_files": "{n} files",
+  "n_in_progress": "{n} in progress",
+  "n_pages": "{n} pages",
+  "n_queued": "{n} queued",
+  "n_ready": "{n} ready to start",
+  "n_running": "{n} running",
+  "needs_attention": "Needs you",
+  "needs_you": "I need you to decide",
+  "never": "never",
+  "no_agent_nor_branch": "no agent nor branch",
+  "no_agents": "no agent running",
+  "no_backlog": "No backlog.",
+  "no_commits_off_main": "no commits off main",
+  "no_connection": "No connection",
+  "no_limit": "no limit",
+  "no_messages": "No messages.",
+  "no_moves": "No moves in the inbox.",
+  "no_orchestrator": "No orchestrator",
+  "no_products": "No products in the registry.",
+  "no_project": "No project",
+  "no_prs": "No open PRs.",
+  "no_report": "No report yet.",
+  "no_wiki": "This product has no wiki",
+  "nobody": "Nobody",
+  "none_f": "None.",
+  "none_m": "None.",
+  "not_found": "Not found",
+  "not_seen": "not seen",
+  "not_takeable": "not from this panel (with slots or of no active product)",
+  "nothing": "nothing",
+  "nothing_in_lane": "Nothing in this column.",
+  "nothing_last_hour": "Nothing in the last hour.",
+  "nothing_pending": "Nothing pending.",
+  "offline": "No connection with the Mac: {text}",
+  "on_time": "on time",
+  "options": "Options",
+  "orch_gone": "orchestrator not alive",
+  "orch_gone_tip": "The orchestrator's Claude Code session is not open: nobody looks after this product until another session takes over and marks itself as the orchestrator",
+  "orch_no_loop_tip": "The orchestrator's session is open but makes no passes: the part of foreman that wakes it up does not run in that session (reloading its plugins, or opening it again, fixes it)",
+  "orch_no_pass": "no passes since {when}",
+  "orch_no_pass_seen": "no passes seen",
+  "orch_note": "Orchestrator's note",
+  "orch_session": "session {id}…",
+  "orch_silent_tip": "No loop passes, and whether the orchestrator's session is still open cannot be checked: it may have closed",
+  "orchestrated_by": "Orchestrated by {name} since {since}",
+  "orchestrator": "Orchestrator",
+  "orchestrator_lc": "orchestrator",
+  "other_answer": "Other answer",
+  "other_answer_ph": "Answer in your words; it closes the question and the orchestrator interprets it",
+  "outcome_failed": "failed",
+  "outcome_ok": "went well",
+  "outcome_partial": "partly done",
+  "over_2h": "(over 2 h)",
+  "pause": "Pause",
+  "paused": "Loop {text}: no agents launched, no work merged into the product",
+  "pending_decision": "Pending decision",
+  "plan": "Plan",
+  "plus_30": "+30 min",
+  "plus_blocked": "+{n} blocked",
+  "plus_no_agent": "+{n} without an agent",
+  "plus_no_branch": "+{n} without a branch",
+  "pr": "PR",
+  "pr_of": "Pull request of {repo}",
+  "priorities": {
+    "high": "High",
+    "low": "Low",
+    "medium": "Medium",
+    "none": "No priority",
+    "urgent": "Urgent"
+  },
+  "priority": "Priority",
+  "priority_lbl": "Urgency",
+  "problems_1": "{n} problem",
+  "problems_n": "{n} problems",
+  "products": "Products",
+  "products_count_1": "{n} product",
+  "products_count_n": "{n} products",
+  "progress": "Progress",
+  "progress_one": "Progress",
+  "project": "Project",
+  "project_filter": "Project: {name}",
+  "project_status": {
+    "backlog": "Backlog",
+    "canceled": "Canceled",
+    "completed": "Completed",
+    "in progress": "In progress",
+    "paused": "Paused",
+    "planned": "Planned"
+  },
+  "prs": "Pull requests",
+  "ptr_loading": "Refreshing…",
+  "ptr_pull": "Pull to refresh",
+  "ptr_release": "Release to refresh",
+  "queue": "Queue",
+  "queue_me": "Queue me",
+  "rank": "{k} of {n} in {epic}",
+  "read_here": "Read here",
+  "read_lc": "read",
+  "recent_moves": "Your last moves",
+  "recommendation": "Recommendation",
+  "recommended_mark": "(recommended)",
+  "recurring": "Recurring tasks",
+  "recurring_task": "Recurring task",
+  "refresh": "Refresh",
+  "reject_act": "You discarded it",
+  "reject_btn": "I don't want it",
+  "reject_reason": "the owner discarded it from the panel",
+  "related": "Related",
+  "release": "Release",
+  "repo_missing": "Repository {key} not found.",
+  "report": "Orchestrator's report",
+  "reports": "Reports",
+  "resource": "Resource",
+  "resources": "Resources",
+  "result": "Result",
+  "resume": "Resume",
+  "review": "Review",
+  "running_for": "Running for",
+  "see": "See",
+  "seen": "seen",
+  "send": "Send",
+  "send_answer": "Send answer",
+  "sent_not_closed": "Your answer «{text}» reached the orchestrator, but the question could not be closed; it closes it",
+  "short_job": "short",
+  "show_older_1": "Show the older one",
+  "show_older_n": "Show the {n} older",
+  "since": "Since",
+  "since_t": "since {t}",
+  "slots": "Slots",
+  "sources": "Sources",
+  "status": "Status",
+  "stuck": "{name}: no activity for {dur}",
+  "sub_status": {
+    "doing": "running",
+    "done": "done",
+    "dropped": "dropped",
+    "moved": "moved to another issue",
+    "todo": "to do",
+    "unknown": "unconfirmed"
+  },
+  "subs": "Parts",
+  "swap_used": "of swap in use",
+  "tab_backlog": "Backlog",
+  "tab_now": "Now",
+  "tab_system": "System",
+  "tab_wiki": "Wiki",
+  "tab_work": "Work",
+  "tab_you": "You",
+  "take": "Take",
+  "take_in": "from {p}: this product is inactive",
+  "task": "Task",
+  "team": "Team",
+  "teams": "Teams",
+  "time": "Time",
+  "title": "foreman",
+  "tokens": "{n} tokens",
+  "tool": "Tool",
+  "turn": "Next turn",
+  "uncommitted": "Uncommitted",
+  "unread": "unread",
+  "until": "Until",
+  "until_t": "until {t}",
+  "unwant_btn": "I no longer want it",
+  "updated_at": "updated {t}",
+  "updated_on": "updated on {date}",
+  "use": "Use",
+  "view_issues": "Issues",
+  "view_projects": "Projects",
+  "waits_answer": "waits for your answer",
+  "waits_dur": "waiting {dur}",
+  "want_btn": "I want to do it",
+  "want_hint": "Tells the orchestrator: it gets it ready to start, with a plan if needed.",
+  "want_off_act": "You no longer want it",
+  "want_on_act": "You asked for it",
+  "wanted_lbl": "You want it done",
+  "wanted_since": "since {when}",
+  "wanted_tag": "wanted",
+  "what": "What",
+  "wiki_failed": "Could not load the wiki: {text}",
+  "wiki_general": "General",
+  "wiki_groups": {
+    "comparison": "Comparisons",
+    "concept": "Concepts",
+    "engine": "Engines",
+    "howto": "How-tos",
+    "model": "Models",
+    "overview": "General"
+  },
+  "wiki_in_text": "In the text",
+  "wiki_no_page": "No page «{n}»",
+  "wiki_nothing": "Nothing with that.",
+  "wiki_pages": "Pages",
+  "wiki_search": "Search the wiki",
+  "wiki_search_ph": "Search pages and text…",
+  "wiki_searching": "Searching the text…",
+  "wiki_types": {
+    "comparison": "Comparison",
+    "concept": "Concept",
+    "engine": "Engine",
+    "howto": "How-to",
+    "model": "Model",
+    "overview": "General",
+    "page": "Page"
+  },
+  "with_notices": "Running, with notices",
+  "with_plan": "with a plan",
+  "worktree": "Worktree",
+  "write_here": "Write something; I read it on the next pass",
+  "wrong_key": "Wrong key in the link",
+  "you": "You",
+  "you_lc": "you",
+  "you_next": "you are next",
+  "you_wait": "queued, first in line: yours as soon as the holder releases it"
+}
+$ GET /api/state?p=faro
+[200]
+{
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ],
+  "project": {
+    "active": true,
+    "activity": [],
+    "agents": [],
+    "backlog_error": null,
+    "decisions": [
+      {
+        "answer": null,
+        "date": "2020-01-18",
+        "id": "DEC J1",
+        "lead": "Lo pide FA-2 T1.",
+        "options": [
+          "a",
+          "b"
+        ],
+        "recommendation": "",
+        "recommended": "",
+        "text": "Lo pide FA-2 T1.",
+        "title": "DEC J1, ¿Cerramos FA-2 con el T1 de loop.py?"
+      }
+    ],
+    "grants": [],
+    "home": "<TMP>/faro",
+    "issue_live": {},
+    "language": "es",
+    "messages": [
+      {
+        "from": "owner",
+        "id": 1,
+        "read": false,
+        "text": "¿Cómo va el mapa?",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "mode": "active",
+    "moves": [],
+    "name": "faro",
+    "notes": [
+      {
+        "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
+        "time": "<TIME>"
+      }
+    ],
+    "orchestrator": null,
+    "orchestrator_health": null,
+    "owner": "Marta",
+    "paused": null,
+    "progress": [
+      {
+        "agent": "ag1",
+        "text": "Lector de cartas: 0,4 s por carta",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "recurring": [
+      {
+        "every": "every 60 min",
+        "late": false,
+        "name": "Bucle del orquestador de faro",
+        "parts": [
+          {
+            "label": null,
+            "last": "<TODAY> <TIME>",
+            "last_ts": <EPOCH>,
+            "late": false
+          }
+        ]
+      }
+    ],
+    "report": null,
+    "repos": [
+      {
+        "branches": [],
+        "github": "",
+        "key": "app",
+        "merge": "squash",
+        "prs": [],
+        "today": []
+      }
+    ],
+    "resources": [
+      "widget"
+    ],
+    "targets": {
+      "production_slots": 1,
+      "ready_target": 2
+    },
+    "teams": [
+      "app"
+    ],
+    "title": "faro",
+    "warnings": [],
+    "wiki": false,
+    "wiki_first": [],
+    "writable": true
+  },
+  "version": <EPOCH>
+}
+$ GET /api/backlog?p=faro
+[200]
+{
+  "project": {
+    "backlog": {
+      "archive": [
+        {
+          "archived": true,
+          "id": "FA-1",
+          "plan": [
+            "reviews/2020-01-10-plan-FA-1.md"
+          ],
+          "priority": "high",
+          "project": "A1",
+          "short": true,
+          "status": "done",
+          "subs": [
+            {
+              "id": "T1",
+              "ref": "abc1234",
+              "status": "done",
+              "title": "Lector de cartas"
+            },
+            {
+              "id": "T2",
+              "ref": "def5678",
+              "status": "done",
+              "title": "Pruebas del lector"
+            }
+          ],
+          "title": "Leer las cartas náuticas"
+        }
+      ],
+      "counts": {
+        "ready": 1,
+        "refining": 0
+      },
+      "issues": [],
+      "projects": [
+        {
+          "id": "A1",
+          "issues": [
+            {
+              "blocked": "",
+              "detail": "",
+              "id": "FA-3",
+              "outcome": {
+                "criterion": "un aviso llega en un minuto"
+              },
+              "plan": [],
+              "project": "A1",
+              "relations": {
+                "related": [
+                  "FA-2"
+                ]
+              },
+              "reports": [],
+              "status": "backlog",
+              "subs": [],
+              "title": "Enviar avisos por radio"
+            },
+            {
+              "blocked": "",
+              "detail": "",
+              "id": "FA-2",
+              "outcome": {
+                "criterion": "cada faro sale en el mapa"
+              },
+              "plan": [],
+              "project": "A1",
+              "relations": {
+                "blocked_by": [
+                  "FA-1"
+                ],
+                "related": [
+                  "FA-3"
+                ]
+              },
+              "reports": [],
+              "status": "ready",
+              "subs": [],
+              "title": "Pintar los faros"
+            }
+          ],
+          "priority": "high",
+          "status": "in progress",
+          "title": "Mapa de la costa"
+        },
+        {
+          "id": "A2",
+          "issues": [
+            {
+              "blocked": "",
+              "detail": "",
+              "id": "FA-4",
+              "outcome": {
+                "criterion": "notas ordenadas"
+              },
+              "plan": [],
+              "project": "A2",
+              "reports": [],
+              "status": "triage",
+              "subs": [],
+              "title": "Ordenar las notas"
+            }
+          ],
+          "status": "backlog",
+          "status_derived": true,
+          "title": "Avisos"
+        }
+      ]
+    },
+    "backlog_error": null,
+    "name": "faro"
+  },
+  "version": <EPOCH>
+}
+$ GET /api/state?p=harbor
+[200]
+{
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ],
+  "project": {
+    "active": true,
+    "activity": [],
+    "agents": [],
+    "backlog_error": null,
+    "decisions": [
+      {
+        "answer": null,
+        "date": "2020-01-18",
+        "id": "DEC J1",
+        "lead": "HB-2 T1 asks for it.",
+        "options": [
+          "a",
+          "b"
+        ],
+        "recommendation": "",
+        "recommended": "",
+        "text": "HB-2 T1 asks for it.",
+        "title": "DEC J1, Close HB-2 with T1 of loop.py?"
+      }
+    ],
+    "grants": [],
+    "home": "<TMP>/harbor",
+    "issue_live": {},
+    "language": "es",
+    "messages": [
+      {
+        "from": "owner",
+        "id": 1,
+        "read": false,
+        "text": "How is the booking going?",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "mode": "active",
+    "moves": [],
+    "name": "harbor",
+    "notes": [
+      {
+        "text": "The form takes 40 s end to end (measured on 5 bookings).",
+        "time": "<TIME>"
+      }
+    ],
+    "orchestrator": null,
+    "orchestrator_health": null,
+    "owner": "Sam",
+    "paused": null,
+    "progress": [
+      {
+        "agent": "ag1",
+        "text": "Booking form: 40 s end to end",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "recurring": [
+      {
+        "every": "weekly",
+        "late": true,
+        "name": "Weekly review",
+        "parts": [
+          {
+            "label": null,
+            "last": null,
+            "last_ts": null,
+            "late": true
+          }
+        ]
+      }
+    ],
+    "report": null,
+    "repos": [
+      {
+        "branches": [],
+        "github": "",
+        "key": "api",
+        "merge": "squash",
+        "prs": [],
+        "today": []
+      }
+    ],
+    "resources": [
+      "widget"
+    ],
+    "targets": {
+      "production_slots": 2,
+      "ready_target": 1
+    },
+    "teams": [
+      "api"
+    ],
+    "title": "Harbor",
+    "warnings": [],
+    "wiki": true,
+    "wiki_first": [],
+    "writable": true
+  },
+  "version": <EPOCH>
+}
+$ GET /api/backlog?p=harbor
+[200]
+{
+  "project": {
+    "backlog": {
+      "archive": [
+        {
+          "archived": true,
+          "id": "HB-1",
+          "plan": [
+            "reviews/2020-01-10-plan-HB-1.md"
+          ],
+          "priority": "high",
+          "project": "A1",
+          "short": true,
+          "status": "done",
+          "subs": [
+            {
+              "id": "T1",
+              "ref": "abc1234",
+              "status": "done",
+              "title": "Form"
+            },
+            {
+              "id": "T2",
+              "ref": "def5678",
+              "status": "done",
+              "title": "Form tests"
+            }
+          ],
+          "title": "Booking form"
+        }
+      ],
+      "counts": {
+        "ready": 1,
+        "refining": 0
+      },
+      "issues": [],
+      "projects": [
+        {
+          "id": "A1",
+          "issues": [
+            {
+              "blocked": "",
+              "detail": "",
+              "id": "HB-3",
+              "outcome": {
+                "criterion": "the feed updates hourly"
+              },
+              "plan": [],
+              "project": "A1",
+              "relations": {
+                "related": [
+                  "HB-2"
+                ]
+              },
+              "reports": [],
+              "status": "backlog",
+              "subs": [],
+              "title": "Tide feed"
+            },
+            {
+              "blocked": "",
+              "detail": "",
+              "id": "HB-2",
+              "outcome": {
+                "criterion": "a card payment goes through"
+              },
+              "plan": [],
+              "project": "A1",
+              "relations": {
+                "blocked_by": [
+                  "HB-1"
+                ],
+                "related": [
+                  "HB-3"
+                ]
+              },
+              "reports": [],
+              "status": "ready",
+              "subs": [],
+              "title": "Payment"
+            },
+            {
+              "blocked": "",
+              "detail": "",
+              "id": "HB-5",
+              "plan": [],
+              "project": "A1",
+              "reports": [],
+              "status": "backlog",
+              "subs": [],
+              "title": "missing criterion"
+            }
+          ],
+          "priority": "high",
+          "status": "in progress",
+          "title": "Berth booking"
+        },
+        {
+          "id": "A2",
+          "issues": [
+            {
+              "blocked": "",
+              "detail": "",
+              "id": "HB-4",
+              "outcome": {
+                "criterion": "notes tidy"
+              },
+              "plan": [],
+              "project": "A2",
+              "reports": [],
+              "status": "triage",
+              "subs": [],
+              "title": "Tidy the notes"
+            }
+          ],
+          "status": "backlog",
+          "status_derived": true,
+          "title": "Tide tables"
+        }
+      ]
+    },
+    "backlog_error": null,
+    "name": "harbor"
+  },
+  "version": <EPOCH>
+}
+$ GET /api/state?p=*
+[200]
+{
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "active": true,
+      "activity": [],
+      "agents": [],
+      "backlog_error": null,
+      "decisions": [
+        {
+          "answer": null,
+          "date": "2020-01-18",
+          "id": "DEC J1",
+          "lead": "Lo pide FA-2 T1.",
+          "options": [
+            "a",
+            "b"
+          ],
+          "recommendation": "",
+          "recommended": "",
+          "text": "Lo pide FA-2 T1.",
+          "title": "DEC J1, ¿Cerramos FA-2 con el T1 de loop.py?"
+        }
+      ],
+      "grants": [],
+      "home": "<TMP>/faro",
+      "issue_live": {},
+      "language": "es",
+      "messages": [
+        {
+          "from": "owner",
+          "id": 1,
+          "read": false,
+          "text": "¿Cómo va el mapa?",
+          "time": "<TODAY> <TIME>"
+        }
+      ],
+      "mode": "active",
+      "moves": [],
+      "name": "faro",
+      "notes": [
+        {
+          "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
+          "time": "<TIME>"
+        }
+      ],
+      "orchestrator": null,
+      "orchestrator_health": null,
+      "owner": "Marta",
+      "paused": null,
+      "progress": [
+        {
+          "agent": "ag1",
+          "text": "Lector de cartas: 0,4 s por carta",
+          "time": "<TODAY> <TIME>"
+        }
+      ],
+      "recurring": [
+        {
+          "every": "every 60 min",
+          "late": false,
+          "name": "Bucle del orquestador de faro",
+          "parts": [
+            {
+              "label": null,
+              "last": "<TODAY> <TIME>",
+              "last_ts": <EPOCH>,
+              "late": false
+            }
+          ]
+        }
+      ],
+      "report": null,
+      "repos": [
+        {
+          "branches": [],
+          "github": "",
+          "key": "app",
+          "merge": "squash",
+          "prs": [],
+          "today": []
+        }
+      ],
+      "resources": [
+        "widget"
+      ],
+      "targets": {
+        "production_slots": 1,
+        "ready_target": 2
+      },
+      "teams": [
+        "app"
+      ],
+      "title": "faro",
+      "warnings": [],
+      "wiki": false,
+      "wiki_first": [],
+      "writable": true
+    },
+    {
+      "active": true,
+      "activity": [],
+      "agents": [],
+      "backlog_error": null,
+      "decisions": [
+        {
+          "answer": null,
+          "date": "2020-01-18",
+          "id": "DEC J1",
+          "lead": "HB-2 T1 asks for it.",
+          "options": [
+            "a",
+            "b"
+          ],
+          "recommendation": "",
+          "recommended": "",
+          "text": "HB-2 T1 asks for it.",
+          "title": "DEC J1, Close HB-2 with T1 of loop.py?"
+        }
+      ],
+      "grants": [],
+      "home": "<TMP>/harbor",
+      "issue_live": {},
+      "language": "es",
+      "messages": [
+        {
+          "from": "owner",
+          "id": 1,
+          "read": false,
+          "text": "How is the booking going?",
+          "time": "<TODAY> <TIME>"
+        }
+      ],
+      "mode": "active",
+      "moves": [],
+      "name": "harbor",
+      "notes": [
+        {
+          "text": "The form takes 40 s end to end (measured on 5 bookings).",
+          "time": "<TIME>"
+        }
+      ],
+      "orchestrator": null,
+      "orchestrator_health": null,
+      "owner": "Sam",
+      "paused": null,
+      "progress": [
+        {
+          "agent": "ag1",
+          "text": "Booking form: 40 s end to end",
+          "time": "<TODAY> <TIME>"
+        }
+      ],
+      "recurring": [
+        {
+          "every": "weekly",
+          "late": true,
+          "name": "Weekly review",
+          "parts": [
+            {
+              "label": null,
+              "last": null,
+              "last_ts": null,
+              "late": true
+            }
+          ]
+        }
+      ],
+      "report": null,
+      "repos": [
+        {
+          "branches": [],
+          "github": "",
+          "key": "api",
+          "merge": "squash",
+          "prs": [],
+          "today": []
+        }
+      ],
+      "resources": [
+        "widget"
+      ],
+      "targets": {
+        "production_slots": 2,
+        "ready_target": 1
+      },
+      "teams": [
+        "api"
+      ],
+      "title": "Harbor",
+      "warnings": [],
+      "wiki": true,
+      "wiki_first": [],
+      "writable": true
+    }
+  ],
+  "version": <EPOCH>
+}
+$ GET /api/backlog?p=*
+[200]
+{
+  "projects": [
+    {
+      "backlog": {
+        "archive": [
+          {
+            "archived": true,
+            "id": "FA-1",
+            "plan": [
+              "reviews/2020-01-10-plan-FA-1.md"
+            ],
+            "priority": "high",
+            "project": "A1",
+            "short": true,
+            "status": "done",
+            "subs": [
+              {
+                "id": "T1",
+                "ref": "abc1234",
+                "status": "done",
+                "title": "Lector de cartas"
+              },
+              {
+                "id": "T2",
+                "ref": "def5678",
+                "status": "done",
+                "title": "Pruebas del lector"
+              }
+            ],
+            "title": "Leer las cartas náuticas"
+          }
+        ],
+        "counts": {
+          "ready": 1,
+          "refining": 0
+        },
+        "issues": [],
+        "projects": [
+          {
+            "id": "A1",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "FA-3",
+                "outcome": {
+                  "criterion": "un aviso llega en un minuto"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "related": [
+                    "FA-2"
+                  ]
+                },
+                "reports": [],
+                "status": "backlog",
+                "subs": [],
+                "title": "Enviar avisos por radio"
+              },
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "FA-2",
+                "outcome": {
+                  "criterion": "cada faro sale en el mapa"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "blocked_by": [
+                    "FA-1"
+                  ],
+                  "related": [
+                    "FA-3"
+                  ]
+                },
+                "reports": [],
+                "status": "ready",
+                "subs": [],
+                "title": "Pintar los faros"
+              }
+            ],
+            "priority": "high",
+            "status": "in progress",
+            "title": "Mapa de la costa"
+          },
+          {
+            "id": "A2",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "FA-4",
+                "outcome": {
+                  "criterion": "notas ordenadas"
+                },
+                "plan": [],
+                "project": "A2",
+                "reports": [],
+                "status": "triage",
+                "subs": [],
+                "title": "Ordenar las notas"
+              }
+            ],
+            "status": "backlog",
+            "status_derived": true,
+            "title": "Avisos"
+          }
+        ]
+      },
+      "backlog_error": null,
+      "name": "faro"
+    },
+    {
+      "backlog": {
+        "archive": [
+          {
+            "archived": true,
+            "id": "HB-1",
+            "plan": [
+              "reviews/2020-01-10-plan-HB-1.md"
+            ],
+            "priority": "high",
+            "project": "A1",
+            "short": true,
+            "status": "done",
+            "subs": [
+              {
+                "id": "T1",
+                "ref": "abc1234",
+                "status": "done",
+                "title": "Form"
+              },
+              {
+                "id": "T2",
+                "ref": "def5678",
+                "status": "done",
+                "title": "Form tests"
+              }
+            ],
+            "title": "Booking form"
+          }
+        ],
+        "counts": {
+          "ready": 1,
+          "refining": 0
+        },
+        "issues": [],
+        "projects": [
+          {
+            "id": "A1",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-3",
+                "outcome": {
+                  "criterion": "the feed updates hourly"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "related": [
+                    "HB-2"
+                  ]
+                },
+                "reports": [],
+                "status": "backlog",
+                "subs": [],
+                "title": "Tide feed"
+              },
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-2",
+                "outcome": {
+                  "criterion": "a card payment goes through"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "blocked_by": [
+                    "HB-1"
+                  ],
+                  "related": [
+                    "HB-3"
+                  ]
+                },
+                "reports": [],
+                "status": "ready",
+                "subs": [],
+                "title": "Payment"
+              },
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-5",
+                "plan": [],
+                "project": "A1",
+                "reports": [],
+                "status": "backlog",
+                "subs": [],
+                "title": "missing criterion"
+              }
+            ],
+            "priority": "high",
+            "status": "in progress",
+            "title": "Berth booking"
+          },
+          {
+            "id": "A2",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-4",
+                "outcome": {
+                  "criterion": "notes tidy"
+                },
+                "plan": [],
+                "project": "A2",
+                "reports": [],
+                "status": "triage",
+                "subs": [],
+                "title": "Tidy the notes"
+              }
+            ],
+            "status": "backlog",
+            "status_derived": true,
+            "title": "Tide tables"
+          }
+        ]
+      },
+      "backlog_error": null,
+      "name": "harbor"
+    }
+  ],
+  "version": <EPOCH>
+}
+$ GET /api/state?p=nope
+[404]
+{
+  "error": "no project 'nope'"
+}
+$ GET /api/backlog?p=nope
+[404]
+{
+  "error": "no project 'nope'"
+}
+$ GET /api/issue?p=faro&id=FA-2
+[200]
+{
+  "issue": {
+    "blocked": "",
+    "detail": "",
+    "id": "FA-2",
+    "outcome": {
+      "criterion": "cada faro sale en el mapa"
+    },
+    "plan": [],
+    "project": "A1",
+    "relations": {
+      "blocked_by": [
+        "FA-1"
+      ],
+      "related": [
+        "FA-3"
+      ]
+    },
+    "reports": [],
+    "status": "ready",
+    "subs": [],
+    "title": "Pintar los faros"
+  },
+  "version": <EPOCH>
+}
+$ GET /api/issue?p=faro&id=FA-1
+[200]
+{
+  "issue": {
+    "archived": true,
+    "assignee": "ana",
+    "blocked": "",
+    "closed": "<TODAY>",
+    "detail": "Nota añadida al detalle.",
+    "id": "FA-1",
+    "outcome": {
+      "criterion": "las cartas se leen en menos de un segundo",
+      "verdict": "cumplido"
+    },
+    "plan": [
+      "reviews/2020-01-10-plan-FA-1.md"
+    ],
+    "priority": "high",
+    "project": "A1",
+    "relations": {
+      "blocks": [
+        "FA-2"
+      ]
+    },
+    "reports": [
+      {
+        "doc": "reviews/2020-01-12-fa1-t1.md",
+        "sub": "T1"
+      }
+    ],
+    "result": "las cartas se leen en 0,4 s",
+    "status": "done",
+    "subs": [
+      {
+        "agent": "ag1",
+        "branch": "a1/t1",
+        "commit": "abc1234",
+        "id": "T1",
+        "ref": "abc1234",
+        "report": "reviews/2020-01-12-fa1-t1.md",
+        "status": "done",
+        "title": "Lector de cartas"
+      },
+      {
+        "commit": "def5678",
+        "id": "T2",
+        "ref": "def5678",
+        "status": "done",
+        "title": "Pruebas del lector"
+      }
+    ],
+    "title": "Leer las cartas náuticas"
+  },
+  "version": <EPOCH>
+}
+$ GET /api/issue?p=harbor&id=HB-404
+[404]
+{
+  "error": "not found"
+}
+$ GET /api/wiki?p=harbor
+[200]
+{
+  "pages": [
+    {
+      "kb": 0.6,
+      "n": "backlog-archive",
+      "path": "pages/backlog-archive.md",
+      "status": null,
+      "tags": [],
+      "title": "Backlog archive",
+      "type": "overview",
+      "updated": null
+    },
+    {
+      "kb": 0.7,
+      "n": "backlog",
+      "path": "pages/backlog.md",
+      "status": null,
+      "tags": [],
+      "title": "Decisions",
+      "type": "overview",
+      "updated": null
+    },
+    {
+      "kb": 0.4,
+      "n": "wiki",
+      "path": "pages/wiki.md",
+      "status": null,
+      "tags": [],
+      "title": "Harbor wiki",
+      "type": "overview",
+      "updated": null
+    }
+  ]
+}
+$ GET /api/wiki/page?p=harbor&n=wiki
+[200]
+{
+  "docs": {},
+  "kb": 0.4,
+  "md": "# Harbor wiki\n\nHand-written page; foreman rewrites only the section below.\n\n## Open decisions\n\n> Generated by `foreman backlog` from `backlog.json`: do not edit by hand (`foreman backlog --help`).\n\nQuestions only Sam can answer; each one names its options.\n\n- **DEC J1, Close HB-2 with T1 of loop.py?** (2020-01-18): HB-2 T1 asks for it. Options: a · b\n\n## Notes\n\nLeft as it is.\n",
+  "n": "wiki",
+  "path": "pages/wiki.md",
+  "sources": [],
+  "status": null,
+  "tags": [],
+  "title": "Harbor wiki",
+  "type": "overview",
+  "updated": null
+}
+$ GET /api/wiki/page?p=harbor&n=nope.md
+[404]
+{
+  "error": "not found"
+}
+$ GET /api/wiki/search?p=harbor&q=decisions
+[200]
+{
+  "results": [
+    {
+      "excerpt": "Decisions > Generated by foreman backlog from backlog.json : do not edit by hand ( foreman backlog --help ). A1 · Berth booking *in…",
+      "hits": 1,
+      "in_title": 1,
+      "n": "backlog",
+      "status": null,
+      "title": "Decisions",
+      "type": "overview"
+    },
+    {
+      "excerpt": "…ten page; foreman rewrites only the section below. Open decisions > Generated by foreman backlog from backlog.json : do not edit by hand ( foreman backlog --help ). Questions only Sam can ans…",
+      "hits": 1,
+      "in_title": 0,
+      "n": "wiki",
+      "status": null,
+      "title": "Harbor wiki",
+      "type": "overview"
+    }
+  ]
+}
+$ GET /api/wiki?p=faro
+[404]
+{
+  "error": "not found"
+}
+$ GET /api/doc?p=faro&path=reviews/2020-01-10-plan-FA-1.md
+[200]
+{
+  "md": "# Plan\n\nT1, T2.\n",
+  "path": "reviews/2020-01-10-plan-FA-1.md"
+}
+$ GET /api/doc?p=faro&path=../projects.toml
+[404]
+{
+  "error": "not found"
+}
+$ GET /api/nope
+[404]
+{
+  "error": "not found"
+}
+$ GET /api/projects
+[403]
+wrong key
+
+######## the owner's writes
+$ POST /api/message?p=faro < ¿Seguimos mañana?
+[200]
+{
+  "from": "owner",
+  "id": 2,
+  "read": false,
+  "text": "¿Seguimos mañana?",
+  "time": "<TODAY> <TIME>"
+}
+$ POST /api/message?p=faro <   
+[400]
+{
+  "error": "empty message"
+}
+$ POST /api/decide?p=harbor&d=DEC%20J1%2C%20Close%20it%3F&op=a
+[200]
+{
+  "freed": [],
+  "resolved": "DEC J1"
+}
+$ POST /api/decide?p=harbor
+[400]
+{
+  "error": "id and op are required"
+}
+$ POST /api/approve?p=faro&repo=app&branch=fa2/t1
+[200]
+{
+  "approve": {
+    "approved": "Marta, <TODAY> <TIME> (panel)",
+    "branch": "fa2/t1",
+    "pr": "",
+    "repo": "app"
+  },
+  "from": "owner",
+  "id": 3,
+  "read": false,
+  "text": "approved app:fa2/t1",
+  "time": "<TODAY> <TIME>"
+}
+$ POST /api/approve?p=faro&repo=nope&branch=x
+[400]
+{
+  "error": "repo and branch are required"
+}
+$ POST /api/move?p=faro&id=FA-2&a=up
+[200]
+{
+  "sentence": "FA-2: 2 -> 1 in A1 (before FA-3)"
+}
+$ POST /api/move?p=faro&id=FA-2&a=first
+[200]
+{
+  "sentence": null
+}
+$ POST /api/move?p=faro&id=FA-404&a=up
+[400]
+{
+  "error": "FA-404 is not among the active issues of the backlog"
+}
+$ POST /api/move?p=harbor&kind=project&id=A2&a=0
+[200]
+{
+  "sentence": "A2: 2 -> 1"
+}
+$ POST /api/pause?p=faro&on=1
+[200]
+{
+  "paused": true
+}
+$ GET /api/state?p=faro
+[200]
+{
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ],
+  "project": {
+    "active": true,
+    "activity": [
+      {
+        "from": "owner",
+        "id": 4,
+        "move": "FA-2",
+        "read": false,
+        "text": "FA-2: 2 -> 1 in A1 (before FA-3)",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "agents": [],
+    "backlog_error": null,
+    "decisions": [
+      {
+        "answer": null,
+        "date": "2020-01-18",
+        "id": "DEC J1",
+        "lead": "Lo pide FA-2 T1.",
+        "options": [
+          "a",
+          "b"
+        ],
+        "recommendation": "",
+        "recommended": "",
+        "text": "Lo pide FA-2 T1.",
+        "title": "DEC J1, ¿Cerramos FA-2 con el T1 de loop.py?"
+      }
+    ],
+    "grants": [],
+    "home": "<TMP>/faro",
+    "issue_live": {},
+    "language": "es",
+    "messages": [
+      {
+        "from": "owner",
+        "id": 1,
+        "read": false,
+        "text": "¿Cómo va el mapa?",
+        "time": "<TODAY> <TIME>"
+      },
+      {
+        "from": "owner",
+        "id": 2,
+        "read": false,
+        "text": "¿Seguimos mañana?",
+        "time": "<TODAY> <TIME>"
+      },
+      {
+        "approve": {
+          "approved": "Marta, <TODAY> <TIME> (panel)",
+          "branch": "fa2/t1",
+          "pr": "",
+          "repo": "app"
+        },
+        "from": "owner",
+        "id": 3,
+        "read": false,
+        "text": "approved app:fa2/t1",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "mode": "active",
+    "moves": [
+      {
+        "from": "owner",
+        "id": 4,
+        "move": "FA-2",
+        "read": false,
+        "text": "FA-2: 2 -> 1 in A1 (before FA-3)",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "name": "faro",
+    "notes": [
+      {
+        "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
+        "time": "<TIME>"
+      }
+    ],
+    "orchestrator": null,
+    "orchestrator_health": null,
+    "owner": "Marta",
+    "paused": "paused at <TIME>",
+    "progress": [
+      {
+        "agent": "ag1",
+        "text": "Lector de cartas: 0,4 s por carta",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "recurring": [
+      {
+        "every": "every 60 min",
+        "late": false,
+        "name": "Bucle del orquestador de faro",
+        "parts": [
+          {
+            "label": null,
+            "last": "<TODAY> <TIME>",
+            "last_ts": <EPOCH>,
+            "late": false
+          }
+        ]
+      }
+    ],
+    "report": null,
+    "repos": [
+      {
+        "branches": [],
+        "github": "",
+        "key": "app",
+        "merge": "squash",
+        "prs": [],
+        "today": []
+      }
+    ],
+    "resources": [
+      "widget"
+    ],
+    "targets": {
+      "production_slots": 1,
+      "ready_target": 2
+    },
+    "teams": [
+      "app"
+    ],
+    "title": "faro",
+    "warnings": [],
+    "wiki": false,
+    "wiki_first": [],
+    "writable": true
+  },
+  "version": <EPOCH>
+}
+$ POST /api/pause?p=faro&on=0
+[200]
+{
+  "paused": false
+}
+$ POST /api/lock/take?r=widget&min=30
+[200]
+{
+  "locks": [
+    {
+      "holders": [
+        {
+          "alive": null,
+          "pid": "",
+          "since": "<TODAY>T<TIME>",
+          "since_ts": <EPOCH>,
+          "slot": "",
+          "taking": null,
+          "what": "manual from the panel (<TODAY> <TIME>, expires <TODAY> <TIME>)",
+          "who": "Marta"
+        }
+      ],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": "<TIME>",
+      "owner_state": "holds",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ]
+}
+$ POST /api/lock/extend?r=widget&min=15
+[200]
+{
+  "locks": [
+    {
+      "holders": [
+        {
+          "alive": null,
+          "pid": "",
+          "since": "<TODAY>T<TIME>",
+          "since_ts": <EPOCH>,
+          "slot": "",
+          "taking": null,
+          "what": "manual from the panel (<TODAY> <TIME>, expires <TODAY> <TIME>)",
+          "who": "Marta"
+        }
+      ],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": "<TIME>",
+      "owner_state": "holds",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ]
+}
+$ POST /api/lock/release?r=widget
+[200]
+{
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ]
+}
+$ POST /api/lock/take?r=nope
+[400]
+{
+  "error": "no resource 'nope'"
+}
+$ POST /api/message?p=nope < x
+[403]
+{
+  "error": "no project 'nope'"
+}
+$ POST /api/nope?p=faro
+[400]
+{
+  "error": "no endpoint /api/nope"
+}
+
+######## after the writes
+$ GET /api/state?p=faro
+[200]
+{
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ],
+  "project": {
+    "active": true,
+    "activity": [
+      {
+        "from": "owner",
+        "id": 4,
+        "move": "FA-2",
+        "read": false,
+        "text": "FA-2: 2 -> 1 in A1 (before FA-3)",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "agents": [],
+    "backlog_error": null,
+    "decisions": [
+      {
+        "answer": null,
+        "date": "2020-01-18",
+        "id": "DEC J1",
+        "lead": "Lo pide FA-2 T1.",
+        "options": [
+          "a",
+          "b"
+        ],
+        "recommendation": "",
+        "recommended": "",
+        "text": "Lo pide FA-2 T1.",
+        "title": "DEC J1, ¿Cerramos FA-2 con el T1 de loop.py?"
+      }
+    ],
+    "grants": [],
+    "home": "<TMP>/faro",
+    "issue_live": {},
+    "language": "es",
+    "messages": [
+      {
+        "from": "owner",
+        "id": 1,
+        "read": false,
+        "text": "¿Cómo va el mapa?",
+        "time": "<TODAY> <TIME>"
+      },
+      {
+        "from": "owner",
+        "id": 2,
+        "read": false,
+        "text": "¿Seguimos mañana?",
+        "time": "<TODAY> <TIME>"
+      },
+      {
+        "approve": {
+          "approved": "Marta, <TODAY> <TIME> (panel)",
+          "branch": "fa2/t1",
+          "pr": "",
+          "repo": "app"
+        },
+        "from": "owner",
+        "id": 3,
+        "read": false,
+        "text": "approved app:fa2/t1",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "mode": "active",
+    "moves": [
+      {
+        "from": "owner",
+        "id": 4,
+        "move": "FA-2",
+        "read": false,
+        "text": "FA-2: 2 -> 1 in A1 (before FA-3)",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "name": "faro",
+    "notes": [
+      {
+        "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
+        "time": "<TIME>"
+      }
+    ],
+    "orchestrator": null,
+    "orchestrator_health": null,
+    "owner": "Marta",
+    "paused": null,
+    "progress": [
+      {
+        "agent": "ag1",
+        "text": "Lector de cartas: 0,4 s por carta",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "recurring": [
+      {
+        "every": "every 60 min",
+        "late": false,
+        "name": "Bucle del orquestador de faro",
+        "parts": [
+          {
+            "label": null,
+            "last": "<TODAY> <TIME>",
+            "last_ts": <EPOCH>,
+            "late": false
+          }
+        ]
+      }
+    ],
+    "report": null,
+    "repos": [
+      {
+        "branches": [],
+        "github": "",
+        "key": "app",
+        "merge": "squash",
+        "prs": [],
+        "today": []
+      }
+    ],
+    "resources": [
+      "widget"
+    ],
+    "targets": {
+      "production_slots": 1,
+      "ready_target": 2
+    },
+    "teams": [
+      "app"
+    ],
+    "title": "faro",
+    "warnings": [],
+    "wiki": false,
+    "wiki_first": [],
+    "writable": true
+  },
+  "version": <EPOCH>
+}
+$ GET /api/state?p=harbor
+[200]
+{
+  "locks": [
+    {
+      "holders": [],
+      "machine": false,
+      "me": "Marta",
+      "name": "widget",
+      "next": null,
+      "owner_expires": null,
+      "owner_state": "no",
+      "projects": [
+        "faro",
+        "harbor"
+      ],
+      "queue": [],
+      "slots": [],
+      "takeable": true,
+      "takers": [
+        "faro",
+        "harbor"
+      ]
+    }
+  ],
+  "project": {
+    "active": true,
+    "activity": [
+      {
+        "from": "owner",
+        "id": 3,
+        "move": "A2",
+        "read": false,
+        "text": "A2: 2 -> 1",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "agents": [],
+    "backlog_error": null,
+    "decisions": [
+      {
+        "answer": "a",
+        "date": "2020-01-18",
+        "id": "DEC J1",
+        "lead": "HB-2 T1 asks for it.",
+        "options": [
+          "a",
+          "b"
+        ],
+        "recommendation": "",
+        "recommended": "",
+        "text": "HB-2 T1 asks for it.",
+        "title": "DEC J1, Close HB-2 with T1 of loop.py?"
+      }
+    ],
+    "grants": [],
+    "home": "<TMP>/harbor",
+    "issue_live": {},
+    "language": "es",
+    "messages": [
+      {
+        "from": "owner",
+        "id": 1,
+        "read": false,
+        "text": "How is the booking going?",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "mode": "active",
+    "moves": [
+      {
+        "from": "owner",
+        "id": 3,
+        "move": "A2",
+        "read": false,
+        "text": "A2: 2 -> 1",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "name": "harbor",
+    "notes": [
+      {
+        "text": "The form takes 40 s end to end (measured on 5 bookings).",
+        "time": "<TIME>"
+      }
+    ],
+    "orchestrator": null,
+    "orchestrator_health": null,
+    "owner": "Sam",
+    "paused": null,
+    "progress": [
+      {
+        "agent": "ag1",
+        "text": "Booking form: 40 s end to end",
+        "time": "<TODAY> <TIME>"
+      }
+    ],
+    "recurring": [
+      {
+        "every": "weekly",
+        "late": true,
+        "name": "Weekly review",
+        "parts": [
+          {
+            "label": null,
+            "last": null,
+            "last_ts": null,
+            "late": true
+          }
+        ]
+      }
+    ],
+    "report": null,
+    "repos": [
+      {
+        "branches": [],
+        "github": "",
+        "key": "api",
+        "merge": "squash",
+        "prs": [],
+        "today": []
+      }
+    ],
+    "resources": [
+      "widget"
+    ],
+    "targets": {
+      "production_slots": 2,
+      "ready_target": 1
+    },
+    "teams": [
+      "api"
+    ],
+    "title": "Harbor",
+    "warnings": [],
+    "wiki": true,
+    "wiki_first": [],
+    "writable": true
+  },
+  "version": <EPOCH>
+}
+$ GET /api/backlog?p=*
+[200]
+{
+  "projects": [
+    {
+      "backlog": {
+        "archive": [
+          {
+            "archived": true,
+            "id": "FA-1",
+            "plan": [
+              "reviews/2020-01-10-plan-FA-1.md"
+            ],
+            "priority": "high",
+            "project": "A1",
+            "short": true,
+            "status": "done",
+            "subs": [
+              {
+                "id": "T1",
+                "ref": "abc1234",
+                "status": "done",
+                "title": "Lector de cartas"
+              },
+              {
+                "id": "T2",
+                "ref": "def5678",
+                "status": "done",
+                "title": "Pruebas del lector"
+              }
+            ],
+            "title": "Leer las cartas náuticas"
+          }
+        ],
+        "counts": {
+          "ready": 1,
+          "refining": 0
+        },
+        "issues": [],
+        "projects": [
+          {
+            "id": "A1",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "FA-2",
+                "outcome": {
+                  "criterion": "cada faro sale en el mapa"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "blocked_by": [
+                    "FA-1"
+                  ],
+                  "related": [
+                    "FA-3"
+                  ]
+                },
+                "reports": [],
+                "status": "ready",
+                "subs": [],
+                "title": "Pintar los faros"
+              },
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "FA-3",
+                "outcome": {
+                  "criterion": "un aviso llega en un minuto"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "related": [
+                    "FA-2"
+                  ]
+                },
+                "reports": [],
+                "status": "backlog",
+                "subs": [],
+                "title": "Enviar avisos por radio"
+              }
+            ],
+            "priority": "high",
+            "status": "in progress",
+            "title": "Mapa de la costa"
+          },
+          {
+            "id": "A2",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "FA-4",
+                "outcome": {
+                  "criterion": "notas ordenadas"
+                },
+                "plan": [],
+                "project": "A2",
+                "reports": [],
+                "status": "triage",
+                "subs": [],
+                "title": "Ordenar las notas"
+              }
+            ],
+            "status": "backlog",
+            "status_derived": true,
+            "title": "Avisos"
+          }
+        ]
+      },
+      "backlog_error": null,
+      "name": "faro"
+    },
+    {
+      "backlog": {
+        "archive": [
+          {
+            "archived": true,
+            "id": "HB-1",
+            "plan": [
+              "reviews/2020-01-10-plan-HB-1.md"
+            ],
+            "priority": "high",
+            "project": "A1",
+            "short": true,
+            "status": "done",
+            "subs": [
+              {
+                "id": "T1",
+                "ref": "abc1234",
+                "status": "done",
+                "title": "Form"
+              },
+              {
+                "id": "T2",
+                "ref": "def5678",
+                "status": "done",
+                "title": "Form tests"
+              }
+            ],
+            "title": "Booking form"
+          }
+        ],
+        "counts": {
+          "ready": 1,
+          "refining": 0
+        },
+        "issues": [],
+        "projects": [
+          {
+            "id": "A2",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-4",
+                "outcome": {
+                  "criterion": "notes tidy"
+                },
+                "plan": [],
+                "project": "A2",
+                "reports": [],
+                "status": "triage",
+                "subs": [],
+                "title": "Tidy the notes"
+              }
+            ],
+            "status": "backlog",
+            "status_derived": true,
+            "title": "Tide tables"
+          },
+          {
+            "id": "A1",
+            "issues": [
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-3",
+                "outcome": {
+                  "criterion": "the feed updates hourly"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "related": [
+                    "HB-2"
+                  ]
+                },
+                "reports": [],
+                "status": "backlog",
+                "subs": [],
+                "title": "Tide feed"
+              },
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-2",
+                "outcome": {
+                  "criterion": "a card payment goes through"
+                },
+                "plan": [],
+                "project": "A1",
+                "relations": {
+                  "blocked_by": [
+                    "HB-1"
+                  ],
+                  "related": [
+                    "HB-3"
+                  ]
+                },
+                "reports": [],
+                "status": "ready",
+                "subs": [],
+                "title": "Payment"
+              },
+              {
+                "blocked": "",
+                "detail": "",
+                "id": "HB-5",
+                "plan": [],
+                "project": "A1",
+                "reports": [],
+                "status": "backlog",
+                "subs": [],
+                "title": "missing criterion"
+              }
+            ],
+            "priority": "high",
+            "status": "in progress",
+            "title": "Berth booking"
+          }
+        ]
+      },
+      "backlog_error": null,
+      "name": "harbor"
+    }
+  ],
+  "version": <EPOCH>
+}
+
+######## state root: files under <TMP>/state
+=== faro/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>"
+}
+=== faro/heartbeats.json.lock
+
+=== faro/inbox.json
+[
+ {
+  "id": 1,
+  "time": "<TODAY> <TIME>",
+  "from": "owner",
+  "text": "¿Cómo va el mapa?",
+  "read": false
+ },
+ {
+  "id": 2,
+  "time": "<TODAY> <TIME>",
+  "from": "owner",
+  "text": "¿Seguimos mañana?",
+  "read": false
+ },
+ {
+  "id": 3,
+  "time": "<TODAY> <TIME>",
+  "from": "owner",
+  "text": "approved app:fa2/t1",
+  "read": false,
+  "approve": {
+   "repo": "app",
+   "branch": "fa2/t1",
+   "pr": "",
+   "approved": "Marta, <TODAY> <TIME> (panel)"
+  }
+ },
+ {
+  "id": 4,
+  "time": "<TODAY> <TIME>",
+  "from": "owner",
+  "text": "FA-2: 2 -> 1 in A1 (before FA-3)",
+  "read": false,
+  "move": "FA-2"
+ }
+]
+=== faro/inbox.json.lock
+
+=== faro/locks-notes/<TODAY>.md.lock
+
+=== faro/progress.jsonl
+{"time": "<TODAY> <TIME>", "agent": "ag1", "text": "Lector de cartas: 0,4 s por carta"}
+=== faro/progress.jsonl.lock
+
+=== harbor/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>"
+}
+=== harbor/heartbeats.json.lock
+
+=== harbor/inbox.json
+[
+ {
+  "id": 1,
+  "time": "<TODAY> <TIME>",
+  "from": "owner",
+  "text": "How is the booking going?",
+  "read": false
+ },
+ {
+  "id": 2,
+  "time": "<TODAY> <TIME>",
+  "from": "owner",
+  "text": "a",
+  "read": false,
+  "decision": "DEC J1, Close HB-2 with T1 of loop.py?",
+  "did": "DEC J1",
+  "resolved": true,
+  "freed": []
+ },
+ {
+  "id": 3,
+  "time": "<TODAY> <TIME>",
+  "from": "owner",
+  "text": "A2: 2 -> 1",
+  "read": false,
+  "move": "A2"
+ }
+]
+=== harbor/inbox.json.lock
+
+=== harbor/locks-notes/<TODAY>.md.lock
+
+=== harbor/progress.jsonl
+{"time": "<TODAY> <TIME>", "agent": "ag1", "text": "Booking form: 40 s end to end"}
+=== harbor/progress.jsonl.lock
+
+=== locks/widget/ (empty)

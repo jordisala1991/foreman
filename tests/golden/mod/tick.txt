@@ -1,0 +1,616 @@
+######## a pass due with something to act on
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- The weekly review is done: nothing overdue for a pass to act on.
+- One message from the owner, unread.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "plain", "text": "memory —"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": true, "grants": false, "marked": true, "submit": "harbor orchestrator loop\n\nLoop pass <TIME> (heartbeat written, <SECONDS> s). Act on each line (those marked (info) only inform):\n- (info) WIP (pipeline not full): production 0/2: no unblocked `ready` issue to launch.\n- (info) WIP (pipeline not full): unblocked ready 0/1 (refining 0): nothing to plan (only triage, blocked or ready issues).\n- Inbox: 1 unread from Sam (ids 1): `foreman inbox new`, answer and mark them read."}
+
+######## its state: files under <TMP>/worlds/a-pass-due-with-something-to-act-on
+=== harbor/heartbeats.json
+{
+ "review": "<TODAY>T<TIME>",
+ "loop": "<TODAY>T<TIME>"
+}
+=== harbor/heartbeats.json.lock
+
+=== harbor/inbox-notified
+1
+=== harbor/inbox.json
+[
+ {
+  "id": 1,
+  "time": "2020-01-15 <TIME>",
+  "from": "owner",
+  "text": "Done?",
+  "read": false
+ }
+]
+=== harbor/loop.jsonl
+{"time": "<TODAY>T<TIME>", "session": "S-orch", "skipped": false, "notices": ["wip_production", "wip_ready", "inbox"], "actionable": ["inbox"], "duration_s": <SECONDS>}
+=== harbor/loop.jsonl.lock
+
+=== harbor/notices-last
+inbox:1
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {}
+}
+
+######## an idle pass
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- The weekly review is done: nothing overdue for a pass to act on.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "plain", "text": "memory —"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": true, "grants": false, "log": "Loop pass <TIME>: nothing to do (skipped without calling the model). For information: WIP (pipeline not full): production 0/2: no unblocked `ready` issue to launch.; WIP (pipeline not full): unblocked ready 0/1 (refining 0): nothing to plan (only triage, blocked or ready issues).", "marked": true}
+
+######## its state: files under <TMP>/worlds/an-idle-pass
+=== harbor/heartbeats.json
+{
+ "review": "<TODAY>T<TIME>",
+ "loop": "<TODAY>T<TIME>"
+}
+=== harbor/heartbeats.json.lock
+
+=== harbor/loop.jsonl
+{"time": "<TODAY>T<TIME>", "session": "S-orch", "skipped": true, "notices": ["wip_production", "wip_ready"], "actionable": [], "duration_s": <SECONDS>}
+=== harbor/loop.jsonl.lock
+
+=== harbor/notices-last
+
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {}
+}
+
+######## no pass due
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- A loop pass just ran (its heartbeat) and the weekly review is done: no pass due, nothing overdue.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "plain", "text": "memory —"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": false, "grants": false, "marked": true}
+
+######## its state: files under <TMP>/worlds/no-pass-due
+=== harbor/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>",
+ "review": "<TODAY>T<TIME>"
+}
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {}
+}
+
+######## a session that is not the marked one
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-other"}
+[exit 0]
+{"grants": false, "marked": false}
+
+######## outside any project
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/elsewhere", "session": "S-elsewhere"}
+[exit 0]
+{"marked": false}
+
+######## in-between notices with no pass due
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- A loop pass just ran (its heartbeat) and the weekly review is done: no pass due, nothing overdue.
+- One message from the owner, unread.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "plain", "text": "memory —"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": false, "grants": false, "marked": true, "notices": "Inbox: 1 unread from Sam: `foreman inbox new`, attend to them and mark them read."}
+
+######## its state: files under <TMP>/worlds/in-between-notices-with-no-pass-due
+=== harbor/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>",
+ "review": "<TODAY>T<TIME>"
+}
+=== harbor/inbox-notified
+1
+=== harbor/inbox.json
+[
+ {
+  "id": 1,
+  "time": "2020-01-15 <TIME>",
+  "from": "owner",
+  "text": "Done?",
+  "read": false
+ }
+]
+=== harbor/notices-last
+inbox_new:1
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {}
+}
+
+######## in-between notices and a version notice
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- A loop pass just ran (its heartbeat) and the weekly review is done: no pass due, nothing overdue.
+- One message from the owner, unread.
+- The session runs an installed foreman 0.1.0 (its hooks' CLAUDE_PLUGIN_ROOT), replaced by an install of 0.2.0.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "plain", "text": "memory —"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": false, "grants": false, "marked": true, "notices": "Inbox: 1 unread from Sam: `foreman inbox new`, attend to them and mark them read.", "version": "This session runs foreman 0.1.0 (<TMP>/worlds/in-between-notices-and-a-version-notice/cache/foreman/0.1.0); 0.2.0 is installed (<TMP>/worlds/in-between-notices-and-a-version-notice/cache/foreman/0.2.0). Claude Code keeps a session on the version it started with: its hooks and the `foreman` on its PATH stay 0.1.0 until Sam types `/reload-plugins` in this session (only they can) or resumes it. Tell Sam once. Until then, what changed is in <TMP>/worlds/in-between-notices-and-a-version-notice/cache/foreman/0.2.0/CHANGELOG.md (0.1.0 → 0.2.0): a config key, a lock or a check added since may behave here as in 0.1.0.", "version_owner": "foreman 0.1.0 in this session, 0.2.0 installed: type /reload-plugins"}
+
+######## its state: files under <TMP>/worlds/in-between-notices-and-a-version-notice
+=== harbor/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>",
+ "review": "<TODAY>T<TIME>"
+}
+=== harbor/inbox-notified
+1
+=== harbor/inbox.json
+[
+ {
+  "id": 1,
+  "time": "2020-01-15 <TIME>",
+  "from": "owner",
+  "text": "Done?",
+  "read": false
+ }
+]
+=== harbor/notices-last
+inbox_new:1
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "0.1.0",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {}
+}
+=== install/sessions.json
+{
+ "S-orch": {
+  "version": "0.1.0",
+  "root": "<TMP>/worlds/in-between-notices-and-a-version-notice/cache/foreman/0.1.0",
+  "kind": "installed",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": "0.2.0"
+ }
+}
+=== install/sessions.json.lock
+
+
+######## a version notice in a session that is not the marked one
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session runs an installed foreman 0.1.0 (its hooks' CLAUDE_PLUGIN_ROOT), replaced by an install of 0.2.0.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-other"}
+[exit 0]
+{"grants": false, "marked": false, "version": "This session runs foreman 0.1.0 (<TMP>/worlds/a-version-notice-in-a-session-that-is-not-the-marked-one/cache/foreman/0.1.0); 0.2.0 is installed (<TMP>/worlds/a-version-notice-in-a-session-that-is-not-the-marked-one/cache/foreman/0.2.0). Claude Code keeps a session on the version it started with: its hooks and the `foreman` on its PATH stay 0.1.0 until Sam types `/reload-plugins` in this session (only they can) or resumes it. Tell Sam once. Until then, what changed is in <TMP>/worlds/a-version-notice-in-a-session-that-is-not-the-marked-one/cache/foreman/0.2.0/CHANGELOG.md (0.1.0 → 0.2.0): a config key, a lock or a check added since may behave here as in 0.1.0.", "version_owner": "foreman 0.1.0 in this session, 0.2.0 installed: type /reload-plugins"}
+
+######## its state: files under <TMP>/worlds/a-version-notice-in-a-session-that-is-not-the-marked-one
+=== harbor/sessions/S-other.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "0.1.0",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor"
+}
+=== install/sessions.json
+{
+ "S-other": {
+  "version": "0.1.0",
+  "root": "<TMP>/worlds/a-version-notice-in-a-session-that-is-not-the-marked-one/cache/foreman/0.1.0",
+  "kind": "installed",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": "0.2.0"
+ }
+}
+=== install/sessions.json.lock
+
+
+######## the session's subagents, as $.agent.list() gives them
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- A loop pass just ran (its heartbeat) and the weekly review is done: no pass due, nothing overdue.
+$ foreman hook mod tick
+< {"agents": [{"id": "a1", "status": "running"}, {"id": "a2", "status": "killed"}], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "plain", "text": "memory —"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": false, "grants": false, "marked": true}
+
+######## its state: files under <TMP>/worlds/the-session-s-subagents-as-agent-list-gives-them
+=== harbor/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>",
+ "review": "<TODAY>T<TIME>"
+}
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {
+  "a1": "running",
+  "a2": "killed"
+ }
+}
+
+######## a held tick: the heartbeat only, even with a pass due
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- The weekly review is done: nothing overdue for a pass to act on.
+- One message from the owner, unread.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "hold": true, "session": "S-orch"}
+[exit 0]
+{"grants": false, "marked": true}
+
+######## its state: files under <TMP>/worlds/a-held-tick-the-heartbeat-only-even-with-a-pass-due
+=== harbor/heartbeats.json
+{
+ "review": "<TODAY>T<TIME>"
+}
+=== harbor/inbox.json
+[
+ {
+  "id": 1,
+  "time": "2020-01-15 <TIME>",
+  "from": "owner",
+  "text": "Done?",
+  "read": false
+ }
+]
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {}
+}
+
+######## a version notice in the marked session, a terminal one
+$ world
+- The session's heartbeat, its module's start said `interactive` (a person at the prompt: a terminal).
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- A loop pass just ran (its heartbeat) and the weekly review is done: no pass due, nothing overdue.
+- The session runs an installed foreman 0.35.0 (its hooks' CLAUDE_PLUGIN_ROOT), replaced by an install of 9.9.0.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "plain", "text": "memory —"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": false, "grants": false, "marked": true, "version": "This session runs foreman 0.35.0 (<TMP>/worlds/a-version-notice-in-the-marked-session-a-terminal-one/cache/foreman/0.35.0); 9.9.0 is installed (<TMP>/worlds/a-version-notice-in-the-marked-session-a-terminal-one/cache/foreman/9.9.0). Claude Code keeps a session on the version it started with: its hooks and the `foreman` on its PATH stay 0.35.0 until Sam types `/reload-plugins` in this session (only they can) or resumes it. Tell Sam once. Until then, what changed is in <TMP>/worlds/a-version-notice-in-the-marked-session-a-terminal-one/cache/foreman/9.9.0/CHANGELOG.md (0.35.0 → 9.9.0): a config key, a lock or a check added since may behave here as in 0.35.0.", "version_owner": "foreman 0.35.0 in this session, 9.9.0 installed: type /reload-plugins"}
+
+######## its state: files under <TMP>/worlds/a-version-notice-in-the-marked-session-a-terminal-one
+=== harbor/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>",
+ "review": "<TODAY>T<TIME>"
+}
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "0.35.0",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "interactive": true,
+ "agents": {}
+}
+=== install/sessions.json
+{
+ "S-orch": {
+  "version": "0.35.0",
+  "root": "<TMP>/worlds/a-version-notice-in-the-marked-session-a-terminal-one/cache/foreman/0.35.0",
+  "kind": "installed",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": "9.9.0"
+ }
+}
+=== install/sessions.json.lock
+
+
+######## a renewal due
+$ world
+- The session's heartbeat, as its module's ticks write it.
+- The session marked as harbor's orchestrator (`foreman session`).
+- An empty backlog (`foreman init`, once: it lives in the home, which the worlds share).
+- A loop pass just ran (its heartbeat) and the weekly review is done: no pass due, nothing overdue.
+- The session's last measure: 208K of a 1000K window, above harbor's [loop] context_rotate (200K).
+- `foreman renew` from the session: its request waits for the next tick.
+$ foreman hook mod tick
+< {"agents": [], "busy": false, "claude_code": "2.1.314", "cwd": "<TMP>/harbor", "session": "S-orch"}
+[exit 0]
+{"band": {"level": "ok", "rows": [[{"prio": 0, "role": "dot", "text": "●"}, {"prio": 2, "role": "warn", "text": "memory 208K of 200K"}, {"prio": 4, "role": "plain", "text": "next pass <TIME>"}, {"prio": 7, "role": "dim", "text": "foreman"}], [{"prio": 1, "role": "dim", "text": "nothing running"}]]}, "due": false, "grants": false, "instructions": "foreman renews the memory of harbor's orchestrator session in place. Right after this compaction foreman gives the session back its rules, board, active backlog, live agents, the owner's open decisions and the owner's last messages verbatim, so leave all that out. Keep this summary short (at most about 1,500 words) and keep only what none of those holds: what the owner asked in this conversation that is still open and not on the board, what was agreed with them, what you were in the middle of and your next step. No history of finished work, no tool output, no file contents.", "log": "foreman: renewing this session's memory in place (208K of 1000K used); the work goes on in a minute", "marked": true, "renew": "r<EPOCH>"}
+
+######## its state: files under <TMP>/worlds/a-renewal-due
+=== harbor/heartbeats.json
+{
+ "loop": "<TODAY>T<TIME>",
+ "review": "<TODAY>T<TIME>"
+}
+=== harbor/measure/S-orch.json
+{
+ "tokens": 208000,
+ "window": 1000000,
+ "percent": 21,
+ "cost_usd": null,
+ "rate_limits": [],
+ "at": "<TODAY>T<TIME>"
+}
+=== harbor/orchestrator.json
+{
+ "session": "S-orch",
+ "name": "orq",
+ "since": "<TODAY>T<TIME>",
+ "pid": null,
+ "pid_start": null,
+ "process": "marked by hand"
+}
+=== harbor/renewals.jsonl
+{"at": "<TODAY>T<TIME>", "id": "r<EPOCH>", "session": "S-orch", "state": "asked", "tokens_before": 208000, "why": "request"}
+=== harbor/renewals.jsonl.lock
+
+=== harbor/session
+S-orch
+=== harbor/sessions/S-orch.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "agents": {}
+}
+
+######## state root: files under <TMP>/state
+=== harbor/measure/S-fresh.json
+{
+ "tokens": null,
+ "window": 200000,
+ "percent": null,
+ "cost_usd": null,
+ "rate_limits": [],
+ "at": "<TODAY>T<TIME>"
+}
+=== harbor/measure/S-measure.json
+{
+ "tokens": 61000,
+ "window": 200000,
+ "percent": 31,
+ "cost_usd": 1.25,
+ "rate_limits": [
+  {
+   "kind": "five_hour",
+   "percent_used": 23.5,
+   "resets_at": "2020-01-15T<TIME>"
+  },
+  {
+   "kind": "seven_day",
+   "percent_used": 7,
+   "resets_at": null
+  }
+ ],
+ "at": "<TODAY>T<TIME>"
+}
+=== harbor/sessions/S-active.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "interactive": true,
+ "ended": "<TODAY>T<TIME>"
+}
+=== harbor/sessions/S-cleared.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor",
+ "interactive": true
+}
+=== harbor/sessions/S-other.json
+{
+ "at": "<TODAY>T<TIME>",
+ "started": "<TODAY>T<TIME>",
+ "busy": false,
+ "version": "<VERSION>",
+ "claude_code": "2.1.314",
+ "cwd": "<TMP>/harbor"
+}
+=== install/sessions.json
+{
+ "S-active": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "claude_code": "2.1.314",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ },
+ "S-cleared": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "claude_code": "2.1.314",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ },
+ "S-old": {
+  "version": "<VERSION>",
+  "root": "<FOREMAN>",
+  "kind": "working_copy",
+  "project": "harbor",
+  "cwd": "<TMP>/harbor",
+  "claude_code": "2.1.200",
+  "seen": "<TODAY>T<TIME>",
+  "last": "<TODAY>T<TIME>",
+  "told": null
+ }
+}
+=== install/sessions.json.lock
+

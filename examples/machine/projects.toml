@@ -1,0 +1,28 @@
+# Example registry (~/.config/foreman/projects.toml, or $FOREMAN_REGISTRY) of a machine with two products that share
+# one GPU (docs/config.md, «Machine resources»). The GPU is declared once here, with everything that defines its one
+# lock; each product only says that it uses it ([resources.gpu] in its foreman.toml, with its own guard), e.g.
+# examples/tidepool.toml.
+
+[[project]]
+name = "tidepool"                 # a mobile app with an API (examples/tidepool.toml)
+home = "~/Projects/tidepool/ops"
+mode = "active"
+
+[[project]]
+name = "lantern"                  # a model-training project that keeps its home inside its repo
+home = "~/Projects/lantern/ops"
+mode = "inactive"                 # set up; its hooks do nothing until it is switched to active
+
+[panel]
+language = "en"
+who = "owner"
+
+[resources.gpu]                   # the machine's GPU: one queue for every product that declares [resources.gpu]
+dir = "~/.gpu-lock"               # the lock and its queue live outside every product (default: the state root)
+queue = "~/.gpu-lock-queue"
+next = "~/.gpu-lock-next"
+jumped = "~/.gpu-lock-jumped"
+busy = "~/.config/foreman/bin/gpu-busy.sh"   # its users outside the lock (examples/machine/gpu-busy.sh), next to
+                                             # this file and outside any product's repo
+busy_wait = 600                   # after taking the lock, wait up to this many s for those users to end
+short_max = 300                   # a short job (FOREMAN_LOCK_SHORT=1, up to this many s) may jump the queue
