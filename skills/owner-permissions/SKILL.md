@@ -38,7 +38,8 @@ blocked. A real risk (it could publish, delete or reach other people's data) is 
      rows: allowed for X, still blocked for what stays;
    - a rule marked «from the machine» holds for every product on this machine (the list of projects' `[machine]`):
      taking it off here only is `[deny] drop` in this product's copy (it opens, like taking a rule off); for every
-     product it is a change to the list of projects (their yes, as step 1 says);
+     product it is a change to the list of projects (their yes, as step 1 says), tested first on a copy with
+     `foreman permissions --machine-candidate COPY` (every product; bring back what it says, «two groups» rows too);
    - «X must wait its turn» → a prefix in that resource's guard; rows: waits for that resource;
    - «let the agents (or you) change a reserved file» → not a rule of this list: say plainly that those files stay
      the owner's or `permissions apply`'s, and why (step 1).

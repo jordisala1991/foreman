@@ -203,7 +203,7 @@ registry), and `[deny] drop`. Machine resources keep their own `[resources.NAME]
   `foreman check` fails in each of them until the registry is fixed. A pattern denied at one level and granted in a
   group at the other is the warning of `[deny.grants]` (below), naming both places.
 - **Who can change it.** The registry is a reserved file (docs/internals.md, «The reserved files»): only with the
-  owner's own yes. An older foreman ignores `[machine]` («unknown section [machine]»): keep a rule in the products
+  owner's own yes, after testing the change on every product with `foreman permissions --machine-candidate` (below). An older foreman ignores `[machine]` («unknown section [machine]»): keep a rule in the products
   too until every session runs a foreman that knows it (the merge does not repeat it).
 - **Grants are per product.** A `[machine.deny.grants]` group is granted in each product apart: the owner's yes in
   one product's panel does not open it in another.
@@ -504,6 +504,25 @@ lifeline with the copy; with a `--table` other than the live one, also how many 
 that only adds rows says so, not «nothing changes»). Exit 1 when a row fails or the orchestrator would lose a lifeline command (a rule refuses it,
 or puts it in a group: the owner would be asked every time), else 0. A row that becomes allowed is listed, never
 hidden. Neither form writes anything, in the home or in the state folder.
+
+A change to the registry's `[machine]` (above, «Machine settings») reaches every product at once, so it has its own
+test, on a copy of the registry:
+
+```
+cp ~/.config/foreman/projects.toml /tmp/registry.toml     # edit its [machine]
+foreman permissions --machine-candidate /tmp/registry.toml [--json]
+```
+
+Only the copy's `[machine]` is taken (the products and the machine resources stay the live registry's; the text says
+when the copy differs elsewhere). A value there that would be ignored or left out is exit 2 with its warning. For
+every registered product it says, in that product's language, the rules from the machine before and after, each
+machine setting that changes (`project.owner: «A» → «B»`), the candidate's test as above (rules, rows, failing rows,
+the lifeline) and what it opens, the new warnings (`foreman check` would fail), and the rows of its table that would
+fall in **two or more groups** other than before: a machine group over a product's group (say `secrets` over a
+product's own `env-app`, both matching `cat .env`) keeps the row's verdict «only the orchestrator», so the diff does
+not show it, but each group needs its own yes. Exit 1 when a product loses a row or a lifeline command, gets a
+warning or does not load, 2 when a table does not read, else 0. It writes nothing; there is no `apply` for the
+machine: the registry changes only with the owner's own yes.
 
 Once tested, the orchestrator puts it in place with `apply`, after the owner's yes in the chat:
 
