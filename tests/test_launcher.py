@@ -140,7 +140,7 @@ class NoPythonTest(LauncherCase):
                     self.assertIn("brew install python@", out["systemMessage"])
                     ctx = out["hookSpecificOutput"]
                     self.assertEqual(ctx["hookEventName"], "SessionStart")
-                    self.assertIn("blocks every Bash, Write and Edit call", ctx["additionalContext"])
+                    self.assertIn("blocks every tool call", ctx["additionalContext"])
         r = self.run_bare("hook", "who", inp='{"session_id": "s1", "source": "compact"}')
         self.assertEqual((r.returncode, r.stdout), (0, ""))
         r = self.run_bare("hook", "who")  # no event on stdin at all

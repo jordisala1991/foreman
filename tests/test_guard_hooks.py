@@ -1263,6 +1263,10 @@ class PauseTest(ProjectCase):
         pre = json.loads((ROOT / "hooks/classic.json").read_text())["hooks"]["PreToolUse"]
         m = [h for h in pre if "pause-agents" in h["hooks"][0]["command"]]
         self.assertEqual([h["matcher"] for h in m], ["Agent|Task"])
+        # the guard sees every tool: one entry with no matcher (a matcher would leave some tool unseen)
+        g = [h for h in pre if h["hooks"][0]["command"].endswith(" hook guard")]
+        self.assertEqual(len(g), 1)
+        self.assertNotIn("matcher", g[0])
         # the classic hooks live apart from the module (an old Claude Code reading `modules` cannot drop them)
         self.assertEqual(json.loads((ROOT / "hooks/hooks.json").read_text()), {"modules": ["./mod/foreman.ts"]})
         self.assertEqual(json.loads((ROOT / ".claude-plugin/plugin.json").read_text())["hooks"], "./hooks/classic.json")

@@ -2,8 +2,7 @@
   "description": "foreman's classic hooks (named by .claude-plugin/plugin.json \"hooks\"): every one exits 0 without output unless the session's cwd belongs to an active project of the registry. The module (hooks/hooks.json) is apart.",
   "hooks": {
     "PreToolUse": [
-      {"matcher": "Bash", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" hook guard", "timeout": 10}]},
-      {"matcher": "Write|Edit|MultiEdit|NotebookEdit", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" hook guard", "timeout": 10}]},
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" hook guard", "timeout": 10}]},
       {"matcher": "Agent|Task", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" hook pause-agents", "timeout": 10}]}
     ],
     "SubagentStart": [

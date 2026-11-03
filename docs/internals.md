@@ -166,7 +166,7 @@ hooks as usual.
 
 ## The reserved files
 
-The guard hook also runs on Write, Edit, MultiEdit and NotebookEdit (hooks/classic.json), and refuses a call that
+On Write, Edit, MultiEdit and NotebookEdit the guard hook (it runs on every tool: «Any other tool») refuses a call that
 writes a reserved file, the same for every product and for anyone in the session: the live foreman.toml and guard
 table (`[check] guard_table`) of every project of the registry, foreman's state (the state root, and a `[paths]
 state` outside it), the registry (with the default one, its whole folder `~/.config/foreman/`), and Claude Code's own
@@ -404,6 +404,34 @@ verdicts on any machine where the home has no remote; a folder that does not exi
 the project), so a row that names a repo checks it only where the repo is. A failing row shows its folder:
 `guard.tsv:12: want deny@/…/lib, got allow: 'git push'`.
 
+## Any other tool
+
+The guard hook runs before every tool call (hooks/classic.json has no matcher for it): Bash as above, and every other
+tool, foreman's own, Claude Code's (Read, Grep, Glob, WebFetch, Monitor, Agent…) and any plugin's, with one rule and no
+list of tools. It walks the call's input (4 levels, 64 strings at most, so a long Agent prompt or a browser batch stays
+cheap) and sorts each string by the name of the field that holds it, split at `_` and at camelCase:
+
+- **a place**: the last word is `path`, `paths`, `file`, `files`, `dir`, `directory`, `folder`, `cwd`, `root`, `url`,
+  `urls`, `uri` or `glob` (`file_path`, `notebook_path`, Grep's `path`, WebFetch's `url`, a plugin's `targetPath`), or
+  the string sits inside a list or map under such a field (an Artifact's `files`). It gets the verdict `cat PLACE`
+  would get in Bash, and an absolute path under `$HOME` also that of `cat ~/…` (Read names absolute paths; rules are
+  often written with `~`). A place never waits for a lock: it runs nothing.
+- **a command**: a string under `command` or `cmd` in any tool but Bash (Monitor, a plugin's terminal). It gets the
+  verdict of that command in Bash, the resource prefixes and the pause included.
+- **free text**: everything else (`content`, `old_string`, `new_string`, `prompt`, `message`, `query`, `pattern`) is
+  not compared, as the text of a note is not; a brief that mentions `.env` passes.
+
+The first refusal wins; it says the tool and the place or command that matched. A write tool's call is first checked
+for the reserved files (above), then by this rule, so writing a secret is refused as reading it. Reading a reserved
+file stays free. If the check fails on a place, its raw text is compared whole; any other failure of foreman lets the
+call through (it never stops a Read). A call that names neither a place nor a command leaves at once. Not seen: a
+tool that runs code under another field (`script`, `code`) and a glob's `pattern`. Without a Python foreman can use,
+every tool call is refused while a registry exists, as a Bash call is (docs/config.md, «Python»).
+
+A guard table checks it with `tool:NAME JSON` rows, judged in both roles like a command:
+`orchestrator<TAB>tool:Read {"file_path": "~/.ssh/id_ed25519"}`, `allow<TAB>tool:mcp__x__y {"message": "cat .env"}`.
+`guard.jsonl` and `approved.jsonl` record the tool and the place or command, never the rest of its input.
+
 ## The state
 
 What foreman writes outside a product's home: one folder per product and a few shared files, under the **state
@@ -439,8 +467,8 @@ after its fixed sequences: tests/golden/*.txt show every file below with real co
 | `pause` | present while the product is paused from the panel («paused at HH:MM») | the panel (`/api/pause`); read by the loop pass, the guard and `hook pause-agents` |
 | `notices-last` | the keys of the actionable notices said between passes, one per line (a case is said once while it lasts) | `hook loop` (prompts), `hook mod tick` (the hooks module, between prompts) |
 | `inbox-notified` | the newest inbox id already announced | the loop pass, `hook loop` |
-| `approved.jsonl` | the orchestrator-only commands (the `[deny.grants]` groups): one line per decision of the guard, `{at, verdict: allow\|deny, why: agent\|session\|process\|grant\|null, session, agent_id, agent, orchestrator, pattern, command (300 characters), tool_use_id}` (a reserved file an agent or another session tried to write: `pattern: file:<class>` and `file`, its path, instead of `command`) (plus `marked_pid`, the mark's pid or null, when `why` is `process`; `group` when `why` is `grant`; `grant`, `[{group, via, at, answer}]`, on an allow that used grants; an allow is a line of today's notes too), one per answer of the owner to the hooks module's question, `{at, verdict: grant\|deny\|late, why: grant, group, answer: yes\|no\|dismissed\|timeout\|unavailable, surfaces, session, orchestrator, command, tool_use_id}` (plus `until` on a grant, `via: panel` and `asked` (the request's time) on a grant approved from the panel, `cooldown_until` after a no, `pending` after a timeout, `refused: session\|process` for a yes that came where it grants nothing), and one per group `foreman permissions grants off` removed, `{at, verdict: revoke, why: grant, group, session}`; cut to the last 30 days once it passes 512 KB (lines of foreman 0.43 or older may carry `why: wrapper`, `approved` and the `{tool_use_id, exit, seconds}` of the old `foreman approved`) | `hook guard`, `hook mod grant`, `foreman permissions grants off` |
-| `guard.jsonl` | one line per refusal of the guard hook: `{at, kind: builtin\|deny\|orchestrator\|lock\|file\|error, rule, where, who: agent\|orchestrator\|other}`, plus `group` and `why` for an orchestrator-only refusal, `resource` for a lock, and `file` (the path) and `why` for a reserved file (`rule: file:<class>`, `where: file`) (`rule`: the pattern, foreman's own rule or the resource's matching prefix; `where`: where it matched, as the refusal says; `who`: an agent_id, the marked session, or any other); never the command's text. A failure to write it leaves the refusal as it is; past 2 MB it keeps its last 10,000 lines. Read by `foreman permissions` (each rule's count of the last 7 days) and `foreman permissions --refused` | `hook guard` |
+| `approved.jsonl` | the orchestrator-only commands (the `[deny.grants]` groups): one line per decision of the guard, `{at, verdict: allow\|deny, why: agent\|session\|process\|grant\|null, session, agent_id, agent, orchestrator, pattern, command (300 characters), tool_use_id}` (a reserved file an agent or another session tried to write: `pattern: file:<class>` and `file`, its path, instead of `command`; a call of any other tool: `tool`, its name, and `place`, the path or URL that matched, or `command`, the one it runs, never the rest of its input) (plus `marked_pid`, the mark's pid or null, when `why` is `process`; `group` when `why` is `grant`; `grant`, `[{group, via, at, answer}]`, on an allow that used grants; an allow is a line of today's notes too), one per answer of the owner to the hooks module's question, `{at, verdict: grant\|deny\|late, why: grant, group, answer: yes\|no\|dismissed\|timeout\|unavailable, surfaces, session, orchestrator, command, tool_use_id}` (plus `until` on a grant, `via: panel` and `asked` (the request's time) on a grant approved from the panel, `cooldown_until` after a no, `pending` after a timeout, `refused: session\|process` for a yes that came where it grants nothing), and one per group `foreman permissions grants off` removed, `{at, verdict: revoke, why: grant, group, session}`; cut to the last 30 days once it passes 512 KB (lines of foreman 0.43 or older may carry `why: wrapper`, `approved` and the `{tool_use_id, exit, seconds}` of the old `foreman approved`) | `hook guard`, `hook mod grant`, `foreman permissions grants off` |
+| `guard.jsonl` | one line per refusal of the guard hook: `{at, kind: builtin\|deny\|orchestrator\|lock\|file\|error, rule, where, who: agent\|orchestrator\|other}`, plus `group` and `why` for an orchestrator-only refusal, `resource` for a lock, and `file` (the path) and `why` for a reserved file (`rule: file:<class>`, `where: file`), `tool` (its name) for a call of any tool but Bash (`where: tool` for a place it named) (`rule`: the pattern, foreman's own rule or the resource's matching prefix; `where`: where it matched, as the refusal says; `who`: an agent_id, the marked session, or any other); never the command's text. A failure to write it leaves the refusal as it is; past 2 MB it keeps its last 10,000 lines. Read by `foreman permissions` (each rule's count of the last 7 days) and `foreman permissions --refused` | `hook guard` |
 | `grants.json` | the owner's grants for `[deny.grants]` groups: `{grants: {group: {session, pid, pid_start, orchestrator, at, until, via, answer, surfaces, tool_use_id}}, cooldowns: {group: {session, until}}, pending: {group: {at, session, pid, pid_start, orchestrator, command, tool_use_id}}, once: {tool_use_id: {session, kind, path, command, at}}}` (a grant from the panel: `via: panel` and `sig`, an HMAC with `panel/grant.key`). `once` holds the owner's yes to one call that writes Claude Code's settings or the registry (`kind` claude or registry; `path` the real path of the file a file tool writes, or `command` the Bash command): the guard spends it on that call (same session and `tool_use_id`, never an agent's) and drops it 10 min after `at`. A grant is live while `until` is ahead and the mark is the same session, pid and start time; a cooldown (10 min after the owner's no) stops the question for that group in that session; a pending request is the last question of a group left unanswered, for the panel, until `grant_minutes` after `at` and while the mark is the session and process that asked. Read by the guard (`why=grant`), `foreman permissions grants` and the panel | `hook mod grant`; the panel's approval; `foreman permissions grants off` removes grants and requests |
 | `permissions/AAAAMMDD-HHMMSS.toml`, `.tsv` | the product's `foreman.toml` (and its guard table, when the change replaced it) as they were before each `foreman permissions apply`: the copy that undoes it (the command it prints applies them back). Never removed by foreman | `foreman permissions apply` |
 | `orchestrator-denied-notified` | the time of the last refusal of an agent, another session or another process of the marked one the loop pass said (`orchestrator_only_denied`) | the loop pass |
