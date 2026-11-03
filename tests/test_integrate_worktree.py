@@ -426,6 +426,38 @@ class IntegrateTest(ProjectCase):
         r = self.integrate("app", "ab1", "AB-1", "--title", "Fix the export", "--body", "b", "--check")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_public_repo_rejects_internal_ids_in_commit_messages(self):
+        self.write_toml(TOML.replace('merge = "squash"', 'merge = "squash"\npublic = true'))
+        wt = self.worktree()
+        (wt / "more.txt").write_text("more\n")
+        git(wt, "add", "-A")
+        git(wt, "commit", "-q", "-m", "AB-1: x")
+        sha = git(wt, "rev-parse", "HEAD")[:12]
+        r = self.integrate("app", "ab1", "AB-1", "--title", "Add it", "--body", "b")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn(f"the message of commit {sha} carries an internal ID", r.stderr)
+        self.assertIn("nothing pushed", r.stderr)
+        self.assertNotIn("AB-1: x", r.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(git(self.tmp / "app.git", "branch", "--list", "ab1"), "")
+
+    def test_public_repo_commit_messages_pass_the_privacy_scan(self):
+        self.write_toml(
+            TOML.replace('merge = "squash"', 'merge = "squash"\npublic = true\nprivacy_scan = "! grep -q secret"')
+        )
+        wt = self.worktree()
+        git(wt, "commit", "-q", "--allow-empty", "-m", "Add it\n\nsee secret-host")
+        r = self.integrate("app", "ab1", "AB-1", "--title", "Add it", "--body", "b")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("fails the privacy scan", r.stderr)
+        self.assertIn("nothing pushed", r.stderr)
+        self.assertNotIn("secret-host", r.stderr)
+        self.assertEqual(self.calls(), [])
+        # a private repo never looks at them
+        self.write_toml(TOML)
+        r = self.integrate("app", "ab1", "AB-1", "--title", "Add it", "--body", "b", "--result", "ok")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     # ---------- local CI runs (--ci, ci_runs, ci_summary) ----------
 
     CI_LOCAL = (

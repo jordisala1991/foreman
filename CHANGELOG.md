@@ -15,6 +15,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Changed
 
+- In a repo with `public = true`, `foreman integrate` also scans the branch's commit messages (`main..BRANCH`) with
+  the checks the PR title and body pass (no internal IDs, then `privacy_scan`), before the local CI and before
+  anything is pushed: a public PR shows them forever, even when the merge squashes them. A hit stops with «nothing
+  pushed» and names the commit and the rule, never the matched text.
 - The test suite covers a whole loop pass (the hook's tick and `loop.jsonl`) when all the ready work waits for a
   pending decision: the WIP notice is information only, says which decision each issue waits for, and the pass is
   skipped; one ready issue that can be launched next to them sends the pass to the model. No behaviour changes: a

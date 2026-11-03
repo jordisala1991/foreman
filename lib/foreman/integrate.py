@@ -9,11 +9,11 @@ replaced), `ci_runs` (the runs of the local CI: each value is put in {ci}; [""] 
 (without a remote: what runs in the main checkout after the fast-forward instead of `local_ci`, see below),
 `remote_checks` (required: wait for `gh pr checks --watch`), `risky_paths` (a branch that touches them is not merged
 without the owner's approval), `require_approval` and `publish_on_merge` (merging is publishing: always the owner's
-approval), `public` (title, body and comment may not carry internal IDs, bracketed or not; `privacy_scan` is an
-extra command that reads the text on stdin and fails to stop it), `pre_merge_report` (a command whose output is
-shown before merging), `post_merge` (a command run in the main checkout once the branch is in main; {main},
-{branch}, {before} and {head} are replaced) and `plan_check_heading` (the section of the issue's plan to compare with
-the branch's report).
+approval), `public` (title, body, comment and the branch's commit messages may not carry internal IDs, bracketed or
+not; `privacy_scan` is an extra command that reads each text on stdin and fails to stop it), `pre_merge_report` (a
+command whose output is shown before merging), `post_merge` (a command run in the main checkout once the branch is in
+main; {main}, {branch}, {before} and {head} are replaced) and `plan_check_heading` (the section of the issue's plan to
+compare with the branch's report).
 
 Order (a failure at any step stops, never forces, and leaves the PR open if there is one):
  0. before any effect: the PR title and body and --result reach the owner, so what they name without explaining
@@ -37,10 +37,12 @@ Order (a failure at any step stops, never forces, and leaves the PR open if ther
     owner's yes); else it goes on and the note says what changed. The other reserved files in the repo (Claude
     Code's settings, a state, the registry) are risky paths. --check shows the same and what it would do;
     (--check stops here, after printing what the backlog close would do);
- 3. local CI in the worktree (unless --no-ci): one run of `local_ci` per value of `ci_runs`, or per --ci=ARGS
-    (repeatable; it replaces `ci_runs`; write it with «=» when ARGS starts with «-»), in order, the first failure
-    stopping; --ci without {ci} in `local_ci` is exit 2 (arguments are never appended blindly). The output is
-    also written, as it comes, to <state>/integrate/<branch>-ci.log (a «/» in the branch becomes «-»);
+ 3. in a `public` repo, each commit message of main..BRANCH passes the public scan (a stop names the commit and the
+    rule, never the text); then the local CI in the worktree (unless --no-ci): one run of `local_ci` per value of
+    `ci_runs`, or per --ci=ARGS (repeatable; it replaces `ci_runs`; write it with «=» when ARGS starts with «-»), in
+    order, the first failure stopping; --ci without {ci} in `local_ci` is exit 2 (arguments are never appended
+    blindly). The output is also written, as it comes, to <state>/integrate/<branch>-ci.log (a «/» in the branch
+    becomes «-»);
  4. push and open the PR (or reuse the open one for this branch); the body gets «Closes #n» when the issue was
     imported from GitHub (its `github` field names this repo);
  5. waits for the remote checks and comments the local CI result (with `ci_summary`, one bullet per run under
@@ -670,7 +672,9 @@ class Integration:
             )
         return text
 
-    def scan_public(self, label: str, text: str | None) -> None:
+    def scan_public(self, label: str, text: str | None, detail: bool = True) -> None:
+        """Stops when a public repo's `label` text carries an internal ID or fails `privacy_scan`; `detail` False
+        leaves the scan's stderr out of the message (it may quote the text)."""
         if not self.repo.get("public") or not text:
             return
         if plain.ids_re(self.p).search(text):  # glossed or not: a public repo carries no internal id
@@ -683,7 +687,24 @@ class Integration:
                 limit = commands.POINTS["repo.privacy_scan"].timeout
                 raise Stop(f"stopped: the privacy scan of the {label} did not end in {limit:g} s")
             if r.rc != 0:  # None (it could not start) fails closed too
-                raise Stop(f"stopped: the {label} fails the privacy scan ({r.stderr.strip()[:200]})")
+                why = f" ({r.stderr.strip()[:200]})" if detail else ""
+                raise Stop(f"stopped: the {label} fails the privacy scan{why}")
+
+    def scan_commit_messages(self) -> None:
+        """A public repo's PR shows the branch's commit messages forever, squash or not: each one passes the same
+        scan as the title and body before anything is pushed. The stop names the commit and the rule, never the
+        matched text."""
+        if not self.repo.get("public"):
+            return
+        log = git(self.wt, "log", "--format=%H%x00%B%x1e", f"{self.main}..{self.branch}")
+        for entry in log.split("\x1e"):
+            sha, _, message = entry.strip().partition("\x00")
+            if not sha:
+                continue
+            try:
+                self.scan_public(f"message of commit {sha[:12]}", message, detail=False)
+            except Stop as e:
+                raise Stop(f"{e.args[0]} (git rebase -i {self.main}, then reword): nothing pushed") from None
 
     def warn_owner_texts(self) -> None:
         """Warnings on stderr, never blocking, for what reaches the owner: the PR title and body and the result line
@@ -1363,6 +1384,7 @@ class Integration:
             return self.run_local()
         body = self.body()
         self.scan_public("PR body", body)
+        self.scan_commit_messages()
         ci_text = self.local_ci()
         try:
             self.scan_public("CI comment", ci_text)
