@@ -180,7 +180,7 @@ class MistakesTest(MachineSettingsCase):
         self.registry(
             MACHINE.replace(f'patterns = ["{SHIP}"]', f'patterns = ["{SHIP}", "(unclosed"]')
             + 'Bad = ["x"]\n\n[machine.loop]\ncontext_rotate = -1\nevery_min = 30\nprompt = "mine"\n'
-            + '\n[machine.paths]\nnotes = "n"\n\n[machine.futuro]\nx = 1\n'
+            + 'config_schema = 1\n\n[machine.paths]\nnotes = "n"\n\n[machine.futuro]\nx = 1\n'
         )
         fake, other = self.both()
         for p in (fake, other):
@@ -198,6 +198,7 @@ class MistakesTest(MachineSettingsCase):
                     "registry: [machine.loop]: prompt is each product's own",
                     "registry: [machine.paths] is each product's own",
                     "registry: [machine]: unknown section [futuro]",
+                    "registry: [machine.loop]: unknown keys config_schema (ignored)",
                 ):
                     self.assertIn(words, text)
         self.assertEqual(self.cli("check").returncode, 1)

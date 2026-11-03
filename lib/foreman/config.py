@@ -871,13 +871,10 @@ def machine_settings(reg: Table | None = None) -> MachineSettings:
             warn.append(f"{where} must be a table (ignored)")
             continue
         allowed = MACHINE_SETTINGS[sec]
-        own = sorted(
-            k for k in table if allowed is not None and k not in allowed and (k in DEFAULTS[sec] or k == "name")
-        )
-        own = [k for k in own if not (sec == "project" and k == "config_schema")]
-        unknown = sorted(
-            k for k in table if allowed is not None and k not in allowed and k not in own and k != "config_schema"
-        )
+        checked_only = ("config_schema",) if sec == "project" else ()  # checked below, never inherited
+        others = sorted(k for k in table if allowed is not None and k not in allowed and k not in checked_only)
+        own = [k for k in others if k in DEFAULTS[sec] or (sec, k) == ("project", "name")]
+        unknown = [k for k in others if k not in own]
         if sec == "project" and "config_schema" in table:
             e, w = problems({"project": {"config_schema": table["config_schema"]}})
             warn += [f"{where}: {x}" for x in w] + [_machine_error(x) for x in e if "config_schema" in x]
