@@ -22,6 +22,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   («from the machine», «machine and product»), counts them, and lists the inherited rules the product removes with
   `[deny] drop`. `--json` adds `from` to each rule (`foreman`, `machine`, `product` or `both`) and `inherited`
   (`{rules, dropped}`).
+- `foreman permissions --machine-candidate FILE`: the effect of a changed registry `[machine]` on every registered
+  product, read only: the inherited rules before and after, the settings that change, each product's candidate test
+  (rules, table rows, failing rows, the lifeline, what opens), the warnings it would gain, and the rows that would
+  fall in two or more `[deny.grants]` groups other than before (each needs its own yes, while the row's verdict stays
+  the same). Exit 1 when a product loses a row or a lifeline command, gets a warning or does not load.
 
 ### Changed
 

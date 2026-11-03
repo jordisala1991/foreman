@@ -29,7 +29,18 @@ project's guard table) whose verdict changes for an agent or the orchestrator (b
 table that fail with the candidate, and the lifeline with the candidate. Exit 1 when a row fails or the lifeline
 loses a command, else 0 (also when something opens: the diff names each row that does).
 
-Both only read: nothing is written in the home or in <state> (test_permissions checks names and mtimes). The view
+The machine's candidate (`foreman permissions --machine-candidate FILE [--json]`, machine_candidate()): FILE is a
+copy of the registry with its [machine] changed (only that section is taken; the products and the machine resources
+stay the live registry's, and the text says when FILE differs elsewhere). A [machine] value that would be ignored or
+left out (config.machine_settings) is exit 2 with its warning and nothing else. For every registered product it
+loads the product twice, with the live [machine] and with FILE's, and gives the candidate's test of each (diff(),
+opens()), the rules inherited before and after, each machine setting that changes (machine_values()), the rows of
+its table that would fall in two or more groups other than before (more_groups(): each group needs its own grant,
+so the owner is asked more than once while the row's verdict stays the same) and the warnings it would gain. Exit 2
+when a product's table does not read, 1 when a product does not load, a row fails, the lifeline loses a command or
+a warning is new, else 0. There is no apply: the registry changes only with the owner's yes (guard.py).
+
+All three only read: nothing is written in the home or in <state> (test_permissions checks names and mtimes). The view
 also gives the base: the first 16 hex digits of the live foreman.toml's sha256.
 
 Applying it (`foreman permissions apply FILE [--table T] [--base HASH] [--opens] [--json]`): the candidate names the
@@ -77,7 +88,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import config, gitpush, grants, guard, i18n, notes, orchestrator, util
+from . import config, gitpush, grants, guard, i18n, notes, orchestrator, toml_reader, util
 from .shell import segments, strip_heredocs, strip_quotes, words
 
 if TYPE_CHECKING:
@@ -949,6 +960,160 @@ def render_refused(project: Project, d: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ---------- the machine's candidate ----------
+
+
+def machine_values(project: Project) -> dict[str, Any]:
+    """The values a [machine] may set (config.MACHINE_SETTINGS) as the project has them after the merge, by
+    `section.key`; deny's patterns and grants are left out (they are rules: diff() compares them)."""
+    out: dict[str, Any] = {}
+    for sec, keys in config.MACHINE_SETTINGS.items():
+        table = project.section(sec)
+        for k in keys if keys is not None else sorted(table):
+            if k in table and not (sec == "deny" and k in ("patterns", "grants")):
+                out[f"{sec}.{k}"] = table[k]
+    return out
+
+
+def setting_changes(project: Project, cand: Project) -> list[dict[str, Any]]:
+    """[{key, before, after}] of each machine_values() key that differs (None: unset)."""
+    before, after = machine_values(project), machine_values(cand)
+    keys = list(before) + [k for k in after if k not in before]
+    return [{"key": k, "before": before.get(k), "after": after.get(k)} for k in keys if before.get(k) != after.get(k)]
+
+
+def more_groups(project: Project, cand: Project, rows: list[guard.Row]) -> list[dict[str, Any]]:
+    """The Bash rows of the candidate's table verdicts (rows) that would fall in two or more [deny.grants] groups,
+    and not in the same ones as before: [{line, command, before, after}] (the groups). Each group needs its own live
+    grant (guard._why), so such a row asks the owner more than once while its verdict, and the diff, stay the same.
+    A row that «never» refuses anyway, or a file:/tool: row, is left out."""
+    out = []
+    for n, _, cmd, folder, _agent, orch in rows:
+        if cmd.startswith(("file:", "tool:")) or orch == "deny":
+            continue
+        cwd = folder or str(project.home)
+        after = grants.groups_of(cand, guard.row_text(cand, cmd), gitpush.Resolver(cand, cwd))
+        if len(after) < 2:
+            continue
+        before = grants.groups_of(project, guard.row_text(project, cmd), gitpush.Resolver(project, cwd))
+        if set(after) != set(before):
+            out.append({"line": n, "command": cmd, "before": before, "after": after})
+    return out
+
+
+def _outside(reg: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in reg.items() if k != "machine"}
+
+
+def machine_candidate(path: PathLike) -> tuple[dict[str, Any], int, dict[str, Project]]:
+    """`--machine-candidate FILE` (module doc): (the result, exit, the live products by name). FILE is a copy of the
+    registry with [machine] changed; only its [machine] is taken, the products and the machine resources stay the
+    live registry's. A FILE that does not read, or whose [machine] has a value that would be ignored or left out
+    (config.machine_settings), is ({error}, 2, {}). For each registered product, the live load against one with the
+    candidate's settings: diff() with opens(), the inherited rules before and after, the settings that change, the
+    rows that would need more groups' grants (more_groups) and the new warnings. Exit 2 when a product's table does
+    not read, 1 when a product does not load, a row fails, the lifeline loses a command or a warning is new (`foreman
+    check` would fail), else 0. Reads only."""
+    f = Path(path).expanduser()
+    try:
+        cand_reg = toml_reader.loads(f.read_text())
+    except (OSError, toml_reader.TOMLDecodeError) as e:
+        return {"error": f"{f}: {e}"}, 2, {}
+    after = config.machine_settings(cand_reg)
+    if after[1]:
+        return {"error": f"{f}: " + "; ".join(after[1])}, 2, {}
+    reg = config.read_registry()
+    entries, broken, _ = config.registry_scan(reg)
+    machine = config.machine_resources(reg)
+    before = config.machine_settings(reg)
+    products: list[dict[str, Any]] = []
+    loaded: dict[str, Project] = {}
+    code = 0
+    for e in entries:
+        try:
+            live = config.load_entry(e, machine=machine, settings=before)
+            cand = config.load_entry(e, machine=machine, settings=after)
+        except config.ConfigError as err:
+            products.append({"project": e["name"], "error": str(err)})
+            code = max(code, 1)
+            continue
+        loaded[live.name] = live
+        d = diff(live, cand)
+        d["opens"] = opens(live, cand, d)
+        d["inherited"] = {
+            "before": inherited(live, rules(live))["rules"],
+            "after": inherited(cand, rules(cand))["rules"],
+        }
+        d["settings"] = setting_changes(live, cand)
+        rows, _ = _rows(cand, table_of(cand))
+        d["more_groups"] = more_groups(live, cand, rows)
+        d["warnings"] = [w for w in cand.warnings if w not in live.warnings]
+        products.append(d)
+        if d["table_error"]:
+            code = 2
+        elif d["table_failures"] or d["lifeline"]["failures"] or d["warnings"]:
+            code = max(code, 1)
+    outside = _outside(cand_reg)
+    out = {
+        "candidate": str(f),
+        "registry": str(config.registry_path()),
+        "outside": bool(outside) and outside != _outside(reg),
+        "products": products,
+        "skipped": [{"project": b["name"], "error": b["error"]} for b in broken],
+    }
+    return out, code, loaded
+
+
+def render_machine(project: Project, m: dict[str, Any], code: int, loaded: dict[str, Project]) -> str:
+    """The text of machine_candidate(): a heading in this project's language, then each product in its own."""
+    s = i18n.for_project(project)
+    lines = [s["perm_machine_heading"].format(candidate=m["candidate"], registry=m["registry"], n=len(m["products"]))]
+    if m["outside"]:
+        lines.append(s["perm_machine_outside"])
+    for d in m["products"]:
+        lines.append("")
+        p = loaded.get(d["project"])
+        if "error" in d or p is None:
+            lines.append(s["perm_machine_error"].format(project=d["project"], error=d.get("error", "-")))
+            continue
+        ps = i18n.for_project(p)
+        lines.append(
+            ps["perm_machine_product"].format(project=d["project"], config=d["config"], table=d["table"] or "-")
+        )
+        lines.append("  " + ps["perm_machine_inherited"].format(**d["inherited"]))
+        if d["settings"]:
+            lines.append("  " + ps["perm_machine_settings"])
+            lines += [
+                "    "
+                + ps["perm_machine_setting"].format(key=c["key"], before=_value(c["before"]), after=_value(c["after"]))
+                for c in d["settings"]
+            ]
+        lines += ["  " + x for x in render_diff(p, d).splitlines()[1:]]
+        if d["more_groups"]:
+            lines.append("  " + ps["perm_machine_groups"].format(n=len(d["more_groups"])))
+            for r in d["more_groups"]:
+                lines.append(
+                    "    "
+                    + ps["perm_machine_groups_row"].format(
+                        line=r["line"],
+                        command=_short(r["command"]),
+                        before=", ".join(r["before"]) or s["perm_none"],
+                        after=", ".join(r["after"]),
+                    )
+                )
+        if d["opens"]:
+            lines.append("  " + ps["perm_opens"])
+            lines += [f"    {x}" for x in d["opens"]]
+        if d["warnings"]:
+            lines.append("  " + ps["perm_machine_warnings"])
+            lines += [f"    {w}" for w in d["warnings"]]
+    for b in m["skipped"]:
+        lines.append(s["perm_machine_error"].format(project=b["project"], error=b["error"]))
+    lines.append("")
+    lines.append(s["perm_machine_fails"] if code else s["perm_machine_ok"])
+    return "\n".join(lines)
+
+
 # ---------- the command ----------
 
 
@@ -973,6 +1138,14 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         metavar="FILE",
         help="a candidate foreman.toml, loaded strictly with the real home: the rules and table rows it changes, the "
         "rows that fail with it and the lifeline (exit 1 if one fails, 2 if it does not load)",
+    )
+    a.add_argument(
+        "--machine-candidate",
+        metavar="FILE",
+        help="a copy of the registry with its [machine] changed: for every registered product, the rules, settings and "
+        "table rows it changes, the rows that would need more groups' grants, what it opens and the lifeline; only "
+        "reads (exit 1 if a product loses a row or a lifeline command or gets a warning, 2 if FILE or a table does "
+        "not read)",
     )
     a.add_argument(
         "--table",
@@ -1031,6 +1204,25 @@ def grants_command(p: Project, action: str | None, group: str | None, as_json: b
 
 
 def run(args: argparse.Namespace, project: Project) -> int:
+    if args.machine_candidate:
+        if (
+            args.action
+            or args.file
+            or args.candidate
+            or args.table
+            or args.base
+            or args.opens
+            or args.refused
+            or args.since
+        ):
+            print("foreman permissions: --machine-candidate FILE goes alone (with --json)", file=sys.stderr)
+            return 2
+        m, code, loaded = machine_candidate(args.machine_candidate)
+        if "error" in m:
+            print(f"foreman permissions: --machine-candidate {m['error']}", file=sys.stderr)
+            return code
+        print(json.dumps(m, ensure_ascii=False, indent=1) if args.json else render_machine(project, m, code, loaded))
+        return code
     if args.action == "grants":
         if args.candidate or args.table or args.base or args.opens or args.refused or args.since:
             print("foreman permissions grants: usage: permissions grants [off [GROUP]] [--json]", file=sys.stderr)

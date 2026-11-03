@@ -306,3 +306,101 @@ class PermissionsTest(MachineSettingsCase):
         self.assertEqual(len(permissions.opens(other, c, d)), 1)
         same = config.load_project(self.other_home, config_file=self.other_home / "foreman.toml", strict=True)
         self.assertEqual(permissions.diff(other, same)["rules"], [])  # the machine's rules are on both sides
+
+
+ENV_READ = "cat ." + "env"  # in pieces: the installed guard reads this file's commands
+OTHER_TABLE = f"""# expect<TAB>command
+orchestrator\t{ENV_READ}
+allow\t{SHIP} now
+allow\tls
+"""
+SECRETS = """
+[machine.project]
+owner = "Machine Owner"
+
+[machine.deny.grants]
+secrets = ["(^|[ /])[.]env"]
+"""
+
+
+class MachineCandidateTest(MachineSettingsCase):
+    """`foreman permissions --machine-candidate FILE`: the effect of a new [machine] on every registered product,
+    read only."""
+
+    def setUp(self):
+        super().setUp()
+        self.other_toml('\n[check]\nguard_table = "guard.tsv"\n\n[deny.grants]\nenv-app = ["[.]env"]\n')
+        (self.other_home / "guard.tsv").write_text(OTHER_TABLE)
+        self.registry("")
+
+    def candidate(self, machine):
+        f = self.tmp / "registry-candidate.toml"
+        f.write_text((self.tmp / "projects.toml").read_text() + textwrap.dedent(machine))
+        return f
+
+    def run_it(self, machine, *extra):
+        r = self.cli("--project", "other", "permissions", "--machine-candidate", str(self.candidate(machine)), *extra)
+        return r, (json.loads(r.stdout) if "--json" in extra and r.stdout else None)
+
+    def test_a_machine_group_over_a_products_group_needs_two_yeses(self):
+        reg = self.tmp / "projects.toml"
+        before = (reg.read_text(), reg.stat().st_mtime_ns)
+        r, m = self.run_it(SECRETS, "--json")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(before, (reg.read_text(), reg.stat().st_mtime_ns))  # only reads
+        self.assertFalse(m["outside"])
+        by = {d["project"]: d for d in m["products"]}
+        self.assertEqual(set(by), {"fake", "other"})
+        other = by["other"]
+        self.assertEqual(other["rows"], [])  # the verdict stays «orchestrator»: the diff alone would not see it
+        (row,) = other["more_groups"]
+        self.assertEqual((row["line"], row["command"], row["before"]), (2, ENV_READ, ["env-app"]))
+        self.assertEqual(set(row["after"]), {"env-app", "secrets"})
+        self.assertEqual(other["rules"], [{"pattern": "(^|[ /])[.]env", "before": [], "after": ["group:secrets"]}])
+        self.assertEqual(other["inherited"], {"before": 0, "after": 1})
+        self.assertIn({"key": "project.owner", "before": "owner", "after": "Machine Owner"}, other["settings"])
+        self.assertEqual((other["opens"], other["warnings"], other["table_failures"]), ([], [], []))
+        self.assertEqual(by["fake"]["settings"], [])  # its foreman.toml writes its owner
+        text = self.cli("--project", "other", "permissions", "--machine-candidate", str(self.candidate(SECRETS)))
+        self.assertEqual(text.returncode, 0, text.stdout)
+        self.assertIn("Machine candidate ", text.stdout)
+        self.assertIn("  Rules from the machine: 0 → 1\n", text.stdout)
+        self.assertIn("    project.owner: «owner» → «Machine Owner»\n", text.stdout)
+        self.assertIn("  1 rows would need the yes of several groups (one each), not as before\n", text.stdout)
+        self.assertIn(f"    row 2 `{ENV_READ}`: groups env-app → ", text.stdout)
+        self.assertTrue(text.stdout.endswith("No product loses a row of its table or a lifeline command\n"))
+
+    def test_a_row_or_a_lifeline_command_lost_is_exit_1(self):
+        r, m = self.run_it(f'\n[machine.deny]\npatterns = ["{SHIP}"]\n', "--json")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        other = {d["project"]: d for d in m["products"]}["other"]
+        self.assertEqual(len(other["table_failures"]), 1)
+        self.assertEqual(other["rows"][0]["after"], "deny")
+        r, m = self.run_it('\n[machine.deny]\npatterns = ["^git -C "]\n', "--json")
+        self.assertEqual(r.returncode, 1)
+        self.assertTrue(all(d["lifeline"]["failures"] for d in m["products"]))
+        self.other_toml(f'\n[check]\nguard_table = "guard.tsv"\n\n[deny]\npatterns = ["{OWN}"]\n')
+        r, _ = self.run_it(f'\n[machine.deny.grants]\nmine = ["{OWN}"]\n')  # denied here, granted there
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("New warnings (`foreman check` would fail)", r.stdout)
+        self.assertIn("A product loses a row", r.stdout)
+
+    def test_bad_files_and_the_registry_outside_machine(self):
+        r, _ = self.run_it('\n[machine.deny]\npatterns = ["("]\n')
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertIn("[machine.deny]", r.stderr)
+        bad = self.tmp / "bad.toml"
+        bad.write_text("[machine\n")
+        r = self.cli("permissions", "--machine-candidate", str(bad))
+        self.assertEqual(r.returncode, 2)
+        r = self.cli("permissions", "--machine-candidate", str(bad), "--table", "x.tsv")
+        self.assertIn("goes alone", r.stderr)
+        only = self.tmp / "only-machine.toml"
+        only.write_text(SECRETS)  # just a [machine]: nothing else to compare
+        r = self.cli("--project", "other", "permissions", "--machine-candidate", str(only), "--json")
+        self.assertFalse(json.loads(r.stdout)["outside"])
+        moved = self.tmp / "moved.toml"
+        moved.write_text('[[project]]\nname = "x"\nhome = "/nowhere"\n' + SECRETS)
+        r = self.cli("--project", "other", "permissions", "--machine-candidate", str(moved))
+        self.assertIn("only its [machine] is tested", r.stdout)
+        self.assertIn("  2 products", r.stdout.replace(":", " "))
