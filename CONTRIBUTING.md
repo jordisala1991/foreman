@@ -21,8 +21,8 @@ bin/foreman selftest --coverage                  # the suite under coverage.py: 
 ```
 
 **The CI is one pass on the oldest supported Python, 3.9**: the whole suite with the code quality and mods checks
-required, `bin/foreman selftest --python PY39 --quality=require --mods=require`. The integration runs it
-(`ops/foreman.toml` `local_ci`, with the Mac's `/usr/bin/python3`), and so does GitHub Actions on Linux
+required, `bin/foreman selftest --python PY39 --quality=require --mods=require`. foreman's own integration runs it
+before each merge (its home's `local_ci`, with macOS's `/usr/bin/python3`), and so does GitHub Actions on Linux
 (`.github/workflows/ci.yml`: Python 3.9 from `actions/setup-python`, ruff and pyright from `[dependency-groups] dev`,
 Claude Code at a pinned version for the mods check). How often: while working, the tests of what you touch
 (`bin/foreman selftest NAME`); before delivering, that pass once, with any Python 3.9.
@@ -76,15 +76,13 @@ are development tools, never run-time dependencies: foreman still needs only the
   `pyright[nodejs]` when there is no `node` on the PATH, so it never downloads node by itself. Without uv:
   `pip install --group dev` (pip 25.1+) in a virtual environment on the PATH.
 - **Modes**: `--quality=auto` (the default) skips a tool it cannot get with a `SKIP quality: …` line and says so in
-  the last line (`quality skipped: ruff`); `--quality=require` fails instead (foreman's own CI runs it once:
-  `ops/foreman.toml` `local_ci`); `--quality=off` does not run them, and is the default with `--python` (the tools do
+  the last line (`quality skipped: ruff`); `--quality=require` fails instead (foreman's own CI runs it once, in
+  the pass above); `--quality=off` does not run them, and is the default with `--python` (the tools do
   not depend on the interpreter).
 - **Fixing**: each finding is one line, `FAIL ruff lib/foreman/x.py:12:5 F401 … (fix: bin/foreman selftest --fix)`
   or `(fix by hand; recheck: bin/foreman selftest --quality-only)`, at most 30 per tool. `--fix` applies ruff's safe
   fixes and `ruff format`, says which files changed and runs `--quality-only`. Review its diff like
   any other: the golden corpus must stay the same.
-- **Blame**: the commit that formatted the tree is in `.git-blame-ignore-revs`; run once per clone
-  `git config blame.ignoreRevsFile .git-blame-ignore-revs` so `git blame` skips it.
 - **Exceptions**: a `# noqa: RULE (reason)` or `# pyright: ignore[rule]  # reason` only with the rule and the reason;
   the `quality:` line counts them, so their number grows in sight.
 - **Type annotations**: every module of `lib/foreman` must annotate every parameter and return (ruff's `ANN` rules,
@@ -174,8 +172,8 @@ session nobody types into it waits for the next due pass, up to `[loop] every_mi
 - **The check** (`lib/foreman/mods.py`, in a thread beside the quality checks): `claude plugin validate --strict`
   on the manifest (it must pass, the module must hook exactly `MODULE_HOOKS`, every gating hook needs a `.catch`)
   and `claude plugin test .`. `--mods=auto` (the default) skips with a `SKIP mods: …` line when there is no Claude
-  Code or it is older than foreman's minimum; `--mods=require` fails instead (foreman's own CI: `ops/foreman.toml`
-  `local_ci`); `--mods=off` runs nothing, the default with `--python`.
+  Code or it is older than foreman's minimum; `--mods=require` fails instead (foreman's own CI, in
+  the pass above); `--mods=off` runs nothing, the default with `--python`.
 - **Trying it in a session**: `claude --plugin-dir <worktree>` from a scratch folder; never write a mod under
   `~/.claude`.
 
