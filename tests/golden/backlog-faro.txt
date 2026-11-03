@@ -10,7 +10,8 @@ foreman init <TMP>/faro
   <TMP>/projects.toml: faro: already there
 
 faro: <TMP>/faro (active); state <TMP>/state/faro
-  config schema 18 (this foreman knows 18): ok
+  config schema 19 (this foreman knows 19): ok
+  inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo app: <TMP>/faro-app merge=squash
   resource widget: this project, foreman lock, guard 2
