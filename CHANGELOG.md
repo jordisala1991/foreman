@@ -23,6 +23,18 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   `[deny] drop`. `--json` adds `from` to each rule (`foreman`, `machine`, `product` or `both`) and `inherited`
   (`{rules, dropped}`).
 
+### Changed
+
+- The guard sees every tool, not only Bash and the write tools: its hook runs before any tool call (no matcher in
+  `hooks/classic.json`). With one rule and no list of tools, a path or URL a call names (Read's `file_path`, Grep's
+  `path`, WebFetch's `url`, a plugin's `targetPath`…) gets the verdict `cat PATH` would get in Bash, and a command
+  it carries (Monitor's `command`) the verdict of that command; free text (what a Write writes, a prompt, a message)
+  is never compared. Writing a secret with Write or Edit is refused as reading it. Guard tables accept
+  `tool:NAME JSON` rows; `guard.jsonl` and `approved.jsonl` record the tool and the place or command that matched,
+  never the rest of the input. Without a Python foreman can use, every tool call is refused while a registry exists
+  (before, only Bash and the write tools were). Cost: one more hook process per call of the other tools, about
+  40 ms each.
+
 ### Config
 
 - Schema 19: `[deny] drop`, a list of rules inherited from the registry's `[machine.deny]` that this product removes

@@ -218,7 +218,7 @@ foreman needs Python 3.9 or newer, standard library only, so the Python that mac
 Without a Python that fits (none at all, as on a Mac without the Command Line Tools, or only older ones), foreman says
 so instead of switching itself off in silence:
 
-- **The guard** (`hook guard`, before every Bash call) denies the call (exit 2) when a foreman registry exists
+- **The guard** (`hook guard`, before every tool call: Bash, Read, Write and any other) denies the call (exit 2) when a foreman registry exists
   (`$FOREMAN_REGISTRY` or `~/.config/foreman/projects.toml`, as above): what is never done without the owner cannot be
   checked, so nothing runs. The reason says which Python is missing and how to install it. Without a registry (the
   plugin installed, no project set up) the call passes.
@@ -347,7 +347,9 @@ guard_table = ""            # a table of commands and the guard's expected verdi
                             # `\n` for newlines (`orchestrator`: denied to an agent, let through for the orchestrator);
                             # `EXPECT@DIR` runs the row as if in DIR, else in the home (docs/internals.md, «git push»);
                             # `file:PATH` is a Write/Edit call writing PATH (relative to DIR or the home; `{state}`,
-                            # `{state_root}`, `{registry}` replaced, in a command too): docs/internals.md, «The reserved files»
+                            # `{state_root}`, `{registry}` replaced, in a command too): docs/internals.md, «The reserved files»;
+                            # `tool:NAME JSON` is a call of tool NAME with that input (`tool:Read {"file_path": "~/.ssh/k"}`):
+                            # docs/internals.md, «Any other tool»
 
 [[recurring]]
 name = "Orchestrator loop"
@@ -452,6 +454,12 @@ pattern anchored with `(^|\s)` finds a command wherever it starts. The values of
 that only mentions a command does not match. A `git push` is also compared as git would run it from its folder (its
 remote and branch), so a bare `git push` is caught too. The full reading, with what it does not see:
 docs/internals.md, «How the guard reads a command».
+
+The same patterns judge every other tool's call (Read, Grep, WebFetch, Monitor, a plugin's tools), with one rule and
+no list of tools: a path or URL the call names (a field such as `file_path`, `path`, `url`, `cwd`) gets the verdict
+`cat PATH` would get in Bash, so a pattern that refuses `cat .env` refuses a Read of `.env` too; a command it carries
+(`command`, `cmd`, as Monitor's) gets the verdict of that command in Bash. Free text (what a Write writes, a prompt, a
+message, a search pattern) is never compared, as a note's text is not. docs/internals.md, «Any other tool».
 
 A rule the patterns cannot say goes in a `PreToolUse` hook of your own, where a `deny` always wins
 (docs/extending.md, «Hooks»). Keep a guard table (`[check] guard_table`) with the commands that must and must not

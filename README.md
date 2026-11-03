@@ -66,7 +66,7 @@ subagents: they use your Claude Code plan or API usage like any other session.
 - **Agents** are Claude Code subagents of foreman's types (`foreman:dev`, `foreman:planner`, `foreman:reviewer`,
   `foreman:mechanic`), each with a launch line from `foreman launch`, one worktree and one branch. They deliver with a
   report and `foreman progress --done` (docs/agent.md).
-- **The guard** is a hook on every Bash, Write and Edit call in a set-up project: it refuses what `foreman.toml`
+- **The guard** is a hook on every tool call in a set-up project: it refuses what `foreman.toml`
   `[deny]` lists, makes shared resources wait in their queue (`foreman lock`), and keeps foreman's own files and
   your git configuration out of the agents' reach. `foreman permissions` shows what it refuses, in plain words.
 - **The panel** (`foreman panel`, http://127.0.0.1:8766) shows every set-up project: backlog, agents, locks,

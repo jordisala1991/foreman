@@ -80,7 +80,7 @@ why="foreman needs Python $min_python or newer and found none${found:+ (the newe
 how="Install one (macOS: xcode-select --install, brew install python@3.13 or mise use -g python@3.13; Linux: your"
 how="$how package manager),"
 how="$how or set FOREMAN_PYTHON to its path; then restart the Claude Code session."
-blocks="foreman blocks every Bash, Write and Edit call while its registry exists"
+blocks="foreman blocks every tool call (Bash, Read, Write and any other) while its registry exists"
 
 if [ "${1:-}" = hook ]; then
   case "${2:-}" in
