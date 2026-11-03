@@ -53,8 +53,9 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
           foreman's hooks module writes each minute, and the `loop` heartbeat); the pause changes nothing.
 - guard   (PreToolUse on Bash, on Write|Edit|MultiEdit|NotebookEdit and on any other tool; guard.check_call): on
           any other tool, the places and commands its call names (guard.check_tool: a path as `cat PATH`, a command
-          as in Bash, the pause too; a call that names neither leaves at once). On a write tool only the reserved files
-          (guard.check_file, by the call's file_path or notebook_path: no caller record, no pause); a refusal of an
+          as in Bash, the pause too; a call that names neither leaves at once). On a write tool first the reserved
+          files (guard.check_file, by the call's file_path or notebook_path: no caller record, no pause), then the
+          same rule (writing a secret is refused as reading it); a refusal of an
           agent or another session goes to <state>/approved.jsonl with the file (notice orchestrator_only_denied),
           every one to <state>/guard.jsonl. The ctx carries the event's tool_use_id: a main-thread write of Claude
           Code's settings or the registry passes on the owner's one-use yes for that call, which it spends
@@ -540,11 +541,11 @@ def _refuse(project: Project, ev: Event, verdict: guard.Verdict) -> int:
 
 def guard_tool(project: Project, ev: Event, tool: str) -> int:
     """The guard on a call of any tool but Bash (guard.check_call): a FILE_TOOLS tool by the file it writes
-    (check_file), any other by the places and commands it names (check_tool); a command it runs also waits while the
-    product is paused, as in Bash. A call that names nothing leaves before anything is built."""
+    (check_file), then like any other, by the places and commands it names (check_tool); a command it runs also
+    waits while the product is paused, as in Bash. A call that names nothing leaves before anything is built."""
     ti = ev.get("tool_input")
     path = guard.tool_path(tool, ti if isinstance(ti, dict) else None)
-    places, commands = ([], []) if path is not None else guard.tool_texts(tool, ti)
+    places, commands = guard.tool_texts(tool, ti)
     if path is None and not places and not commands:
         return 0
     ctx = _guard_ctx(ev)

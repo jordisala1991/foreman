@@ -1095,12 +1095,22 @@ $ foreman hook guard  # row 257: allow
 < {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "cat .env", "file_path": "reviews/x.md"}, "tool_name": "Write", "tool_use_id": "toolu_257"}
 [exit 0]
 $ foreman hook guard  # row 258: deny
-< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"prompt": "x", "url": "http://localhost:8766/api/grants/approve"}, "tool_name": "WebFetch", "tool_use_id": "toolu_258"}
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"content": "A=1", "file_path": "/x/.env"}, "tool_name": "Write", "tool_use_id": "toolu_258"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «(^|[\s/'"=])\.env(?!\.(example|sample|template|dist)\b)(\.[A-Za-z]+)?(['"\s;|&)]|$)» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `Write /x/.env` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 259: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"file_path": "/x/.ssh/config", "new_string": "b", "old_string": "a"}, "tool_name": "Edit", "tool_use_id": "toolu_259"}
+[exit 2]
+--- stderr
+Bloqueado por el guardián de foreman: «\.ssh/» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en el sitio `Edit /x/.ssh/config` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`). La ruta o la URL de una herramienta recibe el veredicto que tendría una orden que la lee; lo que una herramienta escribe o manda como texto (contenido, prompt, mensaje) no se compara. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
+$ foreman hook guard  # row 260: deny
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"prompt": "x", "url": "http://localhost:8766/api/grants/approve"}, "tool_name": "WebFetch", "tool_use_id": "toolu_260"}
 [exit 2]
 --- stderr
 Bloqueado por el guardián de foreman: una petición pendiente de un grupo la aprueba el dueño a mano en el panel de foreman; ninguna llamada de Bash puede llegar a esa aprobación (tampoco las del orquestador). Casó en el sitio `WebFetch http://localhost:8766/api/grants/approve` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`).
-$ foreman hook guard  # row 259: allow
-< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"recap": "read ~/.ssh/config"}, "tool_name": "mcp__ccd_turn__wrap_up", "tool_use_id": "toolu_259"}
+$ foreman hook guard  # row 261: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"recap": "read ~/.ssh/config"}, "tool_name": "mcp__ccd_turn__wrap_up", "tool_use_id": "toolu_261"}
 [exit 0]
 $ foreman hook guard
 < {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "tool_input": {"file_path": "x"}, "tool_name": "Read"}
@@ -1125,7 +1135,7 @@ $ foreman hook guard
 Blocked by the foreman guard: «(^|\s)git push» is on the list of things never done without Sam (harbor). Ask Sam first (foreman backlog decision add, or the inbox). It matched in the command `git push`. If it is only text, write it with the Write or Edit tool, or with `cat > FILE <<'EOF'`. Never without Sam (rules.md).
 $ foreman --project faro guard --table tests/golden_guard.tsv
 [exit 0]
-guard table <TMP>/faro/guard.tsv: ok (157 deny, 0 lock, 88 allow, 14 orchestrator)
+guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
 
 ######## state root: files under <TMP>/state
 === callers.json
@@ -1332,6 +1342,8 @@ guard table <TMP>/faro/guard.tsv: ok (157 deny, 0 lock, 88 allow, 14 orchestrato
 {"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Grep", "rule": "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "where": "tool", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "mcp__x__y", "rule": "\\.ssh/", "where": "tool", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Monitor", "rule": "npm publish", "where": "command", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Write", "rule": "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Edit", "rule": "\\.ssh/", "where": "tool", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "builtin", "tool": "WebFetch", "rule": "api/grants/approve", "where": "tool", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?(?![^;&|\\n]*\\s(?P<q>['\"]?)(--help|-h|--check)(?P=q)(\\s|$))(\\s|$)", "where": "command", "who": "agent"}
 {"at": "<TODAY>T<TIME>", "kind": "lock", "rule": "make up", "resource": "widget", "where": "command", "who": "other"}

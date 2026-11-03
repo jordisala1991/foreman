@@ -7,7 +7,7 @@ faro: <TMP>/faro (active); state <TMP>/state/faro
   repo app: <TMP>/faro-app merge=squash
   resource widget: this project, foreman lock, guard 2
   rules <TMP>/faro/normas.md: ok
-  guard table <TMP>/faro/guard.tsv: ok (157 deny, 0 lock, 88 allow, 14 orchestrator)
+  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
   backlog <TMP>/faro/backlog.json: ok
     warning: decision DEC J1 was recorded with --as-is: it names things the owner would have to ask about (foreman plain; docs/owner.md)
 $ foreman config --projects
@@ -22,7 +22,7 @@ faro: <TMP>/faro (active); state <TMP>/state/faro
   repo app: <TMP>/faro-app merge=squash
   resource widget: this project, foreman lock, guard 2
   rules <TMP>/faro/normas.md: ok
-  guard table <TMP>/faro/guard.tsv: ok (157 deny, 0 lock, 88 allow, 14 orchestrator)
+  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
   backlog <TMP>/faro/backlog.json: ok
     warning: decision DEC J1 was recorded with --as-is: it names things the owner would have to ask about (foreman plain; docs/owner.md)
 $ foreman --version

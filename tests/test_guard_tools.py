@@ -141,6 +141,22 @@ class CheckToolTest(ToolCase):
         v = guard.check_tool(self.project, "Monitor", {"command": PUB})
         self.assertEqual((v[1].where, v[1].tool, v[1].call), ("command", "Monitor", PUB))
 
+    def test_writing_a_secret_as_reading_it(self):
+        """A write tool's file gets the verdict of reading it, after the reserved files; its text is never compared."""
+        for tool, ti in (
+            ("Write", {"file_path": "/x/.env", "content": "A=1"}),
+            ("Edit", {"file_path": "/x/.env", "old_string": "a", "new_string": "b"}),
+            ("NotebookEdit", {"notebook_path": "/x/.env", "new_source": "x"}),
+        ):
+            self.assertEqual(self.got(tool, ti), "deny", tool)
+        self.assertEqual(self.got("Write", {"file_path": "/x/.ssh/config", "content": "x"}), "orchestrator")
+        self.assertEqual(self.got("Write", {"file_path": "/x/.ssh/config", "content": "x"}, "orchestrator"), "allow")
+        self.assertEqual(self.got("Write", {"file_path": "/x/.env.example", "content": "cat .env"}), "allow")
+        v = guard.check_call(
+            self.project, "Write", {"file_path": "foreman.toml"}, guard.as_role("agent", str(self.home))
+        )
+        self.assertEqual(v[0], "file")  # the reserved files answer first
+
     def test_failure_never_blocks_a_read(self):
         with mock.patch.object(guard, "check", return_value=("deny", "(the guard could not check this command: X)")):
             self.assertIsNone(guard.check_tool(self.project, "Read", {"file_path": "/x/README.md"}))

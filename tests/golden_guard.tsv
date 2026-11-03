@@ -277,5 +277,7 @@ deny	tool:Monitor {"command": "npm publish", "description": "x"}
 allow	tool:Monitor {"command": "tail -f build.log"}
 allow	tool:Agent {"prompt": "never read .env; never npm publish", "description": "x"}
 allow	tool:Write {"file_path": "reviews/x.md", "content": "cat .env"}
+deny	tool:Write {"file_path": "/x/.env", "content": "A=1"}
+deny	tool:Edit {"file_path": "/x/.ssh/config", "old_string": "a", "new_string": "b"}
 deny	tool:WebFetch {"url": "http://localhost:8766/api/grants/approve", "prompt": "x"}
 allow	tool:mcp__ccd_turn__wrap_up {"recap": "read ~/.ssh/config"}

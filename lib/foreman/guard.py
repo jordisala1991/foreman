@@ -129,7 +129,8 @@ For the resource prefixes quoted strings are dropped (a note that mentions `make
 command is split at && || ; | newlines and $(; leading VAR=value, env, time, nice, exec, command, sudo and the
 time-limit wrappers are skipped. Exit 2 = rejected, with the reason on stderr for the agent.
 
-Any other tool (check_tool, the same hook on every tool but Bash and FILE_TOOLS; check_call dispatches): one rule,
+Any other tool (check_tool, the same hook on every tool but Bash; check_call dispatches; a FILE_TOOLS call after
+check_file, so writing a secret gets the verdict of reading it, as `echo x > .env` does in Bash): one rule,
 with no list of tools, judges what the call names. tool_texts walks its input (TOOL_DEPTH levels, TOOL_STRINGS
 strings): a string under a field whose name ends, split at `_` and camelCase, in one of PLACE_WORDS (file_path,
 notebook_path, path, url, cwd, root, files, glob, targetPath…), or inside a list or map under one, is a place; a
@@ -1763,15 +1764,17 @@ def check_call(
     projects: Sequence[Project] | None = None,
 ) -> Verdict | None:
     """The guard's verdict on a call of any tool (the hook and a table's `tool:` row): Bash by its command
-    (check()); a FILE_TOOLS tool by the file it writes (check_file); any other tool by what it names
-    (check_tool)."""
+    (check()); a FILE_TOOLS tool by the file it writes (check_file), then as any other tool, so writing a file gets
+    the verdict of reading it; any other tool by what it names (check_tool)."""
     ti = tool_input if isinstance(tool_input, dict) else {}
     if tool in (None, "Bash"):
         cmd = ti.get("command")
         return check(project, cmd, ctx) if isinstance(cmd, str) and cmd else None
     path = tool_path(tool, ti)
     if path is not None:
-        return check_file(project, path, ctx, projects)
+        v = check_file(project, path, ctx, projects)
+        if v is not None:
+            return v
     return check_tool(project, tool, tool_input, ctx)
 
 
