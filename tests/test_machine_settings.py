@@ -1,15 +1,15 @@
 """Machine settings: the registry's [machine], shaped like a foreman.toml, inherited by every registered product
 (config.machine_settings, config.merge_settings). Defaults < machine < product: a product's scalar wins, lists add up,
 tables merge key by key; `[deny] drop` removes an inherited rule; a bad value in [machine] is left out alone, with a
-warning in every product. Two fake products share one fake registry: "fake" (GrantCase's, with its own patterns and
-groups) and "other" (bare)."""
+warning in every product; `foreman permissions` says where each rule comes from. Two fake products share one fake
+registry: "fake" (GrantCase's, with its own patterns and groups) and "other" (bare)."""
 
 import json
 import textwrap
 
 from test_grants import BASE, GrantCase
 
-from foreman import config, grants, guard, orchestrator
+from foreman import config, grants, guard, orchestrator, permissions
 
 # built in pieces where they could look like a command to the installed guard reading this file
 SHIP = "zz-" + "ship"
@@ -246,3 +246,63 @@ class ClassificationTest(MachineSettingsCase):
                     self.assertTrue(key in config.DEFAULTS[sec] or (sec, key) == ("project", "name"), (sec, key))
         for sec in ("repos", "resources", "recurring"):
             self.assertIn(sec, config.PRODUCT_SETTINGS)
+
+
+class PermissionsTest(MachineSettingsCase):
+    """`foreman permissions` says where each rule comes from (text and `--json` `from`) and what `[deny] drop`
+    removed of the inherited ones."""
+
+    def view(self, name):
+        r = self.cli("--project", name, "permissions", "--json")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        d = json.loads(r.stdout)
+        return d, {(x["band"], x.get("group"), x["pattern"]): x["from"] for x in d["rules"]}
+
+    def test_each_rule_says_where_it_comes_from(self):
+        self.registry()
+        self.other_toml(f'\n[deny]\npatterns = ["{OWN}", "{SHIP}"]\n')
+        d, by = self.view("other")
+        self.assertEqual(by[("never", None, SHIP)], "both")
+        self.assertEqual(by[("never", None, OWN)], "product")
+        self.assertEqual(by[("orchestrator", "release", RELEASE)], "machine")
+        self.assertEqual({x["from"] for x in d["rules"] if x["band"] == "builtin"}, {"foreman"})
+        self.assertEqual(d["inherited"], {"rules": 2, "dropped": []})
+        d, by = self.view("fake")
+        self.assertEqual(by[("never", None, "npm " + "publish")], "product")
+        self.assertEqual(by[("never", None, SHIP)], "machine")
+        self.assertEqual(by[("turn", None, "make up")], "product")  # a resource's guard is each product's own
+        self.assertEqual(by[("orchestrator", "deploy", "make deploy")], "product")
+        text = self.cli("--project", "other", "permissions").stdout  # the machine's language: es
+        self.assertIn("Reglas de la máquina (el [machine.deny] del registro): 2\n", text)
+        self.assertIn(f"  - «{SHIP}» (de la máquina y del producto): ", text)
+        self.assertIn(f"    - «{RELEASE}» (de la máquina): ", text)
+        self.assertIn(f"  - «{OWN}»: ", text)
+        self.assertNotIn("[deny] drop", text)
+
+    def test_drop_is_listed_and_no_machine_says_zero(self):
+        self.registry()
+        self.other_toml(f'\n[deny]\ndrop = ["{SHIP}", "group:release"]\n')
+        d, by = self.view("other")
+        self.assertEqual(d["inherited"], {"rules": 0, "dropped": [SHIP, "group:release"]})
+        self.assertNotIn(("never", None, SHIP), by)
+        text = self.cli("--project", "other", "permissions").stdout
+        self.assertIn(f"Reglas heredadas que este producto quita con [deny] drop (2): «{SHIP}», grupo release\n", text)
+        self.registry("")
+        d, by = self.view("fake")
+        self.assertEqual(d["inherited"], {"rules": 0, "dropped": []})
+        self.assertEqual({v for k, v in by.items() if k[0] != "builtin"}, {"product"})
+        text = self.cli("permissions").stdout
+        self.assertIn("Rules from the machine (the registry's [machine.deny]): 0\n", text)
+        self.assertNotIn("(from the machine)", text)
+
+    def test_a_new_drop_in_a_candidate_opens(self):
+        self.registry()
+        other = self.load("other")
+        cand = self.tmp / "candidate.toml"
+        cand.write_text(f'[project]\nname = "other"\n\n[deny]\ndrop = ["{SHIP}"]\n')
+        c = config.load_project(self.other_home, config_file=cand, strict=True)
+        d = permissions.diff(other, c)
+        self.assertEqual(d["rules"], [{"pattern": SHIP, "before": ["never"], "after": []}])
+        self.assertEqual(len(permissions.opens(other, c, d)), 1)
+        same = config.load_project(self.other_home, config_file=self.other_home / "foreman.toml", strict=True)
+        self.assertEqual(permissions.diff(other, same)["rules"], [])  # the machine's rules are on both sides

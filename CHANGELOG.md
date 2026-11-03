@@ -18,6 +18,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   product's scalar wins, lists add up, tables merge key by key. A bad value there is left out alone, with a warning
   in every product. `foreman check` says how many settings and deny rules a product inherits;
   `foreman config --json` gives `registry` (or `registry+foreman.toml` for a list both add to) as their source.
+- `foreman permissions` says where each rule comes from: it marks the rules the registry's `[machine.deny]` gives
+  («from the machine», «machine and product»), counts them, and lists the inherited rules the product removes with
+  `[deny] drop`. `--json` adds `from` to each rule (`foreman`, `machine`, `product` or `both`) and `inherited`
+  (`{rules, dropped}`).
 
 ### Changed
 
@@ -40,7 +44,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 ### Upgrade notes
 
 - Nothing to do: without a `[machine]` in the registry every product loads as before (`foreman check` adds «inherited
-  from the machine (registry [machine]): 0 settings, 0 deny rules»). An older foreman ignores `[machine]` with
+  from the machine (registry [machine]): 0 settings, 0 deny rules», `foreman permissions` «Rules from the
+  machine (the registry's [machine.deny]): 0»). An older foreman ignores `[machine]` with
   «unknown section [machine]»: before moving a rule from the products' foreman.toml to `[machine]`, make sure every
   session runs a foreman that knows it (`foreman session --all --behind`); until then keep it in both places.
 
