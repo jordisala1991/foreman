@@ -58,6 +58,7 @@ production_types = ["dev"]
 
 [loop]
 prompt = "Bucle del orquestador de faro"
+disk_low_gb = 0  # the machine's free disk never decides a golden output (the disk_low notice)
 
 [repos.app]
 path = "{tmp}/faro-app"
@@ -104,6 +105,7 @@ ready_target = 1
 
 [loop]
 prompt = "harbor orchestrator loop"
+disk_low_gb = 0  # the machine's free disk never decides a golden output (the disk_low notice)
 
 [repos.api]
 path = "{tmp}/harbor-api"
