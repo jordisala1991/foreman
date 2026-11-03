@@ -780,6 +780,26 @@ class LoopNoticesTest(NoticesCase):
         ctx = self.assert_submitted("ready_to_integrate")
         self.assertIn(notices.INFO, ctx)  # the information-only notices are marked, not dropped
 
+    def test_a_pass_whose_ready_work_all_waits_for_a_decision_is_skipped(self):
+        self.cli("session", "S1")
+        self.issue("AB-1", "ready")
+        with self.b.mutate() as d:
+            self.b.set_sub(d, "AB-1", "T1", status="done", result="r")
+            self.b.set_sub(d, "AB-1", "T2", title="needs the owner's yes")
+            self.b.add_decision(d, None, "Go?", "why", ["a", "b"], "a", issue="AB-1", as_is=True, blocks=["T2"])
+        self.issue("AB-2", "ready")
+        with self.b.mutate() as d:
+            self.b.add_decision(d, None, "Which?", "why", ["a", "b"], "a", issue="AB-2", as_is=True, blocks=["issue"])
+        log = self.assert_idle()  # nothing an agent can be launched on: an idle pass
+        self.assertIn("to launch (AB-1 T2 waits for decision AB-1 J1; AB-2 waits", log)  # says why
+        line = json.loads(loop.loop_log_file(self.project).read_text().splitlines()[-1])
+        self.assertEqual((line["skipped"], line["actionable"]), (True, []))
+        # one ready issue that can be launched now, next to the held ones: the pass asks for it
+        self.issue("AB-3", "ready")
+        ctx = self.assert_submitted("wip_production")
+        self.assertIn("launch the next `ready` issue (AB-1 T2 waits for decision AB-1 J1;", ctx)
+        self.assertNotIn(notices.INFO + "WIP (pipeline not full): production", ctx)
+
     def test_a_check_json_not_actionable_is_idle(self):
         self.cli("session", "S1")
         self.config(
