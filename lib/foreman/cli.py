@@ -671,6 +671,11 @@ def check(p: Project, run_checks: bool = False) -> int:
     for w in p.warnings:
         print(f"    {w}")
     rc = max(rc, 1 if p.warnings else 0)
+    keys, rules, dropped = p.inherited()
+    print(
+        f"  inherited from the machine (registry [machine]): {keys} setting{'' if keys == 1 else 's'}, "
+        f"{rules} deny rule{'' if rules == 1 else 's'}" + (f"; [deny] drop removes {dropped} here" if dropped else "")
+    )
     from . import versions
 
     cc = versions.claude_code_version()

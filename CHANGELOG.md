@@ -9,6 +9,16 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- Machine settings: a `[machine]` section in the registry (`~/.config/foreman/projects.toml`), shaped like a
+  foreman.toml (`[machine.project]`, `[machine.agents]`, `[machine.loop]`, `[machine.deny]`,
+  `[machine.deny.grants]`, `[machine.strings]`), that every registered product inherits when it loads: what holds
+  for every product (the owner, the language, the commands nobody runs without the owner) is written once. A
+  product's scalar wins, lists add up, tables merge key by key. A bad value there is left out alone, with a warning
+  in every product. `foreman check` says how many settings and deny rules a product inherits;
+  `foreman config --json` gives `registry` (or `registry+foreman.toml` for a list both add to) as their source.
+
 ### Changed
 
 - The guard sees every tool, not only Bash and the write tools: its hook runs before any tool call (no matcher in
@@ -20,6 +30,19 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   never the rest of the input. Without a Python foreman can use, every tool call is refused while a registry exists
   (before, only Bash and the write tools were). Cost: one more hook process per call of the other tools, about
   40 ms each.
+
+### Config
+
+- Schema 19: `[deny] drop`, a list of rules inherited from the registry's `[machine.deny]` that this product removes
+  (a pattern as written there, or `"group:NAME"` for a whole group). `sources` of `foreman config --json` may say
+  `registry+foreman.toml` (additive: `api` stays 1).
+
+### Upgrade notes
+
+- Nothing to do: without a `[machine]` in the registry every product loads as before (`foreman check` adds «inherited
+  from the machine (registry [machine]): 0 settings, 0 deny rules»). An older foreman ignores `[machine]` with
+  «unknown section [machine]»: before moving a rule from the products' foreman.toml to `[machine]`, make sure every
+  session runs a foreman that knows it (`foreman session --all --behind`); until then keep it in both places.
 
 ## [0.56.0] - 2026-11-03
 

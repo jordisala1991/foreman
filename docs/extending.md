@@ -144,8 +144,10 @@ project and the same foreman (`FOREMAN_HOME` is set). `foreman config` without `
   and so is each repo's `path`; every other value is as written (paths relative to the
   home). A machine resource is the merged table foreman uses (the registry's keys, the product's `guard` and `allow`).
 - **`sources`**: the same shape, with where each value comes from: `foreman.toml`, `default` (foreman's, docs/config.md),
-  `registry` (the keys of a machine resource, `[resources.NAME]` in the registry) or `environment` (the default state
-  folder under `FOREMAN_STATE_HOME`). `recurring` has one source for the whole list.
+  `registry` (the keys of a machine resource, `[resources.NAME]` in the registry, and a value of the registry's
+  `[machine]` settings), `registry+foreman.toml` (a list or table both the registry's `[machine]` and foreman.toml
+  add to, such as `deny.patterns`) or `environment` (the default state folder under `FOREMAN_STATE_HOME`).
+  `recurring` has one source for the whole list. A new value here is additive: `api` stays 1.
 - **The rest**: `foreman` (its version), `api` (`FOREMAN_API`, the contract above), the project's `name`,
   `home`, `config_file` (the file it was read from: a registry entry's `config`, or the home's foreman.toml),
   `mode` and `registered` (`true` when it was loaded from its registry entry, whose `mode` it is; otherwise `active`),

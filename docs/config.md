@@ -37,6 +37,12 @@ who = "owner"                     # the name written when the owner takes a lock
 [resources.gpu]                   # optional: a machine resource, declared once for every product (below)
 dir = "~/.gpu-lock"               # where the one lock lives (also queue, next, jumped, log)
 busy = "~/.config/foreman/bin/gpu-busy.sh"   # its users outside the lock, outside any product's repo
+
+[machine.project]                 # optional: settings every product inherits (below), shaped like a foreman.toml
+owner = "owner"
+
+[machine.deny]
+patterns = ["npm publish"]
 ```
 
 `foreman panel [--port 8766] [--host 127.0.0.1] [--token T]` serves one page for every registered project: backlog,
@@ -150,6 +156,58 @@ and adapt: it lists the processes of the executables in its `EXES` (or `$GPU_BUS
 that match `IGNORE`, one line each (pid, elapsed time, working directory, command); stdout is the only contract (any
 output: busy), and its exit code (0 busy, 1 free) is for people. The selftest loads and validates all of them.
 
+### Machine settings: `[machine]` in the registry
+
+What holds for every product on a machine (the owner's name, the language, the commands nobody runs without the
+owner) is written **once**, in the registry's `[machine]`, with the shape of a foreman.toml: `[machine.project]`,
+`[machine.agents]`, `[machine.loop]`, `[machine.deny]`, `[machine.deny.grants]`, `[machine.strings]`. Every product
+inherits it when it loads (`config.machine_settings`, `config.merge_settings`), so the guard, the grants, the loop
+pass and the panel read the merged values without knowing where each came from.
+
+| Section | Keys the machine may set |
+|---|---|
+| `[machine.project]` | `owner`, `language`, `owner_knows` (`config_schema`: checked as a foreman.toml's, not inherited) |
+| `[machine.agents]` | `production_slots`, `ready_target`, `production_types`, `stalled_min` |
+| `[machine.loop]` | `every_min`, `context_rotate`, `disk_low_gb`, `lock_long_min` |
+| `[machine.deny]` | `patterns`, `message`, `grants`, `grant_minutes`, `ask_minutes` |
+| `[machine.strings]` | any text, as `[strings]` |
+
+Everything else is each product's own: `[paths]`, `[backlog]`, `[ids]`, `[panel]`, `[publish]`, `[check]`,
+`[repos.*]`, `[[recurring]]`, `[project] name` and `rules`, `[agents] production_worktree`, `[loop] prompt` (it
+names each product's orchestrator) and `[loop] checks` (commands foreman runs: they never arrive through the
+registry), and `[deny] drop`. Machine resources keep their own `[resources.NAME]` (above).
+
+- **How they merge** (defaults < machine < product). A scalar the product writes wins over the machine's (`owner`,
+  `deny.message`, `grant_minutes`…). Lists add up, the machine's first and without repeats (`deny.patterns`,
+  `owner_knows`, `production_types`). Tables merge key by key with the same rule: a `[deny.grants]` group both
+  declare has the patterns of both; in `[strings]` each text is the product's when it writes one.
+- **Removing an inherited rule: `[deny] drop`**, in the product's foreman.toml only. Each entry is a pattern exactly
+  as the machine writes it (removed from the inherited `patterns` and from every inherited group) or `"group:NAME"`
+  (the whole inherited group NAME; the product's own patterns in a group of that name stay). It removes only what
+  the machine gives, never the product's own rules. To turn a machine «never» into a group of the product's: drop it
+  and add it to the group. An entry that removes nothing inherited is a warning.
+
+  ```toml
+  [deny]
+  drop = ["npm publish", "group:machine"]
+  ```
+
+- **Where each value comes from.** `foreman config --json` says `registry` for a value the machine gives and
+  `registry+foreman.toml` for a list or table both add to (docs/extending.md); `foreman check` prints «inherited
+  from the machine (registry [machine]): N settings, M deny rules», and how many inherited rules `[deny] drop`
+  removes.
+- **Mistakes.** A section or key that is each product's own, or unknown, is ignored with a warning. A bad value (a
+  regex that does not compile, a group with a bad name or no patterns, `context_rotate` below 0, a list key that is
+  not a list) leaves out **only that value**: one bad regex of `patterns` keeps the others, one bad group keeps the
+  other groups. Every product still loads (a product that does not load has no guard) and carries the warning, so
+  `foreman check` fails in each of them until the registry is fixed. A pattern denied at one level and granted in a
+  group at the other is the warning of `[deny.grants]` (below), naming both places.
+- **Who can change it.** The registry is a reserved file (docs/internals.md, «The reserved files»): only with the
+  owner's own yes. An older foreman ignores `[machine]` («unknown section [machine]»): keep a rule in the products
+  too until every session runs a foreman that knows it (the merge does not repeat it).
+- **Grants are per product.** A `[machine.deny.grants]` group is granted in each product apart: the owner's yes in
+  one product's panel does not open it in another.
+
 ## Python: which one foreman runs, and what happens without one
 
 foreman needs Python 3.9 or newer, standard library only, so the Python that macOS ships with its Command Line Tools
@@ -182,7 +240,7 @@ name = "example"            # required: lowercase, digits, . _ -
 owner = "owner"             # who decides; named in pages and guard messages
 language = "en"             # en | es: generated pages, notes heading, guard and resume texts
 rules = "rules.md"          # the project's rules, read by the orchestrator and every agent
-config_schema = 18          # the foreman.toml schema the file is written for (below); default: this foreman's
+config_schema = 19          # the foreman.toml schema the file is written for (below); default: this foreman's
 owner_knows = []            # terms the owner knows, never flagged by those checks: ["CI", "PR"]
 
 [paths]
@@ -267,6 +325,8 @@ patterns = []               # regexes of commands never run without the owner
 message = ""                # added to the rejection
 grant_minutes = 30          # how long the owner's yes to a [deny.grants] group lasts (below)
 ask_minutes = 5             # how long the question for that yes waits; then it is a no for that call (0: no limit)
+drop = []                   # rules inherited from the registry's [machine.deny] this product removes: a pattern as
+                            # written there, or "group:NAME" (above, «Machine settings»)
 
 [deny.grants]               # groups of orchestrator-only commands that also need the owner's own yes
 # deploy = ["make deploy", "(^|[\\s/])kamal([\\s:]|$)"]
@@ -641,7 +701,8 @@ reading is tolerant where a product must not disappear, and strict where mistake
 
 - **Warnings** (the project loads, ignoring them): a section or key this foreman does not know, a
   `config_schema` higher than the one it knows («written for a newer foreman (config schema N, this foreman knows
-  M): update foreman»), machine keys repeated in a machine resource, and a machine resource of the registry that does not load. **Errors** (the project does not load): a bad value of a known key (a regex that does not
+  M): update foreman»), machine keys repeated in a machine resource, a machine resource of the registry that does not load, and
+  a problem of the registry's `[machine]` (each bad value is left out alone; every product carries the warning). **Errors** (the project does not load): a bad value of a known key (a regex that does not
   compile, `merge` outside its list, an invalid name, `config_schema` not a whole number ≥ 1, a section that is not a table).
 - **Tolerant** (warnings are shown, the product keeps working): the panel (the product stays in the picker with a
   «N config warnings» tag, each warning a notice in its Now tab), the hooks (the guard keeps guarding; the `who`
