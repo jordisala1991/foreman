@@ -195,7 +195,7 @@ registry), and `[deny] drop`. Machine resources keep their own `[resources.NAME]
 - **Where each value comes from.** `foreman config --json` says `registry` for a value the machine gives and
   `registry+foreman.toml` for a list or table both add to (docs/extending.md); `foreman check` prints «inherited
   from the machine (registry [machine]): N settings, M deny rules», and how many inherited rules `[deny] drop`
-  removes.
+  removes; `foreman permissions` marks each deny rule the machine gives and lists what `drop` removed (below).
 - **Mistakes.** A section or key that is each product's own, or unknown, is ignored with a warning. A bad value (a
   regex that does not compile, a group with a bad name or no patterns, `context_rotate` below 0, a list key that is
   not a list) leaves out **only that value**: one bad regex of `patterns` keeps the others, one bad group keeps the
@@ -473,7 +473,11 @@ patterns` (never without the owner), each `[deny.grants]` group (only the orches
 `foreman permissions apply`, below) and each resource's `guard` prefixes (they wait their turn in `foreman lock`). Each
 rule comes with how many rows of the guard table (`[check] guard_table`, or `--table T`) it touches, read as the guard
 reads a command, and up to two of them; a rule of the product with no row is a warning, since nothing checks that it
-does what it should. Then the reserved files (docs/internals.md, «The reserved files»): one line per class with this product's paths (a
+does what it should. Each rule says where it comes from: a rule the registry's `[machine.deny]` gives is marked «(from
+the machine)», one both the machine and the product write «(machine and product)»; a line near the top counts them,
+and another lists the inherited rules this product removes with `[deny] drop`. In `--json` each rule has `from`
+(`foreman` for foreman's own, `machine`, `product` or `both`; a resource's `guard` prefixes are always the product's)
+and `inherited` gives `{rules, dropped}`. Then the reserved files (docs/internals.md, «The reserved files»): one line per class with this product's paths (a
 folder of the class holds what lies under it), who may write it and its refusals of the last 7 days, and how many other
 registered products have theirs reserved too. It ends with the lifeline: the commands the orchestrator runs in every
 pass (`foreman start`, `loop`, `check`, `backlog`, `note`, `launch`, `integrate`, `permissions grants`, `permissions`,

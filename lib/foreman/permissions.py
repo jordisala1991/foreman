@@ -8,7 +8,10 @@ The view (`foreman permissions [--table T] [--json]`) lists what the guard (guar
 - turn: each resource's `guard` prefixes, which must run inside `foreman lock RESOURCE run`.
 For each rule, how many rows of the guard table (`[check] guard_table`, or --table) it touches, read the way the guard
 reads a command (guard.deny for one pattern; the resource prefixes as check() compares them), and up to two of them
-as examples; a product rule with no row is a warning (nothing checks that it does what it should). Then the reserved
+as examples; a product rule with no row is a warning (nothing checks that it does what it should). Each rule says
+where it comes from (`from`: foreman, machine, product or both; rules()): a rule the registry's [machine.deny] gives
+is marked in the text, and the view counts them and names what the product's `[deny] drop` removed of them
+(inherited()). Then the reserved
 files (reserved_files): guard.reserved()'s entries for this product and the machine, one line per class with its
 paths (as the settings spell them; a path a folder of its class already holds is left out), who may write it and its
 refusals (rule file:<class>) of the last REFUSED_DAYS days, and how many other registered products have theirs
@@ -134,19 +137,33 @@ def lifeline_failures(project: Project) -> list[dict[str, str]]:
 
 
 def rules(project: Project) -> list[dict[str, str]]:
-    """Every rule of the project in band order: [{band, pattern, group?, resource?, only?}], band builtin, never,
-    orchestrator or turn; the built-in rule of `permissions apply` (guard.PERMISSIONS_APPLY) has only=orchestrator:
-    the marked orchestrator may, after the owner's yes in the chat (and his yes/no with --opens); so do the two that
-    refuse an agent only (guard.AGENT_ONLY: its git in a main checkout with a live home, its `foreman integrate`)."""
-    out = [{"band": "builtin", "pattern": p} for p in guard.BUILTIN]
-    out.append({"band": "builtin", "pattern": guard.PERMISSIONS_APPLY, "only": "orchestrator"})
-    out += [{"band": "builtin", "pattern": p, "only": "orchestrator"} for p in guard.AGENT_ONLY]
-    out += [{"band": "never", "pattern": str(p)} for p in project.section("deny").get("patterns", [])]
+    """Every rule of the project in band order: [{band, pattern, from, group?, resource?, only?}], band builtin,
+    never, orchestrator or turn; the built-in rule of `permissions apply` (guard.PERMISSIONS_APPLY) has
+    only=orchestrator: the marked orchestrator may, after the owner's yes in the chat (and his yes/no with --opens); so
+    do the two that refuse an agent only (guard.AGENT_ONLY: its git in a main checkout with a live home, its `foreman
+    integrate`). from: foreman for a built-in rule, else machine (the registry's [machine.deny]), product (its
+    foreman.toml) or both (written in the two): config.DenyOrigin."""
+    origin = project.deny_origin
+    out = [{"band": "builtin", "pattern": p, "from": "foreman"} for p in guard.BUILTIN]
+    out.append({"band": "builtin", "pattern": guard.PERMISSIONS_APPLY, "only": "orchestrator", "from": "foreman"})
+    out += [{"band": "builtin", "pattern": p, "only": "orchestrator", "from": "foreman"} for p in guard.AGENT_ONLY]
+    for p in project.section("deny").get("patterns", []):
+        out.append({"band": "never", "pattern": str(p), "from": origin["patterns"].get(str(p), "product")})
     for g, pats in grants.groups(project).items():
-        out += [{"band": "orchestrator", "group": g, "pattern": p} for p in pats]
+        mine = origin["grants"].get(g, {})
+        out += [{"band": "orchestrator", "group": g, "pattern": p, "from": mine.get(p, "product")} for p in pats]
     for r, res in project.resources.items():
-        out += [{"band": "turn", "resource": r, "pattern": str(p)} for p in res.get("guard", []) or []]
+        # a resource's guard prefixes are each product's own, even for a machine resource (config.machine_resources)
+        pats = res.get("guard", []) or []
+        out += [{"band": "turn", "resource": r, "pattern": str(p), "from": "product"} for p in pats]
     return out
+
+
+def inherited(project: Project, rules_: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the view says of the machine: {rules: how many of rules_ come from it (machine or both), dropped: the
+    entries of the product's `[deny] drop` that removed an inherited rule ("group:NAME" for a whole group)}."""
+    n = sum(r["from"] in ("machine", "both") for r in rules_)
+    return {"rules": n, "dropped": list(project.deny_origin["dropped"])}
 
 
 def band_of(rule: dict[str, str]) -> str:
@@ -277,6 +294,7 @@ def view(project: Project, table: str | None = None) -> dict[str, Any]:
         "grant_minutes": grants.minutes(project, "grant_minutes", 30),
         "groups": {g: state.get(g, "closed") for g in grants.groups(project)},
         "rules": out,
+        "inherited": inherited(project, out),
         "reserved": reserved_files(project, refused),
         "no_row": [r["pattern"] for r in out if r["no_row"]],
         "refused_days": REFUSED_DAYS,
@@ -292,11 +310,22 @@ def _short(cmd: str) -> str:
 
 def _rule_line(s: dict[str, Any], r: dict[str, Any]) -> str:
     refused = s["perm_refused_week"].format(n=r["refused"], days=REFUSED_DAYS) if r.get("refused") else ""
+    where = s[f"perm_from_{r['from']}"] if r.get("from") in ("machine", "both") else ""
     if r["no_row"]:
-        return f"  - «{r['pattern']}»: {s['perm_no_row']}" + refused
+        return f"  - «{r['pattern']}»{where}: {s['perm_no_row']}" + refused
     rows = (s["perm_rows_1"] if r["rows"] == 1 else s["perm_rows_n"]).format(n=r["rows"])
     ex = "; ".join(f"`{_short(c)}`" for c in r["examples"])
-    return f"  - «{r['pattern']}»: {rows}" + (f" ({ex})" if ex else "") + refused
+    return f"  - «{r['pattern']}»{where}: {rows}" + (f" ({ex})" if ex else "") + refused
+
+
+def _inherited_lines(s: dict[str, Any], d: dict[str, Any]) -> list[str]:
+    """How many rules come from the machine, and what this product's `[deny] drop` removes of them."""
+    out = [s["perm_inherited"].format(n=d["rules"])]
+    if d["dropped"]:
+        g = config.DROP_GROUP
+        names = [s["perm_band_group"].format(group=x[len(g) :]) if x.startswith(g) else f"«{x}»" for x in d["dropped"]]
+        out.append(s["perm_dropped"].format(n=len(names), rules=", ".join(names)))
+    return out
 
 
 def _lifeline_lines(project: Project, s: dict[str, Any], life: dict[str, Any]) -> list[str]:
@@ -338,6 +367,7 @@ def render(project: Project, d: dict[str, Any]) -> str:
         lines.append(s["perm_table"].format(table=d["table"], n=d["table_rows"]))
     else:
         lines.append(s["perm_no_table"])
+    lines += _inherited_lines(s, d["inherited"])
     owner = project.owner
     by = {b: [r for r in d["rules"] if r["band"] == b] for b in ("builtin", "never", "orchestrator", "turn")}
     lines += ["", s["perm_builtin"]] + [_rule_line(s, r) for r in by["builtin"] if not r.get("only")]
