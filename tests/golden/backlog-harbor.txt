@@ -10,7 +10,8 @@ foreman init <TMP>/harbor
   <TMP>/projects.toml: harbor: already there
 
 harbor: <TMP>/harbor (active); state <TMP>/state/harbor
-  config schema 18 (this foreman knows 18): ok
+  config schema 19 (this foreman knows 19): ok
+  inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo api: <TMP>/harbor-api merge=squash
   resource widget: this project, foreman lock, guard 1

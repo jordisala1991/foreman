@@ -17,10 +17,21 @@ reviews. The registry (`~/.config/foreman/projects.toml`, or $FOREMAN_REGISTRY) 
     dir = "~/.gpu-lock"        # paths: `~` expanded, relative ones against the registry's folder
     busy = "~/.config/foreman/bin/gpu-busy.sh"
 
+    [machine.project]          # optional: settings every product inherits, shaped like a foreman.toml
+    owner = "Ada"              # (MACHINE_SETTINGS: which keys; the rest stay each product's own)
+
+    [machine.deny]
+    patterns = ["npm publish"]
+
 A product uses a machine resource by declaring `[resources.NAME]` in its foreman.toml with only its own keys
 (PRODUCT_KEYS: guard, allow), or an empty table. The machine wins: the merged table is resolved once, when the project
 loads (load_project), so `foreman lock`, the guard, `foreman wait` and the loop pass all read the same one; machine
 keys a product repeats there are ignored with a warning (machine_resources, merge_machine).
+
+The registry's [machine] holds settings every product inherits (machine_settings, merge_settings): defaults <
+machine < product. A scalar of the product wins; lists add up (the machine's first, without repeats); tables merge
+key by key with the same rule. A product removes an inherited deny rule with `[deny] drop` (a pattern as written, or
+"group:NAME"). A bad value in [machine] leaves out only that value, with a warning in every product.
 
 Which project a command is about, in order: --project NAME, $FOREMAN_HOME (a home directory), $FOREMAN_PROJECT
 (a registry name), then the current directory (inside a home, a repo, a worktree or the workspace of a registered
@@ -40,6 +51,7 @@ as broken, and the others load.
 
 from __future__ import annotations
 
+import copy
 import os
 import re
 from collections.abc import Iterable, Mapping
@@ -54,12 +66,13 @@ if TYPE_CHECKING:
 MERGE_METHODS = ("squash", "merge", "rebase")
 MODES = ("active", "inactive")
 # where a value of `foreman config --json` comes from (Project.as_dict): foreman's default, the product's foreman.toml,
-# the registry (a machine resource's keys) or the environment (FOREMAN_STATE_HOME, for the default state folder)
-SOURCES = ("default", "foreman.toml", "registry", "environment")
+# the registry (a machine resource's keys, a [machine] setting), both (a list or table the registry's [machine] and
+# the foreman.toml add to) or the environment (FOREMAN_STATE_HOME, for the default state folder)
+SOURCES = ("default", "foreman.toml", "registry", "registry+foreman.toml", "environment")
 # The highest foreman.toml schema this foreman understands. It goes up by one with every new key or section (and
 # tests/config_schema.json records the keys of each schema: the selftest fails if they differ). Keys that ship in the
 # same release share one schema: add them to the newest list of tests/config_schema.json while it is unreleased.
-CONFIG_SCHEMA = 18
+CONFIG_SCHEMA = 19
 # Keys foreman no longer reads, (section, key): what to tell the owner. One left in a foreman.toml is a warning (it
 # loads, ignored; `foreman check` names it), never an error, so an old file keeps working until it is cleaned.
 REMOVED: dict[tuple[str, str], str] = {
@@ -79,7 +92,12 @@ REMOVED: dict[tuple[str, str], str] = {
     ("agents", "planner_types"): "only planner agents count as planners",
     ("project", "owner_plain"): "foreman's checks of what the owner reads are always on",
 }
-REGISTRY_KNOWN = {"project": {"name", "home", "mode", "config"}, "panel": {"language", "who"}, "resources": None}
+REGISTRY_KNOWN = {
+    "project": {"name", "home", "mode", "config"},
+    "panel": {"language", "who"},
+    "resources": None,
+    "machine": None,
+}
 
 # A TOML table as read, or a section of the merged configuration: its keys are the schema's (docs/config.md) and its
 # values whatever TOML holds, so a reader takes each value with the type its key documents (checked by `problems`).
@@ -180,6 +198,7 @@ DEFAULTS: dict[str, Any] = {
         "grants": {},
         "grant_minutes": 30,
         "ask_minutes": 5,
+        "drop": [],
     },
     "panel": {"title": "", "wiki": "", "wiki_first": []},
     "publish": {"means": []},
@@ -231,6 +250,47 @@ RESOURCE_NAME = r"^[a-z0-9][a-z0-9-]*$"
 SOURCE_KINDS = ("heartbeat", "glob", "log")  # a [[recurring]] source reads one of these (notes.last_time)
 SOURCE_KEYS = {*SOURCE_KINDS, "label", "file", "max_h", "at"}
 KNOWN = {k: set(v) for k, v in DEFAULTS.items()} | {"repos": None, "resources": None, "recurring": None}
+# The registry's [machine] (machine_settings): the keys of each section it may set, inherited by every product (None:
+# every key of the section). PRODUCT_SETTINGS are each product's own (None: the whole section): its paths, its ids, its
+# orchestrator's prompt, the commands foreman runs for it (loop.checks) and what removes an inherited rule (deny.drop).
+# Every key of DEFAULTS is in exactly one of the two (test_machine_settings): a new key has to say which.
+MACHINE_SETTINGS: dict[str, tuple[str, ...] | None] = {
+    "project": ("owner", "language", "owner_knows"),
+    "agents": ("production_slots", "ready_target", "production_types", "stalled_min"),
+    "loop": ("disk_low_gb", "every_min", "context_rotate", "lock_long_min"),
+    "deny": ("patterns", "message", "grants", "grant_minutes", "ask_minutes"),
+    "strings": None,
+}
+PRODUCT_SETTINGS: dict[str, tuple[str, ...] | None] = {
+    "project": ("name", "rules", "config_schema"),
+    "paths": None,
+    "backlog": None,
+    "ids": None,
+    "agents": ("production_worktree",),
+    "loop": ("prompt", "checks"),
+    "deny": ("drop",),
+    "panel": None,
+    "publish": None,
+    "check": None,
+    "repos": None,
+    "resources": None,
+    "recurring": None,
+}
+DROP_GROUP = "group:"  # [deny] drop = ["group:NAME"]: the whole group NAME the machine gives
+
+
+class DenyOrigin(TypedDict):
+    """Where each deny rule of a loaded project comes from (Project.deny_origin): "machine" (the registry's
+    [machine.deny]), "product" (its foreman.toml) or "both"; `dropped`: the entries of its `[deny] drop` that removed
+    something inherited."""
+
+    patterns: dict[str, str]
+    grants: dict[str, dict[str, str]]
+    dropped: list[str]
+
+
+# machine_settings(): ({section: {key: value}} of the valid [machine] values, warnings)
+MachineSettings = tuple[Table, list[str]]
 
 
 class Project:
@@ -245,6 +305,8 @@ class Project:
         resource_origin: Mapping[str, str] | None = None,
         declared: Table | None = None,
         config_file: PathLike | None = None,
+        origin: Mapping[tuple[str, str], str] | None = None,
+        deny_origin: DenyOrigin | None = None,
     ) -> None:
         self.home = Path(home).expanduser().resolve()
         self.mode = mode
@@ -258,6 +320,14 @@ class Project:
         # foreman.toml as read, before the defaults (what `sources` tells from a default), and the file it came from
         self.declared: Table = declared if declared is not None else {}
         self.config_file: Path | None = Path(config_file) if config_file else None
+        # {(section, key): "registry" | "registry+foreman.toml"}: the values the registry's [machine] gave or added to
+        # (merge_settings); any other value comes from foreman.toml or the default
+        self.origin: dict[tuple[str, str], str] = dict(origin or {})
+        self.deny_origin: DenyOrigin = deny_origin or {
+            "patterns": {str(p): "product" for p in raw.get("deny", {}).get("patterns", [])},
+            "grants": {g: {str(p): "product" for p in v} for g, v in (raw.get("deny", {}).get("grants") or {}).items()},
+            "dropped": [],
+        }
         self.registered = False  # loaded from a registry entry (load_entry): its mode is the registry's
 
     def __repr__(self) -> str:
@@ -341,7 +411,7 @@ class Project:
 
         for sec in DEFAULTS:
             config[sec] = dict(self.raw[sec])
-            sources[sec] = {k: origin(declared.get(sec), k) for k in config[sec]}
+            sources[sec] = {k: self.origin.get((sec, k)) or origin(declared.get(sec), k) for k in config[sec]}
         sources["project"]["name"] = "foreman.toml"
         config["paths"] = {
             "notes": str(self.notes_dir),
@@ -380,6 +450,16 @@ class Project:
             "sources": sources,
             "warnings": list(self.warnings),
         }
+
+    def inherited(self) -> tuple[int, int, int]:
+        """(keys, rules, dropped): how many settings the registry's [machine] gives this project (deny rules apart),
+        how many deny rules (a pattern or a group's pattern) it inherits, and how many `[deny] drop` entries remove
+        something inherited (`foreman check`)."""
+        keys = sum(1 for (sec, key) in self.origin if not (sec == "deny" and key in ("patterns", "grants")))
+        d = self.deny_origin
+        rules = sum(o != "product" for o in d["patterns"].values())
+        rules += sum(o != "product" for g in d["grants"].values() for o in g.values())
+        return keys, rules, len(d["dropped"])
 
     def _own_roots(self) -> list[Path]:
         """Resolved home and repo paths: what no other project can claim."""
@@ -567,6 +647,12 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
             re.compile(pat)
         except (re.error, TypeError) as e:
             err.append(f"[deny] bad pattern {pat!r}: {e}")
+    drop = deny.get("drop", [])
+    if not (isinstance(drop, list) and all(isinstance(d, str) and d.strip() for d in drop)):
+        err.append(
+            "[deny] drop must be a list of inherited rules to remove: a pattern as the registry's [machine.deny] "
+            'writes it, or "group:NAME" for a whole group'
+        )
     grant_problems(deny, err, warn)
     for key in ("project", "issue", "legacy", "decision"):
         pat = raw.get("ids", {}).get(key)
@@ -753,6 +839,207 @@ def merge_machine(resources: dict[str, Table], machine: Machine) -> tuple[dict[s
     return out, origin, warnings
 
 
+def _machine_error(text: str) -> str:
+    """A problem of a [machine] value, worded as problems() words the foreman.toml's: «[deny] …» → «registry:
+    [machine.deny] …»."""
+    return "registry: " + re.sub(r"^\[", "[machine.", text) + " (left out)"
+
+
+def machine_settings(reg: Table | None = None) -> MachineSettings:
+    """(settings, warnings) of the registry's [machine] (`reg`: the registry as read; default read_registry()).
+    settings: {section: {key: value}} of the values every product inherits (MACHINE_SETTINGS), each checked as
+    problems() checks a foreman.toml's; warnings: what is ignored (a product's own section or key, an unknown one, a
+    newer config_schema) and each bad value, left out alone: one bad regex of `patterns` or one bad group of `grants`
+    leaves the rest in, so a typo in the registry never stops a product from loading (its guard keeps guarding).
+    `[machine.project] config_schema` is only checked, never inherited."""
+    reg = read_registry() if reg is None else reg
+    section = reg.get("machine", {})
+    if not isinstance(section, dict):
+        return {}, ["registry: [machine] must be a table of foreman.toml sections (ignored)"]
+    out: Table = {}
+    warn: list[str] = []
+    for sec, table in section.items():
+        where = f"registry: [machine.{sec}]"
+        if sec not in MACHINE_SETTINGS:
+            warn.append(
+                f"{where} is each product's own (declare it in its foreman.toml): ignored"
+                if sec in PRODUCT_SETTINGS
+                else f"registry: [machine]: unknown section [{sec}] (ignored)"
+            )
+            continue
+        if not isinstance(table, dict):
+            warn.append(f"{where} must be a table (ignored)")
+            continue
+        allowed = MACHINE_SETTINGS[sec]
+        own = sorted(
+            k for k in table if allowed is not None and k not in allowed and (k in DEFAULTS[sec] or k == "name")
+        )
+        own = [k for k in own if not (sec == "project" and k == "config_schema")]
+        unknown = sorted(
+            k for k in table if allowed is not None and k not in allowed and k not in own and k != "config_schema"
+        )
+        if sec == "project" and "config_schema" in table:
+            e, w = problems({"project": {"config_schema": table["config_schema"]}})
+            warn += [f"{where}: {x}" for x in w] + [_machine_error(x) for x in e if "config_schema" in x]
+        if own:
+            warn.append(
+                f"{where}: {', '.join(own)} {'is' if len(own) == 1 else 'are'} each product's own "
+                f"(declare {'it' if len(own) == 1 else 'them'} in its foreman.toml): ignored"
+            )
+        if unknown:
+            warn.append(f"{where}: unknown keys {', '.join(unknown)} (ignored)")
+        keep: Table = {}
+        for key, value in table.items():
+            if allowed is not None and key not in allowed:
+                continue
+            default = DEFAULTS[sec].get(key)
+            if isinstance(default, list) and not isinstance(value, list):
+                warn.append(_machine_error(f"[{sec}] {key} must be a list"))
+                continue
+            if isinstance(default, dict) and not isinstance(value, dict):
+                warn.append(_machine_error(f"[{sec}] {key} must be a table"))
+                continue
+            if (sec, key) == ("deny", "patterns"):  # each regex alone
+                good = []
+                for pat in value:
+                    e, _ = problems({"project": {"name": "machine"}, "deny": {"patterns": [pat]}})
+                    warn += [_machine_error(x) for x in e]
+                    good += [] if e else [pat]
+                keep[key] = good
+            elif (sec, key) == ("deny", "grants"):  # each group alone
+                groups: Table = {}
+                for name, pats in dict(value).items():
+                    e: list[str] = []
+                    grant_problems({"grants": {name: pats}}, e, [])
+                    warn += [_machine_error(x) for x in e]
+                    if not e:
+                        groups[name] = pats
+                keep[key] = groups
+            elif sec == "strings":  # each text alone; the warnings (unknown keys, half plurals) of the whole table
+                e = []
+                string_problems({key: value}, e, [])
+                warn += [_machine_error(x) for x in e]
+                if not e:
+                    keep[key] = value
+            else:
+                one: Table = {"project": {"name": "machine"}}
+                one.setdefault(sec, {})[key] = value
+                e, _ = problems(one)
+                warn += [_machine_error(x) for x in e]
+                if not e:
+                    keep[key] = value
+        if sec == "strings":
+            w: list[str] = []
+            string_problems(table, [], w)
+            warn += [
+                f"registry: [machine.strings]{x[len('[strings]') :]}" if x.startswith("[strings]") else x for x in w
+            ]
+        if sec == "deny":
+            w = []
+            grant_problems({"patterns": keep.get("patterns", []), "grants": keep.get("grants", {})}, [], w)
+            warn += [f"registry: [machine.{x[1:]}" for x in w]
+        out[sec] = keep
+    return out, warn
+
+
+def _combine(machine: Any, product: Any) -> Any:
+    """A product's value on top of the machine's: lists add up (the machine's first, without repeats), tables merge
+    key by key with the same rule, and any other value (or two of different types) is the product's."""
+    if isinstance(machine, list) and isinstance(product, list):
+        return list(machine) + [x for x in product if x not in machine]
+    if isinstance(machine, dict) and isinstance(product, dict):
+        out = dict(machine)
+        for k, v in product.items():
+            out[k] = _combine(machine[k], v) if k in machine else v
+        return out
+    return product
+
+
+def merge_settings(
+    merged: Table, raw: Table, settings: Table
+) -> tuple[dict[tuple[str, str], str], DenyOrigin, list[str]]:
+    """Merges the registry's [machine] (`settings`: machine_settings()[0]) into a product's merged configuration
+    (`merged`, after merge_defaults; `raw`: its foreman.toml as read), in place: defaults < machine < product.
+    Before merging, the product's `[deny] drop` removes what it names from the machine's deny rules (a pattern from
+    `patterns` and from every group, or "group:NAME" the whole group). Returns (origin, deny_origin, warnings):
+    origin {(section, key): "registry" | "registry+foreman.toml"}, deny_origin (DenyOrigin), and the warnings: a
+    drop that removes nothing inherited, a pattern denied at one level and granted in a group at the other."""
+    origin: dict[tuple[str, str], str] = {}
+    warn: list[str] = []
+    mdeny = settings.get("deny", {})
+    mpats = list(mdeny.get("patterns", []))
+    mgroups = {g: list(v) for g, v in mdeny.get("grants", {}).items()}
+    dropped: list[str] = []
+    for d in merged["deny"].get("drop", []):
+        hit = False
+        if d.startswith(DROP_GROUP) and d[len(DROP_GROUP) :] in mgroups:
+            del mgroups[d[len(DROP_GROUP) :]]
+            hit = True
+        else:
+            if d in mpats:
+                mpats.remove(d)
+                hit = True
+            for pats in mgroups.values():
+                if d in pats:
+                    pats.remove(d)
+                    hit = True
+        if hit:
+            dropped.append(d)
+        else:
+            warn.append(f"[deny] drop {d!r}: nothing inherited from the registry's [machine.deny] matches it (ignored)")
+    machine = dict(settings)
+    if "deny" in settings:
+        machine["deny"] = {**mdeny}
+        if "patterns" in mdeny:
+            machine["deny"]["patterns"] = mpats
+        if "grants" in mdeny:
+            machine["deny"]["grants"] = {g: v for g, v in mgroups.items() if v}
+    for sec, table in machine.items():
+        declared = raw.get(sec, {})
+        for key, mval in table.items():
+            if isinstance(mval, (list, dict)) and not mval:
+                continue  # nothing to inherit
+            if key not in declared:
+                merged[sec][key] = copy.deepcopy(mval)  # the machine's table is shared by every product
+                origin[(sec, key)] = "registry"
+            elif isinstance(mval, (list, dict)):
+                merged[sec][key] = _combine(mval, declared[key])
+                origin[(sec, key)] = "registry+foreman.toml"
+    pdeny = raw.get("deny", {})
+    ppats = set(map(str, pdeny.get("patterns", [])))
+    pgroups = {g: set(map(str, v)) for g, v in (pdeny.get("grants") or {}).items()}
+    mp = set(map(str, machine.get("deny", {}).get("patterns", [])))
+    mg = {g: set(map(str, v)) for g, v in machine.get("deny", {}).get("grants", {}).items()}
+
+    def where(p: str, mine: set[str], theirs: set[str]) -> str:
+        return "both" if p in mine and p in theirs else "machine" if p in theirs else "product"
+
+    deny = merged["deny"]
+    deny_origin: DenyOrigin = {
+        "patterns": {str(p): where(str(p), ppats, mp) for p in deny.get("patterns", [])},
+        "grants": {
+            g: {str(p): where(str(p), pgroups.get(g, set()), mg.get(g, set())) for p in v}
+            for g, v in (deny.get("grants") or {}).items()
+        },
+        "dropped": dropped,
+    }
+    for g, pats in sorted(deny_origin["grants"].items()):
+        # denied at one level, granted at the other (the same level warns in its own check)
+        cross = sorted(
+            p
+            for p in pats
+            if p in deny_origin["patterns"]
+            and not (p in ppats and p in pgroups.get(g, set()))
+            and not (p in mp and p in mg.get(g, set()))
+        )
+        if cross:
+            warn.append(
+                f"[deny.grants] {g}: in patterns too, one in the registry's [machine.deny] and the other in "
+                f"foreman.toml (patterns win: nobody runs it): {', '.join(cross)}"
+            )
+    return origin, deny_origin, warn
+
+
 def load_project(
     home: PathLike,
     mode: str = "active",
@@ -760,10 +1047,12 @@ def load_project(
     strict: bool = False,
     warnings: Iterable[str] = (),
     machine: Machine | None = None,
+    settings: MachineSettings | None = None,
 ) -> Project:
     """The project of a home. Errors raise ConfigError; warnings (and the registry's `warnings` for it) are kept in
-    Project.warnings, or raise too with strict=True. `machine`: machine_resources() of the registry, read here if not
-    given (registered_projects reads it once for all); a resource the registry declares is merged with it."""
+    Project.warnings, or raise too with strict=True. `machine`: machine_resources() of the registry, and `settings`:
+    its machine_settings(), read here if not given (registered_projects reads them once for all); a resource the
+    registry declares is merged with it, and so are the registry's [machine] settings (merge_settings)."""
     home = Path(home).expanduser()
     f = Path(config_file).expanduser() if config_file else home / "foreman.toml"
     try:
@@ -777,13 +1066,21 @@ def load_project(
         raise ConfigError(f"{f}: " + "; ".join(err))
     merged = merge_defaults(raw)
     declared = {name: raw["resources"][name] for name in merged["resources"]}
-    if machine is None:
+    reg_warn: list[str] = []
+    if machine is None or settings is None:
         try:
-            machine = machine_resources()
+            reg = read_registry()
         except ConfigError as e:
-            machine = ({}, {}, [])
-            if declared:
+            reg = None
+            if machine is None and declared:  # its [machine] settings too; `foreman check` shows the registry's error
                 warn.append(f"machine resources not applied (the registry does not read: {e})")
+        if machine is None:
+            machine = machine_resources(reg) if reg is not None else ({}, {}, [])
+        if settings is None:
+            settings = machine_settings(reg) if reg is not None else ({}, [])
+    reg_warn += settings[1]
+    origin, deny_origin, settings_warn = merge_settings(merged, raw, settings[0])
+    warn += settings_warn
     for name, own in declared.items():
         repeated = sorted(k for k in own if k in MACHINE_KEYS)
         if name in machine[0] and repeated:
@@ -792,11 +1089,21 @@ def load_project(
                 f"by the machine (registry [resources.{name}]): ignored here; remove "
                 + ("it" if len(repeated) == 1 else "them")
             )
-    merged["resources"], origin, merge_warn = merge_machine(merged["resources"], machine)
+    merged["resources"], resource_origin, merge_warn = merge_machine(merged["resources"], machine)
     warn += merge_warn
-    if strict and warn:
-        raise ConfigError(f"{f}: " + "; ".join(warn))
-    return Project(home, merged, mode, [f"{f.name}: {w}" for w in warn] + list(warnings), origin, raw, f)
+    if strict and (warn or reg_warn):
+        raise ConfigError("; ".join(([f"{f}: " + "; ".join(warn)] if warn else []) + reg_warn))
+    return Project(
+        home,
+        merged,
+        mode,
+        [f"{f.name}: {w}" for w in warn] + reg_warn + list(warnings),
+        resource_origin,
+        raw,
+        f,
+        origin,
+        deny_origin,
+    )
 
 
 def read_registry() -> Table:
@@ -878,10 +1185,14 @@ def panel_settings() -> dict[str, Any]:
     return {"language": "en", "who": "owner", **(panel if isinstance(panel, dict) else {})}
 
 
-def load_entry(e: RegistryEntry, strict: bool = False, machine: Machine | None = None) -> Project:
+def load_entry(
+    e: RegistryEntry, strict: bool = False, machine: Machine | None = None, settings: MachineSettings | None = None
+) -> Project:
     home = e["home"]
     assert home is not None  # registry_scan lists an entry only with its home
-    p = load_project(home, e["mode"], e["config"], strict=strict, warnings=e.get("warnings", ()), machine=machine)
+    p = load_project(
+        home, e["mode"], e["config"], strict=strict, warnings=e.get("warnings", ()), machine=machine, settings=settings
+    )
     p.registered = True
     return p
 
@@ -895,10 +1206,11 @@ def registered_projects(
     reg = read_registry()
     entries, bad, reg_warnings = registry_scan(reg)
     machine = machine_resources(reg)
+    settings = machine_settings(reg)
     out: list[Project] = []
     for e in entries:
         try:
-            out.append(load_entry(e, machine=machine))
+            out.append(load_entry(e, machine=machine, settings=settings))
         except ConfigError as err:
             bad.append({**e, "error": str(err)})
     for b in bad:
