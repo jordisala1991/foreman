@@ -1,8 +1,8 @@
 """Machine settings: the registry's [machine], shaped like a foreman.toml, inherited by every registered product
 (config.machine_settings, config.merge_settings). Defaults < machine < product: a product's scalar wins, lists add up,
 tables merge key by key; `[deny] drop` removes an inherited rule; a bad value in [machine] is left out alone, with a
-warning in every product; `foreman permissions` says where each rule comes from. Two fake products share one fake registry: "fake" (GrantCase's, with its own patterns and
-groups) and "other" (bare)."""
+warning in every product; `foreman permissions` says where each rule comes from. Two fake products share one fake
+registry: "fake" (GrantCase's, with its own patterns and groups) and "other" (bare)."""
 
 import json
 import textwrap
