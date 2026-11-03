@@ -142,7 +142,8 @@ What runs on it, and where each part lives in Python:
 - **The chat reviewer** (`plain.review_answer`) at each main-loop `turn.complete`; its reminder rides the owner's
   next prompt.
 - **The owner's yes for a `[deny.grants]` group** (`grants.py`, `hook mod grant`): in a project with groups, the
-  `tool.call` hook checks each main-loop Bash call before it runs and, when all it lacks is that yes, asks with
+  `tool.call` hook checks each main-loop call before it runs (a Bash command, or any other tool's arguments, which
+  Python judges by the places and commands they name) and, when all it lacks is that yes, asks with
   `$.ui.ask` while the call waits (the module's own limit, `ask_minutes`); the answer goes back to Python, which
   writes the grant. The module also keeps the grants it heard given, so a `grants.json` written by hand is asked
   again, and one question per group: a question left drawn after its limit refuses the group's calls until it is

@@ -432,6 +432,13 @@ A guard table checks it with `tool:NAME JSON` rows, judged in both roles like a 
 `orchestrator<TAB>tool:Read {"file_path": "~/.ssh/id_ed25519"}`, `allow<TAB>tool:mcp__x__y {"message": "cat .env"}`.
 `guard.jsonl` and `approved.jsonl` record the tool and the place or command, never the rest of its input.
 
+When what such a call lacks is only the owner's yes for a `[deny.grants]` group, the hooks module asks it in the
+orchestrator's chat as for a Bash command (docs/config.md, «[deny.grants]»): in the main loop of a project with
+groups it sends every call but its own question (AskUserQuestion) to `foreman hook mod grant` with the tool's
+arguments, and Python judges them with this same rule. The question says the tool and the place or command that
+matched; the record of the answer in `approved.jsonl` carries `tool` and, as its `command`, `<tool> <place or
+command>`, which is also what a pending request shows in the panel.
+
 ## The state
 
 What foreman writes outside a product's home: one folder per product and a few shared files, under the **state

@@ -110,10 +110,15 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
   (no call when too little is left), and shows nothing when it fails.
 - `grant` (the owner's yes for a `[deny.grants]` group, grants.py): `start` answers "grants": true in a project
   with groups and every tick "grants": true|false (read again, so a group added while the session runs counts from
-  the next tick), and only while the last of them said true does the module's `tool.call` hook check a call: a
-  Bash call of the main loop (no `agentId`; a subagent's goes straight on and the classic guard refuses it), before
-  the call runs. {} outside an active project, without a session or without groups. Two phases:
-  - stdin {phase: "check", cwd, session, command, tool_use_id}: guard.check with the main loop's ctx. When the one
+  the next tick), and only while the last of them said true does the module's `tool.call` hook check a call of the
+  main loop (no `agentId`; a subagent's goes straight on and the classic guard refuses it), before the call runs:
+  a Bash call, and a call of any other tool but AskUserQuestion (the module's own question) that is not asked about
+  as a reserved file (below). {} outside an active project, without a session or without groups. Two phases:
+  - stdin {phase: "check", cwd, session, command, tool_use_id}: guard.check with the main loop's ctx. Any other
+    tool: stdin {phase: "check", cwd, session, tool, input (the tool's arguments: the event without tool,
+    tool_use_id, agentId and requestMeta), tool_use_id}, judged by guard.check_call with the same ctx (the places and
+    commands it names, as the classic guard judges it); the question says the tool and the place or command that
+    matched (i18n grant_question_tool), and a reserved file it writes asks nothing ({}). When the one
     thing missing is a grant (why=grant), or the command passes on a live grant of grants.json, it answers {group,
     live: bool, question, yes, no, header (i18n grant_*, the project's language), ask_ms ([deny] ask_minutes; 0: no
     limit), waiting (i18n grant_denied_waiting), until (when live)}. After the owner's no, while the group cools down
@@ -132,21 +137,21 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     permission callback) and `dismissed` otherwise (Esc, «Chat about this», a host that refuses); the timer is
     `timeout`. Neither the surfaces nor `isInteractive` decide whether to ask: they cannot tell a hosted session
     with a person behind it (the desktop app, an SDK host, the phone) from none.
-  - stdin {phase: "answer", cwd, session, group, answer: yes|no|dismissed|timeout|unavailable, surfaces, command,
-    tool_use_id, late?}. On yes, when the session is still the marked one and this call runs in the mark's `claude`
-    process: the grant (grants.give, [deny] grant_minutes), a line in approved.jsonl (verdict grant) and a note;
-    {granted: true, until, log}. A yes from another session or process grants nothing ({granted: false, deny}). Any
-    other answer: {granted: false, deny} (i18n grant_denied_ANSWER) and a line (verdict deny); a no starts the
-    cooldown; a timeout keeps the request pending for the panel (grants.pend, with the mark's pid and start time;
-    the owner approves it there: grants.approve). With `late` true (the answer came after the timeout refused the
-    call), a line (verdict late) and nothing else: {granted: false, log}; the log says the group is already granted
-    (i18n grant_late_granted) when it is, e.g. approved from the panel meanwhile, and nothing is granted twice.
-    The module (`surfaces` is $.session.surfaces(), for the record only): `granted` keeps `until` in its memory,
-    shows `log` and lets the call on to the classic guard, which finds the grant; otherwise it refuses the call with
-    `deny`. After a timeout it keeps listening to the question, still drawn: its late answer (or dismissal) goes
-    here with `late` true and the timed-out call's input, `log` is shown, and the group's question is closed. A
-    call that fails (either phase) is a status line and lets the call on: the classic guard refuses a group's
-    command with no grant.
+  - stdin {phase: "answer", cwd, session, group, answer: yes|no|dismissed|timeout|unavailable, surfaces, command (or
+    tool and input), tool_use_id, late?}; for another tool the record's `command` is `<tool> <place or command>` (judged
+    again) and it carries `tool`. On yes, when the session is still the marked one and this call runs in the mark's
+    `claude` process: the grant (grants.give, [deny] grant_minutes), a line in approved.jsonl (verdict grant) and a
+    note; {granted: true, until, log}. A yes from another session or process grants nothing ({granted: false, deny}).
+    Any other answer: {granted: false, deny} (i18n grant_denied_ANSWER) and a line (verdict deny); a no starts the
+    cooldown; a timeout keeps the request pending for the panel (grants.pend, with the mark's pid and start time; the
+    owner approves it there: grants.approve). With `late` true (the answer came after the timeout refused the call), a
+    line (verdict late) and nothing else: {granted: false, log}; the log says the group is already granted (i18n
+    grant_late_granted) when it is, e.g. approved from the panel meanwhile, and nothing is granted twice. The module
+    (`surfaces` is $.session.surfaces(), for the record only): `granted` keeps `until` in its memory, shows `log` and
+    lets the call on to the classic guard, which finds the grant; otherwise it refuses the call with `deny`. After a
+    timeout it keeps listening to the question, still drawn: its late answer (or dismissal) goes here with `late` true
+    and the timed-out call's input, `log` is shown, and the group's question is closed. A call that fails (either phase)
+    is a status line and lets the call on: the classic guard refuses a group's command with no grant.
   - A reserved file of Claude Code's settings or the registry (guard.ASK_KINDS): the owner's yes for one
     call. The module also checks, in any session of the project (marked or not) and only in its main loop, a
     Write, Edit, MultiEdit or NotebookEdit call whose file (`file_path`, or `notebook_path`) reads as one of those
@@ -588,19 +593,46 @@ def _command(ev: Event) -> str:
     return cmd if isinstance(cmd, str) else ""
 
 
+def _tool(ev: Event) -> str | None:
+    """The tool of a call that is not Bash and carries its `input` (a group's question for any tool), else None."""
+    tool = ev.get("tool")
+    return tool if isinstance(tool, str) and tool and tool != "Bash" and isinstance(ev.get("input"), dict) else None
+
+
+def _tool_call(project: Project, ev: Event, ctx: Any) -> tuple[Any, str]:
+    """The guard's verdict on a call of another tool than Bash (_tool) with ctx (guard.check_call: the places and
+    commands it names) and the call as the owner reads it, `<tool> <place or command>`: the place or command that
+    matched, or that a live grant let through ("" when none)."""
+    from . import guard
+
+    tool = str(_tool(ev))
+    v = guard.check_call(project, tool, ev["input"], ctx)
+    hit = v[1] if v else ctx.get("passed")
+    call = getattr(hit, "call", "") if hit is not None else ""
+    return v, f"{tool} {call}" if call else ""
+
+
 def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
     from . import grants, guard, orchestrator
 
-    if ev.get("tool") in guard.FILE_TOOLS:
-        return _file_check(project, session, ev)
-    cmd = _command(ev)
-    if not cmd:
-        return {}
-    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd")}
-    v = guard.check(project, cmd, ctx)
+    if ev.get("tool") in guard.FILE_TOOLS and _path(ev):
+        out = _file_check(project, session, ev)
+        if out or _tool(ev) is None:
+            return out
     t = i18n.for_project(project)
-    if v and v[0] == "file":
-        return _file_question(project, v[1], cmd) if v[1].kind in guard.ASK_KINDS else {}
+    tool = _tool(ev)
+    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd")}
+    if tool is not None:
+        v, cmd = _tool_call(project, ev, ctx)
+        if not cmd or (v and v[0] == "file"):
+            return {}  # nothing a group covers; a reserved file is asked about by its path (above) or refused
+    else:
+        cmd = _command(ev)
+        if not cmd:
+            return {}
+        v = guard.check(project, cmd, ctx)
+        if v and v[0] == "file":
+            return _file_question(project, v[1], cmd) if v[1].kind in guard.ASK_KINDS else {}
     if v and v[0] == "orchestrator" and v[1].why == "grant":
         group, live = v[1].group, False
         until = grants.cooling(project, group, session)
@@ -623,12 +655,13 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
     out = {
         "group": group,
         "live": live,
-        "question": t["grant_question"].format(
+        "question": t["grant_question_tool" if tool else "grant_question"].format(
             orchestrator=o.get("name") or session[:8],
             project=project.name,
             group=group,
             minutes=minutes,
-            command=" ".join(cmd.split())[:200],
+            tool=tool,
+            command=" ".join(cmd[len(tool) + 1 if tool else 0 :].split())[:200],
         ),
         "yes": t["grant_yes"].format(minutes=minutes),
         "no": t["grant_no"],
@@ -642,7 +675,7 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
 
 
 def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
-    from . import approved, grants, notes, orchestrator
+    from . import approved, grants, guard, notes, orchestrator
 
     group, answer = ev.get("group"), ev.get("answer")
     if group not in grants_groups(project):
@@ -653,7 +686,9 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
         [x for x in ev.get("surfaces") or [] if isinstance(x, str)] if isinstance(ev.get("surfaces"), list) else []
     )
     tid = ev.get("tool_use_id") if isinstance(ev.get("tool_use_id"), str) else None
-    cmd = _command(ev)
+    tool = _tool(ev)
+    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd")}
+    cmd = _tool_call(project, ev, ctx)[1] if tool is not None else _command(ev)
     t = i18n.for_project(project)
     o = orchestrator.current(project) or {}
     who = o.get("name") or session[:8]
@@ -663,6 +698,7 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
         "surfaces": surfaces,
         "session": session,
         "orchestrator": o.get("name") or None,
+        **({"tool": tool} if tool is not None else {}),
         "command": cmd[: approved.COMMAND_CHARS],
         "tool_use_id": tid,
     }

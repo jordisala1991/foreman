@@ -10,7 +10,8 @@
 //           ($.agent.list(), [] when absent), for `renewed` what the module's $.command.run of `compact` settled
 //           with (`text` it resolved with; `reject`: the error it rejected with), for `measure` the session.measure
 //           event (`measure`), and for `answer` the turn.complete event's `turnId` (`turn`) and `answer`; for
-//           `grant`, the main-loop Bash call (`command`, `tool_use_id`, `agentId` for a subagent's),
+//           `grant`, the main-loop call: a Bash one (`command`), a file tool's (`tool`, `file_path`) or any other
+//           tool's (`tool` and its arguments, `input`), with `tool_use_id` and `agentId` for a subagent's;
 //           $.session.surfaces() (`surfaces`), and for a case of the answer phase what the check answered before
 //           (`check`, a stdout) and how the question ended (`ask`: {answer} the label chosen,
 //           {reject} the error $.ui.ask rejected with, {timeout: true} no answer within the check's `ask_ms`)
@@ -1537,6 +1538,181 @@ export default [
     "status": null
   },
   {
+    "name": "any tool: a main-loop Read of a place a group covers: the owner is asked",
+    "op": "grant",
+    "python": true,
+    "engine": {
+      "cwd": "<project>",
+      "session": "S-orch",
+      "version": "2.1.314",
+      "start": "{\"active\": true, \"below\": false, \"grants\": true, \"min\": \"2.1.299\"}\n",
+      "tool": "Read",
+      "input": {
+        "file_path": "/srv/prod-api/config.json"
+      },
+      "tool_use_id": "toolu_1",
+      "surfaces": [
+        "desktop"
+      ]
+    },
+    "stdin": {
+      "phase": "check",
+      "cwd": "<project>",
+      "session": "S-orch",
+      "tool": "Read",
+      "input": {
+        "file_path": "/srv/prod-api/config.json"
+      },
+      "tool_use_id": "toolu_1"
+    },
+    "run": {
+      "exitCode": 0,
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"question\": \"orq, the orchestrator of fake, wants to use Read on `/srv/prod-api/config.json`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stderr": ""
+    },
+    "status": null
+  },
+  {
+    "name": "any tool: a main-loop Monitor running a group's command: the owner is asked",
+    "op": "grant",
+    "python": true,
+    "engine": {
+      "cwd": "<project>",
+      "session": "S-orch",
+      "version": "2.1.314",
+      "start": "{\"active\": true, \"below\": false, \"grants\": true, \"min\": \"2.1.299\"}\n",
+      "tool": "Monitor",
+      "input": {
+        "command": "make deploy",
+        "description": "deploy"
+      },
+      "tool_use_id": "toolu_1",
+      "surfaces": [
+        "desktop"
+      ]
+    },
+    "stdin": {
+      "phase": "check",
+      "cwd": "<project>",
+      "session": "S-orch",
+      "tool": "Monitor",
+      "input": {
+        "command": "make deploy",
+        "description": "deploy"
+      },
+      "tool_use_id": "toolu_1"
+    },
+    "run": {
+      "exitCode": 0,
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"question\": \"orq, the orchestrator of fake, wants to use Monitor on `make deploy`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stderr": ""
+    },
+    "status": null
+  },
+  {
+    "name": "any tool: a call whose free text only mentions a group's command: no question",
+    "op": "grant",
+    "python": true,
+    "engine": {
+      "cwd": "<project>",
+      "session": "S-orch",
+      "version": "2.1.314",
+      "start": "{\"active\": true, \"below\": false, \"grants\": true, \"min\": \"2.1.299\"}\n",
+      "tool": "WebFetch",
+      "input": {
+        "url": "https://example.com/docs",
+        "prompt": "how to run make deploy"
+      },
+      "tool_use_id": "toolu_1",
+      "surfaces": [
+        "desktop"
+      ]
+    },
+    "stdin": {
+      "phase": "check",
+      "cwd": "<project>",
+      "session": "S-orch",
+      "tool": "WebFetch",
+      "input": {
+        "url": "https://example.com/docs",
+        "prompt": "how to run make deploy"
+      },
+      "tool_use_id": "toolu_1"
+    },
+    "run": {
+      "exitCode": 0,
+      "stdout": "{}\n",
+      "stderr": ""
+    },
+    "status": null
+  },
+  {
+    "name": "any tool: a project without groups: a Read is not checked",
+    "op": "grant",
+    "python": false,
+    "engine": {
+      "cwd": "<project>",
+      "session": "S-orch",
+      "version": "2.1.314",
+      "start": "{\"active\": true, \"below\": false, \"min\": \"2.1.299\"}\n",
+      "tool": "Read",
+      "input": {
+        "file_path": "/srv/prod-api/config.json"
+      },
+      "tool_use_id": "toolu_1",
+      "surfaces": [
+        "desktop"
+      ]
+    },
+    "stdin": null,
+    "run": null,
+    "status": null
+  },
+  {
+    "name": "any tool: the owner says yes to a Read",
+    "op": "grant",
+    "python": true,
+    "engine": {
+      "cwd": "<project>",
+      "session": "S-orch",
+      "version": "2.1.314",
+      "start": "{\"active\": true, \"below\": false, \"grants\": true, \"min\": \"2.1.299\"}\n",
+      "tool": "Read",
+      "input": {
+        "file_path": "/srv/prod-api/config.json"
+      },
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"question\": \"orq, the orchestrator of fake, wants to use Read on `/srv/prod-api/config.json`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "ask": {
+        "answer": "Yes, for 30 min"
+      },
+      "tool_use_id": "toolu_1",
+      "surfaces": [
+        "desktop"
+      ]
+    },
+    "stdin": {
+      "phase": "answer",
+      "cwd": "<project>",
+      "session": "S-orch",
+      "tool": "Read",
+      "input": {
+        "file_path": "/srv/prod-api/config.json"
+      },
+      "tool_use_id": "toolu_1",
+      "group": "deploy",
+      "surfaces": [
+        "desktop"
+      ],
+      "answer": "yes"
+    },
+    "run": {
+      "exitCode": 0,
+      "stdout": "{\"granted\": true, \"log\": \"«deploy» allowed for orq until 10:30\", \"until\": \"2026-11-01T10:10:30\"}\n",
+      "stderr": ""
+    },
+    "status": null
+  },
+  {
     "name": "a live grant in grants.json the module has not heard given: asked again",
     "op": "grant",
     "python": true,
@@ -2153,14 +2329,14 @@ export default [
     "status": null
   },
   {
-    "name": "file: a Write of a file whose path names none of them is not checked",
+    "name": "file: without groups, a Write of a file whose path names none of them is not checked",
     "op": "grant",
     "python": false,
     "engine": {
       "cwd": "<project>",
       "session": "S-orch",
       "version": "2.1.314",
-      "start": "{\"active\": true, \"below\": false, \"grants\": true, \"min\": \"2.1.299\"}\n",
+      "start": "{\"active\": true, \"below\": false, \"min\": \"2.1.299\"}\n",
       "tool": "Write",
       "file_path": "<project>/notes.md",
       "tool_use_id": "toolu_1",

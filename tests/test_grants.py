@@ -437,6 +437,51 @@ class ModTest(GrantCase):
         self.assertEqual((q["yes"], q["ask_ms"]), ("Sí, 30 min", 0))
         self.assertIn("¿Le dejas", q["question"])
 
+    def test_check_any_tool(self):
+        """Another tool than Bash goes with its `input`: asked about as `cat PLACE` or its command would be."""
+        place = "/srv/prod-api/config.json"
+        read = {"tool": "Read", "input": {"file_path": place}}
+        q = self.mod(phase="check", **read)
+        self.assertEqual((q["group"], q["live"]), ("deploy", False))
+        self.assertIn(f"wants to use Read on `{place}`, which the group «deploy» covers", q["question"])
+        self.assertEqual(q["group"], self.mod(phase="check", command=f"cat {place}")["group"])  # the same as in Bash
+        q = self.mod(phase="check", tool="Monitor", input={"command": DEPLOY, "description": "x"})
+        self.assertIn(f"wants to use Monitor on `{DEPLOY}`", q["question"])
+        q = self.mod(phase="check", tool="Write", input={"file_path": "/srv/prod-api/.envrc", "content": "x"})
+        self.assertEqual(q["group"], "deploy")  # writing a place: the verdict of reading it
+        # free text is not compared; nothing named; refused anyway; a subagent's never reaches here; not marked
+        for inp in ({"prompt": DEPLOY}, {}, {"url": f"https://x.test/{PUSH}"}):
+            self.assertEqual(self.mod(phase="check", tool="WebFetch", input=inp), {}, inp)
+        self.assertEqual(self.mod(phase="check", tool="Read"), {})  # no input: nothing to judge
+        self.assertEqual(self.mod(session="S2", phase="check", **read), {})
+        # a Write that names a reserved file of Claude Code goes by its path, as before
+        q = self.mod(phase="check", tool="Write", path=str(self.home / ".claude/settings.json"))
+        self.assertEqual(q["group"], "file:claude")
+        self.assertEqual(
+            self.mod(phase="check", tool="Write", input={"file_path": str(self.home / "foreman.toml")}), {}
+        )
+        # a live grant: the module asks only when its memory does not hold it
+        self.give()
+        q = self.mod(phase="check", **read)
+        self.assertEqual((q["group"], q["live"]), ("deploy", True))
+        self.assertIn(place, q["question"])
+
+    def test_answer_any_tool(self):
+        read = {"tool": "Read", "input": {"file_path": "/srv/prod-api/config.json"}}
+        out = self.mod(phase="answer", group="deploy", answer="yes", surfaces=["desktop"], tool_use_id="T1", **read)
+        self.assertTrue(out["granted"])
+        self.assertIsNone(guard.check_tool(self.project, "Read", read["input"], self.ctx()))
+        out = self.mod(
+            phase="answer", group="stores", answer="timeout", surfaces=[], tool="Monitor", input={"command": STORE}
+        )
+        self.assertFalse(out["granted"])
+        self.assertEqual(grants.pending(self.project)["stores"]["command"], f"Monitor {STORE}")
+        lines = self.log()
+        self.assertEqual(
+            [(x["verdict"], x["tool"], x["command"]) for x in lines],
+            [("grant", "Read", "Read /srv/prod-api/config.json"), ("deny", "Monitor", f"Monitor {STORE}")],
+        )
+
     def test_yes(self):
         out = self.answer("yes", tool_use_id="T1")
         self.assertTrue(out["granted"])

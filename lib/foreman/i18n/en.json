@@ -67,6 +67,7 @@
   "guard_file_how_git": "What an agent leaves there would run with the power of whoever runs git next in that repo (the orchestrator when it integrates, or {owner}), in no diff anyone reviews. For one command, use `git -c KEY=VALUE …`; if your task needs a hook or a setting of the repo, say so in your report (the orchestrator or {owner} sets it).",
   "approved_note_grant": " (group «{group}» granted by {owner} at {at}, {via})",
   "grant_question": "{orchestrator}, the orchestrator of {project}, wants to run a command of the group «{group}»: `{command}`. Do you let it run the commands of «{group}» for {minutes} minutes?",
+  "grant_question_tool": "{orchestrator}, the orchestrator of {project}, wants to use {tool} on `{command}`, which the group «{group}» covers. Do you let it run the commands of «{group}» and reach what they name for {minutes} minutes?",
   "grant_yes": "Yes, for {minutes} min",
   "grant_no": "No",
   "grant_header": "foreman",
