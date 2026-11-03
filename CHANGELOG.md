@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-11-03
+
 ### Added
 
 - First public release of foreman.
