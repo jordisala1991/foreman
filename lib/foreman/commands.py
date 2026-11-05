@@ -4,8 +4,9 @@ configuration (docs/extending.md, «The contract»).
 A product command is a string from foreman.toml or the registry that foreman runs at a fixed point: the loop's
 `[loop] checks`, a resource's `busy` (the panel's probe; lock.sh runs it in shell with the same FOREMAN_API and
 FOREMAN_POINT), and the `[repos.*]` steps `local_ci` (with `ci_runs`), `main_ci`, `ci_summary`, `privacy_scan`,
-`pre_merge_report`, `post_merge` and `post_create`. `POINTS` lists them with their placeholders
-and time limits.
+`pre_merge_report`, `post_merge` and `post_create`; and the `setup` and cases of a hidden acceptance check
+(holdout.py: a `holdout.toml` of the product's folder of hidden checks, not foreman.toml; no placeholders, its
+values as variables only). `POINTS` lists them with their placeholders and time limits.
 
 - **How it runs:** `bash -c CMD` in a new session (its own process group), in the folder its caller gives (the
   documented one of each point), stdin the text its point gives or /dev/null, stdout and stderr to temporary files
@@ -131,6 +132,22 @@ POINTS = {
         ("main", "wt", "repo", "name", "branch"),
         timeout=600,
         on_failure="the worktree (and a branch it made) is removed",
+    ),
+    "holdout.setup": Point(
+        "holdout.toml setup",
+        "the copy of the branch's tip a hidden check runs in",
+        (),
+        ("wt", "main", "repo", "branch"),
+        timeout=600,
+        on_failure="the hidden check stops before its cases (exit 2), nothing merged",
+    ),
+    "holdout.scenario": Point(
+        "holdout.toml [[scenario]] command",
+        "the copy of the branch's tip a hidden check runs in",
+        (),
+        ("wt", "main", "repo", "branch"),
+        timeout=300,
+        on_failure="the case fails",
     ),
 }
 QUOTED = {"repo.post_create"}

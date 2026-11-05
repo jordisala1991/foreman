@@ -178,6 +178,8 @@ class RunTest(unittest.TestCase):
                 "repo.pre_merge_report": 300,
                 "repo.post_merge": 600,
                 "repo.post_create": 600,
+                "holdout.setup": 600,
+                "holdout.scenario": 300,
             },
         )
 
