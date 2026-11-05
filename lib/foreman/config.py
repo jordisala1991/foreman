@@ -72,7 +72,7 @@ SOURCES = ("default", "foreman.toml", "registry", "registry+foreman.toml", "envi
 # The highest foreman.toml schema this foreman understands. It goes up by one with every new key or section (and
 # tests/config_schema.json records the keys of each schema: the selftest fails if they differ). Keys that ship in the
 # same release share one schema: add them to the newest list of tests/config_schema.json while it is unreleased.
-CONFIG_SCHEMA = 19
+CONFIG_SCHEMA = 20
 # Keys foreman no longer reads, (section, key): what to tell the owner. One left in a foreman.toml is a warning (it
 # loads, ignored; `foreman check` names it), never an error, so an old file keeps working until it is cleaned.
 REMOVED: dict[tuple[str, str], str] = {
@@ -220,6 +220,9 @@ REPO_DEFAULTS: dict[str, Any] = {
     "publish_on_merge": False,
     "require_approval": False,
     "risky_paths": [],
+    "review": "off",
+    "review_paths": [],
+    "review_lines": 400,
     "public": False,
     "privacy_scan": "",
     "pre_merge_report": "",
@@ -632,6 +635,14 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
             err.append(f"[repos.{key}] ci_summary must be a command (a string)")
         if not isinstance(r.get("post_merge", ""), str):
             err.append(f"[repos.{key}] post_merge must be a command (a string)")
+        if r.get("review", "off") not in ("auto", "off"):
+            err.append(f"[repos.{key}] review must be auto or off")
+        paths = r.get("review_paths", [])
+        if not (isinstance(paths, list) and all(isinstance(x, str) and x for x in paths)):
+            err.append(f'[repos.{key}] review_paths must be a list of paths ("dir/", "file", "glob*" or "file:text")')
+        lines = r.get("review_lines", 400)
+        if isinstance(lines, bool) or not isinstance(lines, int) or lines < 0:
+            err.append(f"[repos.{key}] review_lines must be a whole number of lines, 0 or more (0: size never asks)")
     for key, r in raw.get("resources", {}).items():
         if not isinstance(r, dict):
             err.append(f"[resources.{key}] must be a table")

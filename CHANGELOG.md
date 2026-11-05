@@ -42,6 +42,21 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   summary of the page with where to see it. Older questions are presented as before.
 - `decision_due` notice: a pending question whose `--answer-by` day has come gets one actionable notice asking the
   orchestrator to remind the owner in the chat, with what waits. It only reminds: the question stays pending.
+- Review gate in `foreman integrate`, for a repo with `review = "auto"`: a branch that touches a `risky_paths` or
+  `review_paths` entry, changes more than `review_lines` lines of code (tests, docs, JSON and lock files apart) or
+  was delivered `partial` goes in only once a review by another agent covers its tip and leaves no high or medium
+  finding open. foreman reads the review's header (`Branch:`, `Tip:`, `Round:`, `Open: H n, M n`) under the reviews
+  folder; a tip with the same own patch as the reviewed one (main merged in, a clean rebase) stays covered.
+  `integrate` and `--check` print `== review: STATE` and stop with exit 2, nothing done, with the next step. At most
+  two rounds: after round 2 with findings open the owner decides, and `--approved` lets it in as it is.
+  `--no-review "why"` lets in, noted, a branch whose only reason is its size (never delicate paths nor a partial
+  delivery).
+
+### Config
+
+- Schema 20: `[repos.*] review` (`"off"` by default, or `"auto"`), `review_paths` (a list, as `risky_paths`) and
+  `review_lines` (400; 0 turns the size off). The three are brakes for `foreman permissions`: `review` back to `off`,
+  a `review_paths` entry removed, or `review_lines` raised or set to 0 opens.
 
 ### Upgrade notes
 

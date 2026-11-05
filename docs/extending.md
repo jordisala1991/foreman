@@ -32,7 +32,7 @@ most to adapt foreman:
 | shared resources and their locks | `[resources.*]` (a machine's: once, in the registry) |
 | the panel's name, language and wiki | `[panel]` |
 | recurring tasks and when they are late | `[[recurring]]` |
-| how a merge goes | `[repos.*] merge`, `require_approval`, `risky_paths`, `public`, `remote_checks` |
+| how a merge goes | `[repos.*] merge`, `require_approval`, `risky_paths`, `review`, `review_paths`, `review_lines`, `public`, `remote_checks` |
 
 **Where a value comes from.** A product's key is in its `foreman.toml`; a machine resource's lock keys (`dir`,
 `busy`, `slots`…) are in the registry and win over the product's (docs/config.md, «Machine resources»); every other

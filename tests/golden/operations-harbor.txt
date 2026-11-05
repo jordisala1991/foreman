@@ -2,7 +2,7 @@
 $ foreman --project harbor check
 [exit 0]
 harbor: <TMP>/harbor (active); state <TMP>/state/harbor
-  config schema 19 (this foreman knows 19): ok
+  config schema 20 (this foreman knows 20): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo api: <TMP>/harbor-api merge=squash
@@ -17,7 +17,7 @@ harbor	active	<TMP>/harbor
 $ foreman check
 [exit 0]
 harbor: <TMP>/harbor (active); state <TMP>/state/harbor
-  config schema 19 (this foreman knows 19): ok
+  config schema 20 (this foreman knows 20): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo api: <TMP>/harbor-api merge=squash
@@ -301,8 +301,9 @@ usage: foreman integrate [-h] [--title TITLE] [--body BODY]
                          [--body-file BODY_FILE] [--sub SUB] [--note NOTE]
                          [--report REPORT] [--result RESULT]
                          [--verdict VERDICT] [--rebase-from REBASE_FROM]
-                         [--approved APPROVED] [--ci ARGS] [--no-ci] [--opens]
-                         [--check] [--measure] [--keep-branch]
+                         [--approved APPROVED] [--ci ARGS] [--no-ci]
+                         [--no-review WHY] [--opens] [--check] [--measure]
+                         [--keep-branch]
                          repo branch issue [message]
 
 `foreman integrate REPO BRANCH "ID [Tn]" …`: a finished branch into main through a PR, or by fast-forward.
@@ -328,6 +329,10 @@ options:
   --ci ARGS             one run of local_ci with ARGS as {ci}; repeatable,
                         replaces ci_runs (--ci=--flag with «=»)
   --no-ci
+  --no-review WHY       integrate without a review a branch that needs one
+                        only for its size (a mechanical split proven by its
+                        tests); never for delicate paths or a partial
+                        delivery. WHY goes into the note
   --opens               the branch changes a live foreman.toml or guard table
                         so that it allows something new: foreman asks the
                         owner yes/no first (the guard's group permissions)
@@ -371,7 +376,13 @@ Order (a failure at any step stops, never forces, and leaves the PR open if ther
     exit 2; a row fails or the lifeline loses a command, exit 1; it allows something new without --opens, exit 3
     (nothing merged, a progress line; with --opens the command is in the guard's internal group `permissions`, the
     owner's yes); else it goes on and the note says what changed. The other reserved files in the repo (Claude
-    Code's settings, a state, the registry) are risky paths. --check shows the same and what it would do;
+    Code's settings, a state, the registry) are risky paths. Then, in a repo with `review = "auto"`, the review
+    gate (review.py): the line «== review: STATE»; a branch that needs a review (delicate paths, more than
+    `review_lines` lines of code, a partial delivery) goes in only with a review that covers its tip and leaves 0 H
+    and 0 M open; otherwise exit 2, nothing done, with the next step. --no-review "why" lets in a branch whose only
+    reason is its size and that has no review yet (never delicate paths nor a partial delivery); after round 2 with
+    H or M still open only the owner's yes (--approved) lets it in as it is; both go into the note. --check shows the
+    same and what it would do;
     (--check stops here, after printing what the backlog close would do);
  3. in a `public` repo, each commit message of main..BRANCH passes the public scan (a stop names the commit and the
     rule, never the text); then the local CI in the worktree (unless --no-ci): one run of `local_ci` per value of
