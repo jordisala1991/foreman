@@ -21,7 +21,11 @@ own diff (merge-base..tip) has the same `git patch-id --stable` as at `Tip` (a m
 ask for another review). There are at most two rounds: a round 2 that leaves H or M open goes to the owner (a question;
 the branch waits), and only the owner's yes (`integrate --approved`) lets it in as it is.
 
-`state()` gives one of STATES; `integrate` lets the branch in on NOT_NEEDED and CLEAN only.
+A branch whose reasons went (a `partial` delivered again as `ok`) while its latest review leaves H or M open still
+needs its rounds (a reason of kind "review"). `state()` gives one of STATES; `integrate` lets the branch in on
+NOT_NEEDED and CLEAN only. The reviewer agent of a branch is the one `foreman launch NAME --review REPO:BRANCH`
+recorded (`review` in its agents.json entry, with its repo and branch): reviewer_of() finds it; while it is live it
+holds the branch (the loop does not offer it to integrate, `integrate` says IN_REVIEW).
 """
 
 from __future__ import annotations
@@ -29,9 +33,10 @@ from __future__ import annotations
 import fnmatch
 import re
 import subprocess
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from . import util
 
@@ -312,10 +317,15 @@ def state(project: Project, repo: Table, branch: str, outcome: str | None = None
     """Where BRANCH of REPO (project.repo()) stands (STATES). REVIEWER: a live agent reviewing it (IN_REVIEW, the loop
     knows it)."""
     why = reasons(project, repo, branch, outcome)
-    if not why:
+    if mode(repo) != "auto":
         return State(NOT_NEEDED)
     found, bad = reviews(project, repo["key"], branch)
     rv = found[-1] if found else None
+    if not why:
+        if not (rv and rv.open):
+            return State(NOT_NEEDED)
+        # its reasons went (a partial delivered again as ok), but a review left H or M open: the rounds go on
+        why = [Reason("review", f"{rv.path} left {rv.counts()} open")]
     st = State(NEEDED, why, rv, problems=bad)
     if reviewer:
         st.status, st.reviewer = IN_REVIEW, reviewer
@@ -333,3 +343,12 @@ def state(project: Project, repo: Table, branch: str, outcome: str | None = None
     else:  # a clean review of another diff: read again
         st.round = min(rv.round + 1, MAX_ROUNDS)
     return st
+
+
+def reviewer_of(agents: Iterable[Mapping[str, Any]], repo_key: str, branch: str) -> Mapping[str, Any] | None:
+    """The reviewer agent of REPO_KEY:BRANCH among AGENTS (agents.json entries with their `id`): one launched with
+    `--review` (`review` in its entry) on that repo and branch, the latest started; None without one."""
+    mine = [
+        h for h in agents if h.get("review") and h.get("branch") == branch and (h.get("repo") or repo_key) == repo_key
+    ]
+    return max(mine, key=lambda h: str(h.get("start") or "")) if mine else None

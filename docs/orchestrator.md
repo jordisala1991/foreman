@@ -101,6 +101,7 @@ they disagree.
    | `lock_long` | a lock held over `[loop] lock_long_min` minutes (60): yes, once per case |
    | `lock_queue` | no while every holder holds it through a live `run` or is just taking it; yes if a holder is dead, took it without `run`, gives no pid, never wrote its owner line, or nobody holds it |
    | `ready_to_integrate`, `measure_delivered`, `loose_worktrees`, `branch_no_worktree`, `loose_branches`, `orphan_in_progress`, `backlog_problems`, `backlog_unreadable`, `hung_shells`, `recurring_late`, `inbox` | yes |
+   | `review_needed`, `review_findings` | a delivered branch of a repo with `review = "auto"` whose review does not let it in yet (docs/config.md, «`[repos.*] review`»): it is not in `ready_to_integrate`. `review_needed`, yes: launch a reviewer with the command it gives (`foreman launch NAME --review REPO:BRANCH`: no worktree; the branch is held while it lives), or for round 2 resume the one of round 1. `review_findings`, yes: send the H and M back to the agent that made the branch (SendMessage), or the plan B command it gives (a new agent on the branch's worktree); after round 2 with H or M open, a question for the owner with the review as its page, then no while it is pending, then yes with their answer |
    | `decision_due` | yes, once per question on its reminder day (`--answer-by`, stored as `unanswered.by`) or the first pass after it while it is still pending: remind the owner in the chat; the notice says what waits. foreman never answers for them: the question stays pending |
    | `disk_low` | yes when it crosses `[loop] disk_low_gb`, then no until it goes back above |
    | `check` (or the kind a check line gives) | what the line says (`[loop] checks`, docs/config.md): a JSON line's `actionable`, a plain line yes; a line that gives one of the kinds of this table is a `check` |
@@ -162,6 +163,38 @@ they disagree.
    - `foreman integrate REPO BRANCH "ID Tn" --check`: the branch contains main (or can take it, below), the diff,
      the risky paths it touches, the pre-merge report and the plan's check section. Compare with the report; what
      is missing is measured first or written down as debt (`foreman backlog edit ID --append`).
+   - **A branch that needs a review** (a repo with `review = "auto"`: delicate paths, over `review_lines` lines of
+     code, or delivered `partial`; docs/config.md, «`[repos.*] review`») is not offered as ready: the pass says
+     `review_needed` or `review_findings` instead, and `integrate` (and `--check`) prints `== review: STATE` and
+     stops with exit 2, nothing done, until a review of its tip leaves no H or M open. The rounds:
+     - **Round 1:** launch a `reviewer` with the command the notice gives, `foreman launch NAME --review REPO:BRANCH
+       --issue ID --sub Tn` (no worktree, no backlog change; the branch is held while it lives). Brief: the launch
+       line, «A branch review, round 1» (agents/reviewer.md: its rules and the header foreman reads), the issue, the
+       plan and the agent's report, and nothing of what you think of the branch. Its review,
+       `reviews/YYYY-MM-DD-review-ID-Tn.md`, starts with `Branch:`, `Tip:`, `Round:` and `Open: H n, M n`; foreman
+       takes the verdict from `Open:`, never from the prose.
+     - **Findings go back to the agent that made the branch**, with SendMessage (its id is in the notice and in
+       `foreman agents`), so it fixes them with its whole context: the review's path and «fix or refute each H and
+       M with proof (a test, or the line that disproves it), a "Review, round N" section in your report, commit,
+       `foreman progress --done` again» (docs/agent.md, «Resumed with a review»). Resumed, it is live again and the
+       branch leaves the lists until it delivers. You neither fix nor drop a finding: one you think wrong, say so in
+       the message; the agent refutes it and the reviewer judges. L findings never block. No id to resume (another
+       session, an agent of another day): plan B, the command the notice gives, `foreman launch NAME --repo REPO
+       --branch BRANCH --issue ID --sub Tn`, which reuses the worktree foreman made for the branch when no live agent
+       has it; brief: the plan, its report and the review.
+     - **Round 2:** once the fixes are in, resume the reviewer of round 1 with SendMessage («round 2: check each
+       finding of the review and only what the fixes changed»), or launch one with the previous review in its
+       brief. A merge of main or a clean rebase keeps a review valid (same own patch); other commits need round 2.
+     - **No third round:** round 2 with H or M open makes the state `for the owner`. Ask them with the command the
+       notice gives (`foreman backlog decision add` with `--page` the review: the pass finds the question by its
+       page), written as docs/owner.md says, with the options in as it is with the problem noted, fixed by another
+       agent and reviewed again, or dropped, each with its `--effect`. The branch waits; while the question is
+       pending the notice only informs. With their answer: in as it is, `foreman integrate … --approved "OWNER,
+       DATE (ID)"`; another agent, plan B and then a review with `Round: 3`; dropped, cancel the sub-issue and
+       remove the branch with a note giving its tip.
+     - **Size waiver:** `--no-review "why"`, noted in the integration, only for a branch whose only reason is its
+       size and that has no review yet: a mechanical change proven by its tests (a split checked by the golden
+       corpus). Never for delicate paths nor a `partial` delivery; those wait for their review or the owner.
    - Then without `--check`, with `--title`, `--body` (English for public repos, without internal IDs),
      `--report reviews/…`, `--note "…"` and, if it closes the issue, `--result "…"` (and `--verdict` if it has an
      acceptance criterion); title, body and result are read by the owner: docs/owner.md. The command runs the local CI, pushes, opens the PR, waits for the remote checks, merges
@@ -209,8 +242,10 @@ they disagree.
      worktree is an error with its path), marks the sub-issue ▶ with its agent and branch and the issue `in
      progress` (`--no-backlog` leaves the backlog alone), and prints the **launch line**. A planner, a reviewer or a mechanic
      without a worktree: `foreman launch NAME --issue ID --type planner`; a reviewer agent without production
-     takes no `--repo`, and `--issue ID --no-backlog` when the review hangs from an issue and must not move it. A NAME a live agent or a pending launch
-     already has is refused (`foreman launch NAME --cancel` drops a launch you did not use).
+     takes no `--repo`, and `--issue ID --no-backlog` when the review hangs from an issue and must not move it;
+     the reviewer of a branch the pass holds for review, `foreman launch NAME --review REPO:BRANCH --issue ID --sub
+     Tn` (step 2). A NAME a live agent or a pending launch already has is refused (`foreman launch NAME --cancel`
+     drops a launch you did not use).
    - **The brief starts with the launch line**, as printed: `[foreman launch k3f9q2m7xa] zed7 · AB-1 T1 · branch
      ab1/x · worktree /…/app-zed7 · production`. foreman generates its token and the agents hook ties it to the new
      agent, so `foreman agents` knows its name, issue, sub-issue, branch and worktree whatever the language of the
@@ -233,11 +268,14 @@ they disagree.
      transcript): `working`, `waiting`, `delivered` or `stopped`; `delivered` once
      it ran `foreman progress --done`. Claude Code's «completed» notification is not a delivery: it also comes each
      time an agent stops to wait for a background task of its own (that one is `waiting`, and still live for 3 h at
-     most). When you stop one: `foreman agents --stop NAME`.
+     most). When you stop one: `foreman agents --stop NAME`. What misled the agents: `foreman agents --misled
+     [--since D] [--type T] [--model M]`, the reports' `Misled:` lines with date, agent, type and model (from the
+     delivery that named the report), and a footer counting the reports with something, `none` and without the line.
    - **The delivery check**: when a production agent with a launch line and a branch stops, the agents hook
      checks its delivery from local files and git: a `progress --done` recorded, commits on its branch beyond main,
      and the report under `[ids] report_prefixes` in its branch (with the home outside the repo: written in the home
-     since it started; the one it named with `progress --done --report`, when it named one). If something is missing the stop is
+     since it started; the one it named with `progress --done --report`, when it named one), with a `Misled:` line
+     (what misled it, or `Misled: none`; docs/agent.md). If something is missing the stop is
      blocked and the agent goes back to work with what is missing and the command to fix it; `--outcome failed`
      needs no commits or report, and a measurement (`progress --done --kind measure`, a sub-issue with
      `kind = "measure"`, or a branch whose open sub-issues are all measurements) needs no commits, only its report.
@@ -423,8 +461,10 @@ board, notes) about 15 % of what is re-read. Little of it is code you needed to 
   product: the brief says what to review, why, from which point of view and what is out; the shape of the review
   is in the type, and it leaves `reviews/YYYY-MM-DD-review-<topic>.md` and returns a short conclusion. It is not a
   planner (live, it does not stop the repass asking for plans); when it lists fixes, open their issue with the
-  review as `--plan`, after your «Review by the orchestrator» section. A study that must try things stays with
-  `dev` or `general-purpose`.
+  review as `--plan`, after your «Review by the orchestrator» section. It also reviews the branches the pass holds
+  for review (`review_needed`, step 2 of «Every pass»): then its rules, its document and the header foreman reads
+  are its «A branch review» section, and its findings go to the agent that made the branch, not to a fixes issue.
+  A study that must try things stays with `dev` or `general-purpose`.
 - **Review as for any agent, closely for a cheaper model:** read a mechanic's diff before integrating (`foreman
   integrate --check`), lean on the golden corpus (a refactor that changes any output is wrong, not the golden file)
   and send it back if the brief was widened. Give it a check you can run, not a description to trust.

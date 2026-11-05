@@ -72,6 +72,14 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   code: the total coverage and that of the touched modules (`bin/foreman selftest --coverage`). No report, not delivered.
   It stays technical (the orchestrator and the next agent read it); a question in it for the owner follows
   docs/owner.md.
+- **What misled you**, in the report, at the start of a line: `Misled: <where>: <what> (<cost>)`, one line per thing
+  in what you were given that was wrong, stale or unclear and cost you time; `<where>` is one of `brief`, `plan`,
+  `issue`, `rules` (the project's), `procedure` (this page or your agent type's definition), `docs`, `foreman` (a
+  message of a command, a hook or the guard), `code` (a misleading comment or name) or `environment`; the text in the
+  owner's language. Nothing did: `Misled: none` (say it, so «nothing» differs from «not thought of»). It is not a
+  deviation (what you did differently): it is what you were given wrong. For example `Misled: plan: it said the
+  config schema stays; the schema test wants it raised (one selftest round, 10 min)`. `foreman agents --misled`
+  gathers these lines to review the rules.
 - No live processes, simulators, containers or leftovers in your scratch folder.
 - Your last command is `foreman progress --done "result" --outcome ok|partial|failed --report reviews/<file>.md`,
   a result line as docs/owner.md says: that line is your delivery (the agents hook marks you delivered, so you stop
@@ -83,10 +91,19 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   the prose. A task that only measures (a report, no code for main) delivers with `--kind measure`: it needs no
   commits, only its report. Only at the very end: stopping to wait for a background job of yours is not a delivery. If you are
   resumed afterwards, run it again when you finish.
+- **Resumed with a review:** a branch that touches delicate paths, is large or was delivered `partial` may need a
+  review by another agent before it is integrated; its high (H) and medium (M) findings come back to you, by a
+  message that names the review (`reviews/…-review-…md`), or in the brief of a new agent launched on your branch's
+  worktree. Read the review whole. For each H and M: fix it (a commit, with the test the review asks for when it
+  names one) or refute it with proof (a test that passes, or the `file:line` that disproves it); nothing else, no
+  new scope. L findings: fix them if they are cheap, else list them as debts. Add to your report a section «Review,
+  round N» (N is the review's `Round:`) with one line per finding: its id, fixed (commit, test) or refuted (the
+  proof), and the debts. Commit, then `progress --done` again with the same report. The reviewer checks your fixes
+  in round 2; there is no round 3: what is still open then goes to the owner.
 - **The delivery check:** when you stop, foreman checks that your branch has commits beyond main (not for a
   measurement: `--kind measure`, or a sub-issue planned as one), that your report
-  is in it (when the project keeps reports; the one you named with `--report`, when you named one) and that you
-  ran `progress --done`. If something is missing, your stop is refused with what is missing and the command to fix it: fix it, run
+  is in it (when the project keeps reports; the one you named with `--report`, when you named one) and has a
+  `Misled:` line, and that you ran `progress --done`. If something is missing, your stop is refused with what is missing and the command to fix it: fix it, run
   `progress --done` again and stop.
 - **The final message** (what the orchestrator's context pays for, so it is short and fixed-shaped): at most
   1,200 characters, never a recap of the report. Everything else goes in the report file, which the orchestrator reads

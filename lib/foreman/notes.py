@@ -108,12 +108,15 @@ def progress(
     outcome: str | None = None,
     report: str | None = None,
     kind: str | None = None,
+    agent_type: str | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Appends a line to <state>/progress.jsonl; `done` marks the agent's delivery (`foreman progress --done`: the
     agents hook reads it from the command line, not from here); `agent_id` when the caller is known by it (the
     panel can tie the line to its agent even if the name changes); `outcome` (ok, partial, failed) and `report` (the
     report it names, relative to the home, checked by the caller) and `kind` ("measure": it brings no code for main;
-    "code" or None writes nothing) go with `done`."""
+    "code" or None writes nothing) go with `done`, and so do `type` (the agent's type, without a plugin prefix) and
+    `model` (the model it ran on) when known: progress.jsonl is not pruned, so each report keeps who wrote it."""
     f = project.state / "progress.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
     line: dict[str, Any] = {
@@ -130,6 +133,10 @@ def progress(
             line["report"] = report
         if kind == "measure":
             line["kind"] = kind
+        if agent_type:
+            line["type"] = agent_type.split(":", 1)[-1]
+        if model:
+            line["model"] = model
     with file_lock(f), open(f, "a") as out:
         out.write(json.dumps(line, ensure_ascii=False) + "\n")
     return line

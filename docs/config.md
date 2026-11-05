@@ -486,6 +486,15 @@ done, unless the state is `not needed` or `clean`:
 | `for the owner` | round 2 left H or M open; there is no third round | a question for the owner; the branch waits |
 | `clean` | the review of the tip leaves 0 H and 0 M | it goes in; the note names the review |
 
+The loop pass holds such a branch out of `ready_to_integrate` and says the next step instead (docs/orchestrator.md,
+the notice table): `review_needed` gives the command that launches a reviewer, `foreman launch NAME --review
+REPO:BRANCH` (no worktree; while the reviewer lives the branch is not offered and `integrate` says `in review`);
+`review_findings` sends the findings back to the agent that made the branch, or launches a new one on the branch's
+worktree (`foreman launch NAME --repo REPO --branch BRANCH` reuses the worktree foreman made for it when no live agent
+has it); after round 2 with H or M open, it asks for a question to the owner with the review as its page, and waits
+for the answer. A branch whose reasons went (a `partial` delivered again as `ok`) while its latest review leaves H or
+M open still goes through its rounds.
+
 Two ways past the gate, both written into the integration's note: `--no-review "why"` for a branch whose only reason
 is its size and that has no review yet (a mechanical split proven by its tests; never for delicate paths or a partial
 delivery), and, in `for the owner`, `--approved "who, when"` once the owner says it goes in as it is. A file under the
