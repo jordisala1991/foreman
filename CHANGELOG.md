@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-11-06
+
 ### Removed
 
 - foreman no longer writes text copies of the backlog: the backlog page, the archive page and the pending-decisions
