@@ -1,12 +1,12 @@
 """The golden output corpus: what foreman shows and writes, compared byte for byte with tests/golden/.
 
-Every test of test_golden.py builds a small world in its own temporary directory (two fake products: `faro`, in
-Spanish with its own decisions page, and `harbor`, in English with its decisions in a section of a page it writes by
-hand), runs a fixed sequence of foreman commands, hook events and panel requests against it, and writes down each
-call with its exit code, its stdout and its stderr, and at the end the files under the state root and the products'
-homes. That transcript, after `normalise`, must equal its golden file under tests/golden/. The corpus runs foreman
-the way a user and Claude Code do (lib/main.py in a subprocess, events on stdin, HTTP for the panel), so it does not
-care how the code inside is organised: a refactor that changes nothing visible keeps it green.
+Every test of test_golden.py builds a small world in its own temporary directory (two fake products: `faro`, in Spanish,
+and `harbor`, in English with a wiki of pages it writes by hand), runs a fixed sequence of foreman commands, hook events
+and panel requests against it, and writes down each call with its exit code, its stdout and its stderr, and at the end
+the files under the state root and the products' homes. That transcript, after `normalise`, must equal its golden file
+under tests/golden/. The corpus runs foreman the way a user and Claude Code do (lib/main.py in a subprocess, events on
+stdin, HTTP for the panel), so it does not care how the code inside is organised: a refactor that changes nothing
+visible keeps it green.
 
 - A mismatch fails the test with a short unified diff (golden → now).
 - `bin/foreman selftest --update-golden` runs only these tests and writes the transcripts as they are now; it says

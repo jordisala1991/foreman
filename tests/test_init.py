@@ -73,7 +73,7 @@ class TestInit(InitCase):
         data = b.load()
         self.assertEqual([(i["id"], i["status"]) for _, i, _ in b.iter_issues(data)], [("DE-1", "triage")])
         self.assertEqual([e for e in backlog_check.validate(b, data) if not e.startswith("warning: ")], [])
-        self.assertTrue((self.ops / "pages/backlog.md").exists())
+        self.assertFalse((self.ops / "pages").exists())  # no text copy of the backlog
         # the registry: what was there, byte for byte, then the new entry, which loads
         text = self.registry.read_bytes()
         self.assertTrue(text.startswith(self.before))
@@ -228,7 +228,7 @@ class TestInit(InitCase):
         r = self.init(str(self.home), "--name", "fake")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("foreman.toml: already there", r.stdout)
-        self.assertIn("backlog.json: made, with its pages", r.stdout)
+        self.assertIn("backlog.json: made\n", r.stdout)
         self.assertEqual((self.home / "foreman.toml").read_bytes(), toml)
         self.assertEqual(b.load()["schema_version"], backlog.SCHEMA_VERSION)
         self.assertEqual(self.registry.read_bytes(), self.before)

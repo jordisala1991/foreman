@@ -2,7 +2,7 @@
 $ foreman --project harbor check
 [exit 0]
 harbor: <TMP>/harbor (active); state <TMP>/state/harbor
-  config schema 21 (this foreman knows 21): ok
+  config schema 22 (this foreman knows 22): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo api: <TMP>/harbor-api merge=squash
@@ -17,7 +17,7 @@ harbor	active	<TMP>/harbor
 $ foreman check
 [exit 0]
 harbor: <TMP>/harbor (active); state <TMP>/state/harbor
-  config schema 21 (this foreman knows 21): ok
+  config schema 22 (this foreman knows 22): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo api: <TMP>/harbor-api merge=squash
@@ -44,7 +44,7 @@ foreman: one Claude Code session runs a project's backlog with short-lived agent
 positional arguments:
   {backlog,integrate,holdout,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest}
     backlog             the project's backlog: issues, projects, decisions for
-                        the owner, generated pages
+                        the owner
     integrate           a finished branch into main: a PR, or a fast-forward
                         without a remote
     holdout             the hidden acceptance checks of an issue (the
@@ -231,12 +231,12 @@ selftest [-v] [-j N] [--python PATH] [--quality auto|require|off] [--mods auto|r
 $ foreman backlog --help
 [exit 0]
 usage: foreman backlog [-h]
-                       {show,list,get,status,sub,edit,block,unblock,integrated,move,add,project,relate,archive,decision,page,import-gh,render} ...
+                       {show,list,get,status,sub,edit,block,unblock,integrated,move,add,project,relate,archive,decision,import-gh} ...
 
 The project's backlog.
 
 positional arguments:
-  {show,list,get,status,sub,edit,block,unblock,integrated,move,add,project,relate,archive,decision,page,import-gh,render}
+  {show,list,get,status,sub,edit,block,unblock,integrated,move,add,project,relate,archive,decision,import-gh}
     add                 add an issue and print its id
 
 options:
@@ -304,10 +304,7 @@ options:
                                      is none); --answer T --free: the owner's own words, marked free. Both default
                                      --by to «OWNER, YYYY-MM-DD HH:MM (chat)». --answer alone: as given, with a
                                      warning when it is not one of the options. Already resolved: says so, exit 0
-  page backlog|archive|decisions [--heading T] [--replace OLD NEW ...]
   import-gh REPO --project EN|- --prefix XX [--status S]   open GitHub issues of a configured repo, once each
-  render [--check]                   render --check: exit 1 if a generated page is stale (`foreman check`
-                                     validates the backlog: a stale page there is only a warning)
 $ foreman integrate --help
 [exit 0]
 usage: foreman integrate [-h] [--title TITLE] [--body BODY]
@@ -668,7 +665,7 @@ project A1 · status done · closed <TODAY>
 Acceptance criterion: a card payment goes through
 Result: a booking takes 40 s
 relations: blocked by HB-1 · related HB-3
-  T1 Form ✓ ba1cd92 agent ag6, branch `hb2/t1` [report](../reviews/2020-01-20-hb2-t1.md)
+  T1 Form ✓ ba1cd92 agent ag6, branch `hb2/t1` report reviews/2020-01-20-hb2-t1.md
 
 ######## harbor: locks, waits and time limits
 $ FOREMAN_WHO=ag1 foreman --project harbor lock widget acquire "a test"

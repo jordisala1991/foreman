@@ -7,7 +7,7 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_check, backlog_list, backlog_pages
+from . import backlog_check, backlog_list, backlog_text
 from .backlog import CLOSED, Backlog, BacklogError, DecisionResolved
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ def show_summary(b: Backlog, data: Data) -> str:
         for i in issues:
             subs = [s for s in i["subs"] if s["status"] not in ("canceled", "moved")]
             sc = f"{sum(s['status'] == 'done' for s in subs)}/{len(subs)}" if i["subs"] else ""
-            why = backlog_pages.render_blocked(b, i, rb, "by", holds, "waits for decision")
+            why = backlog_text.render_blocked(b, i, rb, "by", holds, "waits for decision")
             bl = f" [blocked: {why}]" if why else ""
             title = re.sub(r"\*\*|`", "", i["title"])
             out.append(f"  {i['id']:<7} {i['status']:<12} {sc:>5}  {title[:90]}{bl}")
@@ -51,7 +51,7 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
             return json.dumps(obj, ensure_ascii=False, indent=2)
         q = b.project_progress(obj)
         lines = [f"## {obj['id']} · {obj['title']}  ({q['done']}/{q['total']} done)"]
-        meta = backlog_pages.render_project_meta(b, obj)
+        meta = backlog_text.render_project_meta(b, obj)
         if meta:
             lines.append(re.sub(r"^\*|\*$", "", meta, flags=re.M))
         lines.append(f"\n{obj['intro']}\n")
@@ -62,7 +62,7 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
         if as_json:
             return json.dumps(dec, ensure_ascii=False, indent=2)
         done = f"\nresolved {DecisionResolved.said(dec)}" if dec.get("resolved") else ""
-        return backlog_pages.render_decision(b, dec) + done
+        return backlog_text.render_decision(b, dec) + done
     lst, k, pid = b.find(data, b.resolve(data, key), archived=True)
     i = lst[k]
     if as_json:
@@ -78,16 +78,16 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
         )
         + (
             f" · {held}"
-            if (held := backlog_pages.render_held(b, i, b.decision_holds(data), "waits for decision"))
+            if (held := backlog_text.render_held(b, i, b.decision_holds(data), "waits for decision"))
             else ""
         )
         + (f" · github {i['github']}" if i.get("github") else "")
         + (f" · short «{i['short']}»" if i.get("short") else "")
     ]
     for line in (
-        backlog_pages.render_fields(b, i),
-        backlog_pages.render_outcome(b, data, i),
-        backlog_pages.render_result(b, data, i),
+        backlog_text.render_fields(b, i),
+        backlog_text.render_outcome(b, data, i),
+        backlog_text.render_result(b, data, i),
     ):
         if line:
             out.append(re.sub(r"\*\*", "", line))
@@ -97,7 +97,7 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
         out.append("relations: " + " · ".join(rels))
     if i["plan"]:
         out.append("plan: " + " · ".join(p["path"] + (f" {p['note']}" if p["note"] else "") for p in i["plan"]))
-    out += [f"  {backlog_pages.render_sub(b, s)}" for s in i["subs"]]
+    out += [f"  {backlog_text.render_sub(b, s)}" for s in i["subs"]]
     if i["detail"]:
         out.append(f"detail: {i['detail']}")
     return "\n".join(out)
@@ -135,7 +135,7 @@ def get_field(b: Backlog, data: Data, iid: str, field: str) -> str:
     if field == "plan":
         return "\n".join(p["path"] for p in i["plan"])
     if field == "subs":
-        return backlog_pages.render_subs(b, i["subs"])
+        return backlog_text.render_subs(b, i["subs"])
     if field not in ("title", "status", "blocked", "detail", "id", "result", "github"):
         raise BacklogError(f"unknown field {field}")
     return i.get(field, "")
@@ -206,10 +206,7 @@ USAGE = """\
                                      is none); --answer T --free: the owner's own words, marked free. Both default
                                      --by to «OWNER, YYYY-MM-DD HH:MM (chat)». --answer alone: as given, with a
                                      warning when it is not one of the options. Already resolved: says so, exit 0
-  page backlog|archive|decisions [--heading T] [--replace OLD NEW ...]
   import-gh REPO --project EN|- --prefix XX [--status S]   open GitHub issues of a configured repo, once each
-  render [--check]                   render --check: exit 1 if a generated page is stale (`foreman check`
-                                     validates the backlog: a stale page there is only a warning)
 """
 
 
@@ -218,7 +215,7 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
 
     ap = sp.add_parser(
         "backlog",
-        help="the project's backlog: issues, projects, decisions for the owner, generated pages",
+        help="the project's backlog: issues, projects, decisions for the owner",
         description="The project's backlog.",
         epilog=USAGE,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -370,17 +367,11 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         help="what waits for the answer: Tn or issue (with --issue), or ISSUE / ISSUE Tn",
     )
     a.add_argument("--none", action="store_true", help="decision blocks: it holds nothing")
-    a = bp.add_parser("page")
-    a.add_argument("key")
-    a.add_argument("--heading")
-    a.add_argument("--replace", nargs=2, action="append", default=[], metavar=("OLD", "NEW"))
     a = bp.add_parser("import-gh")
     a.add_argument("repo")
     a.add_argument("--project", required=True)
     a.add_argument("--prefix", required=True)
     a.add_argument("--status", default="backlog")
-    a = bp.add_parser("render")
-    a.add_argument("--check", action="store_true")
 
 
 def refuse_decision(bad: list[tuple[str, list[Finding]]]) -> int:
@@ -582,16 +573,6 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 print(f"still blocked, judge it (foreman backlog unblock ID): {d}")
             warn_owner_texts(project, args)
             return 0
-        if c == "render":
-            if args.check:
-                s = backlog_pages.stale(b)
-                for p in s:
-                    print(f"stale: {b.rel(p)}")
-                return 1 if s else 0
-            with b.locked():
-                for p in backlog_pages.render(b):
-                    print(f"wrote {b.rel(p)}")
-            return 0
         if c == "import-gh":
             slug = project.repo(args.repo).get("github")
             if not slug:
@@ -771,8 +752,6 @@ def run(project: Project, args: argparse.Namespace) -> int:
                     freed.append(f"{args.id} holds: {', '.join(holding) or 'nothing'}")
                 else:
                     freed += resolve(b, data, args)
-            elif c == "page":
-                b.edit_page(data, args.key, args.heading, args.replace)
         for line in freed:
             print(line)
         for w in (b.hold_problems(b.load(), holding)[1] if holding else []) + advice:

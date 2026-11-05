@@ -89,7 +89,7 @@ foreman init HOME --name NAME [--owner TEXT] [--language en|es] [--repo KEY=PATH
   beside it.
 - **`HOME/rules.md`**, starting rules in the project's language (what the product is, to fill in; what never
   happens without the owner; how the code is checked, from `--local-ci`); `notes/` and `reviews/`.
-- **The backlog** and its pages, when the home has none; `--sample` adds one issue in triage, `<PX>-1`, where PX is the first two
+- **The backlog**, when the home has none; `--sample` adds one issue in triage, `<PX>-1`, where PX is the first two
   letters of the name in capitals (or `--prefix`), so the board is not empty.
 - **The registry**: a `[[project]]` entry (`name`, `home`, `mode`, `--mode` default `active`) appended to the file,
   everything already there kept byte for byte (comments included); written atomically under a lock and read back.
@@ -237,10 +237,10 @@ Relative paths are relative to the home; `~` is expanded. Every key but `[projec
 ```toml
 [project]
 name = "example"            # required: lowercase, digits, . _ -
-owner = "owner"             # who decides; named in pages and guard messages
-language = "en"             # en | es: generated pages, notes heading, guard and resume texts
+owner = "owner"             # who decides; named in decisions and guard messages
+language = "en"             # en | es: backlog texts, notes heading, guard and resume texts
 rules = "rules.md"          # the project's rules, read by the orchestrator and every agent
-config_schema = 21          # the foreman.toml schema the file is written for (below); default: this foreman's
+config_schema = 22          # the foreman.toml schema the file is written for (below); default: this foreman's
 owner_knows = []            # terms the owner knows, never flagged by those checks: ["CI", "PR"]
 
 [paths]
@@ -251,11 +251,7 @@ worktrees = ""              # default <home>/../wt
 holdout = ""                # default ~/.local/share/foreman/<name>/holdout: hidden acceptance checks
 
 [backlog]
-file = "backlog.json"
-page = "pages/backlog.md"
-archive_page = "pages/backlog-archive.md"
-decisions_page = "pages/decisions.md"
-decisions_section = ""      # if set, only that "## …" section of decisions_page is rewritten
+file = "backlog.json"      # seen in the panel or with `foreman backlog list|show`; foreman writes no text copy of it
 
 [ids]
 project = "^[A-Z]\\d+$"
@@ -842,7 +838,8 @@ title = "Start"
 A foreman.toml (or registry entry) may be read by an older or newer foreman than the one it was written for, so
 reading is tolerant where a product must not disappear, and strict where mistakes are caught:
 
-- **Warnings** (the project loads, ignoring them): a section or key this foreman does not know, a
+- **Warnings** (the project loads, ignoring them): a section or key this foreman does not know, a key foreman no
+  longer reads (it says why and what to delete: the CHANGELOG's Config section of the release names it), a
   `config_schema` higher than the one it knows («written for a newer foreman (config schema N, this foreman knows
   M): update foreman»), machine keys repeated in a machine resource, a machine resource of the registry that does not load, and
   a problem of the registry's `[machine]` (each bad value is left out alone; every product carries the warning). **Errors** (the project does not load): a bad value of a known key (a regex that does not
@@ -896,8 +893,8 @@ and `archived`, or `{"total", "by", "counts"}`. `--all-products` reads every pro
 backlog, each from its own `[backlog] file`, in the registry's order, its projects named `product/EN`; a product whose registry entry or backlog does not load is said on stderr and left out (it does not
 go with `--project`). Bad filters: exit 2.
 
-The backlog file, `backlog.json`, is JSON of schema 5, written only by `foreman backlog …` (never by hand: the pages
-are generated from it). A file of an older schema is refused with what to do (`foreman check` names it). Old ids
+The backlog file, `backlog.json`, is JSON of schema 5, written only by `foreman backlog …` (never by hand; read it in
+the panel or with `foreman backlog list|show`). A file of an older schema is refused with what to do (`foreman check` names it). Old ids
 stay valid through `ids.legacy`.
 
 `foreman check` validates the file, the rules file, the guard table and the backlog (`foreman guard --table FILE`

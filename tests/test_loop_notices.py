@@ -599,9 +599,6 @@ class LoopNoticesTest(NoticesCase):
 
     def test_backlog_problems_and_unreadable(self):
         self.assertNotIn("backlog_problems", self.kinds())
-        page = self.b.out_backlog
-        page.write_text(page.read_text() + "edited by hand\n")
-        self.assertNotIn("backlog_problems", self.kinds())  # a stale page is only a warning
         data = self.b.load()
         data["decisions"].append(
             {"id": "AB-1 J1", "title": "t", "date": "someday", "text": "", "options": ["a"], "recommendation": ""}
@@ -783,7 +780,6 @@ class LoopNoticesTest(NoticesCase):
         self.assert_idle()  # another session's live run
         # the reason goes in the product's language
         self.write_toml(self.toml.replace('owner = "Owner"', 'owner = "Owner"\nlanguage = "es"'))
-        self.cli("backlog", "render")  # its pages change language too
         self.assertTrue(self.assert_idle().startswith("Pasada del bucle "))
         # no prompt is ever blocked: the submitted pass gets nothing more from the loop hook, nor do other prompts
         for ev in (PASS, {**PASS, "session_id": "S9", "prompt": "hello"}, {**PASS, "prompt": "hello"}):

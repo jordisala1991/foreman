@@ -16,9 +16,6 @@ worktrees = "~/Projects/tidepool/wt"
 
 [backlog]
 file = "backlog.json"
-page = "pages/backlog.md"
-archive_page = "pages/backlog-archive.md"
-decisions_page = "pages/decisions.md"
 
 [ids]
 project = "^[A-Z]{2}\\d*$"

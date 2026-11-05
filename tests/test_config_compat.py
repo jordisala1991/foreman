@@ -10,6 +10,7 @@ import unittest
 from helpers import ROOT, ProjectCase, config
 
 from foreman import i18n, loop, toml_reader
+from foreman.backlog import Backlog
 
 RECURRING = '[project]\nname = "x"\n[[recurring]]\nname = "r"\nsources = [{ %s }]\n'
 
@@ -158,6 +159,34 @@ class ConfigCompatTest(ProjectCase):
         r = self.cli("check")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("name_phrase is no longer used", r.stdout + r.stderr)
+
+    def test_removed_page_keys_are_a_warning(self):
+        """Config schema 22: [backlog] page, archive_page, decisions_page and decisions_section (foreman no longer
+        writes text copies of the backlog). Each one loads with a warning that says to delete it and the file it
+        named; `foreman check` exits 1 until it is gone, 0 without it; the backlog still works and no page is
+        written where the key pointed."""
+        Backlog(self.project).init()
+        for key, value in (
+            ("page", '"pages/backlog.md"'),
+            ("archive_page", '"pages/backlog-archive.md"'),
+            ("decisions_page", '"pages/decisions.md"'),
+            ("decisions_section", '"## Open decisions"'),
+        ):
+            with self.subTest(key=key):
+                self.write_toml(self.toml + f'\n[backlog]\nfile = "backlog.json"\n{key} = {value}\n')
+                (w,) = self.project.warnings
+                self.assertIn(f"[backlog] {key} is no longer used", w)
+                self.assertIn("delete the file it names too", w)
+                r = self.cli("check")
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn(f"{key} is no longer used", r.stdout + r.stderr)
+                r = self.cli("backlog", "add", "--id", f"AB-{len(key)}", "--title", f"after {key}")
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertFalse((self.home / "pages").exists())
+        self.write_toml(self.toml)
+        self.assertEqual(self.project.warnings, [])
+        r = self.cli("check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_removed_repo_keys_are_unknown(self):
         """[repos.*] close_keyword and delivery_check (config schema 18): an unknown-key warning, ignored."""

@@ -139,13 +139,13 @@ class InheritTest(MachineSettingsCase):
                 self.assertLessEqual(set(d["sources"][sec].values()), set(config.SOURCES))
 
     def test_lists_and_tables_merge(self):
-        self.registry(MACHINE + '\n[machine.strings]\nnotice = "machine title"\n')
+        self.registry(MACHINE + '\n[machine.strings]\nheld_by = "machine title"\n')
         self.other_toml('owner_knows = ["PR", "CI"]\n\n[deny.grants]\nrelease = ["zz-mine"]\nown = ["zz-two"]\n')
         other = self.load("other")
         self.assertEqual(grants.groups(other), {"release": [RELEASE, "zz-mine"], "own": ["zz-two"]})
         self.assertEqual(other.section("project")["owner_knows"], ["CI", "PR"])
-        self.assertEqual(other.section("strings"), {"notice": "machine title"})
-        self.assertEqual(other.as_dict()["sources"]["strings"], {"notice": "registry"})
+        self.assertEqual(other.section("strings"), {"held_by": "machine title"})
+        self.assertEqual(other.as_dict()["sources"]["strings"], {"held_by": "registry"})
         self.assertEqual(other.as_dict()["sources"]["project"]["owner_knows"], "registry+foreman.toml")
 
     def test_a_pattern_denied_at_one_level_and_granted_at_the_other_warns(self):

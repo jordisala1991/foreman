@@ -65,9 +65,6 @@ worktrees = "{tmp}/other-wt"
 
 [backlog]
 file = "wiki/backlog.json"
-page = "wiki/backlog.md"
-archive_page = "wiki/backlog-archivo.md"
-decisions_page = "wiki/pendientes.md"
 
 [ids]
 project = "^E\\d+$"
@@ -1199,6 +1196,7 @@ console.log(JSON.stringify(out));
         self.assertIn("PF-2", d["sentence"])
         order = [i["id"] for i in Backlog(self.project).load()["projects"][0]["issues"]]
         self.assertEqual(order[:2], ["PF-2", "PF-1"])
+        self.assertFalse((self.home / "pages").exists())  # a move writes the backlog file alone, no text copy
         inbox = notes.inbox(self.project)
         self.assertEqual(
             [m.get("decision") or m.get("move") or m["text"] for m in inbox if m["from"] == "owner"],

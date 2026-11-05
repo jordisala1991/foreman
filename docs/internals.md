@@ -507,7 +507,7 @@ command>`, which is also what a pending request shows in the panel.
 
 What foreman writes outside a product's home: one folder per product and a few shared files, under the **state
 root**, `~/.local/state/foreman` (or `$FOREMAN_STATE_HOME`). None of it is configuration and none of it is the
-product's memory (backlog, notes, reviews and pages live in the home, in its repo): it can be lost without losing
+product's memory (backlog, notes and reviews live in the home, in its repo): it can be lost without losing
 work, though the hooks and the loop pass then start again from nothing (no live agents known, no marked
 orchestrator, every once-only notice said again).
 
@@ -578,7 +578,6 @@ A machine resource (`[resources.NAME]` in the registry) may put its lock elsewhe
 
 ### In the home (the product's repo)
 
-Not state, but also written by foreman: `backlog.json` and the pages generated from it (`[backlog] page`,
-`archive_page`, `decisions_page` or its `decisions_section`), with `.backlog.lock` beside it (`foreman backlog`, the
-panel's moves, `foreman integrate`); `notes/YYYY-MM-DD.md`, append only (`foreman note`, `foreman integrate` and
-foreman's own notes).
+Not state, but also written by foreman: `backlog.json` (no text copy of it since 0.60), with `.backlog.lock` beside
+it (`foreman backlog`, the panel's moves, `foreman integrate`); `notes/YYYY-MM-DD.md`, append only (`foreman note`,
+`foreman integrate` and foreman's own notes).
