@@ -16,8 +16,14 @@ project's language (`[project] language`): explain the decisions' texts in other
    - what it is about and why it comes now: the decision's text and its issue's title; when that is not enough, the
      plan's summary for the owner and the paragraph of this question (its id in brackets) - read those parts of
      `plans`, not the whole plan;
-   - each option, numbered: what changes for them, concretely (what they will see or do differently);
-   - the recommendation and why; what waits for the answer (`holds`), by name, not by id;
+   - each option, numbered: what changes for them, concretely (what they will see or do differently). When the
+     question has `details`, give each option its `effect`, its `cost` and whether it can be undone (`undo`: yes,
+     with difficulty, no) from there, in other words, instead of improvising; an option without them, as today;
+   - the recommendation and why; what waits for the answer (`holds`), by name, not by id; when it has `unanswered`,
+     say what stays stopped meanwhile (`waits`) and the day (`by`) the orchestrator will remind them. Nothing is
+     decided for them: it only reminds and always waits, so never say «if you do not answer I go on with A»;
+   - when it has a `page` (`page_path` is the file): read it, summarize it in two lines and say they can see it,
+     with its screenshots, in the panel (the decision's card); do not paste it;
    - how to answer: the option (number or words), their own words, «skip», «explain it another way», or «whatever
      you think».
 3. **Their answer** closes it now, before the next question:

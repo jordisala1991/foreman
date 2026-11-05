@@ -22,6 +22,9 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   and `page_path`) and the decisions page show them; a decision without them reads and renders as before.
 - `foreman check` validates those fields (undo values, options they name, dates, the page's folder) and warns of
   unknown keys in a decision, which the next write drops.
+- The `owner-decisions` skill presents a question's `details`, `unanswered` and `page` when it has them: per option
+  its effect, cost and whether it can be undone, what waits for the answer and the reminder day, and a two-line
+  summary of the page with where to see it. Older questions are presented as before.
 
 ### Upgrade notes
 
