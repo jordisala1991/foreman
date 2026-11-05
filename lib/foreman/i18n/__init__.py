@@ -1,6 +1,6 @@
-"""Texts a person reads (generated pages, hook notices for the owner), by language: en.json, es.json.
+"""Texts a person reads (the backlog's terminal text, hook notices for the owner), by language: en.json, es.json.
 A project picks one with [project] language and may override any key in [strings] (e.g. to keep the exact
-wording of pages it already has). The panel's texts (panel/strings.<language>.json) are foreman's: a product does not
+wording it already uses). The panel's texts (panel/strings.<language>.json) are foreman's: a product does not
 override them (the old [strings.panel] table is ignored, with a `foreman check` warning: config.REMOVED).
 Code, JSON keys and CLI messages stay in English.
 

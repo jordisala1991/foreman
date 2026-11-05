@@ -1,6 +1,4 @@
 {
-  "table_head": "| ID | Issue | Status | Plan | Sub-issues | Bloqueo | Detalle |\n|---|---|---|---|---|---|---|",
-  "notice": "> Generado por `foreman backlog` desde `{file}`: no editar a mano (`foreman backlog --help`).",
   "agent": "agente",
   "branch": "rama",
   "report": "informe",
@@ -19,11 +17,6 @@
   "unanswered_label": "Mientras no contestes",
   "unanswered_by": "recordatorio el {date}",
   "page_label": "Página",
-  "none": "(ninguna)",
-  "backlog_heading": "Backlog",
-  "archive_heading": "Archivo del backlog",
-  "decisions_heading": "Decisiones pendientes de {owner}",
-  "decisions_intro": "Preguntas que solo puede contestar {owner}; cada una dice sus opciones.",
   "notes_heading": "# Notas {date}",
   "resume": "Eres el orquestador de esta sesión ({procedure}). Retoma sin preguntar: lee tu pizarra, comprueba los agentes vivos y las tareas en segundo plano, y sigue con «Siguiente».",
   "no_board": "(sin pizarra)",

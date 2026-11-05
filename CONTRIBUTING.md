@@ -189,7 +189,7 @@ scripts behind `lock`, `time-limit` and `hung-shells`). `tests/test_docs_tied.py
 | `config.py`, `toml_reader.py` | `foreman.toml`, the registry and where each project keeps its state; the one TOML reader |
 | `commands.py` | the one contract and runner of every shell command taken from the configuration |
 | `util.py`, `shell.py`, `pyscript.py` | small shared helpers (JSON, atomic writes, git, pids); reading a shell line as bash does; the guard's gate for a python program that cannot start a process |
-| `backlog.py`, `backlog_check.py`, `backlog_pages.py`, `backlog_cli.py`, `backlog_list.py` | the backlog: its only writer; its checks; its generated pages; `foreman backlog …`; `foreman backlog list` (read only, one product or all) |
+| `backlog.py`, `backlog_check.py`, `backlog_text.py`, `backlog_cli.py`, `backlog_list.py` | the backlog: its only writer; its checks; its one-line text (`show`, `get`, `start`, `integrate`); `foreman backlog …`; `foreman backlog list` (read only, one product or all) |
 | `notes.py`, `pause.py` | notes, progress, inbox, heartbeats, recurring tasks and the file lock; the panel's pause |
 | `identity.py`, `orchestrator.py`, `procs.py`, `heartbeat.py` | who an agent is and who orchestrates (`agents.json`, `launches.json`, the marked session); the Claude Code process the mark is tied to (`ps`); whether a session runs (the hooks module's heartbeat) |
 | `loop.py`, `notices.py` | the loop pass's own notices; the notice contract (kinds, render, idle) |
@@ -207,16 +207,16 @@ scripts behind `lock`, `time-limit` and `hung-shells`). `tests/test_docs_tied.py
 ## Golden files
 
 The selftest includes a corpus of everything foreman shows and writes (`tests/test_golden.py`, how it works in
-`tests/golden.py`): two fake products (one in Spanish with its own decisions page, one in English with its decisions
-in a section of a hand-written page), fixed sequences of CLI calls (every subcommand that reads or writes), hook events
-(each row of `tests/golden_guard.tsv`, then a session's life: marking, launching an agent, its delivery, the loop's
-prompts, a pause, a compaction, the orchestrator gone), every panel route before and after the owner's writes, and
-the state tree and the products' homes at the end. Each sequence's transcript (exit codes, stdout, stderr, files) must
-equal its file in `tests/golden/`, byte for byte, on every Python foreman runs on; only what varies from run to run
-(temporary paths, dates near today, clock times, epoch times, measured durations, pids, the panel's port, launch
-tokens, the machine's figures, foreman's version and argparse's per-version layout) is normalised, in one documented
-function (`Normaliser`). It is how a refactor (moving code between modules, formatting, a rewrite) proves it changes
-nothing visible: if the corpus passes before and after, no output changed.
+`tests/golden.py`): two fake products (one in Spanish, one in English with a wiki of hand-written pages), fixed
+sequences of CLI calls (every subcommand that reads or writes), hook events (each row of `tests/golden_guard.tsv`, then
+a session's life: marking, launching an agent, its delivery, the loop's prompts, a pause, a compaction, the orchestrator
+gone), every panel route before and after the owner's writes, and the state tree and the products' homes at the end.
+Each sequence's transcript (exit codes, stdout, stderr, files) must equal its file in `tests/golden/`, byte for byte, on
+every Python foreman runs on; only what varies from run to run (temporary paths, dates near today, clock times, epoch
+times, measured durations, pids, the panel's port, launch tokens, the machine's figures, foreman's version and
+argparse's per-version layout) is normalised, in one documented function (`Normaliser`). It is how a refactor (moving
+code between modules, formatting, a rewrite) proves it changes nothing visible: if the corpus passes before and after,
+no output changed.
 
 - A normal `bin/foreman selftest` compares; a mismatch fails with a short unified diff (golden, then now).
 - `bin/foreman selftest --update-golden [PATTERN]` runs only the corpus, rewrites its files as the outputs are now

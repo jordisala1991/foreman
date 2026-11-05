@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import re
 
-from . import backlog_pages
 from .backlog import (
     CLOSED,
     DECISION_KEYS,
@@ -25,7 +24,6 @@ from .backlog import (
     UNDO,
     WANTED,
     Backlog,
-    BacklogError,
     Data,
     Issue,
     Record,
@@ -41,7 +39,7 @@ def hard(errors: list[str]) -> list[str]:
 
 
 def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
-    """Problems (list of strings). files=True also checks plan files, project headers and the generated pages."""
+    """Problems (list of strings). files=True also checks plan files and project headers."""
     err = []
     v = data.get("schema_version")
     if v != SCHEMA_VERSION:
@@ -138,13 +136,6 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
             )
     err += validate_aliases(b, data)
     err += validate_block_cycles(data)
-    if files:
-        try:
-            # a warning: the next write regenerates them anyway, and a branch that changes their format
-            # should not fail its CI over pages committed with the old one (`render --check` still fails)
-            err += [f"warning: {b.rel(p)} is stale: run foreman backlog render" for p in backlog_pages.stale(b, data)]
-        except BacklogError as e:
-            err.append(str(e))
     return err
 
 

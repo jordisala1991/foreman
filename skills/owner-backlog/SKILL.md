@@ -11,7 +11,7 @@ subagents cannot talk to them. A triage idea they marked «wanted» in the panel
 the definition queue says (`foreman docs orchestrator`).
 
 1. **Their words first.** Keep them as they are: they go, quoted, with the date and «(chat)», into the detail. Look
-   for the same thing in the backlog (`foreman backlog`, `foreman backlog show ID`, the pages): if it is there, offer
+   for the same thing in the backlog (`foreman backlog show`, `foreman backlog show ID`): if it is there, offer
    to add to that issue instead (`foreman backlog edit ID --detail …`) and stop here on their yes.
 2. **Questions**, as many as are needed and no more, one per message, each with your own proposal they can accept
    with an «ok»:

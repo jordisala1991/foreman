@@ -101,8 +101,7 @@ class BacklogListTest(ProjectCase):
         (other / "foreman.toml").write_text(
             textwrap.dedent(
                 BASE_TOML.replace('name = "fake"', 'name = "other"').replace("{tmp}", str(self.tmp))
-                + '\n[backlog]\nfile = "wiki/backlog.json"\npage = "wiki/backlog.md"\n'
-                'archive_page = "wiki/archive.md"\ndecisions_page = "wiki/decisions.md"\n'
+                + '\n[backlog]\nfile = "wiki/backlog.json"\n'
             )
         )
         ob = Backlog(config.load_project(other))

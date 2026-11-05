@@ -72,7 +72,7 @@ SOURCES = ("default", "foreman.toml", "registry", "registry+foreman.toml", "envi
 # The highest foreman.toml schema this foreman understands. It goes up by one with every new key or section (and
 # tests/config_schema.json records the keys of each schema: the selftest fails if they differ). Keys that ship in the
 # same release share one schema: add them to the newest list of tests/config_schema.json while it is unreleased.
-CONFIG_SCHEMA = 21
+CONFIG_SCHEMA = 22
 # Keys foreman no longer reads, (section, key): what to tell the owner. One left in a foreman.toml is a warning (it
 # loads, ignored; `foreman check` names it), never an error, so an old file keeps working until it is cleaned.
 REMOVED: dict[tuple[str, str], str] = {
@@ -91,6 +91,11 @@ REMOVED: dict[tuple[str, str], str] = {
     ("panel", "language"): "the panel's language is the registry's [panel] language",
     ("agents", "planner_types"): "only planner agents count as planners",
     ("project", "owner_plain"): "foreman's checks of what the owner reads are always on",
+    **{
+        ("backlog", k): "foreman no longer writes text copies of the backlog, seen in the panel or with `foreman "
+        "backlog list|show`; delete the file it names too"
+        for k in ("page", "archive_page", "decisions_page", "decisions_section")
+    },
 }
 REGISTRY_KNOWN = {
     "project": {"name", "home", "mode", "config"},
@@ -163,10 +168,6 @@ DEFAULTS: dict[str, Any] = {
     "paths": {"notes": "notes", "reviews": "reviews", "state": None, "worktrees": None, "holdout": None},
     "backlog": {
         "file": "backlog.json",
-        "page": "pages/backlog.md",
-        "archive_page": "pages/backlog-archive.md",
-        "decisions_page": "pages/decisions.md",
-        "decisions_section": "",
     },
     "ids": {
         "project": r"^[A-Z]\d+$",

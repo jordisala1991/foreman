@@ -9,6 +9,39 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Removed
+
+- foreman no longer writes text copies of the backlog: the backlog page, the archive page and the pending-decisions
+  page (or the decisions section of a hand-written page) are gone. The backlog is seen in the panel or with `foreman
+  backlog list|show`, the questions with `foreman backlog decision list`. Every write is the backlog file alone, and
+  `foreman check` and the loop pass no longer build the pages in memory to warn they are stale. A question's own page
+  (`decision add --page`) stays.
+- `foreman backlog render [--check]` and `foreman backlog page`: an old call exits 2 with argparse's error.
+
+### Changed
+
+- `foreman backlog show`, `backlog get ID subs`, `foreman start` and `foreman integrate` print a report or a
+  question's page as its path in the home (`report reviews/…md`, `Page: reviews/…md`) instead of a Markdown link
+  relative to the old pages folder (`../reviews/…`). The module `backlog_pages` is now `backlog_text`.
+
+### Config
+
+- Schema 22: `[backlog] page`, `archive_page`, `decisions_page` and `decisions_section` are no longer read. One left
+  in a foreman.toml is a warning that says to delete it (the product loads; `foreman check` exits 1 until it is gone).
+
+### Upgrade notes
+
+- Delete `page`, `archive_page`, `decisions_page` and `decisions_section` from `[backlog]` in foreman.toml, then the
+  files they named (by default `pages/backlog.md`, `pages/backlog-archive.md`, `pages/decisions.md`). Do it once no
+  session of the product still runs foreman 0.59 or older (`foreman session --all --behind`): an older foreman writes
+  them again on its next backlog write, and without the keys it writes them at the default paths.
+- A product whose decisions were a section of a page it writes by hand (`decisions_section`): remove that section's
+  generated body (say there that the questions are in the panel and `foreman backlog decision list`); the rest of the
+  page is untouched.
+- Do not delete the `pages` block of backlog.json: foreman 0.59 and older fail to write the backlog without it. foreman
+  keeps it as it is (and no longer creates it in a new backlog); its texts, the old pages' headings and intros, are
+  shown nowhere now: move any hand-written text you still want into a page of your own.
+
 ## [0.59.0] - 2026-11-06
 
 ### Fixed
