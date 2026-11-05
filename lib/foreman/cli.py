@@ -21,11 +21,14 @@ worktree REPO NAME BRANCH [BASE] | worktree --list   a worktree on a new branch 
                                    it also records a launch and prints its line (as `launch`, without issue)
 launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch BRANCH [--base BASE]] [--type T]
        [--model M] [--production | --no-production] [--no-backlog] [--despite DID --why TEXT] [--json]
-       | launch NAME --cancel
+       | launch NAME --review REPO:BRANCH [--issue ID [--sub Tn]] | launch NAME --cancel
                                    records an agent's identity before launching it (<state>/launches.json) and
                                    prints the launch line, the first line of its brief: `[foreman launch TOKEN]
                                    NAME · ID Tn · branch B · worktree W · production`; with --repo/--branch it makes
-                                   the worktree first (as `worktree`); with --issue/--sub it marks the sub-issue ▶
+                                   the worktree first (as `worktree`), or reuses the one foreman made for BRANCH
+                                   when no live agent has it; --review: a reviewer of that branch, no worktree nor
+                                   backlog change, that holds the branch (not offered to integrate) while it
+                                   lives; with --issue/--sub it marks the sub-issue ▶
                                    with agent and branch (and --kind) and the issue in progress (unless
                                    --no-backlog); a NAME a live agent or a pending launch has is exit 2 (--cancel
                                    drops a pending launch). A production launch of an issue or sub-issue that a
@@ -529,6 +532,23 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         return fail("--sub needs --issue")
     if args.kind and not args.sub:
         return fail("--kind needs --issue and --sub (it marks the sub-issue)")
+    rec_repo, rec_branch = args.repo, args.branch  # what the launch records (a reviewer's: --review)
+    if args.review is not None:
+        rkey, _, rbranch = args.review.partition(":")
+        if args.repo or args.branch or args.base or args.kind:
+            return fail("--review REPO:BRANCH goes without --repo, --branch, --base and --kind (no worktree)")
+        if args.production:
+            return fail("--review launches a reviewer, never a production agent")
+        if not rkey or not rbranch:
+            return fail(f"--review {args.review!r}: REPO:BRANCH")
+        if rkey not in p.repos:
+            return fail(f"--review: no repo {rkey!r} ({', '.join(p.repos) or 'none configured'})")
+        rpath = p.repo(rkey)["path"]
+        if not rpath or not worktree.exists(rpath, f"refs/heads/{rbranch}"):
+            return fail(f"--review: {rkey} has no local branch {rbranch!r}")
+        args.agent_type = args.agent_type or "reviewer"
+        args.no_backlog = True
+        rec_repo, rec_branch = rkey, rbranch
     taken = identity.name_taken(p, args.name)
     if taken:
         return fail(f"{taken}: choose another name")
@@ -558,7 +578,7 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
     wt = None
     if args.repo:
         try:
-            wt, how, warnings = worktree.create(p, args.repo, args.name, args.branch, args.base)
+            wt, how, warnings = worktree.create(p, args.repo, args.name, args.branch, args.base, reuse=True)
         except (worktree.WorktreeError, config.ConfigError) as e:
             return fail(e, 1)
         for w in warnings:
@@ -570,13 +590,14 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         args.name,
         issue=args.issue,
         sub=args.sub,
-        repo=args.repo,
-        branch=args.branch,
+        repo=rec_repo,
+        branch=rec_branch,
         worktree=wt,
         agent_type=args.agent_type,
         production=args.production,
         model=args.model,
         despite=[{"decision": d["id"], "why": why} for d in held],
+        review=args.review is not None,
     )
     if update:
         try:
@@ -799,6 +820,12 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--branch")
     a.add_argument("--base")
     a.add_argument("--type", dest="agent_type")
+    a.add_argument(
+        "--review",
+        metavar="REPO:BRANCH",
+        help="a reviewer of that branch: no worktree, no backlog change, --type reviewer unless given; the branch is "
+        "not offered to integrate while it lives",
+    )
     a.add_argument(
         "--model", help="the model the agent is launched with (recorded; the one that ran is read at its stop)"
     )

@@ -74,6 +74,7 @@ class Launch(_Launch, total=False):
 
     model: str  # the model asked for, only when given
     despite: list[dict[str, str]]  # [{decision, why}]: pending decisions that held it (launch --despite), when any
+    review: bool  # launched to review its repo:branch (launch --review), only when so
 
 
 class Identity(TypedDict):
@@ -216,7 +217,7 @@ def token_in(text: str | None) -> str | None:
 
 
 def launch_line(token: str, rec: Launch) -> str:
-    """`[foreman launch TOKEN] name · ISSUE Tn · branch B · worktree W · production` (the parts it has)."""
+    """`[foreman launch TOKEN] name · ISSUE Tn · branch B · worktree W · production · review` (the parts it has)."""
     parts = [rec["name"]]
     if rec.get("issue"):
         parts.append(" ".join(x for x in (rec["issue"], rec.get("sub")) if x))
@@ -226,6 +227,8 @@ def launch_line(token: str, rec: Launch) -> str:
         parts.append(f"worktree {rec['worktree']}")
     if rec.get("production"):
         parts.append("production")
+    if rec.get("review"):
+        parts.append("review")
     return f"[foreman launch {token}] " + " · ".join(parts)
 
 
@@ -291,11 +294,12 @@ def new_launch(
     production: bool | None = None,
     model: str | None = None,
     despite: list[dict[str, str]] | None = None,
+    review: bool = False,
 ) -> tuple[str, Launch]:
     """Records a launch; (token, record). `production` None: true with a worktree or a production type, otherwise
     decided when the agent is tied to it (by its type). `model`: the one asked for, recorded only when given.
     `despite`: [{decision, why}] of the pending decisions that held it (`launch --despite`), recorded only when
-    given."""
+    given. `review`: a reviewer of `repo`:`branch` with no worktree (launch --review), recorded only when true."""
     from . import loop
 
     production = production_at_launch(project, production, bool(worktree), agent_type)
@@ -316,6 +320,8 @@ def new_launch(
         rec["model"] = model  # the model asked for at launch (the one that ran is read at the agent's stop)
     if despite:
         rec["despite"] = despite
+    if review:
+        rec["review"] = True
     f = launches_file(project)
     with notes.file_lock(f):
         d = prune(util.read_json(f, {}), loop.agents(project))
@@ -370,6 +376,8 @@ def link(
             a["production"] = role(project, a.get("type")) == "production"
         if rec.get("model"):
             a["model_asked"] = rec["model"]
+        if rec.get("review"):
+            a["review"] = True  # it reviews its branch: it holds it while live, its delivery is not the branch's
         a["launch"] = token
         a["named_by"] = how
         rec["agent"] = aid
