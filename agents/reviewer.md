@@ -10,9 +10,9 @@ project's rules file named in your brief, and your issue if the brief names one 
 What is specific to this type:
 - You only read: the code of the repos (main and the branches your brief cites, with `git show`/`git diff`), docs,
   pages, notes, reports, and the foreman commands that only read (`--help`, `check`, `config`, `loop`, `catchup`,
-  `backlog show`). No builds, tests, servers, simulators, containers, shared resources or worktrees. You
-  write one file, your review, plus your note of the day. If a finding needs a test to be confirmed, mark it
-  plausible and propose the test as the first fix sub-issue; you do not run it.
+  `backlog show`, `agents --misled`, `permissions --refused`). No builds, tests, servers, simulators, containers,
+  shared resources or worktrees. You write one file, your review, plus your note of the day. If a finding needs a
+  test to be confirmed, mark it plausible and propose the test as the first fix sub-issue; you do not run it.
 - What the brief marks as in progress on another branch stays out; a finding that branch would not fix is noted
   anyway, marking the collision.
 - **A code review** gives every finding a severity (H/M/L), **confirmed** (followed in the code or in the engine's
@@ -24,13 +24,16 @@ What is specific to this type:
   registered projects use and what not, from the backlog and the notes) and what it proposes
   (remove, merge, rename, hide, explain).
 - **The document**, `reviews/YYYY-MM-DD-review-<topic>.md`: header (what you read, at which commit, what you did not,
-  sources); a summary for the owner in his language as `foreman docs owner` says; the findings (technical); the
-  proposed fixes as sub-issues each integrable alone, without hours, marking collisions with branches in progress;
-  open questions, the owner's apart and written as `foreman docs owner` asks. With that shape the orchestrator can
+  sources, your `Misled:` lines as `foreman docs agent` says); a summary for the owner in his language as
+  `foreman docs owner` says; the findings (technical); the proposed fixes as sub-issues each integrable alone,
+  without hours, marking collisions with branches in progress; open questions, the owner's apart and written as
+  `foreman docs owner` asks. With that shape the orchestrator can
   use it as the plan of the fixes issue.
 - If nothing is worth a fix, say so with what you looked at; do not pad.
 - **A branch review** (your launch line ends in «review»: `foreman launch NAME --review REPO:BRANCH`) has its own
   rules and document: the section below. foreman reads its header to let the branch in or not.
+- **A harness review** (the brief says so: a new model, or the monthly one) has its own reading and header: the
+  last section below.
 - You do not talk to the owner and do not write plans of issues already decided.
 - Your final message is the short template of `foreman docs agent` (at most 1,200 characters): the path of the
   review, the findings by severity, the two or three that matter and the questions; the detail stays in the document.
@@ -82,10 +85,47 @@ Open: H n, M n
 
 `Branch` is the `REPO:BRANCH` of your launch; `Tip` is the commit you reviewed (`git -C REPO_PATH rev-parse
 BRANCH` when you start; if the branch moves while you read, say so and review the new tip); `Round` the brief's;
-`Open` the count of rule 4. Then: what you read and at which commit; the criterion table (rule 2); the findings
-(H, then M, then L), each with an id (F1, F2…) that round 2 and the agent's report reuse; the «Dismissed» list; in
-round 2, the earlier findings one by one. No summary for the owner and no fix sub-issues: the agent that made the
-branch fixes them.
+`Open` the count of rule 4. Then: your `Misled:` lines, what you read and at which commit; the criterion table (rule
+2); the findings (H, then M, then L), each with an id (F1, F2…) that round 2 and the agent's report reuse; the
+«Dismissed» list; in round 2, the earlier findings one by one. No summary for the owner and no fix sub-issues: the
+agent that made the branch fixes them.
 
 **Your final message**, at most 1,200 characters: the path of the review, the `Open:` line and the two or three
 findings that matter (id, severity, `file:line`, one line each).
+
+## A harness review
+
+foreman's texts age with the models that read them: what a model once needed spelled out, the next may not; what
+misleads it shows in the reports' `Misled:` lines. A project's `[[recurring]]` task with a `models` source
+(`foreman docs config`) falls due when an agent runs on a model the last harness review does not name, or monthly;
+then this review is yours. The brief gives the models and the day of the previous review.
+
+1. **Read the evidence first:** `foreman agents --misled --since D` (D: the previous review's day; its footer
+   counts the reports with something, with `none` and without the line) and the guard's refusals of agents
+   (`foreman permissions --refused --since D`). Then the texts the agents read: agents/*.md, docs/agent.md,
+   docs/orchestrator.md, skills/*, the project's rules file and the briefs the evidence cites.
+2. **Each piece** (a rule, a step, a message of foreman) the evidence touches, or that you suspect a newer model no
+   longer needs: **keep, rewrite, remove or measure**, with its evidence (the `Misled:` lines that cite it, 0 cases
+   seen, a refusal). A removal says how it will be measured: the next N deliveries, by their `Misled:` lines and
+   refusals.
+3. **Who decides:** the project's rules are the owner's: their changes go in one list, written for one question to
+   him. foreman's own texts (agents/, docs/, skills/, its messages) are the orchestrator's: fix sub-issues as in any
+   review; from a project that is not foreman's own repository, list them apart as proposals for it.
+
+**The document:** `reviews/YYYY-MM-DD-review-harness.md` (the name the task's `models` glob looks for: writing it marks
+the task done). Right after its title, as plain lines:
+
+```
+Models: claude-a, claude-b
+Since: YYYY-MM-DD
+Lines: N (X with something)
+```
+
+`Models` are the model ids it covers (those of `foreman agents --misled` in the period and the ones the brief
+names); a model seen only in passing, such as a fallback, may be named with a note (`claude-c (fallback, not
+reviewed)`): a model left out makes the task due again the next time an agent runs on it. `Since` is D; `Lines`
+the footer's count. Then a review as above: your `Misled:` lines, the summary for the owner, the findings piece by
+piece, the fix sub-issues and the list for the owner.
+
+**Your final message**, at most 1,200 characters: the path, the `Models:` line, how many pieces to keep, rewrite,
+remove and measure, and the owner's list in one line.

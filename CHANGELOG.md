@@ -37,10 +37,22 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   the notes, the progress and the state never carry the cases. `foreman holdout run REPO BRANCH ID [--full]` runs it
   at once; `foreman holdout status [ID]` shows each check, its runs and logs. Two new points, `holdout.setup` (600 s)
   and `holdout.scenario` (300 s, or the spec's `timeout`).
+- A recurring task that falls due when agents start running on a new model: a `[[recurring]]` source `models =
+  "reviews/*-review-harness*.md"` (a glob of reviews) is late with no review, or when an agent ran after the newest
+  one on a model its `Models:` line does not name (agents.json at the agent's stop, or the model a delivery line of
+  `progress.jsonl` records); `foreman recurring` names the new models. With `max_h` it is also late that many hours
+  after the review (`max_h = 720`: «with each new model and monthly» in one task). docs/config.md.
+- The reviewer's «A harness review» (agents/reviewer.md), the task that `models` source makes due: from `foreman
+  agents --misled` and the guard's refusals since the previous one, each piece of the agents' texts is kept,
+  rewritten, removed or measured; its header `Models:`/`Since:`/`Lines:` is what the source reads. Changes to the
+  project's rules go to the owner as one decision; those to foreman's texts, the orchestrator approves as any plan.
+  Planners, reviewers, dev and mechanic agents are told to write their `Misled:` lines; the batch close starts from
+  `foreman agents --misled` and a plan's review from its `Misled:` lines.
 
 ### Config
 
-- Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`).
+- Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`), and the `models` source of
+  `[[recurring]]`.
 
 ## [0.58.0] - 2026-11-05
 

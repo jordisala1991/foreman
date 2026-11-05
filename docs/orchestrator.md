@@ -463,6 +463,9 @@ board, notes) about 15 % of what is re-read. Little of it is code you needed to 
   review as `--plan`, after your «Review by the orchestrator» section. It also reviews the branches the pass holds
   for review (`review_needed`, step 2 of «Every pass»): then its rules, its document and the header foreman reads
   are its «A branch review» section, and its findings go to the agent that made the branch, not to a fixes issue.
+  With each new model (a `[[recurring]]` task with a `models` source) it does «A harness review» of the agents'
+  texts from their `Misled:` lines: you approve the changes to foreman's texts as any plan; those to the project's
+  rules are the owner's, in one decision.
   A study that must try things stays with `dev` or `general-purpose`.
 - **Review as for any agent, closely for a cheaper model:** read a mechanic's diff before integrating (`foreman
   integrate --check`), lean on the golden corpus (a refactor that changes any output is wrong, not the golden file)

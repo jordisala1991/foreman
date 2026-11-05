@@ -360,12 +360,18 @@ name = "Orchestrator loop"
 every = "hourly"
 sources = [{ heartbeat = "loop", max_h = 2 }, { label = "ran", glob = "reviews/*-health.md", max_h = 26 }]
 # a source is a heartbeat, the newest file of a glob, or { log = "word", file = "log.md" }: the last «## [date] … word»
-# entry of a log page; it is late after max_h hours (default 24), or daily at a time:
+# entry of a log page; it is late after max_h hours (default 24), or daily at a time; a `models` source (below) is
+# late when agents run on a model its newest review does not name:
 
 [[recurring]]
 name = "Watch"
 every = "daily at 09:30"
 sources = [{ label = "ran", glob = "reviews/*-watch.md", at = "09:30" }, { label = "read", heartbeat = "read-watch", at = "09:30" }]
+
+[[recurring]]
+name = "Rules review"
+every = "with each new model, and monthly"
+sources = [{ label = "models", models = "reviews/*-review-harness*.md", max_h = 720 }]
 ```
 
 ## `[project] owner_knows`: what the owner reads
@@ -380,8 +386,8 @@ explicit request. `owner_knows` lists terms this owner knows
 
 ## `[[recurring]]` sources: every few hours or daily at a time
 
-A source reads one thing (exactly one of `heartbeat`, `glob` or `log`; `label` names it in the panel and in
-`foreman recurring`) and is late in one of two ways:
+A source reads one thing (exactly one of `heartbeat`, `glob`, `log` or `models`; `label` names it in the panel and
+in `foreman recurring`) and is late in one of two ways:
 
 - `max_h` (hours, default 24): late when its last run is more than `max_h` hours old. A daily task with
   `max_h = 26` drifts later every day (it may run up to two hours after the previous one, plus the loop's wait).
@@ -391,9 +397,19 @@ A source reads one thing (exactly one of `heartbeat`, `glob` or `log`; `label` n
   (`glob`) is written or its heartbeat (`foreman recurring done NAME`) is beaten after HH:MM. A `log` entry has only a
   date, so with `at` it counts as done for its whole day. `at` and `max_h` do not go together in one source.
 
+A `models` source is a glob of reviews under the home (`models = "reviews/*-review-harness*.md"`): the task is
+due when the agents start running on a model not seen before. Its newest file (by time) is the last review, and its
+`Models:` lines name the models it covered (`Models: claude-a, claude-b (fallback, not reviewed)`: the first word of
+each comma-separated item). The source is late with no review, and when an agent ran after that review on a model
+it does not name: an agents.json entry's `model` (the one its transcript said, at its stop) or a delivery line of
+`progress.jsonl` (`foreman progress --done` records it). `foreman recurring` names them (`(new model: …)`), and so
+does the part's `new` list. A model used before the review and left out of it (a fallback model) does not count. With
+`max_h` it is also late that many hours after the review (`max_h = 720`: at least every 30 days), so one task covers
+«with each new model and monthly»; without `max_h` only a new model makes it late. `at` does not go with it.
+
 Never run is late either way. Late recurring tasks are an actionable `recurring_late` notice in the loop pass (the
-loop's own task, named as `[loop] prompt`, never counts). A bad `at`, a source with no kind or with two, or a
-`max_h` that is not a positive number is an error; an unknown source key is a warning.
+loop's own task, named as `[loop] prompt`, never counts). A bad `at` (or one in a `models` source), a source with no kind or
+with two, a `models` that is not a glob, or a `max_h` that is not a positive number is an error; an unknown source key is a warning.
 
 ## `[repos.*]` local CI: runs and summary
 

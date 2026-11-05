@@ -9,11 +9,13 @@
 - Heartbeats (tools/panel/heartbeat.py): `<state>/heartbeats.json`, {name: ISO time}.
 - Recurring tasks (tools/panel/recurring.json, now [[recurring]] in foreman.toml): each has sources, a heartbeat, a
   file glob under the home or an entry of a log page, with the maximum hours between two runs (`max_h`) or a daily
-  local time (`at = "HH:MM"`: late once that time has passed with nothing done since).
+  local time (`at = "HH:MM"`: late once that time has passed with nothing done since); a `models` source is a glob of
+  reviews, late when agents run on a model its newest review's `Models:` line does not name.
 """
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import json
 import re
@@ -253,8 +255,8 @@ def last_time(project: Project, source: Table, beats: Beats) -> datetime | None:
     if "heartbeat" in source:
         v = beats.get(source["heartbeat"])
         return util.fromiso(v) if v else None
-    if "glob" in source:
-        files = list(project.home.glob(source["glob"]))
+    if "glob" in source or "models" in source:
+        files = list(project.home.glob(source.get("glob") or source["models"]))
         return datetime.fromtimestamp(max(f.stat().st_mtime for f in files)) if files else None
     if "log" in source:  # the last «## [YYYY-MM-DD] … <word>» entry of a log page (at noon: it has no time)
         try:
@@ -264,6 +266,66 @@ def last_time(project: Project, source: Table, beats: Beats) -> datetime | None:
         dates = re.findall(rf"^## \[(\d{{4}}-\d\d-\d\d)\] [^\n]*{re.escape(source['log'])}", text, re.M | re.I)
         return util.fromiso(max(dates) + "T12:00:00") if dates else None
     return None
+
+
+def _when(value: Any) -> datetime | None:
+    """A time of agents.json (ISO) or progress.jsonl (`YYYY-MM-DD HH:MM`) as a naive local datetime; None if bad."""
+    try:
+        t = util.fromiso(str(value).replace(" ", "T", 1))
+    except (TypeError, ValueError):
+        return None
+    return t.astimezone().replace(tzinfo=None) if t.tzinfo else t
+
+
+def models_seen(project: Project, after: datetime | None = None) -> dict[str, datetime]:
+    """{model: the last time an agent ran on it} for the agents seen after `after` (all when None): each agents.json
+    entry's `model` (the one its transcript said, written at its stop) at its end (else its last activity, else its
+    start), and each delivery of progress.jsonl that names one (`foreman progress --done` records it; that file is
+    never pruned, agents.json is)."""
+    seen: dict[str, datetime] = {}
+
+    def add(model: Any, when: Any) -> None:
+        t = _when(when) if when else None
+        if isinstance(model, str) and model and t and (after is None or t > after):
+            seen[model] = max(t, seen.get(model, t))
+
+    agents = util.read_json(project.state / "agents.json", {})
+    for h in agents.values() if isinstance(agents, dict) else ():
+        if isinstance(h, dict):
+            add(h.get("model"), h.get("end") or h.get("activity") or h.get("start"))
+    with contextlib.suppress(OSError):
+        for ln in (project.state / "progress.jsonl").read_text(errors="replace").splitlines():
+            try:
+                x = json.loads(ln)
+            except ValueError:
+                continue
+            if isinstance(x, dict) and x.get("done"):
+                add(x.get("model"), x.get("time"))
+    return seen
+
+
+def models_reviewed(path: Path) -> set[str]:
+    """The model ids of the `Models:` lines of a review (`Models: claude-a, claude-b (a note)`): the first word of
+    each comma-separated item, without backticks."""
+    from .delivery import report_lines
+
+    try:
+        text = path.read_text(errors="replace")
+    except OSError:
+        return set()
+    items = (i for line in report_lines(text, ("Models",))["Models"] for i in line.split(","))
+    return {m.group(1) for m in (re.match(r"[\s`*]*([^\s`*,()]+)", i) for i in items) if m}
+
+
+def new_models(project: Project, source: Table, last: datetime | None) -> list[str]:
+    """The models a `models` source has not seen reviewed: those agents ran on after its newest review (`last`, its
+    file's time) that are not in that review's `Models:` line; every model seen when there is no review."""
+    if last is None:
+        return sorted(models_seen(project))
+    files = list(project.home.glob(source["models"]))
+    newest = max(files, key=lambda f: f.stat().st_mtime)
+    known = models_reviewed(newest)
+    return sorted(m for m in models_seen(project, last) if m not in known)
 
 
 def now() -> datetime:
@@ -286,8 +348,10 @@ def recurring(project: Project, beats: Beats | None = None, when: datetime | Non
     A source with `max_h` (default 24) is late when its last run is more than that many hours old. A source with
     `at = "HH:MM"` is late when its last run is before the last time HH:MM came round (today's once it has passed,
     yesterday's until then): a daily task due at a fixed local time, done when its heartbeat, glob or log has
-    something after that time. A log entry has only a date: with `at` it counts as done for its whole day. Never
-    run is late in both cases."""
+    something after that time. A log entry has only a date: with `at` it counts as done for its whole day. A
+    `models` source (a glob of reviews) is late when an agent ran on a model its newest review's `Models:` line does
+    not name (new_models; the part's `new` lists them), and after `max_h` hours only when `max_h` is given. Never
+    run is late in every case."""
     beats = heartbeats(project) if beats is None else beats
     when = now() if when is None else when
     out: list[dict[str, Any]] = []
@@ -296,7 +360,10 @@ def recurring(project: Project, beats: Beats | None = None, when: datetime | Non
         for src in t["sources"]:
             last = last_time(project, src, beats)
             hours = (when - last).total_seconds() / 3600 if last else None
-            if "at" in src:
+            new = new_models(project, src, last) if "models" in src else []
+            if "models" in src:  # late on a model not reviewed, and after max_h hours only when max_h is given
+                late = hours is None or bool(new) or hours > src.get("max_h", float("inf"))
+            elif "at" in src:
                 done = last.replace(hour=23, minute=59, second=59) if last and "log" in src else last
                 late = done is None or done < last_at(src["at"], when)
             else:
@@ -308,6 +375,7 @@ def recurring(project: Project, beats: Beats | None = None, when: datetime | Non
                     "hours": None if hours is None else max(0, round(hours, 1)),
                     "late": late,
                     **({"at": src["at"]} if "at" in src else {}),
+                    **({"new": new} if "models" in src else {}),
                 }
             )
         out.append(
