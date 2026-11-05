@@ -49,6 +49,17 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   Planners, reviewers, dev and mechanic agents are told to write their `Misled:` lines; the batch close starts from
   `foreman agents --misled` and a plan's review from its `Misled:` lines.
 
+### Changed
+
+- The panel's list of questions that say what each option changes is calmer: the title, one situation line, each option
+  one full-width button with its letter and name (★ the recommended one, ⊘ before the one that cannot be undone, which
+  asks to confirm) and a grey line with what it holds and the reminder's day; what each option changes, its cost and
+  whether it can be undone stay in the detail. Once answered, until the orchestrator reads it, the question stays in
+  its place folded to «✓ You chose A: …» with «Change»; its detail says «Answered», highlights the chosen option and
+  greys the others, and «Change answer» brings the options back. A change goes through `/api/decide?…&change=1`: the
+  backlog's answer changes and the orchestrator gets a new inbox message with `changed_from`. Questions without
+  per-option details look as before.
+
 ### Config
 
 - Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`), and the `models` source of

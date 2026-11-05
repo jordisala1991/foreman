@@ -555,14 +555,18 @@ const renderLocks = d => d.locks.length ? sect(t('resources'), list(d.locks.map(
 
 // ---- Tú: pending decisions (answer in place) and messages with the orchestrator
 const decKey = x => `${x.p}|${x.title}`;
+const DEC_SEEN = new Map();   // decKey → the order a decision was first shown in
 function renderYou(d){
   const unanswered = d.decisions.filter(x => !x.answer).length, asks = d.grants.filter(x => x.pending).length;
   $('badge').hidden = !(unanswered + asks); $('badge').textContent = unanswered + asks;
   renderGrants(d);
   // each decision is a card: title (opens the detail), the first sentence of its text, date and the answer buttons
   // right there, the recommended option marked; below them, when it says so, what waits until the answer and a link to
-  // its page. One that says what each option changes: its options as chips and «Decide» (decCardRich)
-  const dec = sect(t('decisions'), d.decisions.length ? d.decisions.map(x => card(hasDetails(x) && !x.answer ? decCardRich(x) :
+  // its page. One that says what each option changes: one button per option, and folded once answered (decCardRich)
+  // in the order first seen: one just answered (the state lists it after the pending ones) stays in its place
+  d.decisions.forEach(x => { if(!DEC_SEEN.has(decKey(x))) DEC_SEEN.set(decKey(x), DEC_SEEN.size); });
+  const decs = [...d.decisions].sort((a, b) => DEC_SEEN.get(decKey(a)) - DEC_SEEN.get(decKey(b)));
+  const dec = sect(t('decisions'), decs.length ? decs.map(x => card(hasDetails(x) ? decCardRich(x) :
       `<div class="ctitle" data-k="dec" data-key="${esc(decKey(x))}"><span>${ptag(x.p)}${esc(x.title)}</span><span class="chev">›</span></div>`
       + (x.lead ? `<div class="clead">${esc(x.lead)}</div>` : '')
       + `<div class="csub">${x.date ? t('asked_on', {date: esc(x.date)}) : ''}</div>` + decisionActions(x) + decisionMore(x))).join('')
@@ -611,7 +615,7 @@ const decisionActions = x => x.answer
 const decisionSent = x => x.sent ? `<div class="warn answered">${t('sent_not_closed', {text: esc(x.sent)})}</div>` : '';
 const otherButton = x => canWrite(x.p) && !FREE_OPEN.has(freeKey(x)) ? `<button class="sec other" data-fk="${esc(freeKey(x))}" onclick="freeToggle(this)">${t('other_answer')}</button>` : '';
 const freeBox = x => canWrite(x.p) && FREE_OPEN.has(freeKey(x)) ? `<div class="free"><textarea maxlength="2000" data-fk="${esc(freeKey(x))}" placeholder="${esc(t('other_answer_ph'))}" oninput="FREE_DRAFT.set(this.dataset.fk, this.value)"></textarea>`
-      + `<div class="btns"><button data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-p="${esc(x.p)}" data-fk="${esc(freeKey(x))}" onclick="decideFree(this)">${t('send_answer')}</button>`
+      + `<div class="btns"><button data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-p="${esc(x.p)}" data-fk="${esc(freeKey(x))}"${x.answer ? ' data-ch="1"' : ''} onclick="decideFree(this)">${t('send_answer')}</button>`
       + `<button class="sec" data-fk="${esc(freeKey(x))}" onclick="freeToggle(this)">${t('cancel')}</button></div></div>` : '';
 // what a decision says besides its text, only when it says it, so one recorded before shows as before: without what
 // each option changes, the card says what waits until the answer (with the reminder's date) and links its page
@@ -633,42 +637,69 @@ const optLetter = o => (/^\s*([A-Za-z0-9]{1,2})\s*[:.)]\s/.exec(o) || [])[1] || 
 const UNDO_ICO = {yes: '↺', hard: '⚠︎', no: '⊘'};
 const undoChip = u => UNDO_CLS[u] ? `<span class="ochip ${UNDO_CLS[u]}"><span aria-hidden="true">${UNDO_ICO[u]}</span> ${t('chip_undo_' + u)}</span>` : '';
 const undoOf = (x, o) => (x.details[o] || {}).undo || '';
-const optButton = (x, o, cls='') => `<button class="${cls}" data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-op="${esc(o)}" data-p="${esc(x.p)}" data-undo="${esc(undoOf(x, o))}" onclick="decideOpt(this)">${optLetter(o) ? t('dec_choose', {l: esc(optLetter(o))}) : t('dec_choose_it')}</button>`;
-// in the list: each option as a row (its whole name, undo and cost chips, «Recommended» on one) with its own small
-// «Choose» (one tap, or the confirmation for one that cannot be undone); then what it holds and the reminder date
+// an option's data for its button: data-ch when it changes an answer the orchestrator has not read yet
+const optData = (x, o) => `data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-op="${esc(o)}" data-p="${esc(x.p)}" data-undo="${esc(undoOf(x, o))}"${x.answer ? ` data-ch="1" data-fk="${esc(freeKey(x))}"` : ''}`;
+const optButton = (x, o, cls='') => `<button class="${cls}" ${optData(x, o)} onclick="decideOpt(this)">${optLetter(o) ? t('dec_choose', {l: esc(optLetter(o))}) : t('dec_choose_it')}</button>`;
+// «7 nov» / «Nov 7» from «2026-11-07» (the text as it is when it is not such a date)
+const dayMonth = s => { const m = /^\d{4}-(\d\d)-(\d\d)$/.exec(s || ''); return m ? t('dec_day_month', {d: +m[2], m: t('months_short').split(' ')[m[1] - 1]}) : esc(s || ''); };
+// the answers being changed (their options shown again), by product and decision: kept across repaints
+const CHANGE_OPEN = new Set();
+function changeToggle(b){
+  const k = b.dataset.fk;
+  if(CHANGE_OPEN.has(k)) CHANGE_OPEN.delete(k); else CHANGE_OPEN.add(k);
+  if(lastData) renderYou(lastData);
+  if(MV.length) renderModal(true);
+}
+const changeButton = (x, key) => `<button class="sec" data-fk="${esc(freeKey(x))}" onclick="changeToggle(this)">${t(key)}</button>`;
+// what he chose: «✓ You chose A: …» (or his own words)
+const chosenLine = x => `<span class="ok" aria-hidden="true">✓</span> ${x.free ? t('dec_chose_free', {text: esc(x.answer)}) : t('dec_chose', {text: `<b>${esc(x.answer)}</b>`})}`;
+// in the list: the title (it opens the detail) and one situation line; each option one full-width button with its
+// letter and name, ★ at the end of the recommended one and ⊘ before the one that cannot be undone (which asks to
+// confirm); what each changes, its cost and undo stay in the detail; a grey line with what it holds and the
+// reminder's day. Answered (shown until the orchestrator reads it): folded to «✓ You chose A: …» with «Change», which
+// brings the options back
 function decCardRich(x){
-  const w = canWrite(x.p), hs = x.holds || [];
-  const meta = [hs.length && tn('dec_holds', hs.length).toLowerCase(), x.unanswered && x.unanswered.by && t('dec_reminder', {date: esc(x.unanswered.by)})].filter(Boolean).join(' · ');
-  return `<div class="ctitle" data-k="dec" data-key="${esc(decKey(x))}"><span>${ptag(x.p)}${esc(x.title)}</span><span class="chev">›</span></div>`
-    + (x.lead ? `<div class="clead">${esc(x.lead)}</div>` : '')
-    + `<div class="orows">${x.options.map(o => { const d = x.details[o] || {};
-        return `<div class="orow${o===x.recommended ? ' rec' : ''}"><div class="otxt"><div class="oname"><b>${esc(o)}</b>${o===x.recommended ? ` <span class="obadge">${t('dec_rec_badge')}</span>` : ''}</div>`
-          + (UNDO_CLS[d.undo] || d.cost ? `<div class="ochips">${undoChip(d.undo)}${d.cost ? `<span class="ochip">${esc(d.cost)}</span>` : ''}</div>` : '')
-          + `</div>${w ? optButton(x, o, 'sm sec') : ''}</div>`; }).join('')}</div>`
+  const w = canWrite(x.p), hs = x.holds || [], changing = x.answer && CHANGE_OPEN.has(freeKey(x));
+  const head = `<div class="ctitle" data-k="dec" data-key="${esc(decKey(x))}"><span>${ptag(x.p)}${esc(x.title)}</span><span class="chev">›</span></div>`;
+  if(x.answer && !changing) return head + `<div class="ochosen"><span class="otxt">${chosenLine(x)}</span>${w ? `<button class="sm sec" data-fk="${esc(freeKey(x))}" onclick="changeToggle(this)">${t('dec_change')}</button>` : ''}</div>`;
+  const meta = x.answer ? '' : [hs.length && tn('dec_holds', hs.length).toLowerCase(), x.unanswered && x.unanswered.by && t('dec_reminder', {date: dayMonth(x.unanswered.by)})].filter(Boolean).join(' · ');
+  const line = o => { const no = undoOf(x, o)==='no', rec = o===x.recommended, cur = x.answer===o && !x.free;
+    const inner = (cur ? '<span class="ok" aria-hidden="true">✓</span> ' : '') + (no ? `<span class="bad" title="${esc(t('dec_irreversible'))}">${UNDO_ICO.no}</span> ` : '')
+      + `<span class="olt">${esc(o)}</span>` + (rec ? ` <span class="ostar" title="${esc(t('dec_rec_badge'))}">★</span>` : '');
+    return w ? `<button class="sec oline" ${optData(x, o)} onclick="decideOpt(this)">${inner}</button>` : `<div class="oline">${inner}</div>`; };
+  return head + (x.lead ? `<div class="clead olead">${esc(x.lead)}</div>` : '')
+    + `<div class="olines">${x.options.map(line).join('')}</div>`
+    + (changing ? `<div class="btns">${changeButton(x, 'dec_keep')}</div>` : '')
     + (meta ? `<div class="csub">${meta}</div>` : '')
     + decisionSent(x);
 }
-function decOptCard(x, o, write){
-  const d = x.details[o] || {}, rec = o===x.recommended;
-  return `<div class="ocard${rec ? ' rec' : ''}">`
-    + `<div class="ohead"><b>${esc(o)}</b>${rec ? `<span class="obadge">${t('dec_rec_badge')}</span>` : ''}</div>`
+// one option as a card. Answered (`done`): the chosen one with «✓ Your choice», highlighted; the others grey, the
+// recommended one with only its label (no «why», no border); no buttons
+function decOptCard(x, o, write, done){
+  const d = x.details[o] || {}, rec = o===x.recommended, mine = !!x.answer && !x.free && x.answer===o;
+  return `<div class="ocard${rec && !done ? ' rec' : ''}${done ? (mine ? ' chosen' : ' dim') : ''}">`
+    + `<div class="ohead"><b>${esc(o)}</b>${mine ? `<span class="obadge ok"><span aria-hidden="true">✓</span> ${t('dec_your_choice')}</span>` : ''}${rec ? `<span class="obadge">${t('dec_rec_badge')}</span>` : ''}</div>`
     // always its five parts, empty ones too: side by side, each part lines up with the same part of the others
     + `<div class="ochips">${undoChip(d.undo)}${d.cost ? `<span class="ochip">${esc(d.cost)}</span>` : ''}</div>`
     + `<div class="oeff">${d.effect ? esc(d.effect) : ''}</div>`
-    + `<div class="owhy">${rec && x.recommendation ? `<b>${t('dec_why')}</b> ${esc(x.recommendation)}` : ''}</div>`
+    + `<div class="owhy">${rec && !done && x.recommendation ? `<b>${t('dec_why')}</b> ${esc(x.recommendation)}` : ''}</div>`
     + `<div class="ogo">${write ? optButton(x, o) : ''}</div>`
     + '</div>';
 }
+// the detail: pending, told in order (situation, what is at stake, the options, «Other answer», the page). Answered,
+// while the orchestrator has not read it: what it was about stays, the chosen card stands out and «Change answer»
+// brings the options back (with «Keep my answer»)
 function decDetailRich(x){
-  const u = x.unanswered || {}, hs = x.holds || [];
+  const u = x.unanswered || {}, hs = x.holds || [], changing = !!x.answer && CHANGE_OPEN.has(freeKey(x)), done = !!x.answer && !changing;
   const stakes = [u.waits && t('dec_if_none', {text: esc(u.waits)}), u.by && t('dec_remind_on', {date: esc(u.by)})].filter(Boolean).join(' ');
   const holds = hs.length ? `<details class="dholds"><summary>${tn('dec_holds', hs.length)}</summary><ul>${hs.map(h => `<li><span class="mono">${esc(h.ref)}</span> ${esc(h.title)}</li>`).join('')}</ul></details>` : '';
-  const write = canWrite(x.p) && !x.answer;
+  const w = canWrite(x.p), write = w && !done;
   return `<div class="md dsit">${md(x.text)}</div>`
-    + (stakes || holds ? `<div class="dstake">${stakes ? `<div>${stakes}</div>` : ''}${holds}</div>` : '')
-    + (x.answer ? decisionActions(x) : decisionSent(x))
-    + `<div class="ocards n${x.options.length}">${x.options.map(o => decOptCard(x, o, write)).join('')}</div>`
-    + (write ? `<div class="btns">${otherButton(x)}</div>${freeBox(x)}` : '')
+    + (!x.answer && (stakes || holds) ? `<div class="dstake">${stakes ? `<div>${stakes}</div>` : ''}${holds}</div>` : '')
+    + (x.answer ? (x.free ? `<div class="ochosen big">${chosenLine(x)}</div>` : '') : decisionSent(x))
+    + `<div class="ocards n${x.options.length}">${x.options.map(o => decOptCard(x, o, write, done)).join('')}</div>`
+    + (done ? (w ? `<div class="btns">${changeButton(x, 'dec_change_answer')}</div>` : '')
+      : write ? `<div class="btns">${otherButton(x)}${changing ? changeButton(x, 'dec_keep') : ''}</div>${freeBox(x)}` : '')
     + (x.page ? `<details class="sect dpage" id="dpage"><summary>${t('dec_more')}</summary><div id="mpage" class="md"><span class="muted">${t('loading_lc')}</span></div></details>` : '');
 }
 // an option chosen: on one tap, unless it cannot be undone: then a sheet repeats what it changes and its cost, with
@@ -688,7 +719,8 @@ function decideOpt(b){
 }
 function closeSheet(){ const s = $('csheet'); if(s) s.remove(); }
 document.addEventListener('keydown', e => { if(e.key==='Escape' && $('csheet')){ e.stopImmediatePropagation(); closeSheet(); } }, true);
-const answerOpt = b => post(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&d=${encodeURIComponent(b.dataset.d)}&op=${encodeURIComponent(b.dataset.op)}`, b.dataset.p);
+const answerOpt = b => { if(b.dataset.ch) CHANGE_OPEN.delete(b.dataset.fk);
+  return post(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&d=${encodeURIComponent(b.dataset.d)}&op=${encodeURIComponent(b.dataset.op)}${b.dataset.ch ? '&change=1' : ''}`, b.dataset.p); };
 // the «other answer» boxes open and what is typed in them, by product and decision: kept across repaints
 const FREE_OPEN = new Set(), FREE_DRAFT = new Map();
 const freeKey = x => `${x.p}|${x.id || x.title}`;
@@ -1100,7 +1132,7 @@ const VIEWS = {
     const x = lastData.decisions.find(y => decKey(y)===key); if(!x) return null;
     // one that says what each option changes is told in order (decDetailRich); one of before, as before
     const rich = hasDetails(x);
-    return {p: x.p, title: t('decision'), html: dhead(`${ptag(x.p)}${t('pending_decision')}`, esc(x.title)) + (rich ? decDetailRich(x) : props([
+    return {p: x.p, title: t('decision'), html: dhead(`${ptag(x.p)}${t(rich && x.answer ? 'dec_answered_head' : 'pending_decision')}`, esc(x.title)) + (rich ? decDetailRich(x) : props([
         [t('asked'), esc(x.date || '')], [t('status'), x.answer ? `<span class="ok">${t(x.free ? 'answered_free_lc' : 'answered_lc', {text: esc(x.answer)})}</span>` : `<span class="warn">${t('waits_answer')}</span>`],
         [t('options'), x.options.map(o => optLabel(x, o)).join(' · ')], x.recommendation && [t('recommendation'), esc(x.recommendation)],
         x.unanswered && x.unanswered.waits && [t('dec_unanswered'), esc(x.unanswered.waits) + (x.unanswered.by ? ` <span class="muted">· ${t('dec_reminder', {date: esc(x.unanswered.by)})}</span>` : '')]])
@@ -1549,10 +1581,10 @@ async function decideFree(b){
   if(!v || !confirm(t('confirm_free', {text: v.length > 80 ? v.slice(0, 80) + '…' : v}))) return;
   let err = '';
   try{
-    const r = await fetch(api(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&d=${encodeURIComponent(b.dataset.d)}&free=1&p=${encodeURIComponent(b.dataset.p)}`), {method:'POST', body: v});
+    const r = await fetch(api(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&d=${encodeURIComponent(b.dataset.d)}&free=1${b.dataset.ch ? '&change=1' : ''}&p=${encodeURIComponent(b.dataset.p)}`), {method:'POST', body: v});
     if(!r.ok) err = (await r.json().catch(() => ({}))).error || `${r.status}`;
   }catch(e){ err = t('no_connection'); }
-  if(!err){ FREE_OPEN.delete(k); FREE_DRAFT.delete(k); }
+  if(!err){ FREE_OPEN.delete(k); FREE_DRAFT.delete(k); CHANGE_OPEN.delete(k); }
   lastSignature = null; lastEtag = null; lastBlEtag = null; lastBlSig = null; await load();
   if(err) $('err').textContent = t('error', {text: err});
 }
