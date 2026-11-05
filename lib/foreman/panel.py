@@ -6,7 +6,8 @@ registry; branches and PRs come from its [repos]; the locks section is common (e
 and every machine resource of the registry, with the machine's table whatever the registry order).
 Writes: an inbox message, a decision answer (one of its options, or the owner's own words marked free: it resolves
 the decision in the backlog at once, under its lock, and tells the orchestrator in the inbox; the inbox alone, 202,
-when the backlog cannot be saved), a PR approval (an inbox message the orchestrator turns into `foreman integrate
+when the backlog cannot be saved), a change of that answer while the orchestrator has not read it
+(change_answer), a PR approval (an inbox message the orchestrator turns into `foreman integrate
 --approved`), a backlog move (Backlog.rank_issue, noted in the inbox), the owner's mark on a triage issue
 («I want it done», Backlog.want, noted in the inbox; active products only), its discard from triage («I don't
 want it», Backlog.reject: canceled with the panel's reason, noted in the inbox; active products only), the
@@ -706,9 +707,10 @@ def act(path: str, q: Query, body: str) -> Obj:
             raise ValueError("empty message")
         return notes.inbox_add(p, text, sender="owner")
     if path == "/api/decide":
+        act = change_answer if arg("change") == "1" else decide  # a change of an answer the orchestrator has not read
         if arg("free") == "1":  # his own words, in the body
-            return decide(p, arg("id") or arg("d"), body.strip(), free=True)
-        return decide(p, arg("id") or arg("d"), arg("op"))
+            return act(p, arg("id") or arg("d"), body.strip(), free=True)
+        return act(p, arg("id") or arg("d"), arg("op"))
     if path == "/api/grants/approve":
         return grant_approve(p, arg("g"))
     if path == "/api/approve":
@@ -855,6 +857,46 @@ def decide(p: Project, ref: str, option: str, free: bool = False) -> Obj:
         return Accepted(m, note=f"recorded; the orchestrator will resolve it ({e})")
     notes.inbox_add(p, option, sender="owner", decision=card, did=did, resolved=True, freed=freed, **mark)
     return {"resolved": did, "freed": freed, **mark}
+
+
+def change_answer(p: Project, ref: str, option: str, free: bool = False) -> Obj:
+    """The owner changes his panel answer to a decision while the orchestrator has not read it (its inbox message
+    still unread: the same rule that keeps it on the page, decisions_with_answers). The backlog's answer becomes the
+    new one (Backlog.change_answer) and, in the inbox, the old message is marked read and a new unread one carries the
+    answer with `changed_from`: an orchestrator that listed the old one and acts on it still finds the change at its
+    next look. Under the inbox's lock, held while the backlog is saved, so the two never disagree. ValueError (400)
+    when the orchestrator already read it, the decision is not answered, or the option is not one of its options."""
+    if not option or (free and len(option) > FREE_ANSWER_MAX):
+        raise ValueError("empty answer" if not option else f"answer too long: at most {FREE_ANSWER_MAX} characters")
+    mark = {"free": True} if free else {}
+    b, f = Backlog(p), notes.inbox_path(p)
+    by = f"{p.owner}, {datetime.now():%Y-%m-%d %H:%M} (panel)"
+    with notes.file_lock(f):
+        msgs = util.read_json(f, [])
+        try:
+            with b.mutate(timeout=DECIDE_LOCK_S) as data:
+                did = b.decision_ref(data, ref)
+                was = b.change_answer(data, did, option, by, free=free)  # raising here, nothing is saved
+                old = next((m for m in reversed(msgs) if m.get("did") == did and m.get("resolved")), None)
+                if old is None or old.get("read"):
+                    raise ValueError(f"{did}: the orchestrator already read the answer; tell it in the chat")
+        except BacklogError as e:
+            raise ValueError(str(e)) from e
+        old["read"] = True
+        new = {k: v for k, v in old.items() if k not in ("id", "time", "text", "read", "free", "changed_from")}
+        msgs.append(
+            {
+                **new,
+                "id": max(m["id"] for m in msgs) + 1,
+                "time": util.now().strftime("%Y-%m-%d %H:%M"),
+                "text": option,
+                "read": False,
+                "changed_from": was,
+                **mark,
+            }
+        )
+        util.write_json(f, msgs[-200:])
+    return {"changed": did, "was": was, **mark}
 
 
 # ---------- HTTP ----------

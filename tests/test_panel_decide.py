@@ -246,6 +246,53 @@ class PanelDecideTest(PanelCase):
         self.assertIn("decision «PF J1, Which way?» (free text: interpret it): my own words", notes.inbox_line(m))
         self.assertIn("PF J1", [x["id"] for x in self.b.load()["decisions"]])
 
+    def test_change_an_answer_until_the_orchestrator_reads_it(self):
+        """change=1: while the answer's message is unread, the backlog's answer becomes the new one (same resolved
+        date and freed), the old message is marked read and a new unread one carries `changed_from`, so an
+        orchestrator that already listed the old one still finds the change; the state shows the new answer. Once
+        read, a change is a 400 and nothing moves; a foreign option too."""
+        self.assertEqual(self.req("/api/decide?p=fake&id=PF%20J1&op=a", "POST")[0], 200)
+        code, d = self.req("/api/decide?p=fake&id=PF%20J1&op=b&change=1", "POST")
+        self.assertEqual(code, 200, d)
+        self.assertEqual(d, {"changed": "PF J1", "was": "a"})
+        r = self.resolved("PF J1")
+        self.assertEqual((r["answer"], r["resolved"]), ("b", date.today().isoformat()))
+        self.assertRegex(r["by"], BY)
+        old, new = self.owner_msgs()
+        self.assertTrue(old["read"])
+        self.assertEqual(
+            (new["text"], new["did"], new["resolved"], new["freed"], new["read"], new["changed_from"]),
+            ("b", "PF J1", True, ["freed: PF-5"], False, "a"),
+        )
+        self.assertGreater(new["id"], old["id"])
+        self.assertIn("answer changed, it was «a»: undo what the old one started", notes.inbox_line(new))
+        state = self.req("/api/state?p=fake")[1]["project"]
+        self.assertEqual([(x["id"], x["answer"]) for x in state["decisions"]], [("PF J2", None), ("PF J1", "b")])
+        # his own words, then back to an option: `free` follows the last one
+        self.assertEqual(self.req("/api/decide?p=fake&id=PF%20J1&free=1&change=1", "POST", body=b"neither")[0], 200)
+        self.assertTrue(self.resolved("PF J1")["free"])
+        self.assertTrue(self.owner_msgs()[-1]["free"])
+        self.assertEqual(self.req("/api/decide?p=fake&id=PF%20J1&op=a&change=1", "POST")[0], 200)
+        self.assertNotIn("free", self.resolved("PF J1"))
+        self.assertNotIn("free", self.owner_msgs()[-1])
+        # a foreign option: 400, nothing moves
+        code, d = self.req("/api/decide?p=fake&id=PF%20J1&op=zzz&change=1", "POST")
+        self.assertEqual(code, 400, d)
+        self.assertEqual(self.resolved("PF J1")["answer"], "a")
+        # read by the orchestrator: too late
+        notes.inbox_read(self.project)
+        n = len(self.owner_msgs())
+        code, d = self.req("/api/decide?p=fake&id=PF%20J1&op=b&change=1", "POST")
+        self.assertEqual(code, 400, d)
+        self.assertIn("already read", d["error"])
+        self.assertEqual(self.resolved("PF J1")["answer"], "a")
+        self.assertEqual(len(self.owner_msgs()), n)
+        # a pending one has nothing to change
+        code, d = self.req("/api/decide?p=fake&id=PF%20J2&op=no&change=1", "POST")
+        self.assertEqual(code, 400, d)
+        self.assertIn("no answered decision", d["error"])
+        self.assertIn("PF J2", [x["id"] for x in self.b.load()["decisions"]])
+
 
 if __name__ == "__main__":
     unittest.main()

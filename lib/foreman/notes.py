@@ -192,6 +192,8 @@ def inbox_kind(m: Message) -> str:
     free = "; free text: interpret it" if m.get("free") else ""
     if m.get("decision") and m.get("resolved"):
         freed = [f.removeprefix("freed: ") for f in m.get("freed") or [] if f.startswith("freed: ")]
+        if "changed_from" in m:  # the owner changed his answer before it was read: the new one wins
+            free += f"; answer changed, it was «{m['changed_from']}»: undo what the old one started, if anything"
         return f"decision «{m['decision']}» (resolved from the panel{free}" + (
             f"; freed: {', '.join(freed)})" if freed else ")"
         )

@@ -316,7 +316,9 @@ they disagree.
      again with a new `decision add` rather than reopening it. One answered in his own words (the panel's «Other
      answer» box: «free text: interpret it», `free` in the message and in the resolved decision) is resolved too,
      with his text as the answer: read it and decide what it means for the plan before launching what it freed;
-     when it does not settle the question, ask again with a new `decision add`. An answer the owner gives in the chat
+     when it does not settle the question, ask again with a new `decision add`. Until you mark it read he may change
+     it in the panel: the old message is marked read and a new one says «answer changed, it was «…»»; apply the new
+     one and undo what the old one started, if anything. An answer the owner gives in the chat
      closes it the way the panel does: `foreman backlog decision resolve ID --option N` (its number in `foreman
      backlog decision list`, or its exact text; exit 2 if it is none of its options) or, for his own words,
      `--answer "…" --free`; both record `by` «Owner, YYYY-MM-DD HH:MM (chat)» and leave no inbox message. One he

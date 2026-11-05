@@ -1672,6 +1672,25 @@ class Backlog:
             raise BacklogError(f"{did}: {option!r} is not one of its options")
         return Backlog.resolve_decision(data, did, option, by, free=free)
 
+    @staticmethod
+    def change_answer(data: Data, did: str, option: str, by: str, free: bool = False) -> str:
+        """The owner changes his panel answer to resolved decision `did` (one of its options, or his own words: `free`):
+        it keeps its date and what it freed; its answer, `by` and `free` become the new ones. Returns the answer it
+        replaces. Whether it may still change (the orchestrator has not read it) is the panel's to say
+        (panel.change_answer). BacklogError when `did` is not resolved or `option` is not one of its options."""
+        d = Backlog.resolved_decision(data, did)
+        if d is None:
+            raise BacklogError(f"no answered decision {did}")
+        if not free and option not in d.get("options", []):
+            raise BacklogError(f"{did}: {option!r} is not one of its options")
+        was = d.get("answer", "")
+        d.update(answer=clean_text(option), by=clean_text(by))
+        if free:
+            d["free"] = True
+        else:
+            d.pop("free", None)
+        return was
+
     # ---------- moves from the panel ----------
 
     @classmethod

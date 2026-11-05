@@ -163,7 +163,7 @@ class PanelDecisionFieldsTest(PanelCase):
         self.assertIn('(x.page ? `<div id="mpage"', dec)
         self.assertIn("mdFull(rich ? r.md.replace(", dec)
         you = js[js.index("function renderYou") : js.index("function renderGrants")]
-        self.assertIn("card(hasDetails(x) && !x.answer ? decCardRich(x) :", you)
+        self.assertIn("card(hasDetails(x) ? decCardRich(x) :", you)
         for lang in ("en", "es"):
             st = self.req(f"/api/strings?lang={lang}")[1]
             for k in ("dec_waits_by", "dec_see_page", "dec_if_none", "dec_holds_n", "chip_undo_no", "dec_back"):
@@ -200,10 +200,10 @@ class PanelDecisionFieldsTest(PanelCase):
         return r.stdout
 
     def test_rich_question_layout(self):
-        """A question with what each option changes: the card shows each option as a row with its name, chips and own
-        «Choose»; the detail tells the situation, what is at stake with the tasks it holds by
-        name, one card per option in the order written with its own button, «Other answer» after them and the page
-        folded; the «Asked» and «Status» rows are gone."""
+        """A question with what each option changes: the card shows each option as one button with its name (★ the
+        recommended one, ⊘ the one that cannot be undone); the detail tells the situation, what is at stake with the
+        tasks it holds by name, one card per option in the order written with its own button, «Other answer» after
+        them and the page folded; the «Asked» and «Status» rows are gone."""
         out = json.loads(
             self.rich("""
 const x = {p: 'fake', id: 'AP-7 J1', title: 'AP-7 J1, How?', text: 'Situation.', lead: 'Situation.',
@@ -218,19 +218,26 @@ console.log(JSON.stringify({card: decCardRich(x), easy: decCardRich(easy), detai
 """)
         )
         card, easy, detail = out["card"], out["easy"], out["detail"]
-        # the card: each option as a row, in the order written, with its whole name, its chips and its own «Choose»
-        # (the one that cannot be undone asks for the confirmation: data-undo="no"); then what it holds, the reminder
-        self.assertLess(card.index("A: app"), card.index("B: mail"))
-        self.assertLess(card.index("B: mail"), card.index("C: retry"))
-        self.assertEqual(card.count('<div class="orow"') + card.count('<div class="orow rec"'), 3)
-        self.assertEqual(card.count('class="orow rec"'), 1)
-        self.assertEqual(card.count(">Recommended</span>"), 1)
-        self.assertIn("no way back", card)
-        self.assertIn(">2 days</span>", card)
-        self.assertEqual([card.count(f">Choose {k}</button>") for k in "ABC"], [1, 1, 1])
+        # the card: the title, one situation line, each option one full-width button in the order written with its
+        # letter and name, ★ at the end of the recommended one, ⊘ before the one that cannot be undone (which asks for
+        # the confirmation: data-undo="no"); no chips (they stay in the detail); a grey line with what it holds and the
+        # reminder's day
+        name = [card.index(f'<span class="olt">{o}</span>') for o in ("A: app", "B: mail", "C: retry")]
+        self.assertEqual(name, sorted(name))
+        self.assertEqual(card.count('<button class="sec oline"'), 3)
+        self.assertEqual(card.count("★"), 1)
+        self.assertLess(name[0], card.index("★"))
+        self.assertLess(card.index("★"), name[1])
+        self.assertEqual(card.count("⊘"), 1)
+        self.assertLess(name[1], card.index("⊘"))
+        self.assertLess(card.index("⊘"), name[2])
         self.assertEqual(card.count('data-undo="no"'), 1)
         self.assertEqual(easy.count('data-undo="yes"'), 3)
-        self.assertIn("holds 2 tasks · reminder on 2026-11-12", card)
+        self.assertNotIn("ochip", card)
+        self.assertNotIn("2 days", card)
+        self.assertNotIn("data-ch", card)
+        self.assertIn('<div class="clead olead">Situation.</div>', card)
+        self.assertIn('<div class="csub">holds 2 tasks · reminder on Nov 12</div>', card)
         self.assertNotIn("Why:", card)
         self.assertNotIn("Asked", detail)
         self.assertNotIn("waits for your answer", detail)
@@ -277,6 +284,69 @@ console.log(JSON.stringify({before, after, posted, sheet}));
         self.assertIn("cost: annex", sheet)
         self.assertLess(sheet.index(">Back</button>"), sheet.index(">Choose C</button>"))
         self.assertIn('id="csback"', sheet)
+
+    RICH = """
+const x = {p: 'fake', id: 'AP-7 J1', title: 'AP-7 J1, How?', text: 'Situation.', lead: 'Situation.',
+  options: ['A: app', 'B: mail', 'C: retry'], recommended: 'B: mail', recommendation: 'cheaper',
+  details: {'A: app': {effect: 'banner', undo: 'yes'}, 'B: mail': {effect: 'mail', undo: 'yes'},
+            'C: retry': {effect: 'retries alone', undo: 'no'}},
+  unanswered: {waits: 'nothing changes', by: '2026-11-12'}, holds: [{ref: 'AP-7', title: 'Warn'}],
+  answer: 'A: app'};
+"""
+
+    def test_answered_folds_and_change_brings_the_options_back(self):
+        """Answered (until the orchestrator reads it): the card folds to «✓ You chose A: …» with «Change»; the detail
+        keeps the situation, drops what is at stake, highlights the chosen card with «✓ Your choice», greys the
+        others (the recommended one keeps only its label: no border, no why), has no option buttons and offers
+        «Change answer». Changing brings the options back, each button marked as a change (data-ch), with «Keep my
+        answer»; choosing one posts change=1 and closes the change."""
+        out = json.loads(
+            self.rich(
+                self.RICH
+                + """
+const card = decCardRich(x), detail = decDetailRich(x), free = decCardRich({...x, answer: 'neither', free: true});
+CHANGE_OPEN.add(freeKey(x));
+const ccard = decCardRich(x), cdetail = decDetailRich(x);
+answerOpt({dataset: {id: 'AP-7 J1', d: 'AP-7 J1, How?', op: 'B: mail', p: 'fake', ch: '1', fk: freeKey(x)}});
+console.log(JSON.stringify({card, detail, ccard, cdetail, free, posted, open: CHANGE_OPEN.size}));
+"""
+            )
+        )
+        card, detail, ccard, cdetail = out["card"], out["detail"], out["ccard"], out["cdetail"]
+        self.assertIn("You chose <b>A: app</b>", card)
+        self.assertIn('onclick="changeToggle(this)">Change</button>', card)
+        self.assertNotIn("oline", card)
+        self.assertNotIn("Situation.", card)
+        self.assertNotIn("holds", card)
+        self.assertIn("You answered in your words: «neither»", out["free"])
+        # the detail, answered
+        self.assertIn("Situation.", detail)
+        self.assertNotIn("If you do not answer", detail)
+        self.assertNotIn("Holds 1 task", detail)
+        self.assertEqual(detail.count('class="ocard chosen"'), 1)
+        self.assertEqual(detail.count('class="ocard dim"'), 2)
+        self.assertLess(detail.index('class="ocard chosen"'), detail.index("Your choice"))
+        self.assertLess(detail.index("Your choice"), detail.index("B: mail"))
+        self.assertEqual(detail.count(">Recommended</span>"), 1)
+        self.assertNotIn("Why:", detail)
+        self.assertNotIn("cheaper", detail)
+        self.assertNotIn("Choose", detail)
+        self.assertNotIn("Other answer", detail)
+        self.assertIn(">Change answer</button>", detail)
+        # changing: the options are back, as changes
+        self.assertEqual(ccard.count('<button class="sec oline"'), 3)
+        self.assertEqual(ccard.count('data-ch="1"'), 3)
+        self.assertIn(">Keep my answer</button>", ccard)
+        self.assertEqual([cdetail.count(f">Choose {k}</button>") for k in "ABC"], [1, 1, 1])
+        self.assertEqual(cdetail.count('data-ch="1"'), 3)
+        self.assertNotIn("ocard dim", cdetail)
+        self.assertIn('class="ocard rec"', cdetail)
+        self.assertIn("Your choice", cdetail)
+        self.assertIn("Other answer", cdetail)
+        self.assertIn(">Keep my answer</button>", cdetail)
+        self.assertEqual(len(out["posted"]), 1)
+        self.assertTrue(out["posted"][0].endswith("op=B%3A%20mail&change=1"))
+        self.assertEqual(out["open"], 0)
 
     def test_old_question_unchanged(self):
         """A question without what each option changes keeps its card and its detail: decisionActions's output is the
