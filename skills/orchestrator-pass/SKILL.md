@@ -47,6 +47,26 @@ project's rules win. Whatever you tell the owner (chat, decisions, inbox replies
      An agent has delivered when `foreman agents` says `delivered` (it ran `foreman progress --done`), not when
      Claude Code says «completed»: that also comes when it only stops to wait for a task of its own. Read the
      outcome next to it: `partial` or `failed` is read in the report before integrating, never merged as done.
+     `integrate` stopping with `== review: STATE` (exit 2) is the review gate, not a failure: do what the state says
+     (next two lines).
+   - *Need a review* (`review_needed`): launch a `reviewer` with the command the line gives (`foreman launch NAME
+     --review REPO:BRANCH --issue ID --sub Tn`: no worktree; the branch is held while it lives). Brief: the launch
+     line, «A branch review, round N (agents/reviewer.md)», the issue, the plan and the agent's report; give it no
+     opinion of yours about the branch. Round 2 (the fixes are in): resume the reviewer of round 1 with SendMessage
+     («round 2: the fixes are in, check each finding of PREVIOUS_REVIEW and only what they changed»), or launch one
+     with the previous review in its brief. A branch whose only reason is its size and that is a mechanical change
+     proven by its tests (a split checked by the golden corpus) may go in with `foreman integrate … --no-review
+     "why"` instead; never one that touches delicate paths or was delivered `partial`.
+   - *Review findings* (`review_findings`), round 1: send the H and M back to the agent that made the branch, with
+     SendMessage to the id the line gives: the review's path and «fix or refute each H and M with proof, a "Review,
+     round 1" section in your report, commit, `foreman progress --done` again». Do not fix nor drop findings
+     yourself; if you think one is wrong, say so in the message: the agent refutes it with proof and the reviewer
+     judges it in round 2. If it cannot be resumed (another session, an agent of another day), the plan B command
+     the line gives: a new agent on the branch's worktree, brief: the plan, its report and the review. After round
+     2 with H or M open there is no third round: ask the owner with the command the line gives (`--page` the review:
+     that is how the pass finds the question), written as `foreman docs owner` says, each option with its effect;
+     while it is pending the line only informs. With their answer, do what the line says (in as it is with
+     `--approved`, another agent and a round 3, or dropped).
    - *Measurements delivered (nothing to merge)* (`measure_delivered`): the branch only brought a report (its
      sub-issue is `kind = "measure"`, or the agent delivered with `--kind measure`). Read the report, then `foreman
      integrate REPO BRANCH "ID Tn" --measure --result "…"`: no CI, no merge; it removes the worktree and the branch
