@@ -26,10 +26,16 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   planners pass; the refusal reaches the orchestrator and `guard.jsonl`. Nothing changes while no such folder
   exists. The guard hook passes the event's `agent_type` (else `<state>/agents.json` says it); `foreman guard --as
   planner` checks as a planner; `foreman permissions` lists the rule as foreman's own.
+- A recurring task that falls due when agents start running on a new model: a `[[recurring]]` source `models =
+  "reviews/*-review-harness*.md"` (a glob of reviews) is late with no review, or when an agent ran after the newest
+  one on a model its `Models:` line does not name (agents.json at the agent's stop, or the model a delivery line of
+  `progress.jsonl` records); `foreman recurring` names the new models. With `max_h` it is also late that many hours
+  after the review (`max_h = 720`: «with each new model and monthly» in one task). docs/config.md.
 
 ### Config
 
-- Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`).
+- Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`), and the `models` source of
+  `[[recurring]]`.
 
 ## [0.58.0] - 2026-11-05
 

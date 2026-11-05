@@ -250,7 +250,8 @@ MACHINE_KEYS = ("dir", "queue", "next", "jumped", "log", "busy", "busy_wait", "s
 MACHINE_PATHS = ("dir", "queue", "next", "jumped", "log")
 PRODUCT_KEYS = ("guard", "allow")
 RESOURCE_NAME = r"^[a-z0-9][a-z0-9-]*$"
-SOURCE_KINDS = ("heartbeat", "glob", "log")  # a [[recurring]] source reads one of these (notes.last_time)
+# a [[recurring]] source reads one of these (notes.last_time); `models` is a glob of reviews (notes.new_models)
+SOURCE_KINDS = ("heartbeat", "glob", "log", "models")
 SOURCE_KEYS = {*SOURCE_KINDS, "label", "file", "max_h", "at"}
 KNOWN = {k: set(v) for k, v in DEFAULTS.items()} | {"repos": None, "resources": None, "recurring": None}
 # The registry's [machine] (machine_settings): the keys of each section it may set, inherited by every product (None:
@@ -709,7 +710,11 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
             extra = set(s) - SOURCE_KEYS
             if extra:
                 warn.append(f"{where}: unknown source key {', '.join(sorted(extra))} (ignored)")
-            if "at" in s:
+            if "models" in s and not (isinstance(s["models"], str) and s["models"].strip()):
+                err.append(f"{where}: models must be a glob of the reviews under the home, not {s['models']!r}")
+            if "at" in s and "models" in s:
+                err.append(f"{where}: a models source is late on a new model and after max_h hours, not at a time")
+            elif "at" in s:
                 if not (isinstance(s["at"], str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", s["at"])):
                     err.append(f'{where}: at must be a local time "HH:MM" (00:00 to 23:59), not {s["at"]!r}')
                 if "max_h" in s:
