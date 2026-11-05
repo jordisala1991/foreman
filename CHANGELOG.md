@@ -26,6 +26,17 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   planners pass; the refusal reaches the orchestrator and `guard.jsonl`. Nothing changes while no such folder
   exists. The guard hook passes the event's `agent_type` (else `<state>/agents.json` says it); `foreman guard --as
   planner` checks as a planner; `foreman permissions` lists the rule as foreman's own.
+- `foreman integrate` runs an issue's hidden acceptance check: a `holdout.toml` in `<holdout>/ID/` (one shell command
+  per case, with what it does on main and the symptom a user would notice, plus files copied over the branch;
+  docs/config.md). `foreman holdout seal ID` hashes the folder into `<state>/holdout.json` and runs the cases on main
+  (each must fail or pass there as its `on_main` says); `integrate` stops (exit 2) on a check never sealed or changed
+  since, and runs it after the local CI, before anything is pushed or merged, in a detached copy of the tip that is
+  always removed. Too few cases pass: exit 2, and the only text for the agent is the failing cases' symptoms, never
+  a case's id, command, data, file or place; after two failed rounds, only the owner's yes (`--approved`). A pass on
+  the same tip (or the same own diff) is reused; the note says k/N and the round. `integrate --check`, the CI log,
+  the notes, the progress and the state never carry the cases. `foreman holdout run REPO BRANCH ID [--full]` runs it
+  at once; `foreman holdout status [ID]` shows each check, its runs and logs. Two new points, `holdout.setup` (600 s)
+  and `holdout.scenario` (300 s, or the spec's `timeout`).
 - A recurring task that falls due when agents start running on a new model: a `[[recurring]]` source `models =
   "reviews/*-review-harness*.md"` (a glob of reviews) is late with no review, or when an agent ran after the newest
   one on a model its `Models:` line does not name (agents.json at the agent's stop, or the model a delivery line of

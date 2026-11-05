@@ -472,8 +472,40 @@ The folder where a product keeps the part of a plan's acceptance that production
 orchestrator. Keep it outside the home, the repos, the worktrees and the state: those are folders agents read and
 search. Nothing is on by default: while the folder does not exist, nothing changes. Once it exists, the guard keeps
 every agent but a planner away from it, by any tool, and from searches that walk a folder above it (`grep -r x ~`);
-foreman's `holdout` command (to come) is the orchestrator's (docs/internals.md, «The hidden acceptance checks»). A relative value is read
+`foreman holdout` is the orchestrator's (docs/internals.md, «The hidden acceptance checks»). A relative value is read
 from the home, as the other paths.
+
+Each issue with a hidden check has its subfolder, `<holdout>/ID/`: a `holdout.toml` and, under `files/`, whatever is
+copied over the branch before the cases run (test files, fixtures). An example, for an invented product:
+
+```toml
+issue = "BK-7"                # the folder's name
+repo = "api"                  # a repo of foreman.toml
+subs = []                     # the sub-issues whose integration runs it; empty: every one
+lock = ""                     # a resource taken while the cases run (`foreman lock`), e.g. "docker"
+setup = []                    # commands run in the copy after files/ is copied, before the cases
+threshold = 1.0               # the share of cases that must pass (rounded up); 1.0: all
+timeout = 300                 # seconds per case
+
+[[scenario]]
+id = "s1"                     # short and neutral: ids, counts and hashes are all that leave the folder
+command = "vendor/bin/phpunit --filter refundsTwice tests/Hidden"   # rc 0: the case passes
+on_main = "fail"              # on main today: fail (new behaviour) or pass (a regression case)
+symptom = "A booking refunded twice pays the customer back twice"  # what a user would notice
+```
+
+How it runs: `foreman holdout seal ID` (the orchestrator, when it approves the plan) reads every command, hashes the
+folder into `<state>/holdout.json` and runs the cases on main, where each must do what its `on_main` says (else
+nothing is sealed; `--no-baseline` skips that run). Sealing is the orchestrator's yes to run those commands, with its
+own power, at every integration of the issue: read them first. Then `foreman integrate` runs them after the local CI,
+before anything is pushed or merged, in a detached copy of the branch's tip under `<holdout>/.runs/` (the repo's
+`post_create`, then `files/`, then `setup`), and always removes the copy; the full output stays in
+`<holdout>/.runs/ID/`. The folder changed since the seal, or never sealed: exit 2, nothing done. Too few cases pass:
+exit 2, and the only text for the agent is the failing cases' `symptom` lines (a symptom that names a case's command,
+a file under `files/` or the folder does not load). Each failing tip is a round; after two, the owner decides
+(`--approved`). `foreman holdout run REPO BRANCH ID` runs it at once as `integrate` would, `foreman holdout status`
+shows each check, its last runs and their logs. Both `integrate` and `holdout` write in the repo's `.git` and in this
+folder: with Claude Code's sandbox on, they run outside it (`excludedCommands`), as `foreman integrate` already must.
 
 ## `[repos.*] review`: branches another agent reviews before they merge
 

@@ -111,6 +111,7 @@ You rarely type them: the orchestrator and the agents do.
 | `worktree` | a worktree on a new or an existing branch (local or only on the remote) |
 | `agents` | the agents the hooks saw, with their state; name or stop one |
 | `integrate` | a finished branch into main: a PR, or a fast-forward without a remote |
+| `holdout` | the hidden acceptance checks of an issue (the orchestrator's): seal, run, status |
 
 **Backlog, notes and the owner**
 

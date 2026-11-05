@@ -296,8 +296,8 @@ event's `agent_type`, else its entry in `<state>/agents.json`). The orchestrator
 other two. Nothing is on by default: the rule looks only at such folders that exist, of every product of the
 registry, so a product with none (foreman itself) sees no change.
 
-- **foreman's `holdout` command** (to come: it seals and runs the checks) run in any of the forms of `foreman
-  integrate` above, but with `--help` or `-h`; this one whether a folder exists or not.
+- **`foreman holdout`** (it seals and runs the checks: docs/config.md, «`[paths] holdout`») run in any of the forms
+  of `foreman integrate` above, but with `--help` or `-h`; this one whether a folder exists or not.
 - **A path in a command** (also a redirection's file, the value of `--opt=VALUE`, and what runs nested: `sh -c`,
   `$(…)`, a pipe or heredoc into a shell), read from each folder the command may run in (the session's, moved by the
   line's `cd` and `pushd`), with `~`, `$HOME` and the line's own variables expanded and links followed: the folder or
@@ -315,7 +315,15 @@ registry, so a product with none (foreman itself) sees no change.
 Not seen: a program that builds the path by itself (a script written to a file and run later, a path assembled from
 pieces), a variable from outside the line, a link to a folder above the hidden one walked by a program that follows
 links. The rule keeps an agent from finding the cases by accident or by search, not one bent on reading them: the
-seal of T1 (a hash of every file) tells when they changed. `foreman guard --as agent|planner|orchestrator "cat
+seal (a hash of every file, `foreman holdout seal`) tells when they changed.
+
+What foreman itself lets out of the folder: `<state>/holdout.json` keeps hashes, case ids, counts, rounds and dates;
+`integrate --check` (an agent may run it) says whether the issue has a check, whether it is sealed and how many cases;
+the note says how many passed and in which round. The full output of a run stays under `<holdout>/.runs/`, never in
+the CI log of the state. A failure prints, for the agent, only the failing cases' `symptom` lines: what a user would
+notice, never a case's id, command, data, file or place. Left: the orchestrator's own transcript once it reads the
+cases or a run's output (`foreman holdout run --full`), and a copy of the tip registered as a git worktree (its path
+only) while the cases run. `foreman guard --as agent|planner|orchestrator "cat
 PATH"` says what it would do; `foreman permissions` shows the rule as foreman's own.
 
 ## How the guard reads a command (`[deny] patterns`)

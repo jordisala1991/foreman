@@ -39,16 +39,18 @@ docs: agent, config, extending, internals, lock-protocol, orchestrator, owner
 $ foreman --help
 [exit 0]
 usage: foreman [-h] [--version]
-               {backlog,integrate,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest} ...
+               {backlog,integrate,holdout,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest} ...
 
 foreman: one Claude Code session runs a project's backlog with short-lived agents (backlog, locks, worktrees, hooks).
 
 positional arguments:
-  {backlog,integrate,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest}
+  {backlog,integrate,holdout,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest}
     backlog             the project's backlog: issues, projects, decisions for
                         the owner, generated pages
     integrate           a finished branch into main: a PR, or a fast-forward
                         without a remote
+    holdout             the hidden acceptance checks of an issue (the
+                        orchestrator's): seal, run, status
     note                append an entry to today's notes (what must last:
                         figures, corrections)
     progress            a progress line for the owner's panel; --done: an
@@ -138,6 +140,9 @@ launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch 
                                    is exit 2, nothing made: answer it, or --despite DID (each one that holds it)
                                    --why TEXT, recorded in the launch and the notes, with a line for the owner
 integrate REPO BRANCH "ID [Tn]" … (foreman integrate --help)
+holdout seal ID [--no-baseline] | run REPO BRANCH ID [--full] | status [ID]   an issue's hidden acceptance check
+                                   (the orchestrator's; foreman holdout --help): seal hashes its folder and runs
+                                   the cases on main; run runs them on a branch as integrate does
 guard "command" [--as agent|orchestrator] | guard --table FILE   what the guard hook would say about a command
 guard --file PATH [--as agent|orchestrator] [--cwd DIR]   …and about a Write or Edit call that writes PATH
                                    (exit 2 = rejected; --as: who runs it, default an agent), or check a table of
@@ -392,14 +397,18 @@ Order (a failure at any step stops, never forces, and leaves the PR open if ther
     and 0 M open; otherwise exit 2, nothing done, with the next step. --no-review "why" lets in a branch whose only
     reason is its size and that has no review yet (never delicate paths nor a partial delivery); after round 2 with
     H or M still open only the owner's yes (--approved) lets it in as it is; both go into the note. --check shows the
-    same and what it would do;
+    same and what it would do. Then the issue's hidden acceptance check (holdout.py), when it has one for this repo
+    and sub-issue: the line «== hidden check (ID): …» says whether it is sealed and how many cases it has, never its
+    content; not sealed, changed since sealed or unreadable: exit 2, nothing done (--check too);
     (--check stops here, after printing what the backlog close would do);
  3. in a `public` repo, each commit message of main..BRANCH passes the public scan (a stop names the commit and the
     rule, never the text); then the local CI in the worktree (unless --no-ci): one run of `local_ci` per value of
     `ci_runs`, or per --ci=ARGS (repeatable; it replaces `ci_runs`; write it with «=» when ARGS starts with «-»), in
     order, the first failure stopping; --ci without {ci} in `local_ci` is exit 2 (arguments are never appended
     blindly). The output is also written, as it comes, to <state>/integrate/<branch>-ci.log (a «/» in the branch
-    becomes «-»);
+    becomes «-»); then the hidden check runs on a copy of the tip (a pass under the same seal that covers the tip is
+    reused): too few cases pass, exit 2, nothing pushed, with only the failing cases' symptoms for the agent; after
+    two failed rounds only the owner's yes (--approved) lets it in; k/N and the round go into the note;
  4. push and open the PR (or reuse the open one for this branch); the body gets «Closes #n» when the issue was
     imported from GitHub (its `github` field names this repo);
  5. waits for the remote checks and comments the local CI result (with `ci_summary`, one bullet per run under
@@ -420,7 +429,7 @@ main, the home lives inside the repo, everything main has that the branch lacks 
 orchestrator's own commits: backlog, notes, reports) and the merge is clean (`git merge-tree`), main is merged into
 the branch in its worktree (`git merge --no-ff --no-edit`, never a rebase) and the integration goes on; --check only
 says so. Anything else stops, saying why (the paths outside the home, or the conflicting files). Then:
- 4. approval gate as in 6 (exit 3, nothing merged: the branch stays as it is);
+ 4. the hidden check as in 3; approval gate as in 6 (exit 3, nothing merged: the branch stays as it is);
  5. `git merge --ff-only BRANCH` in the main checkout (`merge` and `remote_checks` do not apply);
  6. the local CI again (the same runs), now in the main checkout; or `main_ci` instead, when it is set and main is
     exactly the commit the local CI passed on in the worktree (once per run if it uses {ci}, once otherwise;
@@ -481,8 +490,8 @@ $ foreman nope
 [exit 2]
 --- stderr
 usage: foreman [-h] [--version]
-               {backlog,integrate,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest} ...
-foreman: error: argument cmd: invalid choice: 'nope' (choose from 'backlog', 'integrate', 'note', 'progress', 'inbox', 'recurring', 'worktree', 'launch', 'guard', 'loop', 'renew', 'session', 'agents', 'check', 'config', 'init', 'panel', 'lock', 'wait', 'time-limit', 'hung-shells', 'plain', 'start', 'catchup', 'permissions', 'docs', 'selftest')
+               {backlog,integrate,holdout,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest} ...
+foreman: error: argument cmd: invalid choice: 'nope' (choose from 'backlog', 'integrate', 'holdout', 'note', 'progress', 'inbox', 'recurring', 'worktree', 'launch', 'guard', 'loop', 'renew', 'session', 'agents', 'check', 'config', 'init', 'panel', 'lock', 'wait', 'time-limit', 'hung-shells', 'plain', 'start', 'catchup', 'permissions', 'docs', 'selftest')
 $ foreman --project faro guard "git push origin main"
 [exit 2]
 Bloqueado por el guardián de foreman: «(^|\s)git push» está en la lista de lo que nunca se hace sin Marta (faro). Pregúntale antes (foreman backlog decision add, o el buzón). Casó en la orden `git push origin main`. Si solo es texto, escríbelo con la herramienta Write o Edit, o con `cat > FICHERO <<'EOF'`. Lista de «nunca sin Marta» de faro (normas.md): publicar y lo compartido de la máquina.
@@ -922,8 +931,8 @@ $ foreman --project faro handover
 [exit 2]
 --- stderr
 usage: foreman [-h] [--version]
-               {backlog,integrate,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest} ...
-foreman: error: argument cmd: invalid choice: 'handover' (choose from 'backlog', 'integrate', 'note', 'progress', 'inbox', 'recurring', 'worktree', 'launch', 'guard', 'loop', 'renew', 'session', 'agents', 'check', 'config', 'init', 'panel', 'lock', 'wait', 'time-limit', 'hung-shells', 'plain', 'start', 'catchup', 'permissions', 'docs', 'selftest')
+               {backlog,integrate,holdout,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest} ...
+foreman: error: argument cmd: invalid choice: 'handover' (choose from 'backlog', 'integrate', 'holdout', 'note', 'progress', 'inbox', 'recurring', 'worktree', 'launch', 'guard', 'loop', 'renew', 'session', 'agents', 'check', 'config', 'init', 'panel', 'lock', 'wait', 'time-limit', 'hung-shells', 'plain', 'start', 'catchup', 'permissions', 'docs', 'selftest')
 $ foreman --project faro sessions
 [exit 2]
 --- stderr

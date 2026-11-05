@@ -41,14 +41,18 @@ Order (a failure at any step stops, never forces, and leaves the PR open if ther
     and 0 M open; otherwise exit 2, nothing done, with the next step. --no-review "why" lets in a branch whose only
     reason is its size and that has no review yet (never delicate paths nor a partial delivery); after round 2 with
     H or M still open only the owner's yes (--approved) lets it in as it is; both go into the note. --check shows the
-    same and what it would do;
+    same and what it would do. Then the issue's hidden acceptance check (holdout.py), when it has one for this repo
+    and sub-issue: the line «== hidden check (ID): …» says whether it is sealed and how many cases it has, never its
+    content; not sealed, changed since sealed or unreadable: exit 2, nothing done (--check too);
     (--check stops here, after printing what the backlog close would do);
  3. in a `public` repo, each commit message of main..BRANCH passes the public scan (a stop names the commit and the
     rule, never the text); then the local CI in the worktree (unless --no-ci): one run of `local_ci` per value of
     `ci_runs`, or per --ci=ARGS (repeatable; it replaces `ci_runs`; write it with «=» when ARGS starts with «-»), in
     order, the first failure stopping; --ci without {ci} in `local_ci` is exit 2 (arguments are never appended
     blindly). The output is also written, as it comes, to <state>/integrate/<branch>-ci.log (a «/» in the branch
-    becomes «-»);
+    becomes «-»); then the hidden check runs on a copy of the tip (a pass under the same seal that covers the tip is
+    reused): too few cases pass, exit 2, nothing pushed, with only the failing cases' symptoms for the agent; after
+    two failed rounds only the owner's yes (--approved) lets it in; k/N and the round go into the note;
  4. push and open the PR (or reuse the open one for this branch); the body gets «Closes #n» when the issue was
     imported from GitHub (its `github` field names this repo);
  5. waits for the remote checks and comments the local CI result (with `ci_summary`, one bullet per run under
@@ -69,7 +73,7 @@ main, the home lives inside the repo, everything main has that the branch lacks 
 orchestrator's own commits: backlog, notes, reports) and the merge is clean (`git merge-tree`), main is merged into
 the branch in its worktree (`git merge --no-ff --no-edit`, never a rebase) and the integration goes on; --check only
 says so. Anything else stops, saying why (the paths outside the home, or the conflicting files). Then:
- 4. approval gate as in 6 (exit 3, nothing merged: the branch stays as it is);
+ 4. the hidden check as in 3; approval gate as in 6 (exit 3, nothing merged: the branch stays as it is);
  5. `git merge --ff-only BRANCH` in the main checkout (`merge` and `remote_checks` do not apply);
  6. the local CI again (the same runs), now in the main checkout; or `main_ci` instead, when it is set and main is
     exactly the commit the local CI passed on in the worktree (once per run if it uses {ci}, once otherwise;
@@ -105,7 +109,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_pages, commands, config, delivery, guard, i18n, notes, permissions, plain, review, util
+from . import backlog_pages, commands, config, delivery, guard, holdout, i18n, notes, permissions, plain, review, util
 from .backlog import Backlog, BacklogError
 
 if TYPE_CHECKING:
@@ -180,6 +184,8 @@ class Integration:
         self.perm_note = ""  # the note's part on the live permissions the branch changes (permissions_gate)
         self.outcome: str | None = None  # the agent's delivery (show())
         self.review_note = ""  # the note's part on the branch's review (review_gate)
+        self.hidden: holdout.Status | None = None  # the issue's hidden acceptance check, when it applies (show())
+        self.hidden_note = ""  # the note's part on it (hidden_gate)
 
     def gh(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return sh([self.gh_exe, *args], cwd=self.main_path, check=check)
@@ -478,6 +484,7 @@ class Integration:
             self.out(f"== {self.issue} has no plan linked in the backlog (small issue: the brief was the plan)")
         if issue["subs"]:
             self.out(f"== sub-issues of {self.issue}: {backlog_pages.render_subs(self.backlog, issue['subs'])}")
+        self.show_hidden()
         agent = next((x.get("agent") for x in issue["subs"] if x.get("branch") == self.branch), None)
         outcome = self.outcome = delivery.outcome_of(self.p, branch=self.branch, name=agent)
         if outcome:
@@ -486,6 +493,85 @@ class Integration:
                 "failed": ": the agent says it failed, read the report before merging",
             }.get(outcome, "")
             self.out(f"== the agent's delivery: outcome {outcome}{note}")
+
+    def show_hidden(self) -> None:
+        """The line on the issue's hidden acceptance check (holdout.py), when it has one: whether it applies to this
+        integration, is sealed and how many cases it has. Never its content: an agent may run --check."""
+        if not holdout.exists(self.p, self.issue):
+            return
+        st = holdout.status(self.p, self.issue)
+        if st.spec is not None and not st.error and not st.spec.applies(self.repo["key"], self.sub):
+            which = (
+                f"repo {st.spec.repo}"
+                if st.spec.repo != self.repo["key"]
+                else f"{', '.join(st.spec.subs)}, not {self.sub}"
+            )
+            self.out(f"== hidden check ({self.issue}): for {which}; not run here")
+            return
+        self.hidden = st
+        self.out(f"== hidden check ({self.issue}): {st.line()}")
+
+    def hidden_ready(self) -> None:
+        """Stops (exit 2, nothing done; --check too) when the issue's hidden check applies but cannot run: not
+        sealed, changed since sealed, gone, or its spec does not read."""
+        st = self.hidden
+        if st is not None and not st.ok:
+            raise Stop(f"hidden check {self.issue}: {st.line()}", 2)
+
+    def hidden_gate(self) -> None:
+        """Runs the issue's hidden check on the branch's tip, after the local CI and before anything is pushed or
+        merged (holdout.py). A pass under the current seal that covers the tip is reused. It lets the branch in when
+        enough cases pass; else exit 2 with, for the agent, only the symptoms (holdout.agent_message); after
+        holdout.MAX_ROUNDS failed rounds only the owner's yes (--approved) lets it in. Into the note: k/N and the
+        round, never the cases."""
+        st = self.hidden
+        if st is None or st.spec is None:
+            return
+        s, ref = st.spec, f"{self.repo['key']}:{self.branch}"
+        done = holdout.passed_on(self.p, s, self.repo, self.branch)
+        if done is not None:
+            self.out(
+                f"== hidden check {self.issue}: {done['passed']}/{done['total']} already passed on "
+                f"{str(done['tip'])[:8]} (round {done['round']}): not run again"
+            )
+            self.hidden_note = f"hidden check {self.issue}: {done['passed']}/{done['total']} (round {done['round']})"
+            return
+        self.out(f"== hidden check {self.issue}: {len(s.scenarios)} cases on a copy of {ref}")
+        try:
+            o = holdout.run_cases(self.p, s, self.branch, f"{self.repo['key']}-{self.branch}", self.out)
+        except holdout.HoldoutError as e:
+            raise Stop(f"hidden check {self.issue} could not run ({e}): nothing {self.nothing()}", 2) from e
+        rnd, ok = holdout.record(self.p, s, self.repo, self.branch, o)
+        counts = f"{len(o.passed)} of {o.total} pass (needs {s.needed})"
+        self.out(f"== hidden check {self.issue}: {counts} on {o.tip[:8]}, round {rnd}, {o.seconds} s")
+        if ok:
+            self.hidden_note = f"hidden check {self.issue}: {len(o.passed)}/{o.total} (round {rnd})"
+            return
+        failed = f"failed: {', '.join(o.failed)}; full output: `foreman holdout status {self.issue}` (never sent)"
+        if rnd >= holdout.MAX_ROUNDS and self.a.approved:
+            self.out(f"== hidden check: the owner's yes ({self.a.approved}) lets it in with {counts}")
+            self.hidden_note = (
+                f"hidden check {self.issue}: {len(o.passed)}/{o.total}, the owner lets it in (round {rnd})"
+            )
+            return
+        message = holdout.agent_message(s, o.failed)
+        if rnd >= holdout.MAX_ROUNDS:
+            raise Stop(
+                f"hidden check {self.issue}: {counts}, round {rnd} of {holdout.MAX_ROUNDS} ({failed}): no third "
+                "round: ask the owner (a question); the branch waits, and their yes to let it in as it is goes in "
+                f'--approved "who, when"; nothing {self.nothing()}. What the agent was told fails:\n{message}',
+                2,
+            )
+        raise Stop(
+            f"hidden check {self.issue}: {counts}, round {rnd} of {holdout.MAX_ROUNDS} ({failed}); nothing "
+            f"{self.nothing()}. First read the full output: a case that is wrong, not the branch, is fixed and sealed "
+            "again (that round does not count). Else send the agent only this, as it is (never a case's id, command, "
+            f"data or place):\n{message}",
+            2,
+        )
+
+    def nothing(self) -> str:
+        return "merged" if self.local else "pushed"
 
     def rel(self, path: Path) -> str | None:
         """PATH relative to the main checkout, or None when it lies outside the repo."""
@@ -1182,6 +1268,7 @@ class Integration:
             + (f"; approved: {self.a.approved}" if self.a.approved else "")
             + (f"; {self.perm_note}" if self.perm_note else "")
             + (f"; {self.review_note}" if self.review_note else "")
+            + (f"; {self.hidden_note}" if self.hidden_note else "")
             + (f"; {post}" if post else "")
             + ")",
         )
@@ -1420,6 +1507,7 @@ class Integration:
         self.show()
         self.permissions_gate()
         self.review_gate()
+        self.hidden_ready()
         if a.check:
             self.out("== backlog after the merge (dry run):")
             for d in did or ["nothing to change"]:
@@ -1456,6 +1544,7 @@ class Integration:
             self.scan_public("CI comment", ci_text)
         except Stop as e:
             raise Stop(f"{e.args[0]}: nothing pushed") from None
+        self.hidden_gate()
         pr, url = self.open_pr(a.title, body)
         try:
             self.remote_checks(pr)
@@ -1484,6 +1573,7 @@ class Integration:
     def run_local(self) -> int:
         """The flow for a repo without a remote: no push, no gh."""
         ci_text = self.local_ci()
+        self.hidden_gate()
         why = self.needs_approval()
         if why and not self.a.approved:
             notes.progress(
