@@ -91,14 +91,14 @@ to the hooks module's question, like any group; so does `foreman integrate … -
 foreman.toml or guard table that way, integrate.py). The internal group is compared only for a command that names
 them (names_internal).
 
-Two built-in rules for an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups; _agent_only), each
-("orchestrator", Hit) with why=agent; the orchestrator and the other sessions of the product (the owner's chats)
-pass, and only a caller that _who calls an agent (no process is compared) is checked, so a line without `git` or
-`integrate` costs nothing more. INTEGRATE: a segment whose program is foreman (shell.foreman_call: bare, a path,
-`python3 bin/foreman`, --project P, behind the wrappers runs() skips) running `integrate`, also nested (sh -c, $(…),
-a pipe into a shell…; the regex only for a text the lexer cannot read), in any folder and any product, but with
---help, -h or --check as a word of its own (argparse takes no abbreviation; --check stops before anything is
-written); the text of a note, a commit message, a sed script or a heredoc to an interpreter is never such a call.
+Three built-in rules for an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups; _agent_only),
+each ("orchestrator", Hit) with why=agent; the orchestrator and the other sessions of the product (the owner's
+chats) pass, and only a caller that _who calls an agent (no process is compared) is checked. INTEGRATE: a segment
+whose program is foreman (shell.foreman_call: bare, a path, `python3 bin/foreman`, --project P, behind the wrappers
+runs() skips) running `integrate`, also nested (sh -c, $(…), a pipe into a shell…; the regex only for a text the
+lexer cannot read), in any folder and any product, but with --help, -h or --check as a word of its own (argparse
+takes no abbreviation; --check stops before anything is written); the text of a note, a commit message, a sed script
+or a heredoc to an interpreter is never such a call.
 MAIN_CHECKOUT: a git that rewrites a main checkout holding a live home: the checkout (the nearest folder up with a
 `.git` entry, a stat per level, never git) of the live config or guard table of any product of the registry
 (main_checkouts; a worktree outside it, one nested in .claude/worktrees and a submodule have their own `.git` file,
@@ -124,6 +124,17 @@ checkout as text. Not seen: a git command that writes the shared .git/config or 
 remote add`; their writes by name are the git class of the reserved files, below), a
 branch moved without touching files (update-ref, branch -f: the copy is then dirty and integrate stops), patch, tar
 or unzip over it, git run by a program or a script, a variable from outside the line.
+HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product of the
+registry that exists: none, and only `foreman holdout` is compared), for an agent holdout_reader refuses (every type
+but a planner's: the ctx's agent_type, else <state>/agents.json; an unknown one is refused). Refused: `foreman
+holdout` as INTEGRATE reads it but with --help or -h; a line that names such a folder as text (`~`, $HOME); a word
+of a segment (also a redirection's file, the value of `--opt=VALUE`, nested lines as _walk gives them) that, expanded
+and joined to each folder the segment may run in, reaches one (_holdout_reach: the real path in or at the folder; a
+wildcard that may match it, `**` any depth; with a program that walks, _walks: WALKERS or WALK_FLAGS, a folder that
+holds it, and given no existing path, the folder it runs in); a segment that runs inside one. Any other tool: its
+places as `cat PLACE` (so a Read, Write or Edit in it), and a Grep whose path (else the call's cwd) holds one or a
+Glob whose pattern may reach one. Not seen: a path a program builds, a variable from outside the line, a link to a
+folder above walked by a program that follows links. A failure compares the line's text only.
 
 For the resource prefixes quoted strings are dropped (a note that mentions `make up` is not a command); the
 command is split at && || ; | newlines and $(; leading VAR=value, env, time, nice, exec, command, sudo and the
@@ -1793,11 +1804,8 @@ def _holdout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
                         found.append(_holdout_hit(d, "command", " ".join(t.raw for t in w)))
                         return
 
-        def unparsed(text: str) -> None:
-            d = None if found else _holdout_named(text, dirs)
-            if d is not None:
-                found.append(_holdout_hit(d, "whole", text))
-            elif not found and re.search(HOLDOUT_CALL, text) and not re.search(HOLDOUT_HELP, text):
+        def unparsed(text: str) -> None:  # a text that names the folder was refused before the walk
+            if not found and re.search(HOLDOUT_CALL, text) and not re.search(HOLDOUT_HELP, text):
                 found.append(_holdout_hit(("", "", project.name), "whole", text))
 
         d = _holdout_named(cmd, dirs)

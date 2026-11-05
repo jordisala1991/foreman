@@ -87,6 +87,7 @@ REFUSED = (
     f"python3 -c \"print(open('{H}/AI-4/holdout.toml'.replace('~', '/u')).read())\"",
     f"python3 - <<'EOF'\nprint(open('{H}/AI-4/holdout.toml').read())\nEOF",
     f"cat '{H}/AI-4/holdout.toml",  # the lexer cannot read it: its text names the folder
+    "cd ~/.local/share/foreman/fake/holdout && ls $(pwd)",
     "foreman holdout status",
     "bin/foreman --project fake holdout seal AI-4",
     "python3 bin/foreman holdout run api fo1/x AI-4 --full",
@@ -110,6 +111,8 @@ ALLOWED = (
     "foreman holdout seal --help",
     'foreman note "a hidden check runs at integration"',
     "grep -rn holdout src",
+    "grep -- -r ~/.local",
+    "cat '' src/x.py",
 )
 
 
