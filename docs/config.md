@@ -240,7 +240,7 @@ name = "example"            # required: lowercase, digits, . _ -
 owner = "owner"             # who decides; named in pages and guard messages
 language = "en"             # en | es: generated pages, notes heading, guard and resume texts
 rules = "rules.md"          # the project's rules, read by the orchestrator and every agent
-config_schema = 19          # the foreman.toml schema the file is written for (below); default: this foreman's
+config_schema = 20          # the foreman.toml schema the file is written for (below); default: this foreman's
 owner_knows = []            # terms the owner knows, never flagged by those checks: ["CI", "PR"]
 
 [paths]
@@ -300,6 +300,9 @@ post_create = []            # run in a new worktree, new or existing branch ({ma
 publish_on_merge = false    # merging publishes: always the owner's approval
 require_approval = false    # every merge needs --approved
 risky_paths = []            # "dir/", "file", "glob*", or "file:text" (a changed line contains text)
+review = "off"              # auto: a branch with delicate paths, large or partial needs a review to merge (below)
+review_paths = []           # paths that ask for a review, not for the owner's yes (as risky_paths)
+review_lines = 400          # lines of code over which a branch needs a review (0: size never asks)
 public = false              # no internal IDs in title, body, comment and the branch's commit messages
 privacy_scan = ""           # extra command: each text on stdin, non-zero exit stops
 pre_merge_report = ""       # command whose output is shown before merging
@@ -445,6 +448,52 @@ the warning, the progress line and the note. An unknown placeholder is exit 2 be
 prints the command with `{before}` and `{head}` unreplaced. Its variables, `FOREMAN_BEFORE` and `FOREMAN_HEAD`, need no
 quoting (docs/extending.md).
 
+## `[repos.*] review`: branches another agent reviews before they merge
+
+With `review = "auto"` (the default is `"off"`: nothing changes), `foreman integrate` lets in a branch that needs a
+review only once a review covers its tip and leaves no high (H) or medium (M) finding open. A branch needs one when:
+
+- it touches a `risky_paths` or a `review_paths` entry (the same forms: `"dir/"`, `"file"`, a glob, `"file:text"`);
+  `review_paths` asks for the review without asking for the owner's yes;
+- it changes more than `review_lines` lines of code: added plus removed in `git diff --numstat main...BRANCH`, renames
+  detected, without test folders (`tests/`, `test/` at any level), `*.md`, `*.json` and lock files (`*.lock`,
+  `*-lock.yaml`, `*.lockb`, `go.sum`); 0 turns the size off;
+- its agent delivered it `partial` (`foreman progress --done --outcome partial`).
+
+A measurement (`integrate --measure`) is never reviewed, and a `failed` delivery adds no reason of its own.
+
+A review is a `.md` file under the reviews folder (`[paths] reviews`, any depth) whose name contains `review` and
+whose first 15 lines hold this header, written by the reviewer:
+
+```
+Branch: app:fix/login
+Tip: 3f2a9c1
+Round: 1
+Open: H 1, M 2
+```
+
+foreman reads the verdict from `Open:` (L findings never block). The branch's latest review is the one with the
+highest round, then the newest file. It covers the branch when `Tip` is its tip, or when the branch's own diff (from
+its merge-base with main) is the same patch as at `Tip` (`git patch-id --stable`): merging main or a clean rebase
+does not ask for another review. `integrate` (and `--check`) prints `== review: STATE` and stops with exit 2, nothing
+done, unless the state is `not needed` or `clean`:
+
+| state | what it means | next step |
+|---|---|---|
+| `needed, round N` | no review covers the tip | a reviewer agent that did not write the branch reviews it |
+| `findings` | the review of the tip leaves H or M open (round 1) | the agent that made the branch fixes or refutes each one |
+| `fixed, round 2 needed` | round 1 left H or M open and the branch has moved | round 2 checks the fixes |
+| `for the owner` | round 2 left H or M open; there is no third round | a question for the owner; the branch waits |
+| `clean` | the review of the tip leaves 0 H and 0 M | it goes in; the note names the review |
+
+Two ways past the gate, both written into the integration's note: `--no-review "why"` for a branch whose only reason
+is its size and that has no review yet (a mechanical split proven by its tests; never for delicate paths or a partial
+delivery), and, in `for the owner`, `--approved "who, when"` once the owner says it goes in as it is. A file under the
+reviews folder that names the branch but whose header does not read is listed in the `needed` line.
+
+`review`, `review_paths` and `review_lines` are brakes (below, «Seeing the permissions and testing a change»):
+`review` from `auto` to `off`, an entry removed from `review_paths`, or `review_lines` raised or set to 0 opens.
+
 ## `[deny] patterns`: what the regexes see
 
 Each pattern is a Python regex. The guard splits a Bash line the way bash does (`&&`, `;`, pipes, `$(…)`, `bash -c
@@ -548,7 +597,8 @@ foreman permissions apply /tmp/candidate.toml --table /tmp/guard.tsv [--opens]
   `pre_merge_report`, `post_merge` and `post_create` (every point of docs/extending.md, «The
   contract»). One added, changed or emptied (a CI that no longer runs) opens. So does a brake of an integration that
   comes off: `require_approval`, `publish_on_merge` or `public` from true to false, `remote_checks` from `required`
-  to `none`, an entry removed from `risky_paths`. A brake put on, a `risky_paths` entry added, or a repo or resource
+  to `none`, an entry removed from `risky_paths` or `review_paths`, `review` from `auto` to `off`, `review_lines`
+  raised or set to 0. A brake put on, a `risky_paths` entry added, or a repo or resource
   removed (nothing of it runs any more) opens nothing: `foreman integrate` shows it («Also changes») and goes on.
 - **Who.** Whatever the product's lists say, a built-in rule of the guard lets only the marked orchestrator's main
   thread, in its own process, run `foreman permissions apply`: an agent, a subagent or another session is refused.
