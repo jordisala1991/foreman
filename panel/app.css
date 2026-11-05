@@ -73,6 +73,11 @@ nav button.on{color:var(--acc)}
 button.sec.rec,.chip.rec{border-color:var(--acc)}.recm{color:var(--muted);font-weight:400}
 .answered{margin-top:var(--sp2);font-size:var(--fs-m)}
 .free{margin-top:var(--sp2)}.free textarea{min-height:56px}.answered.warn{margin-bottom:-4px}
+/* what a decision says besides its text: under the card's buttons, and each option in its detail */
+.dmore{margin-top:10px;padding-top:var(--sp2);border-top:1px solid var(--line);display:flex;flex-direction:column;gap:var(--sp1);font-size:var(--fs-m)}
+.dmore .slink{font-size:var(--fs-m)}
+.dopts{border:1px solid var(--line);border-radius:var(--r);background:var(--card)}
+.dopts .dopt{padding:var(--sp2) var(--sp3);border-top:1px solid var(--line)}.dopts .dopt:first-child{border-top:0}
 
 /* ---- List of one-line rows: icon, ID, name, title with ellipsis, metadata on the right; tap opens the detail */
 .list{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:0 0 10px}
@@ -249,6 +254,8 @@ body.dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
 .wrow .sico{color:var(--muted)}
 
 .wdoc{max-width:680px;margin:0 auto;font-size:16px;line-height:1.65;color:var(--fg);overflow-wrap:anywhere}
+/* a document's images (/api/file): as wide as the column at most; tapping one opens it whole */
+.wdoc a.dimg{display:inline-block;max-width:100%}.wdoc a.dimg img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:var(--r-s)}
 .mbody .wdoc .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:var(--fs-s);color:var(--muted);margin:2px 0 14px}
 .mbody .wdoc .crumbs a{color:var(--muted);text-decoration:none;cursor:pointer;padding:2px 0}
 .mbody .wdoc .crumbs a:active{color:var(--fg)}

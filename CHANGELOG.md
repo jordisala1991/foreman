@@ -22,6 +22,14 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   and `page_path`) and the decisions page show them; a decision without them reads and renders as before.
 - `foreman check` validates those fields (undo values, options they name, dates, the page's folder) and warns of
   unknown keys in a decision, which the next write drops.
+- The panel shows those fields: the question's card lists under its buttons what each option changes and whether it
+  can be undone, what waits until the answer (with the reminder date) and a link to its page; the detail shows each
+  option whole (with its cost) and the page inside, with its images. A question without them looks as before
+  (checked pixel by pixel at 390 and 1440 px). The detail now shows the question's whole text (it was cut at 600
+  characters).
+- Images in the panel's documents: a report or a question's page shows its `![alt](picture.png)` from its own
+  folder, through the new `/api/file` (PNG, JPEG, GIF or WebP checked by their first bytes, up to 5 MB, only from the
+  reviews, notes and report folders, with the panel's key; never SVG nor an outside address).
 - The `owner-decisions` skill presents a question's `details`, `unanswered` and `page` when it has them: per option
   its effect, cost and whether it can be undone, what waits for the answer and the reminder day, and a two-line
   summary of the page with where to see it. Older questions are presented as before.

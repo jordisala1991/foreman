@@ -177,6 +177,14 @@ $ GET /api/strings?lang=es
   "context": "Contexto",
   "cpu_idle": "Nada tirando de la CPU.",
   "criterion_lc": "criterio:",
+  "dec_cost": "coste: {text}",
+  "dec_effects": "Qué cambia cada opción",
+  "dec_page": "Página",
+  "dec_reminder": "recordatorio el {date}",
+  "dec_see_page": "Ver su página",
+  "dec_unanswered": "Mientras no contestes",
+  "dec_waits": "Mientras no contestes: {text}",
+  "dec_waits_by": "Mientras no contestes (recordatorio el {date}): {text}",
   "decision": "Decisión",
   "decisions": "Decisiones pendientes",
   "decisions_count_1": "{n} decisión",
@@ -442,6 +450,9 @@ $ GET /api/strings?lang=es
   "tool": "Herramienta",
   "turn": "Turno siguiente",
   "uncommitted": "Sin commit",
+  "undo_hard": "se puede deshacer, con trabajo",
+  "undo_no": "sin vuelta atrás",
+  "undo_yes": "se puede deshacer",
   "unread": "sin leer",
   "until": "Hasta",
   "until_t": "hasta las {t}",
@@ -578,6 +589,14 @@ $ GET /api/strings?lang=en
   "context": "Context",
   "cpu_idle": "Nothing pulling on the CPU.",
   "criterion_lc": "criterion:",
+  "dec_cost": "cost: {text}",
+  "dec_effects": "What each option changes",
+  "dec_page": "Page",
+  "dec_reminder": "reminder on {date}",
+  "dec_see_page": "See its page",
+  "dec_unanswered": "Until you answer",
+  "dec_waits": "Until you answer: {text}",
+  "dec_waits_by": "Until you answer (reminder on {date}): {text}",
   "decision": "Decision",
   "decisions": "Pending decisions",
   "decisions_count_1": "{n} decision",
@@ -843,6 +862,9 @@ $ GET /api/strings?lang=en
   "tool": "Tool",
   "turn": "Next turn",
   "uncommitted": "Uncommitted",
+  "undo_hard": "can be undone, with work",
+  "undo_no": "cannot be undone",
+  "undo_yes": "can be undone",
   "unread": "unread",
   "until": "Until",
   "until_t": "until {t}",
@@ -2951,6 +2973,23 @@ $ GET /api/backlog?p=*
     }
   ],
   "version": <EPOCH>
+}
+
+######## a document's images: only a PNG, JPEG, GIF or WebP under the folders of documents
+$ GET /api/file?p=faro&path=reviews/2020-01-10-plan-FA-1.md
+[404]
+{
+  "error": "not found"
+}
+$ GET /api/file?p=faro&path=../projects.toml
+[404]
+{
+  "error": "not found"
+}
+$ GET /api/file?p=faro&path=reviews/nope.png
+[404]
+{
+  "error": "not found"
 }
 
 ######## state root: files under <TMP>/state

@@ -58,6 +58,21 @@ place, `"stub": true` with only `id`, `status`, `archived` and its `project` whe
 `outcome.aliases` a link may name. Stubs keep every id where it was, so counts, the progress of each project, and
 links still find them; `/api/issue` gives the whole card. `counts` are the same in both bodies, and
 each body has its own ETag. Without `closed`, the body is the one above.
+A pending decision in the state carries its whole `text` (the card shows only its first sentence, `lead`) and, only
+when it has them, its `details`, `unanswered` and `page` (backlog.py): the card adds under its buttons each option's
+effect (cut at 160 characters) and whether it can be undone, what waits until the answer and a link to the page; the
+detail shows each option whole (effect, cost, undo), the reminder date and the page rendered inside with its images.
+A decision without them is sent and shown as before.
+Documents: `/api/doc?p=NAME&path=PATH` gives a `.md` (`{path, md}`, up to 400 KB) and `/api/file?p=NAME&path=PATH`
+an image it shows. Both take only a file under the reviews or notes folders or a report prefix of the product's home
+(or, by absolute path, of any registered product), once resolved (`panel_cards.home_file`: no `..` nor NUL; a
+symbolic link that leads out is refused). `/api/file` serves only `.png .jpg .jpeg .gif .webp` whose first bytes are
+that format's (never SVG, which can carry script), up to 5 MB (`FILE_MAX`), with its own `Content-Type`,
+`X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`, `Cache-Control: private,
+max-age=300` and an ETag of its mtime and size, never gzipped; anything else is a 404 that does not say why. Like
+every request, it needs the panel's key. The document viewer (`mdDoc` with a document's options) shows `![alt](src)`
+from the document's folder through `/api/file` (lazy, at most the column's width, tapping opens it whole); an image
+from elsewhere (`http(s):`, `data:`) is never fetched: a link, or its text. Wiki pages keep showing an image's text.
 The page's version is the newest mtime of `index.html`, `app.js` and `app.css`: the server writes it into the page
 (`<html data-v>`, `?v=` on both assets, which are then cached as immutable) and into every JSON answer (`version`);
 `/api/version` answers it alone. The page reloads itself (once per server version, sessionStorage) when an answer

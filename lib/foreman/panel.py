@@ -26,6 +26,9 @@ ETag and go gzipped. The backlog's cards come apart from the polled state (/api/
 their files, the closed ones short: /api/issue gives a whole card; with closed=recent only each product's
 RECENT_CLOSED most recent closed ones, the older ones and the archive as stubs that still count and link); the state
 carries only what is live about them (issue_live).
+Documents (/api/doc, .md) and the images they show (/api/file: PNG, JPEG, GIF or WebP whose first bytes are their
+format's, up to FILE_MAX, with nosniff and a sandbox CSP; never SVG) come only from the reviews, notes and report
+folders of a registered product (panel_cards.home_file); anything else is a 404.
 
 Where things are: panel_cache (memo, file_sig, the page version), panel_registry (REG), panel_locks (OwnerLock,
 BusyProbe, locks), panel_cards (documents, backlog cards, short cards, recommended_option), panel_wiki (the wiki);
@@ -69,7 +72,7 @@ from . import (
 )
 from .backlog import Backlog, BacklogError
 from .panel_cache import STATIC, iso_age, iso_ts, memo, page_version, sh
-from .panel_cards import backlog_body, backlog_cards, clean, doc_rel, find_card, issue_live
+from .panel_cards import backlog_body, backlog_cards, clean, doc_rel, find_card, home_file, issue_live
 from .panel_locks import OWNER, locks
 from .panel_registry import REG
 from .panel_wiki import wiki_dir, wiki_get, wiki_list, wiki_search
@@ -85,6 +88,38 @@ Query = dict[str, list[str]]  # urllib.parse.parse_qs
 
 ASSETS = {"/app.css": ("app.css", "text/css; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8")}
 DOC_MAX = 400_000
+FILE_MAX = 5_000_000  # the largest image /api/file serves
+# the images /api/file serves: extension -> (type, whether the first bytes are that format's). No SVG: it can carry
+# script and, opened as a page, would run with the panel's origin
+IMAGES = {
+    ".png": ("image/png", lambda b: b.startswith(b"\x89PNG\r\n\x1a\n")),
+    ".jpg": ("image/jpeg", lambda b: b.startswith(b"\xff\xd8\xff")),
+    ".jpeg": ("image/jpeg", lambda b: b.startswith(b"\xff\xd8\xff")),
+    ".gif": ("image/gif", lambda b: b[:6] in (b"GIF87a", b"GIF89a")),
+    ".webp": ("image/webp", lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"),
+}
+# what an image answer carries besides its type: never read as another type, never run as a page
+FILE_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox"}
+
+
+def home_image(project: Project, path: str) -> tuple[bytes, str, str] | None:
+    """(bytes, type, ETag) of an image a document of `project` shows (/api/file): a PNG, JPEG, GIF or WebP under
+    the folders of documents (panel_cards.home_file), up to FILE_MAX, whose first bytes are its format's; else None."""
+    rel = home_file(project, path, tuple(IMAGES))
+    if not rel:
+        return None
+    f = project.home / rel
+    try:
+        st = f.stat()
+        with open(f, "rb") as fh:
+            data = fh.read(FILE_MAX + 1)
+    except OSError:
+        return None
+    ctype, looks = IMAGES[Path(rel).suffix.lower()]
+    if len(data) > FILE_MAX or not looks(data):
+        return None
+    return data, ctype, f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+
 
 # ---------- agents ----------
 
@@ -865,15 +900,17 @@ class Handler(BaseHTTPRequestHandler):
         cache: str = "no-store",
         etag: str | None = None,
         gzipped: bytes | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
-        """`gzipped`: the body already compressed (a cached answer, /api/backlog)."""
+        """`gzipped`: the body already compressed (a cached answer, /api/backlog). `headers`: more headers (an
+        image's: never compressed, it already is)."""
         b = body.encode() if isinstance(body, str) else body
         if etag and self.headers.get("If-None-Match") == etag:
             self.send_response(304)
             self.send_header("ETag", etag)
             self.end_headers()
             return
-        gz = len(b) > 1400 and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        gz = not headers and len(b) > 1400 and "gzip" in (self.headers.get("Accept-Encoding") or "")
         if gz:
             b = gzipped if gzipped is not None else gzip.compress(b, 5)
         self.send_response(code)
@@ -884,6 +921,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Encoding", "gzip")
         if etag:
             self.send_header("ETag", etag)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(b)
 
@@ -980,6 +1019,13 @@ class Handler(BaseHTTPRequestHandler):
             if p is None or not rel or (p.home / rel).stat().st_size > DOC_MAX:
                 return self.json({"error": "not found"}, 404)
             return self.json({"path": rel, "md": (p.home / rel).read_text(errors="replace")})
+        if u.path == "/api/file":  # an image a document shows; anything else is not found, without saying why
+            p = REG.get(q.get("p", [""])[0])
+            img = home_image(p, q.get("path", [""])[0]) if p else None
+            if img is None:
+                return self.json({"error": "not found"}, 404)
+            data, ctype, etag = img
+            return self.send(200, data, ctype, cache="private, max-age=300", etag=etag, headers=FILE_HEADERS)
         return self.json({"error": "not found"}, 404)
 
     def do_POST(self) -> None:
