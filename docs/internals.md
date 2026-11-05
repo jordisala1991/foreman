@@ -60,9 +60,8 @@ links still find them; `/api/issue` gives the whole card. `counts` are the same 
 each body has its own ETag. Without `closed`, the body is the one above.
 A pending decision in the state carries its whole `text` (the card shows only its first sentence, `lead`) and, only
 when it has them, its `details`, `unanswered` and `page` (backlog.py), and, with `details`, `holds` (`{ref, title}`
-of the open work its `blocks` names). One with `details` is told in order: its card shows a chip per option (whether
-it can be undone), «Recommended: A», what it holds and the reminder date, and a «Decide» button (quick answer buttons
-only when every option can be undone); its detail shows the text, what happens without an answer with the reminder
+of the open work its `blocks` names). One with `details` is told in order: its card shows each option as a row (its
+name, undo and cost chips, «Recommended» on one, its own small «Choose») and then what it holds and the reminder date; its detail shows the text, what happens without an answer with the reminder
 date and the tasks it holds (folded), one card per option in the order written (chips for undo and cost, effect, the
 recommendation's reason in its card, its own «Choose» button; side by side from 700 px), «Other answer» and the page
 folded under «See more detail» (without its first title). An option that cannot be undone asks for a confirmation

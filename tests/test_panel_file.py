@@ -200,8 +200,8 @@ class PanelDecisionFieldsTest(PanelCase):
         return r.stdout
 
     def test_rich_question_layout(self):
-        """A question with what each option changes: the card shows each option's chip and «Decide» (quick answers only
-        when every option can be undone); the detail tells the situation, what is at stake with the tasks it holds by
+        """A question with what each option changes: the card shows each option as a row with its name, chips and own
+        «Choose»; the detail tells the situation, what is at stake with the tasks it holds by
         name, one card per option in the order written with its own button, «Other answer» after them and the page
         folded; the «Asked» and «Status» rows are gone."""
         out = json.loads(
@@ -218,12 +218,20 @@ console.log(JSON.stringify({card: decCardRich(x), easy: decCardRich(easy), detai
 """)
         )
         card, easy, detail = out["card"], out["easy"], out["detail"]
-        self.assertIn("Recommended: A", card)
-        self.assertIn('data-k="dec"', card)
-        self.assertIn(">Decide</button>", card)
-        self.assertEqual(card.count("decideOpt(this)"), 0)  # C cannot be undone: no quick answers on the card
-        self.assertEqual(easy.count("decideOpt(this)"), 3)
+        # the card: each option as a row, in the order written, with its whole name, its chips and its own «Choose»
+        # (the one that cannot be undone asks for the confirmation: data-undo="no"); then what it holds, the reminder
+        self.assertLess(card.index("A: app"), card.index("B: mail"))
+        self.assertLess(card.index("B: mail"), card.index("C: retry"))
+        self.assertEqual(card.count('<div class="orow"') + card.count('<div class="orow rec"'), 3)
+        self.assertEqual(card.count('class="orow rec"'), 1)
+        self.assertEqual(card.count(">Recommended</span>"), 1)
         self.assertIn("no way back", card)
+        self.assertIn(">2 days</span>", card)
+        self.assertEqual([card.count(f">Choose {k}</button>") for k in "ABC"], [1, 1, 1])
+        self.assertEqual(card.count('data-undo="no"'), 1)
+        self.assertEqual(easy.count('data-undo="yes"'), 3)
+        self.assertIn("holds 2 tasks · reminder on 2026-11-12", card)
+        self.assertNotIn("Why:", card)
         self.assertNotIn("Asked", detail)
         self.assertNotIn("waits for your answer", detail)
         self.assertLess(detail.index("Situation."), detail.index("If you do not answer: nothing changes"))

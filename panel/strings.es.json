@@ -292,8 +292,6 @@
   "chip_undo_hard": "con trabajo",
   "chip_undo_no": "sin vuelta atrás",
   "dec_more": "Ver más detalle",
-  "dec_decide": "Decidir",
-  "dec_rec_short": "Recomendada: {l}",
   "dec_no_back": "{l} no tiene vuelta atrás",
   "dec_back": "Volver",
   "message": "Mensaje",

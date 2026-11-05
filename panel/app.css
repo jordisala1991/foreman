@@ -86,6 +86,13 @@ button.sec.rec,.chip.rec{border-color:var(--acc)}.recm{color:var(--muted);font-w
 .ochip{font-size:var(--fs-s);line-height:18px;border:1px solid var(--line);border-radius:var(--r-s);padding:1px 9px;background:var(--card)}
 .ochip.ok{color:var(--ok);border-color:var(--ok)}.ochip.warn{color:var(--warn);border-color:var(--warn)}.ochip.bad{color:var(--bad);border-color:var(--bad)}
 .ochip.rec{border-color:var(--acc)}
+/* the list card of such a question: one row per option, its name and chips at the left, its «Choose» at the right */
+.orows{display:flex;flex-direction:column;margin-top:10px;border:1px solid var(--line);border-radius:var(--r)}
+.orow{display:flex;align-items:center;gap:var(--sp3);padding:var(--sp2) var(--sp3);border-top:1px solid var(--line)}.orow:first-child{border-top:0}
+.orow.rec{box-shadow:inset 3px 0 0 var(--acc)}
+.otxt{flex:1;min-width:0}.oname{font-size:var(--fs-m);line-height:1.4}.oname .obadge{display:inline-block;margin-left:4px;vertical-align:1px}
+.orow .ochips{margin-top:var(--sp1)}.orow button{flex:none;white-space:nowrap}
+.orows+.csub{margin-top:var(--sp2)}
 .ocards{display:grid;gap:10px;margin:var(--sp4) 0 var(--sp2)}
 .ocard{display:flex;flex-direction:column;gap:var(--sp2);min-width:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:var(--sp3) 14px}
 .ocard.rec{border-color:var(--acc)}

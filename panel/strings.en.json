@@ -292,8 +292,6 @@
   "chip_undo_hard": "with work",
   "chip_undo_no": "no way back",
   "dec_more": "See more detail",
-  "dec_decide": "Decide",
-  "dec_rec_short": "Recommended: {l}",
   "dec_no_back": "{l} cannot be undone",
   "dec_back": "Back",
   "message": "Message",

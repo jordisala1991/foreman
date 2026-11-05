@@ -633,20 +633,20 @@ const optLetter = o => (/^\s*([A-Za-z0-9]{1,2})\s*[:.)]\s/.exec(o) || [])[1] || 
 const UNDO_ICO = {yes: '↺', hard: '⚠︎', no: '⊘'};
 const undoChip = u => UNDO_CLS[u] ? `<span class="ochip ${UNDO_CLS[u]}"><span aria-hidden="true">${UNDO_ICO[u]}</span> ${t('chip_undo_' + u)}</span>` : '';
 const undoOf = (x, o) => (x.details[o] || {}).undo || '';
-// quick answers from the list only when every option can be undone
-const allUndoable = x => x.options.every(o => undoOf(x, o)==='yes');
 const optButton = (x, o, cls='') => `<button class="${cls}" data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-op="${esc(o)}" data-p="${esc(x.p)}" data-undo="${esc(undoOf(x, o))}" onclick="decideOpt(this)">${optLetter(o) ? t('dec_choose', {l: esc(optLetter(o))}) : t('dec_choose_it')}</button>`;
+// in the list: each option as a row (its whole name, undo and cost chips, «Recommended» on one) with its own small
+// «Choose» (one tap, or the confirmation for one that cannot be undone); then what it holds and the reminder date
 function decCardRich(x){
-  const rec = x.recommended && (optLetter(x.recommended) || x.recommended);
+  const w = canWrite(x.p), hs = x.holds || [];
+  const meta = [hs.length && tn('dec_holds', hs.length).toLowerCase(), x.unanswered && x.unanswered.by && t('dec_reminder', {date: esc(x.unanswered.by)})].filter(Boolean).join(' · ');
   return `<div class="ctitle" data-k="dec" data-key="${esc(decKey(x))}"><span>${ptag(x.p)}${esc(x.title)}</span><span class="chev">›</span></div>`
     + (x.lead ? `<div class="clead">${esc(x.lead)}</div>` : '')
-    + `<div class="ochips">${x.options.map(o => `<span class="ochip${o===x.recommended ? ' rec' : ''}"><b>${esc(optLetter(o) || o)}</b>${UNDO_CLS[undoOf(x, o)] ? ` <span class="${UNDO_CLS[undoOf(x, o)]}"><span aria-hidden="true">${UNDO_ICO[undoOf(x, o)]}</span> ${t('chip_undo_' + undoOf(x, o))}</span>` : ''}</span>`).join('')}</div>`
-    + `<div class="csub">${[rec && t('dec_rec_short', {l: esc(rec)}), (x.holds || []).length && tn('dec_holds', x.holds.length).toLowerCase(),
-        x.unanswered && x.unanswered.by && t('dec_reminder', {date: esc(x.unanswered.by)})].filter(Boolean).join(' · ')}</div>`
-    + decisionSent(x)
-    + `<div class="btns"><button data-k="dec" data-key="${esc(decKey(x))}">${t('dec_decide')}</button>`
-    + (canWrite(x.p) && allUndoable(x) ? x.options.map(o => `<button class="sec${o===x.recommended ? ' rec' : ''}" data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-op="${esc(o)}" data-p="${esc(x.p)}" data-undo="yes" onclick="decideOpt(this)">${esc(optLetter(o) || o)}</button>`).join('') : '')
-    + '</div>';
+    + `<div class="orows">${x.options.map(o => { const d = x.details[o] || {};
+        return `<div class="orow${o===x.recommended ? ' rec' : ''}"><div class="otxt"><div class="oname"><b>${esc(o)}</b>${o===x.recommended ? ` <span class="obadge">${t('dec_rec_badge')}</span>` : ''}</div>`
+          + (UNDO_CLS[d.undo] || d.cost ? `<div class="ochips">${undoChip(d.undo)}${d.cost ? `<span class="ochip">${esc(d.cost)}</span>` : ''}</div>` : '')
+          + `</div>${w ? optButton(x, o, 'sm sec') : ''}</div>`; }).join('')}</div>`
+    + (meta ? `<div class="csub">${meta}</div>` : '')
+    + decisionSent(x);
 }
 function decOptCard(x, o, write){
   const d = x.details[o] || {}, rec = o===x.recommended;
