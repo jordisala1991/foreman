@@ -109,7 +109,8 @@ closed block, the review only proposes something for a concrete failure).
 - **Notes into pages:** consolidate the notes into the project's pages as current state and conclusions (chronology
   at most in a short «History»), say up to which note time it goes, check with grep what a note says was «written
   down in X», and tell the owner (`foreman docs owner`).
-- **Review of the way of working:** what failed in the block; for each failure, first whether a tool can fix it (a
+- **Review of the way of working:** what failed in the block, starting from `foreman agents --misled --since <last
+  close>` (a `<where>` that repeats is a failure); for each failure, first whether a tool can fix it (a
   script or hook before a rule). At most two changes proposed to the owner, plus which rule did not help and can go,
   each with its failure in plain words; a change enters only if the owner approves. A new rule is one sentence
   (the story goes to the notes) and merges with or replaces another. An improvement removed for a failure stays as
@@ -120,5 +121,9 @@ closed block, the review only proposes something for a concrete failure).
   (`docs/config.md`).
   - *Daily reports* (watch, health check…): in the first pass after it, read the report, act on what is out of
     bounds, write the heartbeat the task names.
+  - *Harness review* (a `models` source; `foreman recurring` names the new models): launch a `reviewer` (`foreman
+    launch NAME --type reviewer --no-backlog`) with «A harness review» (agents/reviewer.md), the models and the day
+    of the previous review. Its review is the plan of a fixes issue (your «Review by the orchestrator»): the changes
+    to foreman's texts you approve as any plan; those to the project's rules go to the owner as one decision.
   - *Weekly lint* of the project's pages: a `mechanic` agent fixes broken links, figures without a source, stale
     states and orphan pages; what changes a decision goes to the owner (`foreman backlog decision add`).
