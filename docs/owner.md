@@ -34,9 +34,15 @@ the orchestrator.
 
 ## Templates
 
-- **Decision:** title = the question in one plain sentence; text = what it is about, why it comes now and what each
-  option changes; recommendation = the option and why, and which option it is (`--recommend-option` with the exact
-  text of that option: the panel marks its button «(recommended)»).
+- **Decision:** title = the question in one plain sentence, **one question per decision** (two questions in the
+  title or the text get a warning; a question quoted «…» does not count); text = what it is about and why it comes
+  now; options = short answers, they are the buttons; after each `--option`, its `--effect` (what the owner will see
+  or do differently), its `--cost` when it has one (cost or risk) and its `--undo` (`yes`, `hard`: with work, `no`);
+  recommendation = the option and why, and which option it is (`--recommend-option` with the exact text of that
+  option: the panel marks its button «(recommended)»). When work waits for the answer, `--if-no-answer` says what
+  stays stopped meanwhile and `--answer-by` the day to remind the owner: foreman never answers for them, so a
+  question never says «if you do not answer, I go with A». When a screenshot or a table explains it better than a
+  sentence, `--page` names a page (.md) with them under the reviews folder (see docs/orchestrator.md).
 - **Progress line:** what was reached or what broke, with its figure: «Search answers in 1.2 s instead of 3; the
   last part, the cache, is next».
 - **Result line:** what the product or the owner can do now that they could not before, with its figure.

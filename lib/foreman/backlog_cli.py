@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import backlog_check, backlog_list, backlog_pages
 from .backlog import CLOSED, Backlog, BacklogError, DecisionResolved
@@ -176,6 +176,8 @@ USAGE = """\
   archive ID
   decision add [--id ID | --issue ISSUE] --title T --text T --option O [--option O ...] [--recommend T]
          [--recommend-option O] [--date D] [--as-is] [--blocks REF ...]
+         [--effect T] [--cost T] [--undo yes|hard|no] (after the --option they describe)
+         [--if-no-answer T] [--answer-by D] [--page PATH]
                                      a question for the owner (docs/owner.md): --title the question in one plain
                                      sentence; --text what it is about, why it comes now and what each option
                                      changes; --recommend the option and why; --recommend-option the exact text of
@@ -185,6 +187,14 @@ USAGE = """\
                                      which records it anyway and marks it ("as_is": true, a warning in check).
                                      --blocks: what waits for the answer while it is pending (none by default):
                                      Tn or "issue" relative to --issue, or "ISSUE" / "ISSUE Tn"
+                                     Each --option is a short answer (a button); after it, --effect what the
+                                     owner will see or do differently, --cost its cost or risk, --undo whether it
+                                     can be undone (yes; hard: with work; no). --if-no-answer: what stays stopped
+                                     until the owner answers (foreman never answers for them); --answer-by: the
+                                     day to remind them. --page: a .md under the reviews or notes folders
+                                     (screenshots, tables) that explains the question. Warnings on stderr, never
+                                     blocking: an option without --effect, two questions in one, a reminder date
+                                     in the past, a page that is missing or larger than 400 KB
   decision blocks ID REF ... | decision blocks ID --none [--issue ISSUE]
                                      change what a pending decision holds (REF as in --blocks)
   decision list [--json]             the pending decisions in the order to go through them with the owner: those
@@ -287,7 +297,38 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     a.add_argument("--remove", action="store_true")
     a = bp.add_parser("archive")
     a.add_argument("id")
+
+    class OptionAction(argparse.Action):
+        """--option: one more option, and an empty detail for the --effect, --cost and --undo that follow it."""
+
+        def __call__(
+            self,
+            parser: argparse.ArgumentParser,
+            ns: argparse.Namespace,
+            values: Any,
+            option_string: str | None = None,
+        ) -> None:
+            ns.option = [*ns.option, values]
+            ns.details = [*ns.details, {}]
+
+    class DetailAction(argparse.Action):
+        """--effect, --cost, --undo: a detail of the last --option given (an error before any, or given twice)."""
+
+        def __call__(
+            self,
+            parser: argparse.ArgumentParser,
+            ns: argparse.Namespace,
+            values: Any,
+            option_string: str | None = None,
+        ) -> None:
+            if not ns.details:
+                parser.error(f"{option_string} goes after the --option it describes")
+            if self.dest in ns.details[-1]:
+                parser.error(f"{option_string} given twice for option {len(ns.details)}")
+            ns.details[-1][self.dest] = values
+
     a = bp.add_parser("decision")
+    a.set_defaults(details=[])
     a.add_argument("action", choices=("add", "resolve", "blocks", "list"))
     a.add_argument("id", nargs="?")
     a.add_argument("refs", nargs="*", help="decision blocks: what waits for the answer")
@@ -297,10 +338,21 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     a.add_argument("--text", default="")
     a.add_argument(
         "--option",
-        action="append",
+        action=OptionAction,
         default=[],
         help="decision add: an option (repeat it); decision resolve: the answer, by number (from 1) or exact text",
     )
+    a.add_argument("--effect", action=DetailAction, help="decision add: what the --option before it changes")
+    a.add_argument("--cost", action=DetailAction, help="decision add: the cost or risk of the --option before it")
+    a.add_argument(
+        "--undo",
+        action=DetailAction,
+        choices=("yes", "hard", "no"),
+        help="decision add: whether the --option before it can be undone (hard: with work)",
+    )
+    a.add_argument("--if-no-answer", default="", help="decision add: what stays stopped until the owner answers")
+    a.add_argument("--answer-by", default="", help="decision add: the day to remind the owner (YYYY-MM-DD)")
+    a.add_argument("--page", default="", help="decision add: a .md under the reviews or notes folders explaining it")
     a.add_argument("--recommend", default="")
     a.add_argument("--recommend-option", default="", help="the exact text of the recommended --option")
     a.add_argument("--date")
@@ -410,9 +462,13 @@ def closed_without_commit(project: Project, b: Backlog, data: Data, iid: str, si
     return ""
 
 
+UNDO_WORDS = {"yes": "can be undone", "hard": "can be undone, with work", "no": "cannot be undone"}
+
+
 def show_review(b: Backlog, data: Data, as_json: bool = False) -> str:
     """`decision list`: the pending decisions in review order (Backlog.pending_review), as JSON or one block each
-    with its options numbered as `decision resolve --option N` takes them."""
+    with its options numbered as `decision resolve --option N` takes them, each with its effect when it has one,
+    what waits without an answer and the page's path."""
     items = b.pending_review(data)
     if as_json:
         return json.dumps(items, ensure_ascii=False, indent=2)
@@ -432,8 +488,19 @@ def show_review(b: Backlog, data: Data, as_json: bool = False) -> str:
             block.append(f"  {d['text']}")
         for n, o in enumerate(d["options"], 1):
             block.append(f"  {n}. {o}" + ("  (recommended)" if o == d["recommended"] else ""))
+            x = (d.get("details") or {}).get(o) or {}
+            extra = [x["cost"]] if x.get("cost") else []
+            extra += [UNDO_WORDS[x["undo"]]] if x.get("undo") in UNDO_WORDS else []
+            if x.get("effect") or extra:
+                block.append(
+                    f"     {x.get('effect') or '(no effect given)'}" + (f" ({'; '.join(extra)})" if extra else "")
+                )
         if d["recommendation"]:
             block.append(f"  recommendation: {d['recommendation']}")
+        if u := d.get("unanswered"):
+            block.append(f"  if no answer: {u['waits']}" + (f" (reminder on {u['by']})" if u.get("by") else ""))
+        if d.get("page"):
+            block.append(f"  page: {d['page_path']}")
         out += block
     return "\n".join(out)
 
@@ -534,7 +601,9 @@ def run(project: Project, args: argparse.Namespace) -> int:
             print(f"imported {len(added)}: {', '.join(added)}" if added else "nothing new")
             return 0
         if c == "decision" and args.action == "add" and args.title and not args.as_is:
-            bad = b.decision_findings(args.title, args.text, args.option, args.recommend)
+            bad = b.decision_findings(
+                args.title, args.text, args.option, args.recommend, args.details, args.if_no_answer
+            )
             if bad:
                 return refuse_decision(bad)
         if c == "decision":
@@ -546,6 +615,18 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 raise BacklogError("--none goes with decision blocks")
             if args.free and args.action != "resolve":
                 raise BacklogError("--free goes with decision resolve")
+            rich = [
+                f
+                for f, v in (
+                    ("--if-no-answer", args.if_no_answer),
+                    ("--answer-by", args.answer_by),
+                    ("--page", args.page),
+                )
+                if v
+            ]
+            rich += sorted({f"--{k}" for x in args.details for k in x})
+            if rich and args.action != "add":
+                raise BacklogError(f"{', '.join(rich)} go with decision add")
             if args.json and args.action != "list":
                 raise BacklogError("--json goes with decision list (or backlog show ID --json)")
             if args.action == "list":
@@ -558,6 +639,7 @@ def run(project: Project, args: argparse.Namespace) -> int:
             return dry_run_add(b, args)
         freed = []
         holding: list[str] = []  # what a decision just added or changed holds (its warnings go to stderr)
+        advice: list[str] = []  # what to fix in a decision just added (Backlog.decision_warnings), on stderr
         closing: tuple[str, str, str | None] | None = None  # (issue, sub, its status before) closed by hand
         with b.mutate() as data:
             if c == "status" and "/" in args.ref:
@@ -674,9 +756,14 @@ def run(project: Project, args: argparse.Namespace) -> int:
                             as_is=args.as_is,
                             recommended=args.recommend_option,
                             blocks=args.blocks,
+                            details=args.details,
+                            waits=args.if_no_answer,
+                            answer_by=args.answer_by,
+                            page=args.page,
                         )
                     )
                     holding = data["decisions"][-1].get("blocks", [])
+                    advice = [f"{data['decisions'][-1]['id']}: {w}" for w in b.decision_warnings(data["decisions"][-1])]
                 elif args.action == "blocks":
                     if not args.id or bool(args.refs) == args.none:
                         raise BacklogError("decision blocks needs the decision id and either references or --none")
@@ -688,7 +775,7 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 b.edit_page(data, args.key, args.heading, args.replace)
         for line in freed:
             print(line)
-        for w in b.hold_problems(b.load(), holding)[1] if holding else []:
+        for w in (b.hold_problems(b.load(), holding)[1] if holding else []) + advice:
             print(f"foreman backlog: warning: {w}", file=sys.stderr)
         if closing:
             warn = closed_without_commit(project, b, data, *closing)

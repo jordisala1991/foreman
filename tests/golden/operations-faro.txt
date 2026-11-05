@@ -263,6 +263,8 @@ options:
   archive ID
   decision add [--id ID | --issue ISSUE] --title T --text T --option O [--option O ...] [--recommend T]
          [--recommend-option O] [--date D] [--as-is] [--blocks REF ...]
+         [--effect T] [--cost T] [--undo yes|hard|no] (after the --option they describe)
+         [--if-no-answer T] [--answer-by D] [--page PATH]
                                      a question for the owner (docs/owner.md): --title the question in one plain
                                      sentence; --text what it is about, why it comes now and what each option
                                      changes; --recommend the option and why; --recommend-option the exact text of
@@ -272,6 +274,14 @@ options:
                                      which records it anyway and marks it ("as_is": true, a warning in check).
                                      --blocks: what waits for the answer while it is pending (none by default):
                                      Tn or "issue" relative to --issue, or "ISSUE" / "ISSUE Tn"
+                                     Each --option is a short answer (a button); after it, --effect what the
+                                     owner will see or do differently, --cost its cost or risk, --undo whether it
+                                     can be undone (yes; hard: with work; no). --if-no-answer: what stays stopped
+                                     until the owner answers (foreman never answers for them); --answer-by: the
+                                     day to remind them. --page: a .md under the reviews or notes folders
+                                     (screenshots, tables) that explains the question. Warnings on stderr, never
+                                     blocking: an option without --effect, two questions in one, a reminder date
+                                     in the past, a page that is missing or larger than 400 KB
   decision blocks ID REF ... | decision blocks ID --none [--issue ISSUE]
                                      change what a pending decision holds (REF as in --blocks)
   decision list [--json]             the pending decisions in the order to go through them with the owner: those

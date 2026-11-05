@@ -502,10 +502,66 @@ def build_backlog(case, name, reads=True):
     b("get", i(2), "nofield")
 
 
+# what a question with its optional fields says, per product's language (added after the backlog's own steps)
+FIELDS = {
+    "faro": {
+        "q": "¿Encendemos el faro norte de noche?",
+        "qt": "Hoy está apagado de noche y los barcos lo piden.",
+        "o1": "sí",
+        "e1": "los barcos lo ven de noche",
+        "c1": "una revisión más al mes",
+        "o2": "no",
+        "e2": "sigue como hoy",
+        "waits": "el cambio de horario espera; lo demás sigue",
+        "two": "¿Lo pintamos? ¿Y lo encendemos?",
+        "quoted": "Cuando dices «¿está listo?», ¿miro el faro norte?",
+    },
+    "harbor": {
+        "q": "Do we open the north berth at night?",
+        "qt": "Today it closes at dusk and sailors ask for it.",
+        "o1": "yes",
+        "e1": "boats can moor after dusk",
+        "c1": "one more night check a week",
+        "o2": "no",
+        "e2": "it stays as today",
+        "waits": "the new timetable waits; the rest goes on",
+        "two": "Do we paint it? And do we light it?",
+        "quoted": "When you say «is it ready?», do I look at the north berth?",
+    },
+}
+
+
+def decision_fields(case, name):
+    """After the backlog's steps: a question with each option's effect, cost and undo, what waits without an
+    answer, its reminder date and its page; the warnings and refusals of `decision add`; how show and the page
+    render it."""
+    P, x = PRODUCTS[name]["prefix"], FIELDS[name]
+    b = lambda *a, **k: case.cli("backlog", *a, project=name, **k)  # noqa: E731
+    page = f"reviews/2020-01-19-{P}-2-question/question.md"
+    (case.homes[name] / page).parent.mkdir(parents=True)
+    (case.homes[name] / page).write_text("# question\n")
+    case.t.section(f"{name}: decision fields")
+    b(
+        *("decision", "add", "--issue", f"{P}-2", "--title", x["q"], "--text", x["qt"], "--date", "2020-01-19"),
+        *("--option", x["o1"], "--effect", x["e1"], "--cost", x["c1"], "--undo", "yes"),
+        *("--option", x["o2"], "--effect", x["e2"], "--undo", "hard"),
+        *("--recommend-option", x["o1"], "--if-no-answer", x["waits"], "--answer-by", "2020-01-26", "--page", page),
+    )
+    b("decision", "add", "--title", x["two"], "--option", x["o1"], "--option", x["o2"], "--undo", "no")
+    b("decision", "add", "--title", x["quoted"], "--option", x["o1"], "--effect", x["e1"], "--date", "2020-01-19")
+    b("decision", "add", "--title", x["q"], "--effect", x["e1"], "--option", x["o1"])
+    b("decision", "add", "--title", x["q"], "--option", x["o1"], "--page", "../x.md")
+    b("decision", "add", "--title", x["q"], "--option", x["o1"], "--answer-by", "2020-01-26")
+    b("show", f"{P}-2 J2")
+    b("show", f"{P}-2 J2", "--json")
+    case.t.tree(f"{name} pages", case.homes[name] / "pages")
+
+
 class GoldenBacklogFaro(GoldenCase):
     def test_backlog(self):
         build_backlog(self, "faro")
         self.t.tree("faro home", self.homes["faro"], skip=("reviews", "guard.tsv", "foreman.toml", "normas.md"))
+        decision_fields(self, "faro")
         self.check("backlog-faro.txt")
 
 
@@ -513,6 +569,7 @@ class GoldenBacklogHarbor(GoldenCase):
     def test_backlog(self):
         build_backlog(self, "harbor")
         self.t.tree("harbor home", self.homes["harbor"], skip=("reviews", "foreman.toml", "rules.md"))
+        decision_fields(self, "harbor")
         self.check("backlog-harbor.txt")
 
 

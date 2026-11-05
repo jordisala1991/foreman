@@ -227,7 +227,10 @@ def render_archive(b: Backlog, data: Data) -> str:
     return "\n\n".join(out) + "\n"
 
 
-def render_decision(b: Backlog, d: Record) -> str:
+def render_decision(b: Backlog, d: Record, page: Path | None = None) -> str:
+    """One decision as a line of the decisions page (`page`: that page, for the link to the decision's own page;
+    None: the page's path as it is stored). What a decision of before has, as before; the effect of each option,
+    what waits without an answer and the page come after the options, only when the decision has them."""
     head = f"**{d['id']}, {d['title']}**" if d.get("id") else f"**{d['title']}**"
     rec = d.get("recommendation", "")
     parts = [
@@ -236,13 +239,37 @@ def render_decision(b: Backlog, d: Record) -> str:
         f"{b.s['recommendation_label']}: {rec}" if rec else "",
         f"{b.s['holds_label']}: " + ", ".join(d["blocks"]) + "." if d.get("blocks") else "",
         f"{b.s['options_label']}: " + " · ".join(d["options"]),
+        render_effects(b, d),
     ]
+    u = d.get("unanswered") or {}
+    if u.get("waits"):
+        when = f" ({b.s['unanswered_by'].format(date=u['by'])})" if u.get("by") else ""
+        parts.append(f"{b.s['unanswered_label']}{when}: {u['waits']}")
+    if d.get("page"):
+        name = d["page"].rsplit("/", 1)[-1]
+        parts.append(f"{b.s['page_label']}: [{name}]({link(b, page, d['page']) if page else d['page']})")
     return " ".join(p for p in parts if p)
+
+
+def render_effects(b: Backlog, d: Record) -> str:
+    """«What each option changes: A: effect (cost; can be undone) · B: …» for the options with details; empty
+    when none has them."""
+    det = d.get("details") or {}
+    items = []
+    for o in d.get("options", []):
+        x = det.get(o)
+        if not isinstance(x, dict) or not x:
+            continue
+        extra = [x["cost"]] if x.get("cost") else []
+        if x.get("undo") in ("yes", "hard", "no"):
+            extra.append(b.s[f"undo_{x['undo']}"])
+        items.append(o + (f": {x['effect']}" if x.get("effect") else "") + (f" ({'; '.join(extra)})" if extra else ""))
+    return f"{b.s['effects_label']}: " + " · ".join(items) if items else ""
 
 
 def render_decisions_body(b: Backlog, data: Data) -> str:
     intro = "\n".join(data["pages"].get("decisions", {}).get("intro", [])).strip("\n")
-    items = "\n".join(render_decision(b, d) for d in data["decisions"]) or b.s["none"]
+    items = "\n".join(render_decision(b, d, b.out_decisions) for d in data["decisions"]) or b.s["none"]
     return "\n\n".join(x for x in (notice(b), intro, items) if x)
 
 

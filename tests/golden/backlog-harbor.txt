@@ -98,6 +98,9 @@ $ foreman --project harbor backlog archive HB-1
 $ foreman --project harbor backlog decision add --issue HB-2 --title "Do we take cash at the berth?" --text "Some sailors ask to pay cash; taking it means a till and a daily count." --option "a: card only" --option "b: card and cash" --recommend "a, no till to count" --recommend-option "a: card only" --date 2020-01-17
 [exit 0]
 decision HB-2 J1
+--- stderr
+foreman backlog: warning: HB-2 J1: option 1 («a: card only») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: HB-2 J1: option 2 («b: card and cash») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
 $ foreman --project harbor backlog decision add --title "Close HB-2 with T1 of loop.py?" --text "HB-2 T1 asks for it." --option a --option b --date 2020-01-17
 [exit 2]
 --- stderr
@@ -108,6 +111,9 @@ Rewrite it for the owner as docs/owner.md says (`foreman docs owner`): --title t
 $ foreman --project harbor backlog decision add --title "Close HB-2 with T1 of loop.py?" --text "HB-2 T1 asks for it." --option a --option b --date 2020-01-18 --as-is
 [exit 0]
 decision DEC J1
+--- stderr
+foreman backlog: warning: DEC J1: option 1 («a») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: DEC J1: option 2 («b») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
 $ foreman --project harbor backlog decision resolve "HB-2 J1" --answer "a: card only"
 [exit 0]
 $ foreman --project harbor backlog page decisions --heading Decisions
@@ -741,6 +747,135 @@ Hand-written page; foreman rewrites only the section below.
 Questions only Sam can answer; each one names its options.
 
 - **DEC J1, Close HB-2 with T1 of loop.py?** (2020-01-18): HB-2 T1 asks for it. Options: a · b
+
+## Notes
+
+Left as it is.
+
+######## harbor: decision fields
+$ foreman --project harbor backlog decision add --issue HB-2 --title "Do we open the north berth at night?" --text "Today it closes at dusk and sailors ask for it." --date 2020-01-19 --option yes --effect "boats can moor after dusk" --cost "one more night check a week" --undo yes --option no --effect "it stays as today" --undo hard --recommend-option yes --if-no-answer "the new timetable waits; the rest goes on" --answer-by 2020-01-26 --page reviews/2020-01-19-HB-2-question/question.md
+[exit 0]
+decision HB-2 J2
+--- stderr
+foreman backlog: warning: HB-2 J2: --answer-by 2020-01-26 is in the past: the reminder would come at once; give a later date
+$ foreman --project harbor backlog decision add --title "Do we paint it? And do we light it?" --option yes --option no --undo no
+[exit 0]
+decision DEC J2
+--- stderr
+foreman backlog: warning: DEC J2: option 1 («yes») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: DEC J2: option 2 («no») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: DEC J2: the title asks 2 questions: split it, one decision per question, or keep only the one the owner answers (a quoted question «…» does not count)
+$ foreman --project harbor backlog decision add --title "When you say «is it ready?», do I look at the north berth?" --option yes --effect "boats can moor after dusk" --date 2020-01-19
+[exit 0]
+decision DEC J3
+$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --effect "boats can moor after dusk" --option yes
+[exit 2]
+--- stderr
+usage: foreman backlog decision [-h] [--id DID] [--issue ISSUE]
+                                [--title TITLE] [--text TEXT]
+                                [--option OPTION] [--effect EFFECT]
+                                [--cost COST] [--undo {yes,hard,no}]
+                                [--if-no-answer IF_NO_ANSWER]
+                                [--answer-by ANSWER_BY] [--page PAGE]
+                                [--recommend RECOMMEND]
+                                [--recommend-option RECOMMEND_OPTION]
+                                [--date DATE] [--answer ANSWER] [--by BY]
+                                [--as-is] [--free] [--json]
+                                [--blocks REF [REF ...]] [--none]
+                                {add,resolve,blocks,list} [id] [refs ...]
+foreman backlog decision: error: --effect goes after the --option it describes
+$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --page ../x.md
+[exit 2]
+--- stderr
+foreman backlog: --page '../x.md' must be a .md file relative to the home, without «..»
+$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --answer-by 2020-01-26
+[exit 2]
+--- stderr
+foreman backlog: --answer-by needs --if-no-answer: say what stays stopped until the owner answers
+$ foreman --project harbor backlog show "HB-2 J2"
+[exit 0]
+- **HB-2 J2, Do we open the north berth at night?** (2020-01-19): Today it closes at dusk and sailors ask for it. Options: yes · no What each option changes: yes: boats can moor after dusk (one more night check a week; can be undone) · no: it stays as today (can be undone, with work) Until there is an answer (reminder on 2020-01-26): the new timetable waits; the rest goes on Page: [question.md](reviews/2020-01-19-HB-2-question/question.md)
+$ foreman --project harbor backlog show "HB-2 J2" --json
+[exit 0]
+{
+  "id": "HB-2 J2",
+  "title": "Do we open the north berth at night?",
+  "date": "2020-01-19",
+  "text": "Today it closes at dusk and sailors ask for it.",
+  "options": [
+    "yes",
+    "no"
+  ],
+  "recommendation": "",
+  "recommended": "yes",
+  "details": {
+    "yes": {
+      "effect": "boats can moor after dusk",
+      "cost": "one more night check a week",
+      "undo": "yes"
+    },
+    "no": {
+      "effect": "it stays as today",
+      "undo": "hard"
+    }
+  },
+  "unanswered": {
+    "waits": "the new timetable waits; the rest goes on",
+    "by": "2020-01-26"
+  },
+  "page": "reviews/2020-01-19-HB-2-question/question.md"
+}
+
+######## harbor pages: files under <TMP>/harbor/pages
+=== backlog-archive.md
+# Backlog archive
+
+> Generated by `foreman backlog` from `backlog.json`: do not edit by hand (`foreman backlog --help`).
+
+## A1 · Berth booking
+
+| ID | Issue | Status | Plan | Sub-issues | Blocked | Detail |
+|---|---|---|---|---|---|---|
+| HB-1 | Booking form | done | [plan](../reviews/2020-01-10-plan-HB-1.md) | T1 Form ✓ abc1234 agent ag1, branch `a1/t1` [report](../reviews/2020-01-12-hb1-t1.md) · T2 Form tests ✓ def5678 |  | priority high · assignee ana · blocks HB-2 · **Acceptance criterion**: a booking takes under a minute · **Result** (met): a booking takes 40 s · A note appended to the detail. |
+=== backlog.md
+# Decisions
+
+> Generated by `foreman backlog` from `backlog.json`: do not edit by hand (`foreman backlog --help`).
+
+## A1 · Berth booking
+
+*in progress · priority high*
+
+Book a berth from the phone.
+
+| ID | Issue | Status | Plan | Sub-issues | Blocked | Detail |
+|---|---|---|---|---|---|---|
+| HB-3 | Tide feed | backlog |  |  |  | related to HB-2 · **Acceptance criterion**: the feed updates hourly |
+| HB-2 | Payment | ready |  |  |  | **Acceptance criterion**: a card payment goes through |
+| HB-5 | missing criterion | backlog |  |  |  |  |
+
+## A2 · Tide tables
+
+Show the tides.
+
+| ID | Issue | Status | Plan | Sub-issues | Blocked | Detail |
+|---|---|---|---|---|---|---|
+| HB-4 | Tidy the notes | triage |  |  |  | **Acceptance criterion**: notes tidy |
+=== wiki.md
+# Harbor wiki
+
+Hand-written page; foreman rewrites only the section below.
+
+## Open decisions
+
+> Generated by `foreman backlog` from `backlog.json`: do not edit by hand (`foreman backlog --help`).
+
+Questions only Sam can answer; each one names its options.
+
+- **DEC J1, Close HB-2 with T1 of loop.py?** (2020-01-18): HB-2 T1 asks for it. Options: a · b
+- **HB-2 J2, Do we open the north berth at night?** (2020-01-19): Today it closes at dusk and sailors ask for it. Options: yes · no What each option changes: yes: boats can moor after dusk (one more night check a week; can be undone) · no: it stays as today (can be undone, with work) Until there is an answer (reminder on 2020-01-26): the new timetable waits; the rest goes on Page: [question.md](../reviews/2020-01-19-HB-2-question/question.md)
+- **DEC J2, Do we paint it? And do we light it?** (<TODAY>): Options: yes · no What each option changes: no (cannot be undone)
+- **DEC J3, When you say «is it ready?», do I look at the north berth?** (2020-01-19): Options: yes What each option changes: yes: boats can moor after dusk
 
 ## Notes
 
