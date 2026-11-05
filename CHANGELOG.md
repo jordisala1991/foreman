@@ -75,12 +75,23 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   resumed with a review (fix or refute each H and M with proof, a «Review, round N» section in the report), and the
   `orchestrator-pass` skill and docs/orchestrator.md how the orchestrator runs the rounds (who to launch or resume,
   SendMessage, plan B, the owner's question after round 2, the size waiver).
+- A place for hidden acceptance checks, out of the production agents' reach: each product's `[paths] holdout`
+  (default `~/.local/share/foreman/<name>/holdout/`). A built-in guard rule refuses every agent but a planner (a
+  production agent, a reviewer, an agent of unknown type) any call that reaches such a folder of any registered
+  product: a path in or under it in a command or a tool's place (links followed, `~`/`$HOME` expanded, wildcards that
+  may match it), the folder named as text (inline code, heredocs, unreadable lines), a search that walks a folder
+  above it (`grep -r`, `rg`, `find`, `ls -R`, `du`, `tar`, `rsync`, `cp -R`…; the Grep tool's path, a Glob pattern),
+  any command run inside it, and `foreman holdout` but `--help`. The orchestrator, the owner's other sessions and
+  planners pass; the refusal reaches the orchestrator and `guard.jsonl`. Nothing changes while no such folder
+  exists. The guard hook passes the event's `agent_type` (else `<state>/agents.json` says it); `foreman guard --as
+  planner` checks as a planner; `foreman permissions` lists the rule as foreman's own.
 
 ### Config
 
 - Schema 20: `[repos.*] review` (`"off"` by default, or `"auto"`), `review_paths` (a list, as `risky_paths`) and
   `review_lines` (400; 0 turns the size off). The three are brakes for `foreman permissions`: `review` back to `off`,
   a `review_paths` entry removed, or `review_lines` raised or set to 0 opens.
+- Schema 20 also has `[paths] holdout` (above; empty by default: `~/.local/share/foreman/<name>/holdout`).
 
 ### Upgrade notes
 

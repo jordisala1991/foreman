@@ -248,6 +248,7 @@ notes = "notes"             # YYYY-MM-DD.md, append only
 reviews = "reviews"         # plans and reports
 state = ""                  # default ~/.local/state/foreman/<name> (or $FOREMAN_STATE_HOME/<name>)
 worktrees = ""              # default <home>/../wt
+holdout = ""                # default ~/.local/share/foreman/<name>/holdout: hidden acceptance checks
 
 [backlog]
 file = "backlog.json"
@@ -447,6 +448,16 @@ past it the command's whole process group is stopped and it counts as failed, wi
 the warning, the progress line and the note. An unknown placeholder is exit 2 before anything is done. `--check`
 prints the command with `{before}` and `{head}` unreplaced. Its variables, `FOREMAN_BEFORE` and `FOREMAN_HEAD`, need no
 quoting (docs/extending.md).
+
+## `[paths] holdout`: hidden acceptance checks
+
+The folder where a product keeps the part of a plan's acceptance that production agents do not see: by default
+`~/.local/share/foreman/<name>/holdout/`, one subfolder per issue, written by the planner and kept by the
+orchestrator. Keep it outside the home, the repos, the worktrees and the state: those are folders agents read and
+search. Nothing is on by default: while the folder does not exist, nothing changes. Once it exists, the guard keeps
+every agent but a planner away from it, by any tool, and from searches that walk a folder above it (`grep -r x ~`);
+foreman's `holdout` command (to come) is the orchestrator's (docs/internals.md, «The hidden acceptance checks»). A relative value is read
+from the home, as the other paths.
 
 ## `[repos.*] review`: branches another agent reviews before they merge
 

@@ -196,6 +196,7 @@ asked and never passes. config and table change only through `foreman permission
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -265,12 +266,14 @@ class Ctx(TypedDict, total=False):
     it no process is compared and every [deny.grants] group counts as granted). cwd: the folder the command runs in
     (the event's cwd; `guard --cwd`): with the key, each `git push` is also compared as git would do it (gitpush.py;
     None: an unknown folder); without it, only as written (a table run gives each row its @DIR or the home).
-    passed: set by check(), the orchestrator-only pattern of a command it let through. tool_use_id: the call's, given
+    passed: set by check(), the orchestrator-only pattern of a command it let through. agent_type: the event's (a
+    subagent's type; else <state>/agents.json's, holdout_reader). tool_use_id: the call's, given
     only by the guard hook: with it, a main-thread write of Claude Code's settings or the registry may spend the
     owner's one-use yes for that call (grants.take_once)."""
 
     session: str | None
     agent: str | None
+    agent_type: str | None
     marked: str | None
     cwd: str | None
     passed: Hit
@@ -284,6 +287,8 @@ def as_role(role: str, cwd: str | None = None) -> Ctx | None:
     """The ctx of a table run or `guard --as`: None for an agent, the marked orchestrator's main thread otherwise;
     with cwd, a ctx that carries it (an agent's has no session)."""
     ctx: Ctx = {"session": TABLE_SESSION, "agent": None, "marked": TABLE_SESSION} if role == "orchestrator" else {}
+    if role == "planner":  # an agent of the planner type (it may reach the hidden acceptance checks)
+        ctx = {"agent": "(guard --as planner)", "agent_type": "planner"}
     if cwd is not None:
         ctx["cwd"] = cwd
     return ctx or None
@@ -1281,7 +1286,8 @@ INTEGRATE = (
     r"""(^|[\s/'"])foreman\S*['"]?\s+(--project[\s=]\S+\s+)?['"]?integrate['"]?"""
     r"""(?![^;&|\n]*\s(?P<q>['"]?)(--help|-h|--check)(?P=q)(\s|$))(\s|$)"""
 )
-AGENT_ONLY = (MAIN_CHECKOUT, INTEGRATE)  # the built-in rules that refuse an agent only (permissions.rules)
+HOLDOUT = "holdout:hidden-checks"  # the Hit of an agent reaching the hidden acceptance checks (_holdout)
+AGENT_ONLY = (MAIN_CHECKOUT, INTEGRATE, HOLDOUT)  # the built-in rules that refuse an agent only (permissions.rules)
 # What rewrites the main checkout: always (the whole copy) ...
 GIT_WHOLE = frozenset(
     "merge pull rebase cherry-pick revert am switch clean filter-branch checkout-index".split()
@@ -1576,22 +1582,30 @@ def main_checkout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None
     return _main_checkout(project, cmd, {"cwd": cwd} if cwd else None)
 
 
+def holdout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None:
+    """The HOLDOUT Hit of a command an agent (not a planner) runs in cwd (permissions.touches: the rows of the
+    rule)."""
+    return _holdout(project, cmd, {"cwd": cwd} if cwd else None)
+
+
 def names_integrate(cmd: str) -> bool:
     """Whether a command may run `foreman integrate` (the loose reading of names_apply; INTEGRATE decides)."""
     return "integrate" in re.sub(r"\\\n|[\\'\"]", "", cmd)
 
 
 def _agent_only(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
-    """The built-in rules for an agent only (module doc): its `foreman integrate` (but --help, -h, --check) and its
-    git that rewrites a main checkout holding a live home. Only an agent (_who, no process) is compared."""
+    """The built-in rules for an agent only (module doc): its `foreman integrate` (but --help, -h, --check), its
+    git that rewrites a main checkout holding a live home, and what reaches the hidden acceptance checks (_holdout:
+    a planner passes). Only an agent (_who, no process) is compared."""
     integrate, git = names_integrate(cmd), bool(GIT_WORDS.search(cmd))
-    if not (integrate or git) or _who(project, ctx, process=False) != "agent":
+    if _who(project, ctx, process=False) != "agent":
         return None
     hit = _integrates(cmd) if integrate else None
     if hit:
         hit.why = "agent"
         return hit
-    return _main_checkout(project, cmd, ctx) if git else None
+    hit = _main_checkout(project, cmd, ctx) if git else None
+    return hit or _holdout(project, cmd, ctx)
 
 
 def _integrates(cmd: str) -> Hit | None:
@@ -1620,6 +1634,213 @@ def _integrates(cmd: str) -> Hit | None:
         found.clear()
         unparsed(cmd)
     return found[0] if found else None
+
+
+# ---------- the hidden acceptance checks: what an agent but a planner may not reach (module doc) ----------
+
+HOLDOUT_FREE = ("--help", "-h")  # what an agent may run of `foreman holdout`
+# Programs that walk the folders they are given (or the one they run in, given none) ...
+WALKERS = frozenset("rg ag ack find fd du tar gtar bsdtar rsync tree ditto zip".split())
+# ... and those that walk with one of these short options (or --recursive)
+WALK_FLAGS = {
+    "grep": "rR", "egrep": "rR", "fgrep": "rR", "ggrep": "rR", "ls": "R", "gls": "R", "cp": "rRa", "gcp": "rRa",
+    "scp": "r", "chmod": "R", "chown": "R", "chgrp": "R", "rm": "rR",
+}  # fmt: skip
+WALK_TOOLS = ("Grep", "Glob")  # tools that walk the folder they are given (their `path`, else the call's cwd)
+GLOB_CHARS = re.compile(r"[*?\[]")
+# A text the lexer cannot read: `foreman holdout` (bin/foreman, a path, --project P, quoted words), and its help
+HOLDOUT_CALL = r"""(^|[\s/'"])foreman\S*['"]?\s+(--project[\s=]\S+\s+)?['"]?holdout['"]?(\s|$)"""
+HOLDOUT_HELP = r"""['"]?holdout['"]?\s+['"]?(-h|--help)['"]?(\s|$)"""
+HoldoutDir = tuple[str, str, str]  # (the folded real path, the folded path as configured, the product's name)
+
+
+def holdout_dirs(project: Project, projects: Sequence[Project] | None = None) -> list[HoldoutDir]:
+    """The folder of hidden acceptance checks of each product of the registry ([paths] holdout) that exists: none
+    exists, the rule costs nothing and refuses nothing."""
+    out: list[HoldoutDir] = []
+    for p in _projects(project, projects):
+        d = p.holdout_dir
+        if d.is_dir():
+            out.append((_real(d), _fold(os.path.normpath(d)), p.name))
+    return out
+
+
+def holdout_reader(project: Project, ctx: Ctx | None) -> bool:
+    """Whether the caller may reach the hidden acceptance checks: everyone _who does not call an agent (the
+    orchestrator, the owner's other sessions) and an agent of a planner type (the event's agent_type, else its entry in
+    <state>/agents.json); any other agent, also one whose type is not known, may not."""
+    from . import identity, util
+
+    if _who(project, ctx, process=False) != "agent":
+        return True
+    kind = (ctx or {}).get("agent_type")
+    aid = (ctx or {}).get("agent")
+    if not kind and aid:
+        entry = (util.read_json(project.state / "agents.json", {}) or {}).get(aid)
+        kind = entry.get("type") if isinstance(entry, dict) else None
+    return identity.is_planner_type(project, kind)
+
+
+def _holdout_hit(d: HoldoutDir, where: str, text: str) -> Hit:
+    hit = Hit(HOLDOUT, where, text)
+    hit.why, hit.name, hit.path = "agent", d[2], d[1]
+    return hit
+
+
+def _holdout_named(text: str, dirs: Sequence[HoldoutDir]) -> HoldoutDir | None:
+    """The folder a text names as text (`~`, $HOME and ${HOME} read as the home): its path, or one under it."""
+    home = str(Path.home())
+    t = _fold(text.replace("${HOME}", home).replace("$HOME", home).replace("~/", home + "/"))
+    for d in dirs:
+        for form in dict.fromkeys(d[:2]):
+            if re.search(re.escape(form) + r"(?=$|[/\s'\"`;|&()<>])", t):
+                return d
+    return None
+
+
+def _holdout_reach(path: str, dirs: Sequence[HoldoutDir], walk: bool) -> HoldoutDir | None:
+    """The folder an absolute path reaches: the folder or a path under it; with walk (the program or tool walks
+    it), also a folder that holds it. A path with a wildcard: when it may match one of those (`**` any depth)."""
+    norm = os.path.normpath(path)
+    m = GLOB_CHARS.search(norm)
+    if m is None:
+        real = _real(norm)
+        return next((d for d in dirs if _under(real, d[0]) or (walk and _under(d[0], real))), None)
+    cut = norm.rfind(os.sep, 0, m.start())
+    head = _real(norm[:cut] or os.sep).rstrip(os.sep)
+    parts = (head + _fold(norm[cut:])).split(os.sep)
+    for d in dirs:
+        target = d[0].split(os.sep)
+        for k, part in enumerate(parts):
+            if part == "**" or k >= len(target):
+                return d  # it may reach any depth below, or it names something under the folder
+            if not fnmatch.fnmatchcase(target[k], part):
+                break
+        else:
+            if len(parts) == len(target) or walk:
+                return d  # the folder itself, or one that holds it walked
+    return None
+
+
+def _walks(name: str, args: Sequence[str]) -> bool:
+    """Whether a program with these arguments walks the folders it is given (WALKERS, WALK_FLAGS)."""
+    if name in WALKERS:
+        return True
+    flags = WALK_FLAGS.get(name)
+    if not flags:
+        return False
+    for k, a in enumerate(args):
+        if a == "--":
+            break
+        if a in ("--recursive", "--dereference-recursive", "--directories=recurse"):
+            return True
+        if a == "-d" and args[k + 1 : k + 2] == ["recurse"]:
+            return True
+        if a.startswith("-") and not a.startswith("--") and set(a[1:]) & set(flags):
+            return True
+    return False
+
+
+def _holdout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
+    """The HOLDOUT Hit of an agent's line (module doc), or None: `foreman holdout` but --help or -h; a line that names
+    a folder of hidden checks as text; a word (also a redirection's file, `--opt=VALUE`'s value, nested commands)
+    that is, resolved from each folder the segment may run in, such a folder or a path in it, or a folder that holds
+    one for a program that walks it (_walks; given no existing path, the folder it runs in); a segment that runs in
+    one. Only for a caller holdout_reader refuses, and only while such a folder exists. Never raises: a failure
+    compares the line's text only."""
+    try:
+        dirs = holdout_dirs(project)
+    except Exception:  # noqa: BLE001 (a registry that does not read: this product's folder alone)
+        dirs = holdout_dirs(project, [project]) if project.holdout_dir.is_dir() else []
+    if not dirs and "holdout" not in cmd:
+        return None
+    if holdout_reader(project, ctx):
+        return None
+    found: list[Hit] = []
+    try:
+        cwd = os.path.normpath(os.path.expanduser((ctx or {}).get("cwd") or os.getcwd()))
+
+        def visit(_line: str, segs: Any, words_of: Any, info: Any, here: Any, env: dict[str, list[str]]) -> None:
+            for k, (seg, w, r) in enumerate(zip(segs, words_of, info)):
+                if found:
+                    return
+                values = [str(t.value) for t in w[r.prog :]]
+                got = foreman_call(values) if r.prog < len(w) else None
+                if got and got[1] == "holdout" and not set(got[2]) & set(HOLDOUT_FREE):
+                    found.append(_holdout_hit(("", "", project.name), "command", " ".join(t.raw for t in w)))
+                    return
+                if not dirs:
+                    continue
+                folders = [f for f in here[k] if f != gitpush.UNKNOWN]
+                walk = r.prog < len(w) and _walks(PurePath(values[0]).name, values[1:])
+                named = False
+                for t in seg.toks:
+                    if t.kind not in ("word", "target"):
+                        continue
+                    for text in _expand(str(t.value), t.literal, env, t.raw.startswith("~")):
+                        for v in (text, text.partition("=")[2] if text.startswith("-") else ""):
+                            if not v:
+                                continue
+                            for full in [v] if os.path.isabs(v) else [os.path.join(f, v) for f in folders]:
+                                named = named or (walk and os.path.exists(full))
+                                d = _holdout_reach(full, dirs, walk)
+                                if d is not None:
+                                    found.append(_holdout_hit(d, "command", " ".join(t.raw for t in w)))
+                                    return
+                for f in folders:  # where it runs: in such a folder, or one above it that it walks given no path
+                    d = _holdout_reach(f, dirs, walk and not named)
+                    if d is not None:
+                        found.append(_holdout_hit(d, "command", " ".join(t.raw for t in w)))
+                        return
+
+        def unparsed(text: str) -> None:
+            d = None if found else _holdout_named(text, dirs)
+            if d is not None:
+                found.append(_holdout_hit(d, "whole", text))
+            elif not found and re.search(HOLDOUT_CALL, text) and not re.search(HOLDOUT_HELP, text):
+                found.append(_holdout_hit(("", "", project.name), "whole", text))
+
+        d = _holdout_named(cmd, dirs)
+        if d is not None:
+            return _holdout_hit(d, "command", cmd)
+        try:
+            _walk(cmd, frozenset({cwd}), {"HOME": [str(Path.home())]}, 0, visit, unparsed)
+        except Unparsed:
+            unparsed(cmd)
+        return found[0] if found else None
+    except Exception:  # noqa: BLE001 (a failure of the walk: the text alone)
+        try:
+            d = _holdout_named(cmd, dirs)
+            return _holdout_hit(d, "whole", cmd) if d is not None else None
+        except Exception:  # noqa: BLE001 (not even that: let it pass)
+            return None
+
+
+def _holdout_tool(project: Project, tool: str | None, tool_input: Any, ctx: Ctx | None) -> Hit | None:
+    """The HOLDOUT Hit of a Grep or Glob call that walks a folder holding hidden checks (Grep: its `path`, else the
+    call's cwd; Glob: its pattern from there), for a caller holdout_reader refuses; a place in or under such a folder is
+    check()'s (`cat PLACE`). Never raises."""
+    try:
+        if tool not in WALK_TOOLS or not isinstance(tool_input, dict):
+            return None
+        dirs = holdout_dirs(project)
+        if not dirs or holdout_reader(project, ctx):
+            return None
+        cwd = (ctx or {}).get("cwd") or os.getcwd()
+        base = os.path.join(cwd, os.path.expanduser(str(tool_input.get("path") or cwd)))
+        pattern = tool_input.get("pattern")
+        places = [base]  # Grep walks its folder; Glob, what its pattern reaches from it
+        if tool == "Glob" and isinstance(pattern, str) and pattern:
+            places = [os.path.join(base, os.path.expanduser(pattern))]
+        for place in places:
+            d = _holdout_reach(place, dirs, True)
+            if d is not None:
+                hit = _holdout_hit(d, "tool", f"{tool} {place}")
+                hit.tool, hit.call = str(tool), place
+                return hit
+        return None
+    except Exception:  # noqa: BLE001 (a failure of foreman never stops a call of another tool)
+        return None
 
 
 def tool_path(tool: str | None, tool_input: dict[str, Any] | None) -> str | None:
@@ -1705,6 +1926,9 @@ def check_tool(project: Project, tool: str | None, tool_input: Any, ctx: Ctx | N
     try:
         places, commands = tool_texts(tool, tool_input)
         before = (ctx or {}).get("passed")
+        hit = _holdout_tool(project, tool, tool_input, ctx)
+        if hit is not None:
+            return "orchestrator", hit
         for cmd in commands:
             v = check(project, cmd, ctx)
             if v is not None:
@@ -1839,6 +2063,8 @@ def message(project: Project, verdict: Verdict) -> str:
                     s["guard_where_command"].format(part=detail.part),
                 ]
             )
+        if isinstance(detail, Hit) and detail == HOLDOUT:
+            return s["guard_holdout"].format(project=detail.name or project.name, part=detail.part)
         if isinstance(detail, Hit) and detail == INTEGRATE:
             return " ".join(
                 [

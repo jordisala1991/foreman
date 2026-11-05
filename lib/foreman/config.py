@@ -160,7 +160,7 @@ DEFAULTS: dict[str, Any] = {
         "config_schema": CONFIG_SCHEMA,
         "owner_knows": [],
     },
-    "paths": {"notes": "notes", "reviews": "reviews", "state": None, "worktrees": None},
+    "paths": {"notes": "notes", "reviews": "reviews", "state": None, "worktrees": None, "holdout": None},
     "backlog": {
         "file": "backlog.json",
         "page": "pages/backlog.md",
@@ -370,6 +370,13 @@ class Project:
         return self.path(w) if w else self.home.parent / "wt"
 
     @property
+    def holdout_dir(self) -> Path:
+        """The product's folder of hidden acceptance checks ([paths] holdout, default
+        ~/.local/share/foreman/<name>/holdout): only planners and the orchestrator reach it (guard.py, HOLDOUT)."""
+        h = self.raw["paths"].get("holdout")
+        return self.path(h) if h else Path.home() / ".local/share/foreman" / self.name / "holdout"
+
+    @property
     def board(self) -> Path:
         return self.state / "board.md"
 
@@ -421,6 +428,7 @@ class Project:
             "reviews": str(self.reviews_dir),
             "state": str(self.state),
             "worktrees": str(self.worktrees_dir),
+            "holdout": str(self.holdout_dir),
         }
         if sources["paths"]["state"] == "default" and os.environ.get("FOREMAN_STATE_HOME"):
             sources["paths"]["state"] = "environment"

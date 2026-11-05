@@ -854,9 +854,9 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument(
         "--as",
         dest="role",
-        choices=("agent", "orchestrator"),
+        choices=("agent", "planner", "orchestrator"),
         default="agent",
-        help="check the command as an agent (default) or as the marked orchestrator's main thread",
+        help="check the command as an agent (default), a planner agent or the marked orchestrator's main thread",
     )
     a.add_argument(
         "--cwd",

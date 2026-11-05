@@ -151,9 +151,10 @@ def rules(project: Project) -> list[dict[str, str]]:
     """Every rule of the project in band order: [{band, pattern, from, group?, resource?, only?}], band builtin,
     never, orchestrator or turn; the built-in rule of `permissions apply` (guard.PERMISSIONS_APPLY) has
     only=orchestrator: the marked orchestrator may, after the owner's yes in the chat (and his yes/no with --opens); so
-    do the two that refuse an agent only (guard.AGENT_ONLY: its git in a main checkout with a live home, its `foreman
-    integrate`). from: foreman for a built-in rule, else machine (the registry's [machine.deny]), product (its
-    foreman.toml) or both (written in the two): config.DenyOrigin."""
+    do the three that refuse an agent only (guard.AGENT_ONLY: its git in a main checkout with a live home, its `foreman
+    integrate`, and what reaches the hidden acceptance checks, which a planner may). from: foreman for a built-in
+    rule, else machine (the registry's [machine.deny]), product (its foreman.toml) or both (written in the two):
+    config.DenyOrigin."""
     origin = project.deny_origin
     out = [{"band": "builtin", "pattern": p, "from": "foreman"} for p in guard.BUILTIN]
     out.append({"band": "builtin", "pattern": guard.PERMISSIONS_APPLY, "only": "orchestrator", "from": "foreman"})
@@ -194,6 +195,8 @@ def touches(rule: dict[str, str], cmd: str, at: gitpush.Resolver) -> bool:
         return any(guard.matches_prefix(words(s), rule["pattern"]) for s in segments(plain))
     if rule["pattern"] == guard.MAIN_CHECKOUT:  # no regex: the rule itself, from the row's folder
         return guard.main_checkout_hit(at.project, cmd, next(iter(at.start)) or None) is not None
+    if rule["pattern"] == guard.HOLDOUT:  # no regex either: the rule, for an agent that is not a planner
+        return guard.holdout_hit(at.project, cmd, next(iter(at.start)) or None) is not None
     try:
         return guard.deny([rule["pattern"]], cmd, at) is not None
     except Exception:  # noqa: BLE001 (a push the resolver cannot read: the guard denies it, but it says nothing of this rule)
@@ -392,7 +395,11 @@ def render(project: Project, d: dict[str, Any]) -> str:
         lines += ["  " + _rule_line(s, r) for r in by["orchestrator"] if r["group"] == g]
     for r in by["builtin"]:
         if r.get("only"):  # `foreman permissions apply` and the agent-only rules: foreman's own, not a group
-            head = {guard.MAIN_CHECKOUT: "perm_main_checkout_rule", guard.INTEGRATE: "perm_integrate_rule"}
+            head = {
+                guard.MAIN_CHECKOUT: "perm_main_checkout_rule",
+                guard.INTEGRATE: "perm_integrate_rule",
+                guard.HOLDOUT: "perm_holdout_rule",
+            }
             lines.append(s[head.get(r["pattern"], "perm_apply_rule")].format(owner=owner))
             lines.append("  " + _rule_line(s, r))
     lines += ["", s["perm_turn"]]
