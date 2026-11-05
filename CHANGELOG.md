@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-11-05
+
 ### Added
 
 - What misled each agent: a production report carries a line `Misled: <where>: <what> (<cost>)` per thing in its
@@ -91,7 +93,9 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Upgrade notes
 
-- No schema change (still 5). An older foreman that writes the backlog drops `details`, `unanswered` and `page` of a
+- Agent reports need a `Misled:` line from this version on (`Misled: none` when nothing misled them): an agent already running learns it from the first refused stop.
+- Reviews before integrating stay off until a repo sets `review = "auto"` (config schema 20).
+- Backlog: no schema change (still 5). An older foreman that writes the backlog drops `details`, `unanswered` and `page` of a
   decision: record such questions once every session of the product runs this version.
 
 ## [0.57.0] - 2026-11-03
