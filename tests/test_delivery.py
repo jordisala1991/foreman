@@ -31,6 +31,7 @@ remote = "none"
 {extra}
 """
 
+REPORT = "# Report\n\nMisled: none\n"
 LINE = re.compile(r"^\[foreman launch [a-z2-7]{10}\] .*$", re.M)
 
 
@@ -111,7 +112,7 @@ class DeliveryCase(ProjectCase):
     def report(self, name="zed7"):
         d = self.home / "reviews"
         d.mkdir(exist_ok=True)
-        (d / f"2026-10-31-{name}.md").write_text("# Report\n")
+        (d / f"2026-10-31-{name}.md").write_text(REPORT)
 
     def entry(self, aid="ag1"):
         return loop.agents(self.project)[aid]
@@ -171,7 +172,7 @@ class BlockTest(DeliveryCase):
         self.commit(wt)
         self.done()
         (self.home / "lab").mkdir()
-        (self.home / "lab/measures.md").write_text("# Measures\n")
+        (self.home / "lab/measures.md").write_text("# Measures\n\nMisled: none\n")
         self.assertIn("no report", self.stop())
         b = Backlog(self.project)
         b.init()
@@ -428,9 +429,25 @@ class HomeInRepoTest(DeliveryCase):
         reason = self.stop()
         self.assertIn("no report under reviews/ in your branch: write reviews/YYYY-MM-DD-<task>.md", reason)
         (wt / "reviews").mkdir()
+        (wt / "reviews/2026-10-31-zed7.md").write_text(REPORT)
+        git(wt, "add", "-A")
+        git(wt, "commit", "-q", "-m", "report")
+        self.done()
+        self.assertIsNone(self.stop())
+
+    def test_the_misled_line_is_read_in_the_branch(self):
+        """The home inside the repo: the branch's copy of the report is read, and the refusal says to commit it."""
+        wt = self.launch()
+        (wt / "reviews").mkdir()
         (wt / "reviews/2026-10-31-zed7.md").write_text("# Report\n")
         git(wt, "add", "-A")
         git(wt, "commit", "-q", "-m", "report")
+        (wt / "reviews/2026-10-31-zed7.md").write_text(REPORT)  # written, not committed
+        self.done()
+        reason = self.stop()
+        self.assertIn("your report reviews/2026-10-31-zed7.md lacks the line `Misled: …`", reason)
+        self.assertIn(f"; commit it in {wt}", reason)
+        git(wt, "commit", "-q", "-am", "the line")
         self.done()
         self.assertIsNone(self.stop())
 
@@ -440,10 +457,10 @@ class HomeInRepoTest(DeliveryCase):
         wt = self.launch()
         self.commit(wt)
         (wt / "reviews").mkdir()
-        (wt / "reviews/2026-10-31-zed7.md").write_text("# Another report\n")
+        (wt / "reviews/2026-10-31-zed7.md").write_text(REPORT)
         git(wt, "add", "-A")
         git(wt, "commit", "-q", "-m", "a report")
-        (wt / "reviews/2026-11-01-result.md").write_text("# Report\n")  # written, not committed
+        (wt / "reviews/2026-11-01-result.md").write_text(REPORT)  # written, not committed
         r = self.cli("--project", "fake", "progress", "--done", "x", "--report", "reviews/2026-11-01-result.md")
         self.assertEqual(r.returncode, 2)  # from the main checkout, with no agent named: not found
         self.assertIn("reviews/2026-11-01-result.md does not exist", r.stderr)
@@ -461,3 +478,151 @@ class HomeInRepoTest(DeliveryCase):
         self.done(report="reviews/2026-11-01-result.md")  # from the main checkout: the agent's worktree is recorded
         self.assertIsNone(self.stop())
         self.assertEqual(self.entry()["report"], "reviews/2026-11-01-result.md")
+
+
+class MisledTest(DeliveryCase):
+    """The `Misled:` line of a report: the delivery check wants it, `foreman agents --misled` gathers it."""
+
+    def write(self, name, text):
+        d = self.home / "reviews"
+        d.mkdir(exist_ok=True)
+        (d / name).write_text(text)
+        return f"reviews/{name}"
+
+    def test_report_lines(self):
+        text = "# R\nMisled: plan: stale\n- **Misled:** none\n**Misled**: brief: two orders\nMisled:\nnot Misled: x\n"
+        self.assertEqual(delivery.report_lines(text), {"Misled": ["plan: stale", "none", "brief: two orders"]})
+        self.assertEqual(
+            delivery.report_lines("Evidence: shot.png\n", ("Misled", "Evidence")),
+            {"Misled": [], "Evidence": ["shot.png"]},
+        )
+        self.assertEqual(delivery.report_lines("Misled: x", ()), {})
+        self.assertEqual(
+            [delivery.is_nothing(v) for v in ("none", "None.", "nada", "-", "plan: x")], [True, True, True, True, False]
+        )
+
+    def test_a_report_without_the_line_is_refused(self):
+        wt = self.launch()
+        self.commit(wt)
+        self.write("2026-10-31-zed7.md", "# Report\nDeviations: none\n")
+        self.done()
+        reason = self.stop()
+        self.assertIn("your report reviews/2026-10-31-zed7.md lacks the line `Misled: …`", reason)
+        self.assertIn("`Misled: <where>: <what> (<cost>)`", reason)
+        self.assertIn("`Misled: none` if nothing did", reason)
+        self.assertNotIn("commit it in", reason)  # the home is outside the repo: the file is written there
+        self.assertNotIn("- no report", reason)
+        self.assertEqual(self.entry()["delivery_blocks"], 1)
+        self.write("2026-10-31-zed7.md", "# Report\nMisled: plan: said the schema stays (10 min)\n")
+        self.done()
+        self.assertIsNone(self.stop())
+        self.assertEqual(loop.agent_state(self.entry()), "delivered")
+
+    def test_none_passes_and_failed_needs_nothing(self):
+        wt = self.launch()
+        self.commit(wt)
+        self.write("2026-10-31-zed7.md", "# Report\n\nMisled: none\n")
+        self.done()
+        self.assertIsNone(self.stop())
+        self.launch("fl1", aid="ag2", branch="fl/x")
+        self.write("2026-10-31-fl1.md", "# Report, no line\n")
+        self.done("failed", aid="ag2", name="fl1")
+        self.assertIsNone(self.stop("ag2"))
+
+    def test_counts_in_the_two_refusals(self):
+        """A report that never gets the line: two refusals, then let go with `misled` in what is missing."""
+        wt = self.launch()
+        self.commit(wt)
+        self.write("2026-10-31-zed7.md", "# Report\n")
+        self.done()
+        self.assertIn("try 1 of 2", self.stop())
+        self.done()
+        self.assertIn("try 2 of 2", self.stop())
+        self.done()
+        self.assertIsNone(self.stop())
+        self.assertEqual(self.entry()["delivery_incomplete"]["missing"], ["misled"])
+
+    def test_an_unreadable_report_counts_as_found(self):
+        with self.assertRaises(delivery.Unknown):
+            delivery.report_text(self.project, "reviews/none.md", self.tmp / "app", "main", self.tmp / "app")
+
+    def test_progress_done_records_type_and_model(self):
+        self.launch("zed7", "--repo", "app", "--branch", "ab1/x", "--model", "claude-test-1", kind="foreman:dev")
+        self.write("2026-10-31-zed7.md", REPORT)
+        self.done(report="reviews/2026-10-31-zed7.md")
+        line = json.loads((self.project.state / "progress.jsonl").read_text().splitlines()[-1])
+        self.assertEqual((line["type"], line["model"]), ("dev", "claude-test-1"))
+        r = self.cli("progress", "a step", env={"FOREMAN_WHO": "zed7"})  # not a delivery: neither
+        self.assertEqual(r.returncode, 0, r.stderr)
+        line = json.loads((self.project.state / "progress.jsonl").read_text().splitlines()[-1])
+        self.assertNotIn("type", line)
+        self.assertEqual(delivery.type_and_model(self.project, None, "nobody"), (None, None))
+
+    def test_agents_misled(self):
+        """`foreman agents --misled`: one line per `Misled:` line with date, agent, type, model and report, the
+        footer that counts the reports, the filters, the default period and --json."""
+        self.launch("zed7", "--repo", "app", "--branch", "ab1/x", "--model", "claude-test-1", kind="foreman:dev")
+        self.write(
+            "2026-11-02-zed7.md", "# R\nMisled: plan: said the schema stays (10 min)\nMisled: foreman: odd text\n"
+        )
+        self.done(report="reviews/2026-11-02-zed7.md")
+        self.write("2026-11-02-plan-AB-2.md", "# Plan\nMisled: none\n")
+        self.write("2026-11-03-review-code.md", "# Review\nMisled: docs: an old page\n")
+        self.write("2026-11-03-other.md", "# No line\n")
+        self.write("2026-10-20-old.md", "Misled: plan: before the period\n")
+        (self.home / "reviews/2026-11-03-other").mkdir()
+        (self.home / "reviews/2026-11-03-other/attachment.md").write_text("an attachment, not a report\n")
+        r = self.cli("agents", "--misled", "--since", "2026-11-01")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(
+            r.stdout.splitlines(),
+            [
+                "2026-11-02 zed7 dev claude-test-1 reviews/2026-11-02-zed7.md: plan: said the schema stays (10 min)",
+                "2026-11-02 zed7 dev claude-test-1 reviews/2026-11-02-zed7.md: foreman: odd text",
+                "2026-11-03 - reviewer - reviews/2026-11-03-review-code.md: docs: an old page",
+                "4 reports since 2026-11-01: 2 with something, 1 none, 1 without the line"
+                " (reviews/2026-11-03-other.md)",
+                "by where: plan 1, foreman 1, docs 1",
+            ],
+        )
+        r = self.cli("agents", "--misled", "--since", "2026-11-01", "--type", "foreman:dev")
+        self.assertEqual(
+            r.stdout.splitlines()[-2:],
+            [
+                "1 reports since 2026-11-01: 1 with something, 0 none, 0 without the line",
+                "by where: plan 1, foreman 1",
+            ],
+        )
+        r = self.cli("agents", "--misled", "--since", "2026-11-01", "--model", "opus", "--json")
+        res = json.loads(r.stdout)
+        self.assertEqual((res["reports"], res["rows"]), (0, []))
+        # the default period: since the newest harness review
+        self.write("2026-11-03-review-harness.md", "# Harness\nModels: claude-test-1\nMisled: rules: a\n")
+        res = delivery.misled(self.project)
+        self.assertEqual((res["since"], res["reports"], res["something"]), ("2026-11-03", 3, 2))
+        self.assertEqual(res["rows"][-1]["where"], "rules")
+        # an unknown <where>: the whole text, under «-»
+        self.write("2026-11-04-x.md", "Misled: the brief and the plan disagreed\n")
+        rows = delivery.misled(self.project, since="2026-11-04")["rows"]
+        self.assertEqual((rows[0]["where"], rows[0]["text"]), ("-", "the brief and the plan disagreed"))
+        r = self.cli("agents", "--misled", "--since", "yesterday")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("a day as YYYY-MM-DD", r.stderr)
+        r = self.cli("agents", "--type", "dev")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("go with --misled", r.stderr)
+
+    def test_misled_text_names_at_most_ten_without(self):
+        for i in range(12):
+            self.write(f"2026-11-02-n{i:02}.md", "# none\n")
+        out = delivery.misled_text(delivery.misled(self.project, since="2026-11-01"))
+        self.assertIn("12 without the line (reviews/2026-11-02-n00.md", out)
+        self.assertTrue(out.endswith(", …)"))
+        self.assertNotIn("by where", out)
+        self.assertRegex(delivery.misled(self.project)["since"], r"^\d{4}-\d{2}-\d{2}$")  # no harness review: 7 days
+        # an undated report counts by the day it was changed; a broken progress line is skipped
+        self.write("undated.md", "Misled: code: a misleading name\n")
+        self.project.state.mkdir(parents=True, exist_ok=True)
+        (self.project.state / "progress.jsonl").write_text("not json\n[1]\n")
+        rows = delivery.misled(self.project, since="2026-11-03")["rows"]
+        self.assertEqual([(r["report"], r["where"]) for r in rows], [("reviews/undated.md", "code")])

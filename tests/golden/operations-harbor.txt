@@ -186,6 +186,11 @@ agents [--json] [--stop ID]        one line per agent: id, name, state (working,
                                    issue/sub, branch, minutes, model, outcome; --json (--full): the full records
 agents --name ID NAME [--issue ID] [--sub Tn] [--repo R] [--branch B] [--worktree W]   the identity of an agent
                                    launched without a launch line, by hand (ID: its id or a unique prefix)
+agents --misled [--since YYYY-MM-DD] [--type T] [--model M] [--json]
+                                   the `Misled:` lines of the reports (what misled each agent) since the day
+                                   (default: the last `*-review-harness*.md`, else 7 days), with date, agent,
+                                   type, model and report; the footer counts the reports with something, `none`
+                                   and without the line
 init HOME --name NAME [--owner O] [--language en|es] [--repo KEY=PATH]… [--local-ci [KEY=]CMD]… [--slots N]
      [--every-min N] [--sample [--prefix PX]] [--mode active|inactive] [--no-register] [--dry-run]
                                    a new project's home: a minimal foreman.toml, starting rules, notes/, reviews/,
