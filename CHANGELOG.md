@@ -27,6 +27,13 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   option whole (with its cost) and the page inside, with its images. A question without them looks as before
   (checked pixel by pixel at 390 and 1440 px). The detail now shows the question's whole text (it was cut at 600
   characters).
+- A question that says what each option changes is told in order in the panel: its situation, what happens
+  without an answer (with the reminder date and the tasks it holds, by name), then each option as a card with whether
+  it can be undone, its cost, its effect and its own «Choose» button (the recommended one marked, with its reason),
+  «Other answer», and its page folded under «See more detail». Only an option that cannot be undone asks for a
+  confirmation, with what it changes; the others answer on one tap. In the list, its card shows a chip per option,
+  the recommended one and a «Decide» button (quick answers only when every option can be undone). Questions without
+  those details look as before.
 - Images in the panel's documents: a report or a question's page shows its `![alt](picture.png)` from its own
   folder, through the new `/api/file` (PNG, JPEG, GIF or WebP checked by their first bytes, up to 5 MB, only from the
   reviews, notes and report folders, with the panel's key; never SVG nor an outside address).
