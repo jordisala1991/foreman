@@ -240,7 +240,7 @@ name = "example"            # required: lowercase, digits, . _ -
 owner = "owner"             # who decides; named in pages and guard messages
 language = "en"             # en | es: generated pages, notes heading, guard and resume texts
 rules = "rules.md"          # the project's rules, read by the orchestrator and every agent
-config_schema = 20          # the foreman.toml schema the file is written for (below); default: this foreman's
+config_schema = 21          # the foreman.toml schema the file is written for (below); default: this foreman's
 owner_knows = []            # terms the owner knows, never flagged by those checks: ["CI", "PR"]
 
 [paths]
