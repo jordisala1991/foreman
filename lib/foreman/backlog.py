@@ -254,6 +254,20 @@ def find_sub(i: Issue, sid: str) -> int | None:
     return None
 
 
+def due_decisions(data: Data, today: date | None = None) -> list[Record]:
+    """The pending decisions whose reminder day (`unanswered.by`) is today or past, in the backlog's order: each
+    `{id, title, by, waits}`. A decision with no `by` (or a bad one) never is. Only reads; saying it once is the
+    loop's (loop.decision_notices)."""
+    today = today or date.today()
+    out: list[Record] = []
+    for d in data["decisions"]:
+        u = d.get("unanswered")
+        by = u.get("by") if isinstance(u, dict) else None
+        if isinstance(by, str) and valid_date(by) and date.fromisoformat(by) <= today:
+            out.append({"id": d["id"], "title": d.get("title", ""), "by": by, "waits": u.get("waits", "")})
+    return out
+
+
 class Backlog:
     """The backlog of one project (a config.Project)."""
 

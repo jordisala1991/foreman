@@ -55,6 +55,7 @@ from . import (
     util,
     worktree,
 )
+from . import backlog as backlog_mod
 from .backlog import Backlog, BacklogError, Data, Holds, Issue
 from .notices import Notice, changed_mark, notice, render, run_checks
 from .notices import idle as nothing_actionable
@@ -1183,6 +1184,40 @@ def machine_notices(project: Project, mark: bool = True) -> list[Notice]:
     return out
 
 
+def decision_notices(project: Project, mark: bool = True) -> list[Notice]:
+    """`decision_due`: a pending question reached its reminder day (`unanswered.by`) without an answer: said once
+    per question (<state>/decision-due-notified: `ID|day`; mark=False reads it without writing). Only a reminder:
+    foreman never answers for the owner."""
+    try:
+        due = backlog_mod.due_decisions(Backlog(project).load())
+    except (BacklogError, OSError, ValueError):
+        return []  # backlog_unreadable says it
+    f = project.state / "decision-due-notified"
+    try:
+        seen = set(f.read_text().split("\n"))
+    except OSError:
+        seen = set()
+    out: list[Notice] = []
+    for d in due:
+        case = f"{d['id']}|{d['by']}"
+        if case in seen:
+            continue
+        out.append(
+            notice(
+                "decision_due",
+                True,
+                f"Question {d['id']} reaches its date ({d['by']}) without an answer: remind {project.owner} in the "
+                f"chat; it says what waits: {d['waits']}",
+                "decision_due:" + case,
+            )
+        )
+        seen.add(case)
+    if out and mark:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("\n".join(sorted(seen))[-4000:])
+    return out
+
+
 def with_versions(
     project: Project,
     session: str | None,
@@ -1225,6 +1260,7 @@ def notices_for_pass(project: Project, session: str | None = None, mark: bool = 
     out += lock_queues(project)
     out += branch_notices(project, live, heads, ids)
     out += machine_notices(project, mark)
+    out += decision_notices(project, mark)
     out += run_checks(project)
     return with_versions(project, session, out, at_version, found, mark)
 
