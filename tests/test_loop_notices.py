@@ -21,6 +21,7 @@ from typing import ClassVar
 
 from helpers import ENTRY, ProjectCase, git, make_repo
 
+from foreman import backlog as backlog_mod
 from foreman import config, delivery, heartbeat, hooks_mod, identity, lock, loop, notes, notices, orchestrator, util
 from foreman.backlog import Backlog
 
@@ -618,6 +619,33 @@ class LoopNoticesTest(NoticesCase):
         f.write_text("echo 'pid 42, 300 min: older than 3 h without a lock or CI'\nexit 1\n")
         os.environ["FOREMAN_HUNG_SHELLS_SH"] = str(f)
         self.assertEqual(self.kinds()["hung_shells"], [True])
+
+    def test_decision_due(self):
+        from datetime import date, timedelta
+
+        today = date.today()
+        with self.b.mutate() as d:
+            for n, by in (("J1", today), ("J2", today + timedelta(days=3))):
+                d["decisions"].append(
+                    {
+                        "id": f"E1 {n}",
+                        "title": "t",
+                        "date": today.isoformat(),
+                        "text": "",
+                        "options": ["a", "b"],
+                        "recommendation": "a",
+                        "unanswered": {"waits": "the release", "by": by.isoformat()},
+                    }
+                )
+        due = [n for n in self.notices(mark=False) if n["kind"] == "decision_due"]
+        self.assertEqual(len(due), 1)  # only the one whose day came; looking marks nothing
+        self.assertIn("E1 J1", due[0]["text"])
+        self.assertIn("what waits: the release", due[0]["text"])
+        self.assertTrue(due[0]["actionable"])
+        self.assertEqual(self.kinds()["decision_due"], [True])  # marks it
+        self.assertNotIn("decision_due", self.kinds())  # once
+        self.assertEqual(backlog_mod.due_decisions(self.b.load(), today + timedelta(days=3))[1]["id"], "E1 J2")
+        self.assertEqual(backlog_mod.due_decisions(self.b.load(), today - timedelta(days=1)), [])
 
     def test_recurring_late(self):
         self.assertNotIn("recurring_late", self.kinds())
