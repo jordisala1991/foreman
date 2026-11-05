@@ -83,6 +83,11 @@ agents [--json] [--stop ID]        one line per agent: id, name, state (working,
                                    issue/sub, branch, minutes, model, outcome; --json (--full): the full records
 agents --name ID NAME [--issue ID] [--sub Tn] [--repo R] [--branch B] [--worktree W]   the identity of an agent
                                    launched without a launch line, by hand (ID: its id or a unique prefix)
+agents --misled [--since YYYY-MM-DD] [--type T] [--model M] [--json]
+                                   the `Misled:` lines of the reports (what misled each agent) since the day
+                                   (default: the last `*-review-harness*.md`, else 7 days), with date, agent,
+                                   type, model and report; the footer counts the reports with something, `none`
+                                   and without the line
 init HOME --name NAME [--owner O] [--language en|es] [--repo KEY=PATH]… [--local-ci [KEY=]CMD]… [--slots N]
      [--every-min N] [--sample [--prefix PX]] [--mode active|inactive] [--no-register] [--dry-run]
                                    a new project's home: a minimal foreman.toml, starting rules, notes/, reviews/,
@@ -123,6 +128,7 @@ import argparse
 import inspect
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -859,6 +865,14 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--name", nargs=2, metavar=("ID", "NAME"), help="give an agent its identity by hand")
     for k in ("--issue", "--sub", "--repo", "--branch", "--worktree"):
         a.add_argument(k)
+    a.add_argument(
+        "--misled", action="store_true", help="the `Misled:` lines of the reports, with a footer that counts them"
+    )
+    a.add_argument(
+        "--since", metavar="YYYY-MM-DD", help="with --misled: from this day (default: the last harness review)"
+    )
+    a.add_argument("--type", dest="agent_type", metavar="T", help="with --misled: only this type of agent")
+    a.add_argument("--model", metavar="M", help="with --misled: only the models whose id has M")
     a = sp.add_parser("check", help="validate foreman.toml, the backlog and the guard table")
     a.add_argument(
         "--run-checks",
@@ -1130,6 +1144,11 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError as e:
                 print(f"foreman progress: --report {args.report}: {e}; nothing written", file=sys.stderr)
                 return 2
+        agent_type = model = None
+        if args.done:
+            from . import delivery
+
+            agent_type, model = delivery.type_and_model(p, aid, who)
         notes.progress(
             p,
             " ".join(args.text),
@@ -1139,6 +1158,8 @@ def main(argv: list[str] | None = None) -> int:
             outcome=(args.outcome or "ok") if args.done else None,
             report=report,
             kind=args.kind if args.done else None,
+            agent_type=agent_type,
+            model=model,
         )
         from . import plain
 
@@ -1333,6 +1354,18 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(f"named: {aid} is {args.name[1]}")
             return 0
+        if args.misled:
+            from . import delivery
+
+            if args.since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.since):
+                print(f"foreman agents: --since {args.since}: a day as YYYY-MM-DD", file=sys.stderr)
+                return 2
+            res = delivery.misled(p, since=args.since, type_=args.agent_type, model=args.model)
+            print(json.dumps(res, ensure_ascii=False, indent=1) if args.json else delivery.misled_text(res))
+            return 0
+        if args.since or args.agent_type or args.model:
+            print("foreman agents: --since, --type and --model go with --misled", file=sys.stderr)
+            return 2
         if args.stop:
             hits = loop.stop_agent(p, args.stop)
             print(f"stopped: {', '.join(hits)}" if hits else f"no agent {args.stop}")

@@ -233,11 +233,14 @@ they disagree.
      transcript): `working`, `waiting`, `delivered` or `stopped`; `delivered` once
      it ran `foreman progress --done`. Claude Code's «completed» notification is not a delivery: it also comes each
      time an agent stops to wait for a background task of its own (that one is `waiting`, and still live for 3 h at
-     most). When you stop one: `foreman agents --stop NAME`.
+     most). When you stop one: `foreman agents --stop NAME`. What misled the agents: `foreman agents --misled
+     [--since D] [--type T] [--model M]`, the reports' `Misled:` lines with date, agent, type and model (from the
+     delivery that named the report), and a footer counting the reports with something, `none` and without the line.
    - **The delivery check**: when a production agent with a launch line and a branch stops, the agents hook
      checks its delivery from local files and git: a `progress --done` recorded, commits on its branch beyond main,
      and the report under `[ids] report_prefixes` in its branch (with the home outside the repo: written in the home
-     since it started; the one it named with `progress --done --report`, when it named one). If something is missing the stop is
+     since it started; the one it named with `progress --done --report`, when it named one), with a `Misled:` line
+     (what misled it, or `Misled: none`; docs/agent.md). If something is missing the stop is
      blocked and the agent goes back to work with what is missing and the command to fix it; `--outcome failed`
      needs no commits or report, and a measurement (`progress --done --kind measure`, a sub-issue with
      `kind = "measure"`, or a branch whose open sub-issues are all measurements) needs no commits, only its report.

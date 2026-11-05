@@ -11,6 +11,16 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Added
 
+- What misled each agent: a production report carries a line `Misled: <where>: <what> (<cost>)` per thing in its
+  brief, plan, rules, docs or a foreman message that was wrong, stale or unclear, or `Misled: none`
+  (docs/agent.md). The delivery check refuses a stop (not a `failed` one) whose report lacks it, saying how to write
+  it; it shares the two refusals with the other items. Every product, no switch.
+- `foreman agents --misled [--since YYYY-MM-DD] [--type T] [--model M] [--json]` gathers those lines from the
+  reports (by default since the last `*-review-harness*.md`, else 7 days), with date, agent, type and model, and a
+  footer: how many reports have something, `none` or no line at all.
+- `foreman progress --done` records the agent's `type` and `model` in its progress line, so each report keeps who
+  wrote it after agents.json is pruned.
+
 - Richer questions for the owner: `foreman backlog decision add` takes, after each `--option`, its `--effect` (what
   the owner will see or do differently), `--cost` and `--undo yes|hard|no` (whether it can be undone); and
   `--if-no-answer` (what stays stopped until the owner answers), `--answer-by` (the day to remind them; foreman never

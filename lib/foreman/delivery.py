@@ -25,7 +25,9 @@ incomplete, and every delivery states its outcome.
   sub-issue when it exists; the report the agent named at delivery, which must then exist (no guess replaces it);
   with the home inside the repo, a file the branch adds or changes under one of the
   prefixes (as `foreman integrate` finds a report the branch adds); with the home elsewhere, a file under the
-  prefixes written since the agent started that names its branch, or whose name has its name or issue. An agent
+  prefixes written since the agent started that names its branch, or whose name has its name or issue. The report
+  found must carry every fixed line of REPORT_LINES (`report_lines`: `Misled: …`, or `Misled: none`), read from the
+  branch when the home lives in the repo (`report_text`). An agent
   that delivered with `--outcome failed` needs neither commits nor a report: a failure must be deliverable. A
   measurement needs no commits, only its report (`measures`: the delivery said `--kind measure`, the agent's
   sub-issue is `kind = "measure"`, or `branch_kind` says `measure`). A step
@@ -36,6 +38,9 @@ incomplete, and every delivery states its outcome.
   (an entry is one launch): after that it is let go, with `delivery_incomplete` ({at, missing}) in its entry, which
   the loop shows as the actionable notice `delivery_incomplete` until the agent is resumed or delivers complete.
   Claude Code sends no SubagentStop when a subagent is cut by maxTurns: that case is not covered.
+- **Gathering the lines.** `foreman agents --misled` (`misled`, `misled_text`): the `Misled:` lines of the reports of
+  a period, each tied to the delivery that named it (`progress --done` records the agent's `type` and `model`,
+  `type_and_model`), with a footer counting the reports with something, `none` and without the line.
 """
 
 from __future__ import annotations
@@ -63,6 +68,17 @@ OUTCOMES = ("ok", "partial", "failed")
 MAX_BLOCKS = 2
 GIT_TIMEOUT = 10
 REPORT_DAYS = 3  # how far back the pass looks in the home when no agent of the branch is recorded
+
+# The fixed lines of a report (`report_lines`): a production delivery that is not `failed` is refused while its
+# report lacks one of them (`missing`). LINE_HOW says, in the refusal, how to write each.
+REPORT_LINES = ("Misled",)
+LINE_HOW = {
+    "Misled": "what in the brief, the plan, the issue, the rules, the docs or a message of foreman was wrong, stale "
+    "or unclear and cost you time, one line each as `Misled: <where>: <what> (<cost>)`, <where> one of "
+    "brief, plan, issue, rules, procedure, docs, foreman, code, environment; `Misled: none` if nothing did",
+}
+WHERE = ("brief", "plan", "issue", "rules", "procedure", "docs", "foreman", "code", "environment")
+NOTHING = ("none", "nothing", "nada", "-")
 
 
 class Unknown(Exception):
@@ -340,6 +356,12 @@ def named_report(project: Project, path: str, wts: Iterable[PathLike | None] = (
 def worktrees_of(project: Project, aid: str | None, name: str | None) -> list[str]:
     """The worktree recorded for the agent (agents.json, by agent id, else the newest entry with this name); [] when
     none is."""
+    h = entry_of(project, aid, name)
+    return [h["worktree"]] if h and h.get("worktree") else []
+
+
+def entry_of(project: Project, aid: str | None, name: str | None) -> Agent | None:
+    """The agent's entry in agents.json: by agent id, else the newest entry with this name; None when none is."""
     from . import loop
 
     d = loop.agents(project)
@@ -347,7 +369,19 @@ def worktrees_of(project: Project, aid: str | None, name: str | None) -> list[st
     if h is None and name:
         mine = [x for x in d.values() if x.get("name") == name]
         h = max(mine, key=lambda x: str(x.get("start") or ""), default=None)
-    return [h["worktree"]] if h and h.get("worktree") else []
+    return h
+
+
+def type_and_model(project: Project, aid: str | None, name: str | None) -> tuple[str | None, str | None]:
+    """(type without a plugin prefix, model) of the agent that delivers, for its `done` line: the model its
+    transcript says it runs on, else the recorded one, else the one asked at launch; None for what is not known."""
+    from . import identity
+
+    h = entry_of(project, aid, name)
+    if not h:
+        return None, None
+    t = h.get("type")
+    return (t.split(":", 1)[-1] if t else None), identity.transcript_model(h) or h.get("model") or h.get("model_asked")
 
 
 def delivered_report(project: Project, aid: str | None, h: Agent) -> str | None:
@@ -644,6 +678,11 @@ def missing(project: Project, aid: str | None, h: Agent) -> list[tuple[str, str]
                             "checked, what is missing; it names your branch)",
                         )
                     )
+            elif rep.path is not None:
+                text = report_text(project, rep.path, wt, branch, main_path)
+                for k, found in report_lines(text).items():
+                    if not found:
+                        items.append((k.lower(), line_missing(k, rep.path, wt, home_in(main_path, project))))
         except Unknown:
             pass
     if not done:
@@ -696,3 +735,171 @@ def outcome_of(project: Project, branch: str | None = None, name: str | None = N
         if x:
             return x.get("outcome") or "ok"
     return None
+
+
+# ---------- the fixed lines of a report ----------
+
+LINE_RE = r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?({keys})(?:\*\*)?:(?:\*\*)?[ \t]*(\S.*?)[ \t]*$"
+
+
+def report_lines(text: str, keys: Iterable[str] = REPORT_LINES) -> dict[str, list[str]]:
+    """{key: [the text of each `Key: text` line]} of a report, for every key (REPORT_LINES by default): a line that
+    starts with the key and a colon (a list dash and bold around the key are let through) and has text after it.
+    The one reading of every fixed line of a report: the delivery check and `foreman agents --misled`."""
+    keys = list(keys)
+    out: dict[str, list[str]] = {k: [] for k in keys}
+    if keys:
+        for m in re.finditer(LINE_RE.format(keys="|".join(map(re.escape, keys))), text, re.M):
+            out[m.group(1)].append(m.group(2))
+    return out
+
+
+def is_nothing(value: str) -> bool:
+    """Whether a line's text says nothing happened (`none`, `nothing`, `nada`, `-`, with or without a full stop)."""
+    return value.strip().rstrip(".").strip().lower() in NOTHING
+
+
+def report_text(project: Project, path: str, wt: PathLike, branch: str, main_path: PathLike) -> str:
+    """The text of the report the delivery check found (PATH, relative to the home or absolute): the branch's copy
+    when the home lives in the repo and the branch has it, else the file in the home. Raises Unknown when neither
+    can be read (the caller counts it as found)."""
+    full = Path(path) if Path(path).is_absolute() else project.home / path
+    rel = home_in(main_path, project)
+    if rel is not None:
+        try:
+            inner = full.resolve().relative_to(project.home.resolve()).as_posix()
+            return git(wt, "show", f"{branch}:{repo_path(rel, inner)}")
+        except (ValueError, Unknown):
+            pass
+    try:
+        return full.read_text(errors="replace")
+    except OSError as e:
+        raise Unknown(str(e)) from e
+
+
+def line_missing(key: str, path: str, wt: PathLike, rel: Path | None) -> str:
+    """The refusal's text for a report that lacks the line KEY: what to write, and where to commit it when the home
+    lives in the repo (REL)."""
+    how = LINE_HOW.get(key, f"one line `{key}: …`")
+    tail = f"; commit it in {wt}" if rel is not None else ""
+    return f"your report {path} lacks the line `{key}: …`: {how}{tail}"
+
+
+def report_date(f: Path) -> str:
+    """The day of a report: the `YYYY-MM-DD` its name starts with, else the day it was last changed ("" when it
+    cannot be read)."""
+    m = re.match(r"\d{4}-\d{2}-\d{2}", f.name)
+    if m:
+        return m.group(0)
+    try:
+        return time.strftime("%Y-%m-%d", time.localtime(f.stat().st_mtime))
+    except OSError:
+        return ""
+
+
+def is_review(name: str) -> bool:
+    """Whether a file name is a review (`review-….md`, with or without a date in front)."""
+    return re.match(r"(?:\d{4}-\d{2}-\d{2}-)?review(?:[-_.]|$)", name.lower()) is not None
+
+
+def deliveries_by_report(project: Project) -> dict[str, dict[str, Any]]:
+    """{report: the last `done` line of progress.jsonl that names it}."""
+    out: dict[str, dict[str, Any]] = {}
+    try:
+        lines = (project.state / "progress.jsonl").read_text(errors="replace").splitlines()
+    except OSError:
+        return out
+    for ln in lines:
+        try:
+            x = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(x, dict) and x.get("done") and x.get("report"):
+            out[str(x["report"])] = x
+    return out
+
+
+def misled(
+    project: Project, since: str | None = None, type_: str | None = None, model: str | None = None
+) -> dict[str, Any]:
+    """`foreman agents --misled`: the `Misled:` lines of the reports (the `.md` files right under each of `[ids]
+    report_prefixes` and the reviews folder; what is in their subfolders is a report's attachment) dated at or after
+    SINCE (YYYY-MM-DD; default the day of the newest `*-review-harness*.md`, else 7 days ago). Each report is
+    tied to the last delivery that named it (progress.jsonl: agent, type, model); without one, its type comes from
+    its name (a plan: planner, a review: reviewer). TYPE_ (exact, without a plugin prefix) and MODEL (a part of its
+    id) keep only those reports. Returns {since, reports, something, none, without, without_line: [paths], rows:
+    [{date, agent, type, model, report, where, text}]}."""
+    dirs = [project.home / d for d in report_dirs(project)] + [project.reviews_dir]
+    files = list({f.resolve(): f for d in dirs if d.is_dir() for f in d.glob("*.md")}.values())
+    if since is None:
+        harness = [report_date(f) for f in files if "review-harness" in f.name.lower()]
+        since = (
+            max(harness) if harness else time.strftime("%Y-%m-%d", time.localtime(util.now().timestamp() - 7 * 86400))
+        )
+    by = deliveries_by_report(project)
+    home = project.home.resolve()
+    out: dict[str, Any] = {"since": since, "reports": 0, "something": 0, "none": 0, "without": 0}
+    rows: list[dict[str, str]] = []
+    without: list[str] = []
+    for f in sorted(files, key=lambda f: (report_date(f), f.name)):
+        day = report_date(f)
+        if day < since:
+            continue
+        try:
+            path = f.relative_to(home).as_posix()
+        except ValueError:
+            path = str(f)
+        x = by.get(path) or {}
+        kind = str(x.get("type") or "").split(":", 1)[-1]
+        kind = kind or ("planner" if is_plan(f.name) else "reviewer" if is_review(f.name) else "-")
+        ran = str(x.get("model") or "-")
+        if (type_ and kind != type_.split(":", 1)[-1]) or (model and model not in ran):
+            continue
+        try:
+            found = report_lines(f.read_text(errors="replace"), ("Misled",))["Misled"]
+        except OSError:
+            continue
+        out["reports"] += 1
+        real = [v for v in found if not is_nothing(v)]
+        out["something" if real else "none" if found else "without"] += 1
+        if not found:
+            without.append(path)
+        for v in real:
+            m = re.match(r"(\w+):\s*(.*)$", v)
+            where_ = m.group(1).lower() if m and m.group(1).lower() in WHERE else "-"
+            text = m.group(2) if where_ != "-" and m else v
+            rows.append(
+                {
+                    "date": day,
+                    "agent": str(x.get("agent") or "-"),
+                    "type": kind,
+                    "model": ran,
+                    "report": path,
+                    "where": where_,
+                    "text": text,
+                }
+            )
+    return {**out, "without_line": without, "rows": rows}
+
+
+def misled_text(result: dict[str, Any]) -> str:
+    """`foreman agents --misled` as text: one line per `Misled:` line, then the footer (how many reports, with
+    something, none and without the line; how many lines per <where>)."""
+    lines = [
+        f"{r['date']} {r['agent']} {r['type']} {r['model']} {r['report']}: {r['where']}: {r['text']}"
+        for r in result["rows"]
+    ]
+    w = result["without_line"]
+    foot = (
+        f"{result['reports']} reports since {result['since']}: {result['something']} with something, "
+        f"{result['none']} none, {result['without']} without the line"
+    )
+    if w:
+        foot += " (" + ", ".join(w[:10]) + (", …" if len(w) > 10 else "") + ")"
+    lines.append(foot)
+    counts: dict[str, int] = {}
+    for r in result["rows"]:
+        counts[r["where"]] = counts.get(r["where"], 0) + 1
+    if counts:
+        lines.append("by where: " + ", ".join(f"{k} {n}" for k, n in sorted(counts.items(), key=lambda kv: -kv[1])))
+    return "\n".join(lines)

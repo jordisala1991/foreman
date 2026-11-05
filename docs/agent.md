@@ -72,6 +72,14 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   code: the total coverage and that of the touched modules (`bin/foreman selftest --coverage`). No report, not delivered.
   It stays technical (the orchestrator and the next agent read it); a question in it for the owner follows
   docs/owner.md.
+- **What misled you**, in the report, at the start of a line: `Misled: <where>: <what> (<cost>)`, one line per thing
+  in what you were given that was wrong, stale or unclear and cost you time; `<where>` is one of `brief`, `plan`,
+  `issue`, `rules` (the project's), `procedure` (this page or your agent type's definition), `docs`, `foreman` (a
+  message of a command, a hook or the guard), `code` (a misleading comment or name) or `environment`; the text in the
+  owner's language. Nothing did: `Misled: none` (say it, so «nothing» differs from «not thought of»). It is not a
+  deviation (what you did differently): it is what you were given wrong. For example `Misled: plan: it said the
+  config schema stays; the schema test wants it raised (one selftest round, 10 min)`. `foreman agents --misled`
+  gathers these lines to review the rules.
 - No live processes, simulators, containers or leftovers in your scratch folder.
 - Your last command is `foreman progress --done "result" --outcome ok|partial|failed --report reviews/<file>.md`,
   a result line as docs/owner.md says: that line is your delivery (the agents hook marks you delivered, so you stop
@@ -85,8 +93,8 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   resumed afterwards, run it again when you finish.
 - **The delivery check:** when you stop, foreman checks that your branch has commits beyond main (not for a
   measurement: `--kind measure`, or a sub-issue planned as one), that your report
-  is in it (when the project keeps reports; the one you named with `--report`, when you named one) and that you
-  ran `progress --done`. If something is missing, your stop is refused with what is missing and the command to fix it: fix it, run
+  is in it (when the project keeps reports; the one you named with `--report`, when you named one) and has a
+  `Misled:` line, and that you ran `progress --done`. If something is missing, your stop is refused with what is missing and the command to fix it: fix it, run
   `progress --done` again and stop.
 - **The final message** (what the orchestrator's context pays for, so it is short and fixed-shaped): at most
   1,200 characters, never a recap of the report. Everything else goes in the report file, which the orchestrator reads
