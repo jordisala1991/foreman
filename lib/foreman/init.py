@@ -63,7 +63,7 @@ def add_parser(sp: Any) -> None:
     a.add_argument("home", help="the project's home: the folder for foreman.toml, the backlog, notes and reports")
     a.add_argument("--name", required=True, help="the project's name (lowercase letters, digits, . _ -)")
     a.add_argument("--owner", help="who decides (default: owner)")
-    a.add_argument("--language", choices=LANGUAGES, help="of the pages, notes and notices (default: en)")
+    a.add_argument("--language", choices=LANGUAGES, help="of the notes and notices (default: en)")
     a.add_argument("--repo", action="append", default=[], metavar="KEY=PATH", help="a code repo (repeat for each)")
     a.add_argument(
         "--local-ci",
@@ -376,7 +376,7 @@ def plan_backlog(plan: Plan) -> None:
     data: backlog.Data = {}
     if not b.exists():
         plan.writes["backlog"] = True
-        plan.say(b.data_path, "made, with its pages", "would be made, with its pages")
+        plan.say(b.data_path, "made", "would be made")
     else:
         try:
             data = b.load()

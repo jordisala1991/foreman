@@ -45,9 +45,6 @@ rules = "normas.md"
 [paths]
 worktrees = "{tmp}/wt"
 
-[backlog]
-decisions_page = "pages/decisiones.md"
-
 [ids]
 criterion_required = ["FA-"]
 
@@ -92,10 +89,6 @@ language = "en"
 [paths]
 worktrees = "{tmp}/wt"
 
-[backlog]
-decisions_page = "pages/wiki.md"
-decisions_section = "## Open decisions"
-
 [ids]
 issue = "^HB-\\\\d+$"
 
@@ -130,15 +123,20 @@ sources = [{ heartbeat = "review", max_h = 168 }]
 
 HARBOR_WIKI = """# Harbor wiki
 
-Hand-written page; foreman rewrites only the section below.
+Hand-written page; foreman leaves it as it is.
 
 ## Open decisions
 
-(generated)
+In the panel and in `foreman backlog decision list`.
 
 ## Notes
 
 Left as it is.
+"""
+
+HARBOR_RUNBOOK = """# Runbook
+
+How to bring the api up: `make up`, then check the logs. See [[wiki]].
 """
 
 # Each product: its toml, its language's texts for the fixed sequences.
@@ -172,7 +170,6 @@ PRODUCTS = {
             "rec": "a, porque no se pierde nada",
             "bad": "¿Cerramos FA-2 con el T1 de loop.py?",
             "badt": "Lo pide FA-2 T1.",
-            "heading": "Decisiones de Marta",
             "note": "Lectura de cartas",
             "notet": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
             "prog": "Lector de cartas: 0,4 s por carta",
@@ -211,7 +208,6 @@ PRODUCTS = {
             "rec": "a, no till to count",
             "bad": "Close HB-2 with T1 of loop.py?",
             "badt": "HB-2 T1 asks for it.",
-            "heading": "Decisions",
             "note": "Booking form",
             "notet": "The form takes 40 s end to end (measured on 5 bookings).",
             "prog": "Booking form: 40 s end to end",
@@ -281,6 +277,7 @@ class GoldenCase(unittest.TestCase):
         shutil.copy(ROOT / "tests/golden_guard.tsv", self.homes["faro"] / "guard.tsv")
         (self.homes["harbor"] / "pages").mkdir()
         (self.homes["harbor"] / "pages/wiki.md").write_text(HARBOR_WIKI)
+        (self.homes["harbor"] / "pages/runbook.md").write_text(HARBOR_RUNBOOK)
         (self.tmp / "projects.toml").write_text("\n".join(reg))
         for repo in ("faro-app", "harbor-api"):
             d = self.tmp / repo
@@ -467,20 +464,16 @@ def build_backlog(case, name, reads=True):
         "--as-is",
     )
     b("decision", "resolve", f"{i(2)} J1", "--answer", x["o1"])
-    b("page", "decisions", "--heading", x["heading"])
-    b("page", "backlog", "--heading", x["heading"])
     b("move", i(4), "--project", "A2")
     b("move", i(3), "--before", i(2))
     b("unblock", i(3))
     b("status", f"{P}-99", "done")
     b("status", i(4), "nonsense")
-    b("render", "--check")
     if not reads:
         return
     case.t.section(f"{name}: reads")
     b("show")
     b("show", "--json")
-    b("render")
     data = json.loads((case.homes[name] / "backlog.json").read_text())
     ids = [p["id"] for p in data["projects"]] + [
         d["id"] for d in data["decisions"] + data["decisions_resolved"] if d.get("id")
@@ -554,7 +547,6 @@ def decision_fields(case, name):
     b("decision", "add", "--title", x["q"], "--option", x["o1"], "--answer-by", "2020-01-26")
     b("show", f"{P}-2 J2")
     b("show", f"{P}-2 J2", "--json")
-    case.t.tree(f"{name} pages", case.homes[name] / "pages")
 
 
 class GoldenBacklogFaro(GoldenCase):

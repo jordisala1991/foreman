@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_pages, i18n, identity, lock, loop, notes, orchestrator, pause, transcripts
+from . import backlog_text, i18n, identity, lock, loop, notes, orchestrator, pause, transcripts
 from .backlog import Backlog, BacklogError
 
 if TYPE_CHECKING:
@@ -130,7 +130,7 @@ def active_backlog(project: Project) -> dict[str, Any]:
             if s.get("status") != "done"
         ]
         blocked = i.get("blocked") or (("by " + ", ".join(rb[i["id"]])) if rb.get(i["id"]) else "")
-        blocked = " · ".join(x for x in (blocked, backlog_pages.render_held(b, i, holds)) if x)
+        blocked = " · ".join(x for x in (blocked, backlog_text.render_held(b, i, holds)) if x)
         out["issues"].append(
             {
                 "id": i["id"],

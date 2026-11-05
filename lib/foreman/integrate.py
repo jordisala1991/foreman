@@ -109,7 +109,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_pages, commands, config, delivery, guard, holdout, i18n, notes, permissions, plain, review, util
+from . import backlog_text, commands, config, delivery, guard, holdout, i18n, notes, permissions, plain, review, util
 from .backlog import Backlog, BacklogError
 
 if TYPE_CHECKING:
@@ -483,7 +483,7 @@ class Integration:
         else:
             self.out(f"== {self.issue} has no plan linked in the backlog (small issue: the brief was the plan)")
         if issue["subs"]:
-            self.out(f"== sub-issues of {self.issue}: {backlog_pages.render_subs(self.backlog, issue['subs'])}")
+            self.out(f"== sub-issues of {self.issue}: {backlog_text.render_subs(self.backlog, issue['subs'])}")
         self.show_hidden()
         agent = next((x.get("agent") for x in issue["subs"] if x.get("branch") == self.branch), None)
         outcome = self.outcome = delivery.outcome_of(self.p, branch=self.branch, name=agent)

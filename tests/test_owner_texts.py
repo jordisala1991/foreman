@@ -86,12 +86,11 @@ class OwnerTextsTest(ProjectCase):
                 data, None, GOOD_TITLE, GOOD_TEXT, ["yes", "no"], "yes, they miss it today", issue="AB-1"
             )
             self.b.add_decision(data, None, "Keep the old export?", "", ["yes", "no"], issue="AB-1")
-        page = (self.home / "pages/decisions.md").read_text()
-        self.assertIn(f"{GOOD_TEXT} Recommendation: yes, they miss it today Options: yes · no", page)
+        r = self.cli("backlog", "show", "AB-1 J1")
+        self.assertIn(f"{GOOD_TEXT} Recommendation: yes, they miss it today Options: yes · no", r.stdout)
+        page = self.cli("backlog", "show", "AB-1 J2").stdout
         self.assertIn("**AB-1 J2, Keep the old export?** (", page)
         self.assertNotIn("Recommendation: Options", page)
-        r = self.cli("backlog", "show", "AB-1 J1")
-        self.assertIn("Recommendation: yes, they miss it today", r.stdout)
         cards = panel_cards.backlog_cards(self.project)["decisions"]
         self.assertEqual(cards[0]["text"], GOOD_TEXT)  # no longer glued to the text
         self.assertEqual(cards[0]["recommendation"], "yes, they miss it today")
@@ -109,7 +108,7 @@ class OwnerTextsTest(ProjectCase):
         b = Backlog(self.project)
         with b.mutate() as data:
             b.add_decision(data, None, GOOD_TITLE, "", ["sí", "no"], "sí", issue="AB-1")
-        self.assertIn("Recomendación: sí Opciones: sí · no", (self.home / "pages/decisions.md").read_text())
+        self.assertIn("Recomendación: sí Opciones: sí · no", self.cli("backlog", "show", "AB-1 J1").stdout)
 
     # ---------- warnings elsewhere: never blocking ----------
 

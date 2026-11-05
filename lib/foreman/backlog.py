@@ -1,8 +1,8 @@
 """The work state of a project: one backlog JSON file, and this module is its only writer.
 
-Forked from an earlier in-house version (schema 2, 2026-10-30) and driven by the project's foreman.toml: file and
-page paths, ID patterns, which ID prefixes need an acceptance criterion, the owner of the decisions and the language
-of the generated pages.
+Forked from an earlier in-house version (schema 2, 2026-10-30) and driven by the project's foreman.toml: the file's
+path, ID patterns, which ID prefixes need an acceptance criterion, the owner of the decisions and the language of its
+texts.
 
 It holds the projects (E1…) in priority order, their issues (XX-n) in rank order with their sub-issues (T0…), the
 archive and the owner's pending decisions. An issue is acceptance criterion + plan + result: an optional outcome
@@ -20,11 +20,11 @@ Schema: 5 (the model above, SCHEMA below), the only one foreman reads and writes
 file: foreman 0.54 moves a schema 4 file to 5 (`foreman backlog migrate`), foreman 0.25 or older a schema 2 or 3 file
 to 4.
 
-The generated pages (backlog, archive, decisions) are rewritten after every write: never edit them by hand.
-Every command that writes takes the file lock, writes atomically (temp file + rename) and renders at the end.
+It is read in the panel or with `foreman backlog list|show`; foreman writes no text copy of it (since 0.60).
+Every command that writes takes the file lock and writes atomically (temp file + rename).
 
-This module holds the data model (load, save, queries and changes); the pages are in backlog_pages, the checks in
-backlog_check and the `foreman backlog` command line in backlog_cli.
+This module holds the data model (load, save, queries and changes); its one-line terminal text is in backlog_text,
+the checks in backlog_check and the `foreman backlog` command line in backlog_cli.
 """
 
 from __future__ import annotations
@@ -136,8 +136,8 @@ SCHEMA = """
 {
   "schema_version": 5,
   "updated": "YYYY-MM-DD",
-  "pages": {"backlog": {"front_matter": [[key, raw YAML value], ...], "heading": "...", "intro": [lines]},
-            "archive": {...same...}, "decisions": {"intro": [lines]}},
+  "pages"?: {...},                         # unused since 0.60 (the text pages it headed are gone); kept as it is
+                                           # when present, because foreman 0.59 or older fails to write without it
   "projects": [{"id": "E1", "title": "...", "intro": "markdown",
      "status"?: backlog|planned|in progress|paused|completed|canceled,
      "priority"?: urgent|high|medium|low|none, "repos"?: [repo keys], "issues": [ISSUE]}],
@@ -278,10 +278,6 @@ class Backlog:
         self.root = project.home
         self.data_path = project.path(cfg["file"])
         self.lock_path = self.data_path.parent / ".backlog.lock"
-        self.out_backlog = project.path(cfg["page"])
-        self.out_archive = project.path(cfg["archive_page"])
-        self.out_decisions = project.path(cfg["decisions_page"])
-        self.decisions_section = cfg.get("decisions_section") or ""
         self.project_id = re.compile(ids["project"])
         self.new_issue_id = re.compile(ids["issue"])
         self.legacy_id = re.compile(ids["legacy"]) if ids.get("legacy") else None
@@ -345,15 +341,9 @@ class Backlog:
         return v
 
     def empty(self) -> Data:
-        owner = self.project.owner
         return {
             "schema_version": SCHEMA_VERSION,
             "updated": date.today().isoformat(),
-            "pages": {
-                "backlog": {"front_matter": [], "heading": self.s["backlog_heading"], "intro": []},
-                "archive": {"front_matter": [], "heading": self.s["archive_heading"], "intro": []},
-                "decisions": {"intro": [self.s["decisions_intro"].format(owner=owner)]},
-            },
             "projects": [],
             "issues": [],
             "archive": [],
@@ -397,11 +387,12 @@ class Backlog:
                 or k not in DECISION_OPTIONAL + ("resolved", "answer")
             }
 
-        pages = data.get("pages", {})
+        # the old pages block, as it is: foreman 0.59 or older reads it on every write
+        pages = {"pages": data["pages"]} if data.get("pages") else {}
         return {
             "schema_version": data.get("schema_version", SCHEMA_VERSION),
             "updated": data.get("updated", ""),
-            "pages": {k: pages[k] for k in ("backlog", "archive", "decisions") if k in pages},
+            **pages,
             "projects": [project(p) for p in data.get("projects", [])],
             "issues": [issue(i) for i in data.get("issues", [])],
             "archive": [
@@ -438,9 +429,9 @@ class Backlog:
 
     @contextlib.contextmanager
     def mutate(self, timeout: float = 30) -> Iterator[Data]:
-        """Lock (waiting `timeout` seconds at most), load (see `load`), let the caller change the data, validate, save
-        and render."""
-        from . import backlog_check, backlog_pages
+        """Lock (waiting `timeout` seconds at most), load (see `load`), let the caller change the data, validate and
+        save."""
+        from . import backlog_check
 
         with self.locked(timeout):
             data = self.load()
@@ -450,17 +441,12 @@ class Backlog:
                 raise BacklogError("not saved: " + "; ".join(errors))
             data["updated"] = date.today().isoformat()
             util.write_text_atomic(self.data_path, self.dumps(data))
-            backlog_pages.render(self, data)
 
     def init(self) -> Path:
         if self.exists():
             raise BacklogError(f"{self.data_path} already exists")
-        from . import backlog_pages
-
         with self.locked():
-            data = self.empty()
-            util.write_text_atomic(self.data_path, self.dumps(data))
-            backlog_pages.render(self, data)
+            util.write_text_atomic(self.data_path, self.dumps(self.empty()))
         return self.data_path
 
     def rel(self, p: Path) -> Path:
@@ -1333,23 +1319,6 @@ class Backlog:
             "total": len(live),
             "started": sum(1 for i in live if STATUS_CATEGORY.get(i["status"]) == "started"),
         }
-
-    @staticmethod
-    def edit_page(data: Data, key: str, heading: str | None = None, replace: Iterable[tuple[str, str]] = ()) -> None:
-        page = data["pages"].get(key)
-        if page is None:
-            raise BacklogError(f"no page {key!r} ({', '.join(data['pages'])})")
-        if heading is not None:
-            if "heading" not in page:
-                raise BacklogError(f"page {key} has no heading")
-            page["heading"] = heading.strip()
-        text = "\n".join(page["intro"])
-        for old, new in replace:
-            n = text.count(old)
-            if n != 1:
-                raise BacklogError(f"page {key}: {old[:60]!r} appears {n} times (must be once)")
-            text = text.replace(old, new)
-        page["intro"] = text.split("\n")
 
     def archive(self, data: Data, iid: str) -> None:
         lst, k, pid = self.find(data, iid)

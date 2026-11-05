@@ -11,7 +11,7 @@ from datetime import date, timedelta
 
 from helpers import BASE_TOML, ProjectCase
 
-from foreman import backlog_check, backlog_pages
+from foreman import backlog_check, backlog_text
 from foreman.backlog import PAGE_MAX, Backlog
 
 TITLE = "Should the weekly report include the export?"
@@ -81,16 +81,15 @@ class DecisionFieldsTest(ProjectCase):
         self.assertEqual(d["unanswered"], {"waits": "the export waits; the rest goes on", "by": later(7)})
         self.assertEqual(d["page"], PAGE)
         self.assertEqual(self.cli("check").returncode, 0)
-        # the decisions page: after the options, a link relative to the page
-        page = (self.home / "pages/decisions.md").read_text()
+        # show: after the options; the page's path relative to the home, as it is stored
+        show = self.cli("backlog", "show", "AB-1 J1").stdout
         self.assertIn(
             "Options: yes · no What each option changes: yes: the report gets a page with the export (one more "
             "minute; can be undone) · no: the report stays as it is (can be undone, with work) Until there is an "
-            f"answer (reminder on {later(7)}): the export waits; the rest goes on Page: [question.md](../{PAGE})",
-            page,
+            f"answer (reminder on {later(7)}): the export waits; the rest goes on Page: {PAGE}",
+            show,
         )
-        show = self.cli("backlog", "show", "AB-1 J1").stdout
-        self.assertIn(f"Page: [question.md]({PAGE})", show)
+        self.assertNotIn("../", show)
         lst = self.cli("backlog", "decision", "list").stdout
         self.assertIn("  1. yes  (recommended)\n     the report gets a page with the export (one more minute;", lst)
         self.assertIn("  2. no\n     the report stays as it is (can be undone, with work)", lst)
@@ -110,13 +109,13 @@ class DecisionFieldsTest(ProjectCase):
     def test_spanish_labels(self):
         self.write_toml(BASE_TOML.replace('language = "en"', 'language = "es"'))
         self.assertEqual(self.rich().returncode, 0)
-        page = (self.home / "pages/decisions.md").read_text()
+        page = self.cli("backlog", "show", "AB-1 J1").stdout
         self.assertIn("Qué cambia cada opción: yes: ", page)
         self.assertIn(
             "(one more minute; se puede deshacer) · no: the report stays as it is (se puede deshacer, con", page
         )
         self.assertIn(f"Mientras no contestes (recordatorio el {later(7)}): the export waits", page)
-        self.assertIn(f"Página: [question.md](../{PAGE})", page)
+        self.assertIn(f"Página: {PAGE}", page)
         b = Backlog(self.project)
         self.assertEqual(b.s["undo_no"], "sin vuelta atrás")
 
@@ -125,7 +124,7 @@ class DecisionFieldsTest(ProjectCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         d = self.b.load()["decisions"][0]
         self.assertEqual(list(d), ["id", "title", "date", "text", "options", "recommendation"])
-        line = backlog_pages.render_decision(self.b, d, self.b.out_decisions)
+        line = backlog_text.render_decision(self.b, d)
         self.assertEqual(
             line,
             f"- **AB-1 J1, {TITLE}** (2026-11-01): {TEXT} Recommendation: yes, it is cheap Options: yes · no",

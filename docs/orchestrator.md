@@ -9,8 +9,8 @@ they disagree.
 
 | What | Where |
 |---|---|
-| Work: projects (E1…), issues with acceptance criterion, plan, reports and result, sub-issues | the backlog file, only through `foreman backlog`; its pages are generated; to list or count issues, of one product or all (`--all-products`), `foreman backlog list` (never a script over the file) |
-| Decisions only the owner can take | `foreman backlog decision add/resolve`; generated in the decisions page |
+| Work: projects (E1…), issues with acceptance criterion, plan, reports and result, sub-issues | the backlog file, only through `foreman backlog`; to see it, the panel or `foreman backlog show`; to list or count issues, of one product or all (`--all-products`), `foreman backlog list` (never a script over the file) |
+| Decisions only the owner can take | `foreman backlog decision add/resolve/list`; the panel shows them |
 | What happens while working | `notes/YYYY-MM-DD.md` with `foreman note` |
 | Plans and reports | `reviews/` (`[paths] reviews`) |
 | Project rules: repos, commands, what is never done without the owner, how each change is checked | the rules file |

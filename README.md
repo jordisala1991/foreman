@@ -117,7 +117,7 @@ You rarely type them: the orchestrator and the agents do.
 
 | Command | What it does |
 |---|---|
-| `backlog` | the project's backlog: issues, projects, decisions for the owner, generated pages |
+| `backlog` | the project's backlog: issues, projects, decisions for the owner |
 | `note` | append an entry to today's notes (what must last: figures, corrections) |
 | `progress` | a progress line for the owner's panel; --done: an agent's delivery |
 | `inbox` | the owner's messages from the panel and the orchestrator's replies |
