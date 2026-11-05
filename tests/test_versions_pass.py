@@ -99,6 +99,8 @@ class OwnSessionTest(VersionPassCase):
         self.assertIn(f"foreman 0.1.0 in this session, 0.2.0 installed: it does not load here by itself. {ASK}", text)
         self.assertNotIn("hand over", text)
         self.assertNotIn("handover", text)
+        for word in ("Remote Control", "phone", "refused"):  # /reload-plugins works there too
+            self.assertNotIn(word, text)
         self.assertEqual(self.kinds("S1")["foreman_behind"], [False])  # said once
         self.free_agents()
         notes.inbox_read(self.project, [])
