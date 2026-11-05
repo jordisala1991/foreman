@@ -9,6 +9,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Fixed
+
+- The new-version notice of the orchestrator loop (and `docs/orchestrator.md`) no longer says `/reload-plugins` is refused
+  over Remote Control from the phone: it is not.
+
 ### Added
 
 - A place for hidden acceptance checks, out of the production agents' reach: each product's `[paths] holdout`

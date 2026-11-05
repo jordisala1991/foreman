@@ -467,7 +467,7 @@ def foreman_behind_notice(
     said = changed_mark(project, "foreman-behind-notified", key, mark)
     text = (
         f"{head}: it does not load here by itself. Tell {project.owner}, in plain words, to type /reload-plugins in "
-        "this chat to load it (on the computer itself: over Remote Control from the phone it is refused). Nothing "
+        "this chat to load it. Nothing "
         "else waits for it."
     )
     return notice("foreman_behind", said, text, key)

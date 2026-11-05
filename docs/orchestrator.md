@@ -139,8 +139,7 @@ they disagree.
    never makes the owner type anything; one still on the old version after it is told as above, the marked
    session too. The pass carries `foreman_behind` until the session runs the installed version: information while
    the host loads it by itself (the desktop app, once the session is free); otherwise actionable once per installed version: tell the
-   owner, in plain words, to type `/reload-plugins` in this session (on the computer itself: over Remote Control
-   from the phone it is refused), then information. Other sessions of the product behind come as `sessions_behind`: tell the owner which ones need
+   owner, in plain words, to type `/reload-plugins` in this session, then information. Other sessions of the product behind come as `sessions_behind`: tell the owner which ones need
    `/reload-plugins`, or relaunch the ones you launched. `foreman session` says which foreman the marked session runs,
    and `foreman session --all [--behind] [--json]` lists the live sessions of every registered product with theirs. The
    panel's System tab lists the live sessions behind (an estimated version with «≈»), and the product row and the
