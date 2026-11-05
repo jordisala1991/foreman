@@ -18,6 +18,9 @@ What is specific to this type:
   There, while working, run the tests of what you touch (`bin/foreman selftest NAME`) and, before delivering,
   the CI's one pass on Python 3.9 once (`bin/foreman selftest --python /usr/bin/python3 --quality=require
   --mods=require`, or any other 3.9); the integration runs it again.
+- Resumed with a review of your branch (or launched on a reviewed branch): fix or refute each H and M finding with
+  proof (a test, or the line that disproves it), only those; add a «Review, round N» section to your report, one
+  line per finding (`docs/agent.md`, «Resumed with a review»), commit, and `progress --done` again.
 - Deliver: what is in the branch (commits), figures with their source, what you checked and what is left to the CI,
   and the result in one line, written for the owner (`foreman docs owner`), naming your report with
   `progress --done … --report PATH`; the rest of the delivery stays technical.

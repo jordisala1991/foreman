@@ -67,6 +67,14 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 - `foreman launch --repo REPO --branch BRANCH` reuses the worktree foreman made for BRANCH when no live agent has it
   («reusing its worktree at …»), so a branch can go back to work with a new agent; `foreman worktree` still refuses a
   branch checked out elsewhere.
+- The `reviewer` agent has a branch review mode («A branch review»): it reads the criterion, the plan and the diff
+  before the agent's report, backs every line of the criterion with evidence, gives each finding its severity,
+  failure scenario and the test that would prove it, dismisses a finding only by citing the line that refutes it,
+  keeps style and new scope out of H and M, and in round 2 checks only the earlier findings and what the fixes
+  changed; its review starts with the header foreman reads. The `dev` agent and docs/agent.md say what to do when
+  resumed with a review (fix or refute each H and M with proof, a «Review, round N» section in the report), and the
+  `orchestrator-pass` skill and docs/orchestrator.md how the orchestrator runs the rounds (who to launch or resume,
+  SendMessage, plan B, the owner's question after round 2, the size waiver).
 
 ### Config
 
