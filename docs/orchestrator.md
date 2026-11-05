@@ -101,6 +101,7 @@ they disagree.
    | `lock_long` | a lock held over `[loop] lock_long_min` minutes (60): yes, once per case |
    | `lock_queue` | no while every holder holds it through a live `run` or is just taking it; yes if a holder is dead, took it without `run`, gives no pid, never wrote its owner line, or nobody holds it |
    | `ready_to_integrate`, `measure_delivered`, `loose_worktrees`, `branch_no_worktree`, `loose_branches`, `orphan_in_progress`, `backlog_problems`, `backlog_unreadable`, `hung_shells`, `recurring_late`, `inbox` | yes |
+   | `decision_due` | yes, once per question on its reminder day (`--answer-by`, stored as `unanswered.by`) or the first pass after it while it is still pending: remind the owner in the chat; the notice says what waits. foreman never answers for them: the question stays pending |
    | `disk_low` | yes when it crosses `[loop] disk_low_gb`, then no until it goes back above |
    | `check` (or the kind a check line gives) | what the line says (`[loop] checks`, docs/config.md): a JSON line's `actionable`, a plain line yes; a line that gives one of the kinds of this table is a `check` |
    | `check_failed` | yes (a check that times out or ends with a code other than 0 or 1) |

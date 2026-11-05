@@ -25,6 +25,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 - The `owner-decisions` skill presents a question's `details`, `unanswered` and `page` when it has them: per option
   its effect, cost and whether it can be undone, what waits for the answer and the reminder day, and a two-line
   summary of the page with where to see it. Older questions are presented as before.
+- `decision_due` notice: a pending question whose `--answer-by` day has come gets one actionable notice asking the
+  orchestrator to remind the owner in the chat, with what waits. It only reminds: the question stays pending.
 
 ### Upgrade notes
 

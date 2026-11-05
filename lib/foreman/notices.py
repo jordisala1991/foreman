@@ -56,6 +56,7 @@ KINDS = (
     "hung_shells",
     "recurring_late",
     "inbox",
+    "decision_due",
     "disk_low",
     "check",
     "check_failed",
