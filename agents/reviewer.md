@@ -24,10 +24,10 @@ What is specific to this type:
   registered projects use and what not, from the backlog and the notes) and what it proposes
   (remove, merge, rename, hide, explain).
 - **The document**, `reviews/YYYY-MM-DD-review-<topic>.md`: header (what you read, at which commit, what you did not,
-  sources, your `Misled:` lines as `foreman docs agent` says); a summary for the owner in his language as `foreman
-  docs owner` says; the findings (technical); the proposed fixes as sub-issues each integrable alone, without hours,
-  marking collisions with branches in progress; open questions, the owner's apart and written as `foreman docs owner`
-  asks. With that shape the orchestrator can
+  sources, your `Misled:` lines as `foreman docs agent` says); a summary for the owner in his language as
+  `foreman docs owner` says; the findings (technical); the proposed fixes as sub-issues each integrable alone,
+  without hours, marking collisions with branches in progress; open questions, the owner's apart and written as
+  `foreman docs owner` asks. With that shape the orchestrator can
   use it as the plan of the fixes issue.
 - If nothing is worth a fix, say so with what you looked at; do not pad.
 - **A branch review** (your launch line ends in «review»: `foreman launch NAME --review REPO:BRANCH`) has its own
