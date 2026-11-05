@@ -42,7 +42,7 @@ key not written takes foreman's default. `foreman check` reads the file strictly
 
 ## 2. A behaviour: a command at a fixed point
 
-foreman runs a product's command at nine points. Each is a shell string in the configuration, run with `bash -c` in
+foreman runs a product's command at eleven points. Each is a shell string in the configuration, run with `bash -c` in
 its own process group, in the folder of its point, with a fixed time limit; past it the whole group is stopped. The
 full contract (placeholders, variables, quoting, versioning) is below, «The contract».
 
@@ -57,6 +57,8 @@ full contract (placeholders, variables, quoting, versioning) is below, «The con
 | `repo.pre_merge_report` | `[repos.*] pre_merge_report` | before merging, in the main checkout | `{wt} {main} {branch}` | — | stdout is shown (its rc and stderr under it) | 300 s |
 | `repo.post_merge` | `[repos.*] post_merge` | after the merge, in the main checkout | `{main} {branch} {before} {head}` | — | its last line goes into the note; a failure is a warning, the merge stands | 600 s |
 | `repo.post_create` | `[repos.*] post_create` | in each new worktree | `{main} {wt} {repo} {name} {branch}`, quoted | — | rc 0; otherwise the worktree is removed | 600 s |
+| `holdout.setup` | `holdout.toml setup` (a hidden check's spec, not foreman.toml) | `foreman integrate` and `foreman holdout`, in the copy of the branch's tip (or main's) a hidden acceptance check runs in, before its cases | — (`FOREMAN_WT`, `FOREMAN_MAIN`, `FOREMAN_REPO`, `FOREMAN_BRANCH`) | — | rc 0; otherwise the check stops (exit 2), nothing merged | 600 s |
+| `holdout.scenario` | `holdout.toml [[scenario]] command` | the same, once per case | — (as `holdout.setup`) | — | rc 0: the case passes; cut at the spec's `timeout` (300 s by default), it fails | 300 s |
 
 Writing one:
 

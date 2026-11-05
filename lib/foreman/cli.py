@@ -36,6 +36,9 @@ launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch 
                                    is exit 2, nothing made: answer it, or --despite DID (each one that holds it)
                                    --why TEXT, recorded in the launch and the notes, with a line for the owner
 integrate REPO BRANCH "ID [Tn]" … (foreman integrate --help)
+holdout seal ID [--no-baseline] | run REPO BRANCH ID [--full] | status [ID]   an issue's hidden acceptance check
+                                   (the orchestrator's; foreman holdout --help): seal hashes its folder and runs
+                                   the cases on main; run runs them on a branch as integrate does
 guard "command" [--as agent|orchestrator] | guard --table FILE   what the guard hook would say about a command
 guard --file PATH [--as agent|orchestrator] [--cwd DIR]   …and about a Write or Edit call that writes PATH
                                    (exit 2 = rejected; --as: who runs it, default an agent), or check a table of
@@ -138,7 +141,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import __version__, backlog, backlog_check, backlog_cli, config, integrate, util
+from . import __version__, backlog, backlog_check, backlog_cli, config, holdout, integrate, util
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -199,7 +202,7 @@ orchestrator's replies, shown under them.
 COMMAND_GROUPS = {
     "Set up and check": ["init", "check", "config", "permissions", "guard", "docs", "selftest"],
     "The orchestrator's session": ["start", "session", "loop", "renew", "catchup", "recurring"],
-    "Agents and branches": ["launch", "worktree", "agents", "integrate"],
+    "Agents and branches": ["launch", "worktree", "agents", "integrate", "holdout"],
     "Backlog, notes and the owner": ["backlog", "note", "progress", "inbox", "plain", "panel"],
     "Shared resources and waiting": ["lock", "wait", "time-limit", "hung-shells"],
 }
@@ -229,6 +232,7 @@ REPLACED = {
 ACTING = {
     "lock",
     "integrate",
+    "holdout",
     "worktree",
     "launch",
     "session",
@@ -785,6 +789,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = ap.add_subparsers(dest="cmd", required=True)
     backlog_cli.add_parser(sp)
     integrate.add_parser(sp)
+    holdout.add_parser(sp)
     a = sp.add_parser("note", help="append an entry to today's notes (what must last: figures, corrections)")
     a.add_argument("title")
     a.add_argument("text", nargs="*")
@@ -1139,6 +1144,8 @@ def main(argv: list[str] | None = None) -> int:
         return backlog_cli.run(p, args)
     if c == "integrate":
         return integrate.run(p, args)
+    if c == "holdout":
+        return holdout.run_command(p, args)
     from . import loop, notes, notices
 
     if c == "note":

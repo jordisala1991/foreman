@@ -511,7 +511,9 @@ class OpensTest(PermissionsCase):
             value = '["a", "b"]' if key in ("ci_runs", "post_create") else '"echo x"'
             values[f"repo.{key}"] = live + f"{key} = {value}\n"
         values["repo.local_ci"] = live.replace('"make test"', '"echo x"')  # the repo sets it: changed
-        self.assertLessEqual(set(commands.POINTS), set(values))  # every point is a case (and ci_runs)
+        # every point of foreman.toml is a case (and ci_runs); a hidden check's commands are in its own holdout.toml
+        points = {k for k in commands.POINTS if not k.startswith("holdout.")}
+        self.assertLessEqual(points, set(values))
         for point, text in values.items():
             with self.subTest(point=point):
                 out = self.opened(text)
