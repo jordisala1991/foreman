@@ -16,7 +16,8 @@ asking for changes to a plan is the orchestrator's; approved means it can run no
   T1…, each checkable alone) and open questions. **No hour estimates.** Small or measure-only issues: the brief is
   the plan. A review by a `reviewer` agent that lists fix sub-issues counts as that plan once you have added your
   «Review by the orchestrator» section.
-- **Review:** read it, correct or approve it with a «Review by the orchestrator (date)» section at its end, answer
+- **Review:** read it (its `Misled:` lines first: what misled the planner will mislead the agent, so fix it in the
+  plan or the brief), correct or approve it with a «Review by the orchestrator (date)» section at its end, answer
   its open questions (the owner's go to `foreman backlog decision add`, each one written so it stands alone, as
   `foreman docs owner` says; with `--blocks Tn` for the sub-issues the plan says wait for that answer, never the
   whole issue by habit) and link it:

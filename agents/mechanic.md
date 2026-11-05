@@ -22,7 +22,8 @@ What is specific to this type:
   There, while working, run the tests of what you touch (`bin/foreman selftest NAME`) and, before delivering,
   the CI's one pass on Python 3.9 once (`bin/foreman selftest --python /usr/bin/python3 --quality=require
   --mods=require`, or any other 3.9); the integration runs it again.
-- Deliver: files touched, what you left untouched and why, and how you checked it; the one-line result of
-  `foreman progress --done` is read by the owner (`foreman docs owner`), and its `--report PATH` names your report.
+- Deliver: files touched, what you left untouched and why, how you checked it, and your `Misled:` lines (an unclear
+  brief belongs there too); the one-line result of `foreman progress --done` is read by the owner
+  (`foreman docs owner`), and its `--report PATH` names your report.
 - Your final message is the short template of `foreman docs agent` (at most 1,200 characters; for a plan, its path,
   the summary in a few lines and the open questions); the detail goes in the report or the plan file.

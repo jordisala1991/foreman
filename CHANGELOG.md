@@ -31,6 +31,12 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   one on a model its `Models:` line does not name (agents.json at the agent's stop, or the model a delivery line of
   `progress.jsonl` records); `foreman recurring` names the new models. With `max_h` it is also late that many hours
   after the review (`max_h = 720`: «with each new model and monthly» in one task). docs/config.md.
+- The reviewer's «A harness review» (agents/reviewer.md), the task that `models` source makes due: from `foreman
+  agents --misled` and the guard's refusals since the previous one, each piece of the agents' texts is kept,
+  rewritten, removed or measured; its header `Models:`/`Since:`/`Lines:` is what the source reads. Changes to the
+  project's rules go to the owner as one decision; those to foreman's texts, the orchestrator approves as any plan.
+  Planners, reviewers, dev and mechanic agents are told to write their `Misled:` lines; the batch close starts from
+  `foreman agents --misled` and a plan's review from its `Misled:` lines.
 
 ### Config
 
