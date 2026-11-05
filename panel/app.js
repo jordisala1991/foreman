@@ -1042,12 +1042,13 @@ const VIEWS = {
     const x = lastData.decisions.find(y => decKey(y)===key); if(!x) return null;
     return {p: x.p, title: t('decision'), html: dhead(`${ptag(x.p)}${t('pending_decision')}`, esc(x.title)) + props([
         [t('asked'), esc(x.date || '')], [t('status'), x.answer ? `<span class="ok">${t(x.free ? 'answered_free_lc' : 'answered_lc', {text: esc(x.answer)})}</span>` : `<span class="warn">${t('waits_answer')}</span>`],
-        [t('options'), x.options.map(o => optLabel(x, o)).join(' · ')], x.recommendation && [t('recommendation'), esc(x.recommendation)],
+        ...(hasDetails(x) ? [] : [[t('options'), x.options.map(o => optLabel(x, o)).join(' · ')], x.recommendation && [t('recommendation'), esc(x.recommendation)]]),
         x.unanswered && x.unanswered.waits && [t('dec_unanswered'), esc(x.unanswered.waits) + (x.unanswered.by ? ` <span class="muted">· ${t('dec_reminder', {date: esc(x.unanswered.by)})}</span>` : '')]])
-      + (hasDetails(x) ? sect(t('dec_effects'), `<div class="dopts">${decOptions(x, true)}</div>`) : '')
+      + (hasDetails(x) ? sect(t('dec_effects'), `<div class="dopts">${decOptions(x, true)}</div>`
+        + (x.recommendation ? `<div class="drec"><b>${t('recommendation')}:</b> ${esc(x.recommendation)}</div>` : '')) : '')
       + sect(t('detail'), `<div class="md">${md(x.text)}</div>`)
       // its page inside, with its images (loaded after: it is a document)
-      + (x.page ? sect(t('dec_page'), `<a class="dl" data-doc="${esc(x.page)}">${esc(x.page.split('/').pop())}</a><div id="mpage"><span class="muted">${t('loading_lc')}</span></div>`) : '')
+      + (x.page ? `<div id="mpage" class="md"><span class="muted">${t('loading_lc')}</span></div>` : '')
       + decisionActions(x),
       after: async v => {
         fillFree($('mbody'));
@@ -1055,7 +1056,7 @@ const VIEWS = {
         const r = await loadDoc(x.page, x.p), el = $('mpage');
         if(!el || MV[MV.length-1]!==v) return;
         el.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(r.md, x.p, r.path);
-        if(v.page){ v.page = false; el.previousElementSibling.scrollIntoView(); }   // opened from the card's link
+        if(v.page){ v.page = false; el.scrollIntoView(); }   // opened from the card's link
       }};
   },
   msg(key, obj){

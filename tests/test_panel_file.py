@@ -152,7 +152,11 @@ class PanelDecisionFieldsTest(PanelCase):
         self.assertIn("x.answer || !(hasDetails(x) || (x.unanswered && x.unanswered.waits) || x.page) ? ''", more)
         dec = js[js.index("  dec(key){") : js.index("  msg(key, obj){")]
         self.assertIn("(hasDetails(x) ? sect(t('dec_effects')", dec)
-        self.assertIn("(x.page ? sect(t('dec_page')", dec)
+        self.assertIn('(x.page ? `<div id="mpage"', dec)
+        self.assertNotIn("dec_page", dec)
+        # options and recommendation once: in the top table only without details, below only with them
+        self.assertIn("...(hasDetails(x) ? [] : [[t('options')", dec)
+        self.assertIn('<div class="drec">', dec)
         self.assertIn("mdFull(r.md, x.p, r.path)", dec)
         for lang in ("en", "es"):
             st = self.req(f"/api/strings?lang={lang}")[1]

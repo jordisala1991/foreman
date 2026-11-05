@@ -78,6 +78,7 @@ button.sec.rec,.chip.rec{border-color:var(--acc)}.recm{color:var(--muted);font-w
 .dmore .slink{font-size:var(--fs-m)}
 .dopts{border:1px solid var(--line);border-radius:var(--r);background:var(--card)}
 .dopts .dopt{padding:var(--sp2) var(--sp3);border-top:1px solid var(--line)}.dopts .dopt:first-child{border-top:0}
+.drec{margin-top:var(--sp2);padding:0 var(--sp3)}
 
 /* ---- List of one-line rows: icon, ID, name, title with ellipsis, metadata on the right; tap opens the detail */
 .list{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:0 0 10px}
