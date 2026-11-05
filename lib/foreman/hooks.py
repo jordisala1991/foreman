@@ -522,6 +522,7 @@ def _guard_ctx(ev: Event) -> guard.Ctx:
     return {
         "session": ev.get("session_id"),
         "agent": ev.get("agent_id") or None,
+        "agent_type": ev.get("agent_type") or None,
         "cwd": ev.get("cwd"),
         "tool_use_id": ev.get("tool_use_id") or None,
     }

@@ -1112,6 +1112,12 @@ Bloqueado por el guardián de foreman: una petición pendiente de un grupo la ap
 $ foreman hook guard  # row 261: allow
 < {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"recap": "read ~/.ssh/config"}, "tool_name": "mcp__ccd_turn__wrap_up", "tool_use_id": "toolu_261"}
 [exit 0]
+$ foreman hook guard  # row 262: orchestrator
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman holdout status"}, "tool_name": "Bash", "tool_use_id": "toolu_262"}
+[exit 0]
+$ foreman hook guard  # row 263: allow
+< {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"command": "foreman holdout --help"}, "tool_name": "Bash", "tool_use_id": "toolu_263"}
+[exit 0]
 $ foreman hook guard
 < {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "tool_input": {"file_path": "x"}, "tool_name": "Read"}
 [exit 0]
@@ -1135,7 +1141,7 @@ $ foreman hook guard
 Blocked by the foreman guard: «(^|\s)git push» is on the list of things never done without Sam (harbor). Ask Sam first (foreman backlog decision add, or the inbox). It matched in the command `git push`. If it is only text, write it with the Write or Edit tool, or with `cat > FILE <<'EOF'`. Never without Sam (rules.md).
 $ foreman --project faro guard --table tests/golden_guard.tsv
 [exit 0]
-guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
+guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 89 allow, 15 orchestrator)
 
 ######## state root: files under <TMP>/state
 === callers.json

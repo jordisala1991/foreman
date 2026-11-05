@@ -2,13 +2,13 @@
 $ foreman --project faro check
 [exit 0]
 faro: <TMP>/faro (active); state <TMP>/state/faro
-  config schema 20 (this foreman knows 20): ok
+  config schema 21 (this foreman knows 21): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo app: <TMP>/faro-app merge=squash
   resource widget: this project, foreman lock, guard 2
   rules <TMP>/faro/normas.md: ok
-  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
+  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 89 allow, 15 orchestrator)
   backlog <TMP>/faro/backlog.json: ok
     warning: decision DEC J1 was recorded with --as-is: it names things the owner would have to ask about (foreman plain; docs/owner.md)
 $ foreman config --projects
@@ -18,13 +18,13 @@ harbor	active	<TMP>/harbor
 $ foreman check
 [exit 0]
 faro: <TMP>/faro (active); state <TMP>/state/faro
-  config schema 20 (this foreman knows 20): ok
+  config schema 21 (this foreman knows 21): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo app: <TMP>/faro-app merge=squash
   resource widget: this project, foreman lock, guard 2
   rules <TMP>/faro/normas.md: ok
-  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
+  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 89 allow, 15 orchestrator)
   backlog <TMP>/faro/backlog.json: ok
     warning: decision DEC J1 was recorded with --as-is: it names things the owner would have to ask about (foreman plain; docs/owner.md)
 $ foreman --version

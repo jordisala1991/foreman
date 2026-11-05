@@ -165,6 +165,7 @@ class ConfigTest(ProjectCase):
                 "reviews": str(self.home / "reviews"),
                 "state": str(self.tmp / "state/fake"),
                 "worktrees": str(self.tmp / "wt"),
+                "holdout": str(Path.home() / ".local/share/foreman/fake/holdout"),
             },
         )
         self.assertEqual(s["paths"], {**dict.fromkeys(c["paths"], "default"), "state": "environment"})

@@ -333,11 +333,11 @@ class TableAndViewTest(MainCheckoutCase):
 
     def test_permissions_view(self):
         rules = [r for r in permissions.rules(self.project) if r["pattern"] in guard.AGENT_ONLY]
-        self.assertEqual([(r["band"], r["only"]) for r in rules], [("builtin", "orchestrator")] * 2)
+        self.assertEqual([(r["band"], r["only"]) for r in rules], [("builtin", "orchestrator")] * 3)
         (self.home / "tests/guard.tsv").write_text(f"orchestrator@{self.top}\tgit merge main\nallow\tls\n")
         d = permissions.view(self.project)
         rows = {r["pattern"]: r["rows"] for r in d["rules"] if r["pattern"] in guard.AGENT_ONLY}
-        self.assertEqual(rows, {guard.MAIN_CHECKOUT: 1, guard.INTEGRATE: 0})
+        self.assertEqual(rows, {guard.MAIN_CHECKOUT: 1, guard.INTEGRATE: 0, guard.HOLDOUT: 0})
         text = permissions.render(self.project, d)
         self.assertIn("an agent's git that rewrites a main checkout", text)
         self.assertIn("`foreman integrate` (but --check and --help)", text)

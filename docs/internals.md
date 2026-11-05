@@ -282,6 +282,40 @@ branch moved without touching files (`update-ref`, `branch -f`: the copy is then
 `patch` or an archive over the copy, and git run by a program or a script. `foreman guard --as agent --cwd DIR
 "git merge main"` says what it would do; `foreman permissions` shows both rules as foreman's own.
 
+## The hidden acceptance checks: the orchestrator's and the planners'
+
+Part of a plan's acceptance may be kept apart from what the production agents read: cases a planner writes in the
+product's folder of hidden checks (`[paths] holdout`, by default `~/.local/share/foreman/<name>/holdout/`, outside
+the home, the repos, the worktrees and the state), which the orchestrator reviews and runs at integration. A third
+built-in rule keeps it out of reach of every agent but a planner: a production agent (`dev`, `mechanic`, the types of
+`[agents] production_types`), a reviewer, any other type, and an agent whose type foreman does not know (the hook
+event's `agent_type`, else its entry in `<state>/agents.json`). The orchestrator, the owner's other sessions and a
+`planner` pass. Its refusal reaches the orchestrator (`orchestrator_only_denied`) and `<state>/guard.jsonl`, as the
+other two. Nothing is on by default: the rule looks only at such folders that exist, of every product of the
+registry, so a product with none (foreman itself) sees no change.
+
+- **foreman's `holdout` command** (to come: it seals and runs the checks) run in any of the forms of `foreman
+  integrate` above, but with `--help` or `-h`; this one whether a folder exists or not.
+- **A path in a command** (also a redirection's file, the value of `--opt=VALUE`, and what runs nested: `sh -c`,
+  `$(…)`, a pipe or heredoc into a shell), read from each folder the command may run in (the session's, moved by the
+  line's `cd` and `pushd`), with `~`, `$HOME` and the line's own variables expanded and links followed: the folder or
+  anything in it (`cat`, `ls`, `cp`, `python3 x.py PATH`, `cd`), a wildcard that may match it
+  (`~/.local/share/foreman/*/holdout`), and a folder that holds it when the program walks it: `grep -r|-R`, `rg`,
+  `ag`, `find`, `fd`, `ls -R`, `du`, `tar`, `rsync`, `tree`, `cp -r|-R|-a`, `zip`… (`grep -r x ~`, `find ~/.local`,
+  `rg x /`). A walking program given no path that exists walks the folder it runs in. Any command that runs inside
+  the folder is refused too.
+- **The folder named as text** anywhere in the line (`~/…`, `$HOME/…` or absolute): inline code (`python3 -c`), a
+  heredoc to an interpreter, and a line the lexer cannot read.
+- **Any other tool** by the places it names (as `cat PLACE`: Read, Write, Edit, an MCP tool's `file_path`…); `Grep`
+  also when its `path` (else the call's folder) holds the folder, and `Glob` when its pattern may reach it
+  (`**` below a folder that holds it).
+
+Not seen: a program that builds the path by itself (a script written to a file and run later, a path assembled from
+pieces), a variable from outside the line, a link to a folder above the hidden one walked by a program that follows
+links. The rule keeps an agent from finding the cases by accident or by search, not one bent on reading them: the
+seal of T1 (a hash of every file) tells when they changed. `foreman guard --as agent|planner|orchestrator "cat
+PATH"` says what it would do; `foreman permissions` shows the rule as foreman's own.
+
 ## How the guard reads a command (`[deny] patterns`)
 
 A rule the patterns cannot say goes in a `PreToolUse` hook of the product's own, where a `deny` always wins

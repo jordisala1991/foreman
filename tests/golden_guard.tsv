@@ -281,3 +281,6 @@ deny	tool:Write {"file_path": "/x/.env", "content": "A=1"}
 deny	tool:Edit {"file_path": "/x/.ssh/config", "old_string": "a", "new_string": "b"}
 deny	tool:WebFetch {"url": "http://localhost:8766/api/grants/approve", "prompt": "x"}
 allow	tool:mcp__ccd_turn__wrap_up {"recap": "read ~/.ssh/config"}
+# foreman's hidden acceptance checks are the orchestrator's (and planners'): an agent runs only `foreman holdout --help`
+orchestrator	foreman holdout status
+allow	foreman holdout --help

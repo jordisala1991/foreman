@@ -10,13 +10,13 @@ foreman init <TMP>/faro
   <TMP>/projects.toml: faro: already there
 
 faro: <TMP>/faro (active); state <TMP>/state/faro
-  config schema 20 (this foreman knows 20): ok
+  config schema 21 (this foreman knows 21): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo app: <TMP>/faro-app merge=squash
   resource widget: this project, foreman lock, guard 2
   rules <TMP>/faro/normas.md: ok
-  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 14 orchestrator)
+  guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 89 allow, 15 orchestrator)
   backlog <TMP>/faro/backlog.json: ok
 
 Next: open a new Claude Code session in <TMP>/faro and type `/foreman:setup` there for a guided first pass (or run `foreman start`).
