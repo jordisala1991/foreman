@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-11-06
+
 ### Fixed
 
 - The new-version notice of the orchestrator loop (and `docs/orchestrator.md`) no longer says `/reload-plugins` is refused
@@ -64,6 +66,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 - Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`), and the `models` source of
   `[[recurring]]`.
+
+### Upgrade notes
+
+- Nothing to do: config schema 21 adds only optional keys, and the backlog schema stays 5. An answer can be changed
+  from the panel only while the orchestrator has not read it.
 
 ## [0.58.0] - 2026-11-05
 
