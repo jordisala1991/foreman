@@ -9,6 +9,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Fixed
+
+- The new-version notice of the orchestrator loop (and `docs/orchestrator.md`) no longer says `/reload-plugins` is refused
+  over Remote Control from the phone: it is not.
+
 ### Added
 
 - A place for hidden acceptance checks, out of the production agents' reach: each product's `[paths] holdout`
@@ -21,6 +26,17 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   planners pass; the refusal reaches the orchestrator and `guard.jsonl`. Nothing changes while no such folder
   exists. The guard hook passes the event's `agent_type` (else `<state>/agents.json` says it); `foreman guard --as
   planner` checks as a planner; `foreman permissions` lists the rule as foreman's own.
+- A recurring task that falls due when agents start running on a new model: a `[[recurring]]` source `models =
+  "reviews/*-review-harness*.md"` (a glob of reviews) is late with no review, or when an agent ran after the newest
+  one on a model its `Models:` line does not name (agents.json at the agent's stop, or the model a delivery line of
+  `progress.jsonl` records); `foreman recurring` names the new models. With `max_h` it is also late that many hours
+  after the review (`max_h = 720`: «with each new model and monthly» in one task). docs/config.md.
+- The reviewer's «A harness review» (agents/reviewer.md), the task that `models` source makes due: from `foreman
+  agents --misled` and the guard's refusals since the previous one, each piece of the agents' texts is kept,
+  rewritten, removed or measured; its header `Models:`/`Since:`/`Lines:` is what the source reads. Changes to the
+  project's rules go to the owner as one decision; those to foreman's texts, the orchestrator approves as any plan.
+  Planners, reviewers, dev and mechanic agents are told to write their `Misled:` lines; the batch close starts from
+  `foreman agents --misled` and a plan's review from its `Misled:` lines.
 
 ### Changed
 
@@ -35,7 +51,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Config
 
-- Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`).
+- Schema 21: `[paths] holdout` (empty by default: `~/.local/share/foreman/<name>/holdout`), and the `models` source of
+  `[[recurring]]`.
 
 ## [0.58.0] - 2026-11-05
 

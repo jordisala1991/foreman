@@ -1217,6 +1217,7 @@ def main(argv: list[str] | None = None) -> int:
             parts = ", ".join(
                 f"{x['label'] or 'last'} {x['last'] or 'never'}"
                 + (f" (daily at {x['at']})" if x.get("at") else "")
+                + (f" (new model: {', '.join(x['new'])})" if x.get("new") else "")
                 + (" LATE" if x["late"] else "")
                 for x in t["parts"]
             )

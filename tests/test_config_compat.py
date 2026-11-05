@@ -51,6 +51,10 @@ class ConfigCompatTest(ProjectCase):
                 'at = "09:30"',
                 'heartbeat = "a", glob = "b"',
                 'heartbeat = "a", max_h = 0',
+                'models = "reviews/*.md", at = "09:30"',
+                'models = ""',
+                "models = 3",
+                'models = "reviews/*.md", glob = "b"',
             )
         ]
         for text in bad:
@@ -67,6 +71,8 @@ class ConfigCompatTest(ProjectCase):
             'log = "lint", file = "log.md", at = "13:05"',
             'heartbeat = "a", max_h = 1.5',
             'heartbeat = "a"',
+            'models = "reviews/*-review-harness*.md"',
+            'models = "reviews/*-review-harness*.md", max_h = 720, label = "models"',
         ):
             with self.subTest(src=src):
                 self.assertEqual(config.problems(toml_reader.loads(RECURRING % src)), ([], []))

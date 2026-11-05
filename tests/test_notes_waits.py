@@ -163,6 +163,99 @@ class RecurringAtTest(ProjectCase):
         self.assertIn("ran never (daily at 09:30) LATE", self.cli("recurring").stdout)
 
 
+MODELS_TOML = (
+    TOML
+    + """
+[[recurring]]
+name = "Rules review"
+every = "with each new model and monthly"
+sources = [{ label = "models", models = "reviews/*-review-harness*.md", max_h = 720 }]
+
+[[recurring]]
+name = "Rules review, models only"
+sources = [{ models = "reviews/*-review-harness*.md" }]
+"""
+)
+
+
+class RecurringModelsTest(ProjectCase):
+    """A `models` source is late with no review, when an agent ran on a model the newest review's `Models:` line does
+    not name (agents.json at its stop, or a delivery line of progress.jsonl), and after max_h only when it is given."""
+
+    toml = MODELS_TOML
+
+    def setUp(self):
+        super().setUp()
+        (self.home / "reviews").mkdir()
+
+    def review(self, when, models, name="review-harness"):
+        f = self.home / f"reviews/{when[:10]}-{name}.md"
+        f.write_text(f"# Harness review\n\nModels: {models}\nSince: 2026-10-01\n")
+        ts = datetime.fromisoformat(when).timestamp()
+        os.utime(f, (ts, ts))
+
+    def agent(self, aid, model, end):
+        d = util.read_json(self.project.state / "agents.json", {})
+        d[aid] = {"name": aid, "type": "foreman:dev", "start": end, "end": end, "model": model}
+        util.write_json(self.project.state / "agents.json", d)
+
+    def state(self, when="2026-11-10T12:00:00"):
+        return {
+            t["name"]: (t["late"], t["parts"][0].get("new"))
+            for t in notes.recurring(self.project, when=datetime.fromisoformat(when))
+            if t["name"].startswith("Rules")
+        }
+
+    def test_no_review_is_late_and_names_the_models_seen(self):
+        self.agent("a1", "claude-a", "2026-11-01T10:00:00")
+        self.assertEqual(self.state()["Rules review"], (True, ["claude-a"]))
+        self.assertIn("models never (new model: claude-a) LATE", self.cli("recurring").stdout)
+
+    def test_reviewed_models_are_on_time_and_a_new_one_is_late(self):
+        self.agent("a1", "claude-a", "2026-11-01T10:00:00")
+        self.review("2026-11-02T09:00:00", "`claude-a`, claude-old (fallback, not reviewed)")
+        self.agent("a2", "claude-a", "2026-11-03T10:00:00")
+        self.assertEqual(self.state()["Rules review"], (False, []))
+        self.agent("a3", "claude-b", "2026-11-04T10:00:00")
+        self.assertEqual(self.state()["Rules review"], (True, ["claude-b"]))
+        self.assertEqual(self.state()["Rules review, models only"], (True, ["claude-b"]))
+        self.assertIn("(new model: claude-b) LATE", self.cli("recurring").stdout)
+        self.review("2026-11-05T09:00:00", "claude-a, claude-b")  # the newest review counts
+        self.assertEqual(self.state()["Rules review"], (False, []))
+
+    def test_a_model_used_before_the_review_and_left_out_does_not_count(self):
+        """The window starts at the newest review: a model it chose not to list (a fallback) is not new."""
+        self.agent("a1", "claude-x", "2026-11-01T10:00:00")
+        self.review("2026-11-02T09:00:00", "claude-a")
+        self.assertEqual(self.state()["Rules review"], (False, []))
+
+    def test_a_delivery_line_names_the_model_when_agents_json_forgot_it(self):
+        self.review("2026-11-02T09:00:00", "claude-a")
+        self.project.state.mkdir(parents=True, exist_ok=True)
+        with open(self.project.state / "progress.jsonl", "a") as f:
+            for line in (
+                {"time": "2026-11-03 10:00", "agent": "x", "text": "t", "done": True, "model": "claude-c"},
+                {"time": "2026-11-03 11:00", "agent": "y", "text": "not a delivery", "model": "claude-d"},
+                {"time": "2026-11-01 10:00", "agent": "z", "text": "t", "done": True, "model": "claude-e"},
+            ):
+                f.write(json.dumps(line) + "\n")
+            f.write("not json\n")
+        self.assertEqual(self.state()["Rules review"], (True, ["claude-c"]))
+
+    def test_monthly_with_max_h_and_never_without_it(self):
+        self.review("2026-11-02T09:00:00", "claude-a")
+        self.assertEqual(self.state("2026-12-01T08:00:00")["Rules review"], (False, []))
+        self.assertEqual(self.state("2026-12-02T10:00:00")["Rules review"], (True, []))  # 30 days and an hour
+        self.assertEqual(self.state("2027-06-01T10:00:00")["Rules review, models only"], (False, []))
+        self.assertEqual(notes.models_seen(self.project), {})
+
+    def test_models_line_parsing(self):
+        f = self.home / "reviews/r.md"
+        f.write_text("x\n- **Models:** `claude-a`, claude-b-1 (fallback), , claude-c\nModels: claude-d\n")
+        self.assertEqual(notes.models_reviewed(f), {"claude-a", "claude-b-1", "claude-c", "claude-d"})
+        self.assertEqual(notes.models_reviewed(self.home / "reviews/missing.md"), set())
+
+
 class WaitsTest(ProjectCase):
     toml = TOML
 
