@@ -8,6 +8,8 @@ import re
 from . import backlog_pages
 from .backlog import (
     CLOSED,
+    DECISION_KEYS,
+    DETAIL_KEYS,
     EXTRA_ISSUE_KEYS,
     ISSUE_KEYS,
     ISSUE_STATUSES,
@@ -19,11 +21,15 @@ from .backlog import (
     SUB_ID,
     SUB_KINDS,
     SUB_SYMBOLS,
+    UNANSWERED_KEYS,
+    UNDO,
     WANTED,
     Backlog,
     BacklogError,
     Data,
     Issue,
+    Record,
+    valid_date,
 )
 
 SOFT = ("duplicate sub-issues", "does not exist", "warning: ")
@@ -109,6 +115,8 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
             err.append(f"decision {d['id']}: by is not a string")
         if "free" in d and d["free"] is not True:
             err.append(f"decision {d['id']}: free is not true")
+        err += unknown_keys(f"decision {d['id']}", d, DECISION_KEYS)
+        err += validate_decision_extras(b, d)
     for d in data["decisions"]:
         if not d.get("options"):
             err.append(f"decision {d['id']}: no options")
@@ -137,6 +145,49 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
             err += [f"warning: {b.rel(p)} is stale: run foreman backlog render" for p in backlog_pages.stale(b, data)]
         except BacklogError as e:
             err.append(str(e))
+    return err
+
+
+def validate_decision_extras(b: Backlog, d: Record) -> list[str]:
+    """The problems of a decision's optional `details`, `unanswered` and `page` (Backlog.SCHEMA): each option's
+    effect, cost and undo (yes, hard or no) for one of its options, what waits without an answer and its date, and a
+    page under the folders of documents (a pending decision's page that is missing is a warning)."""
+    where = f"decision {d['id']}"
+    err = []
+    if "details" in d:
+        det = d["details"]
+        if not isinstance(det, dict):
+            err.append(f"{where}: details is not an object")
+            det = {}
+        for o, x in det.items():
+            if o not in d.get("options", []):
+                err.append(f"{where}: details for {o!r}, which is not one of its options")
+            if not isinstance(x, dict):
+                err.append(f"{where}: details of {o!r} is not an object")
+                continue
+            for k, v in x.items():
+                if k not in DETAIL_KEYS:
+                    err.append(f"warning: {where}: details of {o!r}: unknown key {k} (dropped at the next write)")
+                elif not isinstance(v, str) or not v.strip():
+                    err.append(f"{where}: details of {o!r}: {k} is not a text")
+            if "undo" in x and x["undo"] not in UNDO:
+                err.append(f"{where}: details of {o!r}: undo {x['undo']!r} is not one of {', '.join(UNDO)}")
+    if "unanswered" in d:
+        u = d["unanswered"]
+        if not isinstance(u, dict):
+            err.append(f"{where}: unanswered is not an object")
+        else:
+            err += unknown_keys(f"{where} unanswered", u, UNANSWERED_KEYS)
+            if not isinstance(u.get("waits"), str) or not u["waits"].strip():
+                err.append(f"{where}: unanswered has no waits (what stays stopped until the owner answers)")
+            if "by" in u and not valid_date(u["by"]):
+                err.append(f"{where}: unanswered by {u['by']!r} is not a date (YYYY-MM-DD)")
+    if "page" in d:
+        bad = b.page_problem(d["page"])
+        if bad:
+            err.append(f"{where}: page {bad}")
+        elif not d.get("resolved") and not b.page_path(d["page"]).is_file():
+            err.append(f"warning: {where}: page {d['page']} is missing")
     return err
 
 

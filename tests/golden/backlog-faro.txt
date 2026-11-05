@@ -99,6 +99,9 @@ $ foreman --project faro backlog archive FA-1
 $ foreman --project faro backlog decision add --issue FA-2 --title "¿Pintamos los faros apagados?" --text "Algunos faros están apagados; pintarlos confunde, no pintarlos esconde datos." --option "a: pintarlos en gris" --option "b: no pintarlos" --recommend "a, porque no se pierde nada" --recommend-option "a: pintarlos en gris" --date 2020-01-17
 [exit 0]
 decision FA-2 J1
+--- stderr
+foreman backlog: warning: FA-2 J1: option 1 («a: pintarlos en gris») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: FA-2 J1: option 2 («b: no pintarlos») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
 $ foreman --project faro backlog decision add --title "¿Cerramos FA-2 con el T1 de loop.py?" --text "Lo pide FA-2 T1." --option a --option b --date 2020-01-17
 [exit 2]
 --- stderr
@@ -109,6 +112,9 @@ Rewrite it for the owner as docs/owner.md says (`foreman docs owner`): --title t
 $ foreman --project faro backlog decision add --title "¿Cerramos FA-2 con el T1 de loop.py?" --text "Lo pide FA-2 T1." --option a --option b --date 2020-01-18 --as-is
 [exit 0]
 decision DEC J1
+--- stderr
+foreman backlog: warning: DEC J1: option 1 («a») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: DEC J1: option 2 («b») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
 $ foreman --project faro backlog decision resolve "FA-2 J1" --answer "a: pintarlos en gris"
 [exit 0]
 $ foreman --project faro backlog page decisions --heading "Decisiones de Marta"
@@ -683,3 +689,123 @@ Avisar a los barcos.
 Preguntas que solo puede contestar Marta; cada una dice sus opciones.
 
 - **DEC J1, ¿Cerramos FA-2 con el T1 de loop.py?** (2020-01-18): Lo pide FA-2 T1. Opciones: a · b
+
+######## faro: decision fields
+$ foreman --project faro backlog decision add --issue FA-2 --title "¿Encendemos el faro norte de noche?" --text "Hoy está apagado de noche y los barcos lo piden." --date 2020-01-19 --option sí --effect "los barcos lo ven de noche" --cost "una revisión más al mes" --undo yes --option no --effect "sigue como hoy" --undo hard --recommend-option sí --if-no-answer "el cambio de horario espera; lo demás sigue" --answer-by 2020-01-26 --page reviews/2020-01-19-FA-2-question/question.md
+[exit 0]
+decision FA-2 J2
+--- stderr
+foreman backlog: warning: FA-2 J2: --answer-by 2020-01-26 is in the past: the reminder would come at once; give a later date
+$ foreman --project faro backlog decision add --title "¿Lo pintamos? ¿Y lo encendemos?" --option sí --option no --undo no
+[exit 0]
+decision DEC J2
+--- stderr
+foreman backlog: warning: DEC J2: option 1 («sí») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: DEC J2: option 2 («no») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
+foreman backlog: warning: DEC J2: the title asks 2 questions: split it, one decision per question, or keep only the one the owner answers (a quoted question «…» does not count)
+$ foreman --project faro backlog decision add --title "Cuando dices «¿está listo?», ¿miro el faro norte?" --option sí --effect "los barcos lo ven de noche" --date 2020-01-19
+[exit 0]
+decision DEC J3
+$ foreman --project faro backlog decision add --title "¿Encendemos el faro norte de noche?" --effect "los barcos lo ven de noche" --option sí
+[exit 2]
+--- stderr
+usage: foreman backlog decision [-h] [--id DID] [--issue ISSUE]
+                                [--title TITLE] [--text TEXT]
+                                [--option OPTION] [--effect EFFECT]
+                                [--cost COST] [--undo {yes,hard,no}]
+                                [--if-no-answer IF_NO_ANSWER]
+                                [--answer-by ANSWER_BY] [--page PAGE]
+                                [--recommend RECOMMEND]
+                                [--recommend-option RECOMMEND_OPTION]
+                                [--date DATE] [--answer ANSWER] [--by BY]
+                                [--as-is] [--free] [--json]
+                                [--blocks REF [REF ...]] [--none]
+                                {add,resolve,blocks,list} [id] [refs ...]
+foreman backlog decision: error: --effect goes after the --option it describes
+$ foreman --project faro backlog decision add --title "¿Encendemos el faro norte de noche?" --option sí --page ../x.md
+[exit 2]
+--- stderr
+foreman backlog: --page '../x.md' must be a .md file relative to the home, without «..»
+$ foreman --project faro backlog decision add --title "¿Encendemos el faro norte de noche?" --option sí --answer-by 2020-01-26
+[exit 2]
+--- stderr
+foreman backlog: --answer-by needs --if-no-answer: say what stays stopped until the owner answers
+$ foreman --project faro backlog show "FA-2 J2"
+[exit 0]
+- **FA-2 J2, ¿Encendemos el faro norte de noche?** (2020-01-19): Hoy está apagado de noche y los barcos lo piden. Opciones: sí · no Qué cambia cada opción: sí: los barcos lo ven de noche (una revisión más al mes; se puede deshacer) · no: sigue como hoy (se puede deshacer, con trabajo) Mientras no contestes (recordatorio el 2020-01-26): el cambio de horario espera; lo demás sigue Página: [question.md](reviews/2020-01-19-FA-2-question/question.md)
+$ foreman --project faro backlog show "FA-2 J2" --json
+[exit 0]
+{
+  "id": "FA-2 J2",
+  "title": "¿Encendemos el faro norte de noche?",
+  "date": "2020-01-19",
+  "text": "Hoy está apagado de noche y los barcos lo piden.",
+  "options": [
+    "sí",
+    "no"
+  ],
+  "recommendation": "",
+  "recommended": "sí",
+  "details": {
+    "sí": {
+      "effect": "los barcos lo ven de noche",
+      "cost": "una revisión más al mes",
+      "undo": "yes"
+    },
+    "no": {
+      "effect": "sigue como hoy",
+      "undo": "hard"
+    }
+  },
+  "unanswered": {
+    "waits": "el cambio de horario espera; lo demás sigue",
+    "by": "2020-01-26"
+  },
+  "page": "reviews/2020-01-19-FA-2-question/question.md"
+}
+
+######## faro pages: files under <TMP>/faro/pages
+=== backlog-archive.md
+# Archivo del backlog
+
+> Generado por `foreman backlog` desde `backlog.json`: no editar a mano (`foreman backlog --help`).
+
+## A1 · Mapa de la costa
+
+| ID | Issue | Status | Plan | Sub-issues | Bloqueo | Detalle |
+|---|---|---|---|---|---|---|
+| FA-1 | Leer las cartas náuticas | done | [plan](../reviews/2020-01-10-plan-FA-1.md) | T1 Lector de cartas ✓ abc1234 agente ag1, rama `a1/t1` [informe](../reviews/2020-01-12-fa1-t1.md) · T2 Pruebas del lector ✓ def5678 |  | prioridad high · asignado ana · bloquea FA-2 · **Criterio de aceptación**: las cartas se leen en menos de un segundo · **Resultado** (cumplido): las cartas se leen en 0,4 s · Nota añadida al detalle. |
+=== backlog.md
+# Decisiones de Marta
+
+> Generado por `foreman backlog` desde `backlog.json`: no editar a mano (`foreman backlog --help`).
+
+## A1 · Mapa de la costa
+
+*in progress · prioridad high*
+
+Dibujar la costa con datos abiertos.
+
+| ID | Issue | Status | Plan | Sub-issues | Bloqueo | Detalle |
+|---|---|---|---|---|---|---|
+| FA-3 | Enviar avisos por radio | backlog |  |  |  | relacionado con FA-2 · **Criterio de aceptación**: un aviso llega en un minuto |
+| FA-2 | Pintar los faros | ready |  |  |  | **Criterio de aceptación**: cada faro sale en el mapa |
+
+## A2 · Avisos
+
+Avisar a los barcos.
+
+| ID | Issue | Status | Plan | Sub-issues | Bloqueo | Detalle |
+|---|---|---|---|---|---|---|
+| FA-4 | Ordenar las notas | triage |  |  |  | **Criterio de aceptación**: notas ordenadas |
+=== decisiones.md
+# Decisiones pendientes de Marta
+
+> Generado por `foreman backlog` desde `backlog.json`: no editar a mano (`foreman backlog --help`).
+
+Preguntas que solo puede contestar Marta; cada una dice sus opciones.
+
+- **DEC J1, ¿Cerramos FA-2 con el T1 de loop.py?** (2020-01-18): Lo pide FA-2 T1. Opciones: a · b
+- **FA-2 J2, ¿Encendemos el faro norte de noche?** (2020-01-19): Hoy está apagado de noche y los barcos lo piden. Opciones: sí · no Qué cambia cada opción: sí: los barcos lo ven de noche (una revisión más al mes; se puede deshacer) · no: sigue como hoy (se puede deshacer, con trabajo) Mientras no contestes (recordatorio el 2020-01-26): el cambio de horario espera; lo demás sigue Página: [question.md](../reviews/2020-01-19-FA-2-question/question.md)
+- **DEC J2, ¿Lo pintamos? ¿Y lo encendemos?** (<TODAY>): Opciones: sí · no Qué cambia cada opción: no (sin vuelta atrás)
+- **DEC J3, Cuando dices «¿está listo?», ¿miro el faro norte?** (2020-01-19): Opciones: sí Qué cambia cada opción: sí: los barcos lo ven de noche

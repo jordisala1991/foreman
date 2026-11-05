@@ -35,7 +35,7 @@ import json
 import re
 import subprocess
 import time
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, overload
@@ -95,12 +95,19 @@ DECISION_KEYS = (
     "recommended",
     "as_is",
     "blocks",
+    "details",
+    "unanswered",
+    "page",
     "resolved",
     "answer",
     "by",
     "free",
 )
-DECISION_OPTIONAL = ("recommended", "as_is", "blocks", "by", "free")  # kept only when set
+DECISION_OPTIONAL = ("recommended", "as_is", "blocks", "details", "unanswered", "page", "by", "free")  # only when set
+DETAIL_KEYS = ("effect", "cost", "undo")  # what a decision's `details` says of one option
+UNDO = ("yes", "hard", "no")  # whether an option can be undone: yes, with work, no
+UNANSWERED_KEYS = ("waits", "by")  # what a decision's `unanswered` says: what stays stopped meanwhile, reminder date
+PAGE_MAX = 400_000  # the largest page the panel shows (panel.DOC_MAX)
 EXTRA_ISSUE_KEYS = (
     "short",
     "result",
@@ -117,6 +124,7 @@ PROJECT_KEYS = ("status", "priority", "repos")
 SCHEMA_VERSION = 5  # the schema foreman writes
 LISTS = ("projects", "issues", "archive", "decisions", "decisions_resolved")  # every schema 5 file
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+QUOTED = re.compile(r"«[^»]*»|“[^”]*”|\"[^\"]*\"")  # quoted text: a question quoted in a question is not asked
 PENDING_SUBS = ("todo", "in progress", "unknown")
 OLD_SCHEMA_HINT = {
     4: "foreman 0.54 moves it to schema 5 (foreman backlog migrate --write), then this one reads it",
@@ -151,7 +159,13 @@ SCHEMA = """
                  "recommended": "the exact text of one option" (only when given with --recommend-option),
                  "as_is": true (only when recorded with --as-is: its texts did not pass `foreman plain`),
                  "blocks": ["XX-1 T3", "XX-2"] (only when set: the sub-issues, or whole issues, that wait for the
-                           answer while the decision is pending; none by default)}],
+                           answer while the decision is pending; none by default),
+                 "details"?: {"exact text of an option": {"effect"?: "what the owner will see or do differently",
+                              "cost"?: "its cost or risk", "undo"?: "yes"|"hard"|"no" (can it be undone)}},
+                 "unanswered"?: {"waits": "what stays stopped while there is no answer",
+                                 "by"?: "YYYY-MM-DD" (the day the orchestrator reminds the owner)},
+                 "page"?: "reviews/...md" (relative to the home, under the reviews or notes folders or a report
+                          prefix: a page with screenshots or tables that explains the question)}],
   "decisions_resolved": [decision + {"resolved": "YYYY-MM-DD", "answer": "...",
                           "by"?: "who and when, e.g. «Owner, YYYY-MM-DD HH:MM (panel)» or «… (chat)» (only when set)",
                           "free"?: true (only when the answer is the owner's own words, not one of the options:
@@ -193,6 +207,17 @@ def clean_text(t: str) -> str: ...
 def clean_text(t: str | None) -> str | None:
     """md_cell of a text, None kept (a field left as it is)."""
     return md_cell(t) if t is not None else None
+
+
+def valid_date(v: object) -> bool:
+    """`v` is a YYYY-MM-DD date that exists."""
+    if not isinstance(v, str) or not DATE.match(v):
+        return False
+    try:
+        date.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
 
 
 def norm_sub_status(v: str) -> str:
@@ -538,13 +563,13 @@ class Backlog:
         k = find_sub(i, sid) if sid else None
         return i["status"] not in CLOSED and (k is None or i["subs"][k]["status"] in PENDING_SUBS)
 
-    @staticmethod
-    def pending_review(data: Data, today: date | None = None) -> list[Record]:
+    def pending_review(self, data: Data, today: date | None = None) -> list[Record]:
         """The pending decisions in the order the owner goes through them: those that hold open work first, then
         the rest, each group oldest first (the backlog's order on a tie). Each one: its fields (id, title, date,
         age_days, text, options, recommendation, recommended), `holds` (what it holds that is still open,
         hold_open), `issue` ({id, title, short, status} of the issue its id starts with, archived included; None
-        when there is none) and `plans` (that issue's plan paths). Only reads."""
+        when there is none) and `plans` (that issue's plan paths); and, only when the decision has them, `details`,
+        `unanswered`, `page` and `page_path` (the page's absolute path). Only reads."""
         today = today or date.today()
         out: list[Record] = []
         for d in data["decisions"]:
@@ -577,6 +602,11 @@ class Backlog:
                     "plans": [p["path"] for p in i.get("plan") or []] if i else [],
                 }
             )
+            for k in ("details", "unanswered", "page"):  # only when set: a decision of before reads as before
+                if d.get(k):
+                    out[-1][k] = d[k]
+            if d.get("page"):
+                out[-1]["page_path"] = str(self.page_path(d["page"]))
         # stable: the backlog's order on a tie; an unreadable date goes last in its group
         return sorted(out, key=lambda x: (not x["holds"], x["age_days"] is None, -(x["age_days"] or 0)))
 
@@ -1352,13 +1382,22 @@ class Backlog:
         as_is: bool = False,
         recommended: str = "",
         blocks: Sequence[str] = (),
+        details: Sequence[Mapping[str, str]] = (),
+        waits: str = "",
+        answer_by: str = "",
+        page: str = "",
     ) -> str:
         """Add a pending decision and return its id. Without `did` it is the next free one: «<issue> J<n>» when the
         decision names an issue (else the issue's prefix, else «DEC»: the first area the `[ids] decision` pattern
         accepts), else «DEC J<n>». `as_is`: recorded although its texts fail `foreman plain` (the
         command line checks them, see `decision_findings`). `recommended`: the exact text of one of `options`, the
         one the recommendation picks (stored as `recommended`; the panel marks it). `blocks`: what waits for the
-        answer (`hold_refs`: «T3» or «issue» relative to `issue`, or full references); none by default."""
+        answer (`hold_refs`: «T3» or «issue» relative to `issue`, or full references); none by default.
+        `details`: one mapping per option, in their order ({effect?, cost?, undo?: yes|hard|no}; stored by the
+        option's text, only the options that have one). `waits`: what stays stopped while nobody answers, and
+        `answer_by` the day the orchestrator reminds the owner (needs `waits`); stored as `unanswered`. `page`: a .md
+        under the reviews or notes folders or a report prefix (`page_problem`). Each of them stored only when set,
+        so a decision without them is written as before."""
         if issue and not self.is_issue_id(issue):
             raise BacklogError(f"--issue {issue!r} is not an issue id (e.g. AB-22)")
         if not did:
@@ -1408,7 +1447,111 @@ class Backlog:
             data["decisions"][-1]["as_is"] = True
         if held:
             data["decisions"][-1]["blocks"] = held
+        rich = self.decision_extras(options, details, waits, answer_by, page)
+        data["decisions"][-1].update(rich)
         return did
+
+    def decision_extras(
+        self, options: Sequence[str], details: Sequence[Mapping[str, str]], waits: str, answer_by: str, page: str
+    ) -> Record:
+        """The optional keys `details`, `unanswered` and `page` of a decision with these (clean) options, checked;
+        only those that have a value. BacklogError naming the flag on a bad value."""
+        out: Record = {}
+        if len(details) > len(options):
+            raise BacklogError("more option details than --option: --effect, --cost and --undo follow their --option")
+        det: Record = {}
+        for o, x in zip(options, details):
+            unknown = sorted(set(x) - set(DETAIL_KEYS))
+            if unknown:
+                raise BacklogError(
+                    f"option {o!r}: unknown detail {', '.join(unknown)} (known: {', '.join(DETAIL_KEYS)})"
+                )
+            if x.get("undo") and x["undo"] not in UNDO:
+                raise BacklogError(f"--undo {x['undo']!r} for option {o!r}: yes, hard (with work) or no")
+            one = {k: clean_text(x[k]) for k in DETAIL_KEYS if (x.get(k) or "").strip()}
+            if one:
+                det[o] = one
+        if det:
+            out["details"] = det
+        waits, answer_by = clean_text(waits or ""), (answer_by or "").strip()
+        if answer_by:
+            if not waits:
+                raise BacklogError("--answer-by needs --if-no-answer: say what stays stopped until the owner answers")
+            if not valid_date(answer_by):
+                raise BacklogError(f"--answer-by {answer_by!r} is not a date (YYYY-MM-DD)")
+        if waits:
+            out["unanswered"] = {"waits": waits, **({"by": answer_by} if answer_by else {})}
+        page = (page or "").strip()
+        if page:
+            bad = self.page_problem(page)
+            if bad:
+                raise BacklogError(f"--page {bad}")
+            out["page"] = page
+        return out
+
+    def page_problem(self, path: str) -> str:
+        """Why `path` cannot be a decision's page (empty when it can): it must be a .md relative to the home, without
+        «..», under the reviews or notes folders or a report prefix (the folders the panel shows documents from).
+        Whether it exists is not checked here (`decision_warnings` says so)."""
+        if not isinstance(path, str) or not path or "\0" in path:
+            return f"{path!r} is not a path"
+        if path.startswith("/") or ".." in Path(path).parts or not path.endswith(".md"):
+            return f"{path!r} must be a .md file relative to the home, without «..»"
+        roots = [self.project.reviews_dir, self.project.notes_dir] + [self.root / x for x in self.report_prefixes]
+        f = (self.root / path).resolve()
+        for r in roots:
+            try:
+                f.relative_to(r.resolve())
+                return ""
+            except (OSError, ValueError):
+                continue
+        return f"{path!r} is outside the folders of documents (the reviews or notes folders, or a report prefix)"
+
+    def page_path(self, path: str) -> Path:
+        """The absolute path of a decision's page."""
+        return self.root / path
+
+    @staticmethod
+    def question_count(text: str) -> int:
+        """How many questions `text` asks: the runs of «?» once what is quoted («…», “…”, "…") is taken out."""
+        return len(re.findall(r"\?+", QUOTED.sub("", text or "")))
+
+    def decision_warnings(self, d: Record, today: date | None = None) -> list[str]:
+        """What to fix in pending decision `d`, never blocking (`decision add` prints them on stderr): an option
+        that does not say what it changes, two questions in one, a reminder date in the past, a page that does not
+        exist yet or that the panel cannot show (larger than PAGE_MAX)."""
+        today = today or date.today()
+        out = []
+        opts = list(d.get("options", []))
+        det = d.get("details") or {}
+        for n, o in enumerate(opts, 1):
+            if not (det.get(o) or {}).get("effect"):
+                which = f"option {n}" if len(opts) > 1 else "the option"
+                out.append(
+                    f"{which} («{o}») has no --effect: say what the owner will see or do differently with it "
+                    "(--effect after its --option)"
+                )
+        for field in ("title", "text"):
+            k = self.question_count(d.get(field, ""))
+            if k >= 2:
+                out.append(
+                    f"the {field} asks {k} questions: split it, one decision per question, or keep only the one "
+                    "the owner answers (a quoted question «…» does not count)"
+                )
+        by = (d.get("unanswered") or {}).get("by", "")
+        if by and valid_date(by) and date.fromisoformat(by) < today:
+            out.append(f"--answer-by {by} is in the past: the reminder would come at once; give a later date")
+        page = d.get("page")
+        if page:
+            f = self.page_path(page)
+            if not f.is_file():
+                out.append(f"the page {page} is not there yet: write it before the owner reads the question")
+            elif f.stat().st_size > PAGE_MAX:
+                out.append(
+                    f"the page {page} is larger than {PAGE_MAX // 1000} KB: the panel will not show it; "
+                    "shorten it or move tables to another page"
+                )
+        return out
 
     def set_decision_blocks(self, data: Data, did: str, refs: Sequence[str], issue: str | None = None) -> list[str]:
         """Replace what pending decision `did` holds (`hold_refs`; empty: nothing) and return the stored references."""
@@ -1423,15 +1566,28 @@ class Backlog:
         return held
 
     def decision_findings(
-        self, title: str, text: str, options: Sequence[str], recommendation: str = ""
+        self,
+        title: str,
+        text: str,
+        options: Sequence[str],
+        recommendation: str = "",
+        details: Sequence[Mapping[str, str]] = (),
+        waits: str = "",
     ) -> list[tuple[str, list[dict[str, Any]]]]:
         """[(field, findings)] of a decision's texts that fail `foreman plain` (docs/owner.md); empty when they
-        pass."""
+        pass. The owner reads each option's effect and cost and what waits without an answer too."""
         from . import plain
 
         fields = [("title", title), ("text", text)]
-        fields += [(f"option {n}" if len(options) > 1 else "option", o) for n, o in enumerate(options, 1)]
-        return plain.check(self.project, fields + [("recommendation", recommendation)])
+        for n, o in enumerate(options, 1):
+            name = f"option {n}" if len(options) > 1 else "option"
+            fields.append((name, o))
+            x = details[n - 1] if n <= len(details) else {}
+            fields += [(f"{name} {k}", x[k]) for k in ("effect", "cost") if x.get(k)]
+        fields.append(("recommendation", recommendation))
+        if waits:
+            fields.append(("if no answer", waits))
+        return plain.check(self.project, fields)
 
     @staticmethod
     def decision_ref(data: Data, ref: str) -> str:

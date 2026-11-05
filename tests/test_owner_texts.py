@@ -47,7 +47,11 @@ class OwnerTextsTest(ProjectCase):
         self.assertIn("option 2: «step 4»", r.stderr)
 
     def test_explained_decision_is_recorded(self):
-        r = self.decision(GOOD_TITLE, "--recommend", "yes: it costs one more step and they miss it today")
+        r = self.cli(
+            *("backlog", "decision", "add", "--issue", "AB-1", "--title", GOOD_TITLE, "--text", GOOD_TEXT),
+            *("--option", "yes", "--effect", "they see it too", "--option", "no", "--effect", "only you see it"),
+            *("--recommend", "yes: it costs one more step and they miss it today"),
+        )
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "decision AB-1 J1"), r.stderr)
         self.assertEqual(r.stderr, "")
         d = self.b.load()["decisions"][0]

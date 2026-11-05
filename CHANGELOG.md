@@ -9,6 +9,25 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- Richer questions for the owner: `foreman backlog decision add` takes, after each `--option`, its `--effect` (what
+  the owner will see or do differently), `--cost` and `--undo yes|hard|no` (whether it can be undone); and
+  `--if-no-answer` (what stays stopped until the owner answers), `--answer-by` (the day to remind them; foreman never
+  answers for the owner) and `--page` (a .md under the reviews or notes folders, with screenshots or tables, that
+  explains the question). They are stored as the optional `details`, `unanswered` and `page` of the decision, only
+  when given, and pass `foreman plain` like the title. Warnings on stderr, never blocking: an option without
+  `--effect`, two questions in one (a quoted «…» question does not count), a reminder date in the past, a page that
+  is missing or larger than 400 KB. `backlog show`, `decision list` (with `--json`: `details`, `unanswered`, `page`
+  and `page_path`) and the decisions page show them; a decision without them reads and renders as before.
+- `foreman check` validates those fields (undo values, options they name, dates, the page's folder) and warns of
+  unknown keys in a decision, which the next write drops.
+
+### Upgrade notes
+
+- No schema change (still 5). An older foreman that writes the backlog drops `details`, `unanswered` and `page` of a
+  decision: record such questions once every session of the product runs this version.
+
 ## [0.57.0] - 2026-11-03
 
 ### Added

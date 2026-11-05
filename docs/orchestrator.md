@@ -297,7 +297,21 @@ they disagree.
    - A question they do not answer on the spot: `foreman backlog decision add` (options = buttons); remind after 3
      days. `--title` is the question in one plain sentence, `--text` what it is about, why now and what each option
      changes, `--recommend` the option and why (shown with its label), and `--recommend-option` with the exact text
-     of that `--option` so the panel marks its button (exit 2 if it matches none). A question that names ids or
+     of that `--option` so the panel marks its button (exit 2 if it matches none). Each `--option` stays a short
+     answer; what it changes goes after it: `--effect` (what the owner will see or do differently), `--cost` (cost
+     or risk, when there is one) and `--undo yes|hard|no` (can it be undone; `hard`: with work). When work waits for
+     the answer, `--if-no-answer` says what stays stopped meanwhile and `--answer-by YYYY-MM-DD` the day to remind
+     them (instead of the 3 days): you only remind, the owner always answers, so a question never announces an
+     option it will take by itself. When screenshots or a table explain it better, write a page and give it with
+     `--page`: one folder per question, `<reviews>/YYYY-MM-DD-<ID with hyphens>-question/question.md` (in the home,
+     never in the repo: screenshots may show the product's data), its images beside it and linked relative
+     (`![before](before-390.png)`); any .md under the reviews or notes folders or a report prefix is accepted, up to
+     400 KB. `decision add` warns, without blocking, of an option without `--effect`, two questions in one, a reminder
+     date in the past and a page that is missing or too large: fix them while the question is fresh. The effects,
+     costs and what waits pass `foreman plain` like the title. `decision list --json` gives `details`, `unanswered`
+     and `page` with `page_path` (absolute) when set. Record such a question only when `foreman session --all
+     --behind` shows no session of this product behind: an older foreman that writes the backlog drops these
+     fields (`foreman check` warns of unknown keys in a decision). A question that names ids or
      internal names without explaining them is refused (exit 2, with what to explain): rewrite it; `--as-is` only when the owner
      knows those terms (better: `[project] owner_knows`), and it stays marked. If part of the work cannot start
      before the answer, `--blocks Tn` (or `issue`, with `--issue`; or `ISSUE Tn`) says so, and only that part: the
