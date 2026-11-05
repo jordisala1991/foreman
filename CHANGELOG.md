@@ -44,6 +44,19 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   two rounds: after round 2 with findings open the owner decides, and `--approved` lets it in as it is.
   `--no-review "why"` lets in, noted, a branch whose only reason is its size (never delicate paths nor a partial
   delivery).
+- The review loop: the loop pass no longer offers a branch whose review does not let it in under
+  `ready_to_integrate`; two new notices say what to do instead. `review_needed` gives the command to launch a
+  reviewer (or, for round 2, to resume the one of round 1); `review_findings` sends the high and medium findings back
+  to the agent that made the branch (or a new agent on its worktree), and after round 2 with findings open asks for a
+  question to the owner with the review as its page, waiting while it is pending and saying what to do with the
+  answer. A branch whose `partial` delivery became `ok` keeps its rounds while its review leaves findings open.
+- `foreman launch NAME --review REPO:BRANCH`: a reviewer of a branch, with no worktree and no backlog change
+  (`--type reviewer` unless given; the launch line ends in «review»). While it lives the branch is held: not offered
+  to integrate, and `integrate` says `in review`. Its own delivery never counts as the branch's (outcome, report,
+  kind).
+- `foreman launch --repo REPO --branch BRANCH` reuses the worktree foreman made for BRANCH when no live agent has it
+  («reusing its worktree at …»), so a branch can go back to work with a new agent; `foreman worktree` still refuses a
+  branch checked out elsewhere.
 
 ### Config
 

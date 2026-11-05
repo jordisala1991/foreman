@@ -11,7 +11,10 @@ the worktree when the branch already existed locally).
 The branch may already exist (e.g. the branch of a PR opened by another session):
 - a local branch: the worktree is made on it, without moving it; BASE, if given, is ignored (with a warning);
 - only on the remote (after fetching that branch, if the repo has the remote): a local branch tracking it;
-- checked out in another worktree: an error that names its path, and nothing is touched.
+- checked out in another worktree: an error that names its path, and nothing is touched; except, for `foreman
+  launch` (reuse=True), a worktree foreman made (under the worktrees folder) that no live agent has: the new agent
+  takes it as it is ("reusing …"; post_create does not run again), as when a branch goes back to work after a review
+  and its first agent cannot be resumed.
 """
 
 from __future__ import annotations
@@ -65,11 +68,28 @@ def remote_branch(main: PathLike, remote: str | None, branch: str) -> str | None
     return f"{remote}/{branch}" if exists(main, f"refs/remotes/{remote}/{branch}") else None
 
 
+def reuse_blocker(project: Project, branch: str, path: PathLike) -> str:
+    """Why `launch` may not reuse the worktree PATH that holds BRANCH ('' when it may): it is not one foreman made
+    (under the worktrees folder), or a live agent has the branch or that worktree."""
+    from . import loop
+
+    real = Path(os.path.realpath(path))
+    root = Path(os.path.realpath(project.worktrees_dir))
+    if real == root or root not in real.parents:
+        return f"{path} is not under foreman's worktrees folder {project.worktrees_dir}"
+    for h in loop.live_agents(project):
+        wt = h.get("worktree")
+        if h.get("branch") == branch or (wt and Path(os.path.realpath(wt)) == real):
+            return f"the live agent {h.get('name') or h['id'][:8]} has it"
+    return ""
+
+
 def create(
-    project: Project, repo_key: str, name: str, branch: str, base: str | None = None
+    project: Project, repo_key: str, name: str, branch: str, base: str | None = None, reuse: bool = False
 ) -> tuple[Path, str, list[str]]:
     """(path, how, warnings): how says where the branch comes from ("from BASE abc1234", "existing branch at …",
-    "tracking origin/BRANCH at …")."""
+    "tracking origin/BRANCH at …", or with REUSE "reusing its worktree at …": a worktree foreman made for BRANCH
+    that no live agent has, taken as it is)."""
     repo = project.repo(repo_key)
     main = repo["path"]
     if not main or not (main / ".git").exists():
@@ -80,11 +100,20 @@ def create(
             commands.expand("repo.post_create", step)
         except commands.PlaceholderError as e:
             raise WorktreeError(f"[repos.{repo_key}] post_create {step!r}: {e}; nothing done") from e
+    warnings: list[str] = []
+    open_in = worktrees(main)
+    if reuse and branch in open_in:
+        held = Path(open_in[branch])
+        why = reuse_blocker(project, branch, held)
+        if why:
+            raise WorktreeError(f"branch {branch} is already checked out in {held} and {why}; nothing done")
+        if base:
+            warnings.append(f"branch {branch} already exists: BASE {base} ignored, the branch is not moved")
+        return held, f"reusing its worktree at {git(held, 'rev-parse', '--short', 'HEAD')}", warnings
     if wt.exists():
         raise WorktreeError(f"{wt} already exists")
-    if branch in (open_in := worktrees(main)):
+    if branch in open_in:
         raise WorktreeError(f"branch {branch} is already checked out in {open_in[branch]}; nothing done")
-    warnings: list[str] = []
     made_branch = True
     if exists(main, f"refs/heads/{branch}"):
         if base:

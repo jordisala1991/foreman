@@ -121,11 +121,14 @@ worktree REPO NAME BRANCH [BASE] | worktree --list   a worktree on a new branch 
                                    it also records a launch and prints its line (as `launch`, without issue)
 launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch BRANCH [--base BASE]] [--type T]
        [--model M] [--production | --no-production] [--no-backlog] [--despite DID --why TEXT] [--json]
-       | launch NAME --cancel
+       | launch NAME --review REPO:BRANCH [--issue ID [--sub Tn]] | launch NAME --cancel
                                    records an agent's identity before launching it (<state>/launches.json) and
                                    prints the launch line, the first line of its brief: `[foreman launch TOKEN]
                                    NAME · ID Tn · branch B · worktree W · production`; with --repo/--branch it makes
-                                   the worktree first (as `worktree`); with --issue/--sub it marks the sub-issue ▶
+                                   the worktree first (as `worktree`), or reuses the one foreman made for BRANCH
+                                   when no live agent has it; --review: a reviewer of that branch, no worktree nor
+                                   backlog change, that holds the branch (not offered to integrate) while it
+                                   lives; with --issue/--sub it marks the sub-issue ▶
                                    with agent and branch (and --kind) and the issue in progress (unless
                                    --no-backlog); a NAME a live agent or a pending launch has is exit 2 (--cancel
                                    drops a pending launch). A production launch of an issue or sub-issue that a
@@ -434,9 +437,10 @@ $ foreman launch --help
 [exit 0]
 usage: foreman launch [-h] [--issue ISSUE] [--sub SUB] [--kind {measure,code}]
                       [--repo REPO] [--branch BRANCH] [--base BASE]
-                      [--type AGENT_TYPE] [--model MODEL] [--production]
-                      [--no-production] [--no-backlog] [--despite DID]
-                      [--why WHY] [--json] [--cancel]
+                      [--type AGENT_TYPE] [--review REPO:BRANCH]
+                      [--model MODEL] [--production] [--no-production]
+                      [--no-backlog] [--despite DID] [--why WHY] [--json]
+                      [--cancel]
                       name
 
 positional arguments:
@@ -452,6 +456,9 @@ options:
   --branch BRANCH
   --base BASE
   --type AGENT_TYPE
+  --review REPO:BRANCH  a reviewer of that branch: no worktree, no backlog
+                        change, --type reviewer unless given; the branch is
+                        not offered to integrate while it lives
   --model MODEL         the model the agent is launched with (recorded; the
                         one that ran is read at its stop)
   --production
