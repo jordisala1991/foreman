@@ -82,11 +82,13 @@ def doc_roots(project: Project) -> list[Path]:
     ]
 
 
-def doc_rel(project: Project, path: str | None) -> str | None:
-    """`path` relative to the home if it is a readable .md under the reviews or notes folders or a report prefix;
-    an absolute path is kept if it is one of those of any registered product (a backlog moved from another product
-    links its reports where they are)."""
-    if not path or "\0" in path or ".." in Path(path).parts or not path.endswith(".md"):
+def home_file(project: Project, path: str | None, exts: tuple[str, ...]) -> str | None:
+    """`path` as given if it names an existing file with one of the extensions `exts` (lowercase, with their dot)
+    under the reviews or notes folders or a report prefix of the home, once resolved (so a symbolic link that leads
+    out is refused); relative to the home, or absolute if it is under those folders of any registered product (a
+    backlog moved from another product links its reports where they are). None otherwise: a «..», a NUL, another
+    extension or another place."""
+    if not path or "\0" in path or ".." in Path(path).parts or not path.lower().endswith(exts):
         return None
     f = project.home / path
     roots = doc_roots(project)
@@ -100,6 +102,11 @@ def doc_rel(project: Project, path: str | None) -> str | None:
         if f.is_file():
             return path
     return None
+
+
+def doc_rel(project: Project, path: str | None) -> str | None:
+    """`path` if it is a readable .md the panel may show (home_file)."""
+    return home_file(project, path, (".md",))
 
 
 def doc_dirs(project: Project) -> list[Path]:
@@ -262,7 +269,7 @@ def backlog_cards(project: Project) -> Cards:
             return {
                 "id": d.get("id", ""),
                 "title": clean(f"{d['id']}, {d['title']}" if d.get("id") else d["title"]),
-                "text": d.get("text", "")[:600],
+                "text": d.get("text", ""),  # whole: the detail shows it all (the card shows only its lead)
                 "lead": lead(d.get("text", "")),
                 "recommendation": d.get("recommendation", "")[:300],
                 "recommended": (
@@ -272,6 +279,9 @@ def backlog_cards(project: Project) -> Cards:
                 ),
                 "options": d.get("options", []),
                 "date": d.get("date"),
+                # what each option changes, what waits until the answer and the page: only when the decision has them,
+                # so a decision of before is sent as before
+                **{k: d[k] for k in ("details", "unanswered", "page") if d.get(k)},
             }
 
         decisions = [decision(d) for d in data.get("decisions", [])]

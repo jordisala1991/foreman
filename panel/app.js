@@ -107,8 +107,9 @@ function md(text){
 function inlineF(s){ return mdInline(s, DOC_OPTS); }
 // ---- Markdown for documents and wiki pages (mdDoc): headings with anchors, nested lists, tables (in their own scroller),
 // fenced code, quotes (shown as callouts), rules, bold, italics, strike-through, code, [[page]] and [text](url) links.
-// Not covered: HTML (it is shown escaped), images, footnotes, setext headings, indented code without fences.
-// opts.link(target, textHtml) and opts.code(text) decide what links and code become (documents, wiki pages).
+// Not covered: HTML (it is shown escaped), footnotes, setext headings, indented code without fences.
+// opts.link(target, textHtml) and opts.code(text) decide what links and code become (documents, wiki pages);
+// opts.img(target, alt), what an image ![alt](target) becomes (only a document's: docOpts); without it, as before.
 const fold = t => String(t).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const slug = t => fold(t.replace(/<[^>]+>/g, '')).replace(/&[a-z#0-9]+;/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 's';
 const wikiTitle = n => (WIKI.list && WIKI.list.find(p => p.n===n) || {}).title || n;
@@ -127,6 +128,7 @@ function mdInline(s, o){
   s = s.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (m, f, c) => put(o.code(c.trim())));
   // [[page]] shows the page title, as in Notion (the name if the list is not loaded yet)
   s = s.replace(/\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g, (m, n, a, l) => put(wikiLink(n.trim(), a, esc(l || wikiTitle(n.trim())))));
+  if(o.img) s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, a, u) => put(o.img(u, a)));
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, t, u) => put(o.link(u, mdInline(t, o))));
   s = s.replace(/(^|[\s(])(https?:\/\/[^\s<>)]+[^\s<>).,;:])/g, (m, b, u) => b + put(`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`));
   s = esc(s)
@@ -223,7 +225,29 @@ function mdDoc(text, o=DOC_OPTS){
   }
   return {html: h, toc};
 }
-function mdFull(text){ return `<div class="md wdoc">${mdDoc(text).html}</div>`; }
+// a document of product p in folder base (its path's folder, relative to the home or absolute): its images come from
+// /api/file, the path joined to that folder; an image from elsewhere (http, data…) is never fetched: a link to it, or
+// its text. Tapping an image opens it whole
+const dirOf = path => String(path || '').includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+function joinPath(base, u){
+  const out = [];
+  for(const x of (u.startsWith('/') || !base ? u : `${base}/${u}`).split('/')){
+    if(x === '..'){ if(!out.length || out[out.length-1] === '') return ''; out.pop(); }
+    else if(x !== '.' && (x || !out.length)) out.push(x);
+  }
+  return out.join('/');
+}
+function docOpts(p, base){
+  return {...DOC_OPTS, img: (u, alt) => {
+    if(/^https?:/i.test(u)) return `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(alt || u)}</a>`;
+    const path = /^[a-z][\w+.-]*:/i.test(u) ? '' : joinPath(base, u.replace(/[?#].*/, ''));
+    if(!path) return esc(alt);
+    const src = esc(api(`/api/file?p=${encodeURIComponent(p)}&path=${encodeURIComponent(path)}`));
+    return `<a class="dimg" href="${src}" target="_blank" rel="noopener"><img loading="lazy" src="${src}" alt="${esc(alt)}"></a>`;
+  }};
+}
+// a whole document; with its product and path, its images too
+function mdFull(text, p, path){ return `<div class="md wdoc">${mdDoc(text, p && path ? docOpts(p, dirOf(path)) : DOC_OPTS).html}</div>`; }
 
 // ---- Shared components (markup for the classes in app.css)
 const NONE = '<span class="muted">—</span>';
@@ -536,11 +560,12 @@ function renderYou(d){
   $('badge').hidden = !(unanswered + asks); $('badge').textContent = unanswered + asks;
   renderGrants(d);
   // each decision is a card: title (opens the detail), the first sentence of its text, date and the answer buttons
-  // right there, the recommended option marked
+  // right there, the recommended option marked; below them, when it says so, what each option changes, what waits
+  // until the answer and a link to its page
   const dec = sect(t('decisions'), d.decisions.length ? d.decisions.map(x => card(
       `<div class="ctitle" data-k="dec" data-key="${esc(decKey(x))}"><span>${ptag(x.p)}${esc(x.title)}</span><span class="chev">›</span></div>`
       + (x.lead ? `<div class="clead">${esc(x.lead)}</div>` : '')
-      + `<div class="csub">${x.date ? t('asked_on', {date: esc(x.date)}) : ''}</div>` + decisionActions(x))).join('')
+      + `<div class="csub">${x.date ? t('asked_on', {date: esc(x.date)}) : ''}</div>` + decisionActions(x) + decisionMore(x))).join('')
     : list(empty(t('nothing_pending'))), unanswered || null);
   // painted only when it changed, so an «other answer» being typed keeps its focus while the rest polls
   if($('dec').dataset.sig !== dec){ $('dec').innerHTML = dec; $('dec').dataset.sig = dec; fillFree($('dec')); }
@@ -586,6 +611,26 @@ const decisionActions = x => x.answer
     + (canWrite(x.p) && FREE_OPEN.has(freeKey(x)) ? `<div class="free"><textarea maxlength="2000" data-fk="${esc(freeKey(x))}" placeholder="${esc(t('other_answer_ph'))}" oninput="FREE_DRAFT.set(this.dataset.fk, this.value)"></textarea>`
       + `<div class="btns"><button data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-p="${esc(x.p)}" data-fk="${esc(freeKey(x))}" onclick="decideFree(this)">${t('send_answer')}</button>`
       + `<button class="sec" data-fk="${esc(freeKey(x))}" onclick="freeToggle(this)">${t('cancel')}</button></div></div>` : '');
+// what a decision says besides its text, only when it says it, so one recorded before shows as before.
+// decOptions: each option with what it changes and whether it can be undone (whole, with its cost, in the detail;
+// the effect cut in the card); decWaits: what stays stopped until the answer, with the reminder's date
+const UNDO_CLS = {yes: 'ok', hard: 'warn', no: 'bad'};
+const cut = (s, n) => s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
+const hasDetails = x => !!x.details && x.options.some(o => x.details[o]);
+function decOptions(x, whole){
+  return x.options.filter(o => x.details[o]).map(o => {
+    const d = x.details[o], undo = UNDO_CLS[d.undo] ? `<span class="${UNDO_CLS[d.undo]}">${t('undo_' + d.undo)}</span>` : '';
+    const eff = d.effect ? esc(whole ? d.effect : cut(d.effect, 160)) : '';
+    if(!whole) return `<div class="dopt"><b>${esc(o)}</b>${eff ? ` ${eff}` : ''}${undo ? ` · ${undo}` : ''}</div>`;
+    const meta = [undo, d.cost ? esc(t('dec_cost', {text: d.cost})) : ''].filter(Boolean).join(' · ');
+    return `<div class="dopt"><div><b>${optLabel(x, o)}</b></div>${eff ? `<div>${eff}</div>` : ''}${meta ? `<div class="csub">${meta}</div>` : ''}</div>`;
+  }).join('');
+}
+const decWaits = u => u.by ? t('dec_waits_by', {date: esc(u.by), text: esc(u.waits)}) : t('dec_waits', {text: esc(u.waits)});
+const decisionMore = x => x.answer || !(hasDetails(x) || (x.unanswered && x.unanswered.waits) || x.page) ? ''
+  : `<div class="dmore">${hasDetails(x) ? decOptions(x, false) : ''}`
+    + (x.unanswered && x.unanswered.waits ? `<div class="csub">${decWaits(x.unanswered)}</div>` : '')
+    + (x.page ? `<a class="slink" data-k="dec" data-key="${esc(decKey(x))}" data-page="1">${t('dec_see_page')}</a>` : '') + '</div>';
 // the «other answer» boxes open and what is typed in them, by product and decision: kept across repaints
 const FREE_OPEN = new Set(), FREE_DRAFT = new Map();
 const freeKey = x => `${x.p}|${x.id || x.title}`;
@@ -911,7 +956,7 @@ const VIEWS = {
       + ((c.subs || []).length ? sect(t('subs'), list(subRows(c)), subCount(c)) : '')
       + sect(t('description'), `<div class="md">${det}</div>`)
       + sect(t('activity'), activityHtml((lastData.activity || []).filter(m => m.p===c.p && m.move===c.id))),
-      after: async v => { if(!plan) return; const r = await loadDoc(plan, c.p); const el = $('mplan'); if(el && MV[MV.length-1]===v) el.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(r.md); }};
+      after: async v => { if(!plan) return; const r = await loadDoc(plan, c.p); const el = $('mplan'); if(el && MV[MV.length-1]===v) el.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(r.md, c.p, r.path); }};
   },
   ag(key){
     const a = lastData.agents.find(x => x.id===key); if(!a) return null;
@@ -997,8 +1042,21 @@ const VIEWS = {
     const x = lastData.decisions.find(y => decKey(y)===key); if(!x) return null;
     return {p: x.p, title: t('decision'), html: dhead(`${ptag(x.p)}${t('pending_decision')}`, esc(x.title)) + props([
         [t('asked'), esc(x.date || '')], [t('status'), x.answer ? `<span class="ok">${t(x.free ? 'answered_free_lc' : 'answered_lc', {text: esc(x.answer)})}</span>` : `<span class="warn">${t('waits_answer')}</span>`],
-        [t('options'), x.options.map(o => optLabel(x, o)).join(' · ')], x.recommendation && [t('recommendation'), esc(x.recommendation)]])
-      + sect(t('detail'), `<div class="md">${md(x.text)}</div>`) + decisionActions(x), after: () => fillFree($('mbody'))};
+        [t('options'), x.options.map(o => optLabel(x, o)).join(' · ')], x.recommendation && [t('recommendation'), esc(x.recommendation)],
+        x.unanswered && x.unanswered.waits && [t('dec_unanswered'), esc(x.unanswered.waits) + (x.unanswered.by ? ` <span class="muted">· ${t('dec_reminder', {date: esc(x.unanswered.by)})}</span>` : '')]])
+      + (hasDetails(x) ? sect(t('dec_effects'), `<div class="dopts">${decOptions(x, true)}</div>`) : '')
+      + sect(t('detail'), `<div class="md">${md(x.text)}</div>`)
+      // its page inside, with its images (loaded after: it is a document)
+      + (x.page ? sect(t('dec_page'), `<a class="dl" data-doc="${esc(x.page)}">${esc(x.page.split('/').pop())}</a><div id="mpage"><span class="muted">${t('loading_lc')}</span></div>`) : '')
+      + decisionActions(x),
+      after: async v => {
+        fillFree($('mbody'));
+        if(!x.page) return;
+        const r = await loadDoc(x.page, x.p), el = $('mpage');
+        if(!el || MV[MV.length-1]!==v) return;
+        el.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(r.md, x.p, r.path);
+        if(v.page){ v.page = false; el.previousElementSibling.scrollIntoView(); }   // opened from the card's link
+      }};
   },
   msg(key, obj){
     const x = obj; if(!x) return null;
@@ -1036,8 +1094,8 @@ async function loadIssue(p, id, k){
   const v = MV[MV.length-1]; if(v && v.k==='h' && v.key===id) renderModal(true);
 }
 function pushView(v){ MV.push(v); history.pushState({n:MV.length}, ''); renderModal(); }
-function openView(k, key){ if(k==='h') for(const x in FULL) if(FULL[x] && FULL[x].err) delete FULL[x];
-  pushView({k, key, obj: SNAP[k] ? SNAP[k][key] : undefined}); }
+function openView(k, key, more){ if(k==='h') for(const x in FULL) if(FULL[x] && FULL[x].err) delete FULL[x];
+  pushView({k, key, obj: SNAP[k] ? SNAP[k][key] : undefined, ...more}); }
 // the product a document or wiki page belongs to: that of the view it was opened from, else the one shown
 const viewP = () => { for(let i = MV.length - 1; i >= 0; i--) if(MV[i].p) return MV[i].p; return lastData && lastData.ps[0] ? lastData.ps[0].name : ''; };
 function openDoc(r){ pushView({k:'doc', key:r, p: viewP()}); }
@@ -1056,7 +1114,7 @@ document.addEventListener('click', e => {
     return; }
   // a row, link or button with data-k opens its detail (a row only if the tap was not on a control inside it)
   const r = e.target.closest('[data-k]');
-  if(r && (r.matches('button, a') || !e.target.closest('button, a, .grip, details'))){ e.preventDefault(); openView(r.dataset.k, r.dataset.key); }
+  if(r && (r.matches('button, a') || !e.target.closest('button, a, .grip, details'))){ e.preventDefault(); openView(r.dataset.k, r.dataset.key, r.dataset.page ? {page: true} : undefined); }
 });
 async function renderModal(keepScroll){
   const v = MV[MV.length-1]; $('modal').hidden = !v; document.body.style.overflow = v ? 'hidden' : '';
@@ -1067,7 +1125,7 @@ async function renderModal(keepScroll){
   if(v.k==='doc'){
     $('mtit').textContent = v.key.split('/').pop(); body.innerHTML = `<span class="muted">${t('loading_lc')}</span>`; body.dataset.sig = '';
     const r = await loadDoc(v.key, v.p);
-    if(MV[MV.length-1]===v){ body.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(r.md); body.scrollTop = 0; }
+    if(MV[MV.length-1]===v){ body.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(r.md, v.p, r.path); body.scrollTop = 0; }
     return;
   }
   const r = lastData && VIEWS[v.k] ? VIEWS[v.k](v.key, v.obj) : null;

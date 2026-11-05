@@ -1421,6 +1421,10 @@ class GoldenPanel(GoldenCase):
         for name in PRODUCTS:
             g(f"/api/state?p={name}")
         g("/api/backlog?p=*")
+        self.t.section("a document's images: only a PNG, JPEG, GIF or WebP under the folders of documents")
+        g("/api/file?p=faro&path=reviews/2020-01-10-plan-FA-1.md")
+        g("/api/file?p=faro&path=../projects.toml")
+        g("/api/file?p=faro&path=reviews/nope.png")
         self.state_tree()
         self.check("panel.txt")
 
