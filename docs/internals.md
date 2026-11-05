@@ -59,10 +59,15 @@ place, `"stub": true` with only `id`, `status`, `archived` and its `project` whe
 links still find them; `/api/issue` gives the whole card. `counts` are the same in both bodies, and
 each body has its own ETag. Without `closed`, the body is the one above.
 A pending decision in the state carries its whole `text` (the card shows only its first sentence, `lead`) and, only
-when it has them, its `details`, `unanswered` and `page` (backlog.py): the card adds under its buttons each option's
-effect (cut at 160 characters) and whether it can be undone, what waits until the answer and a link to the page; the
-detail shows each option whole (effect, cost, undo), the reminder date and the page rendered inside with its images.
-A decision without them is sent and shown as before.
+when it has them, its `details`, `unanswered` and `page` (backlog.py), and, with `details`, `holds` (`{ref, title}`
+of the open work its `blocks` names). One with `details` is told in order: its card shows each option as a row (its
+name, undo and cost chips, «Recommended» on one, its own small «Choose») and then what it holds and the reminder date; its detail shows the text, what happens without an answer with the reminder
+date and the tasks it holds (folded), one card per option in the order written (chips for undo and cost, effect, the
+recommendation's reason in its card, its own «Choose» button; side by side from 700 px), «Other answer» and the page
+folded under «See more detail» (without its first title). An option that cannot be undone asks for a confirmation
+(«Back» focused, «Choose C»); the others answer on one tap. Without `details`, the card adds under its buttons what
+waits until the answer and a link to the page, and the detail is the one of before; a decision without any of these
+fields is sent and shown as before.
 Documents: `/api/doc?p=NAME&path=PATH` gives a `.md` (`{path, md}`, up to 400 KB) and `/api/file?p=NAME&path=PATH`
 an image it shows. Both take only a file under the reviews or notes folders or a report prefix of the product's home
 (or, by absolute path, of any registered product), once resolved (`panel_cards.home_file`: no `..` nor NUL; a
