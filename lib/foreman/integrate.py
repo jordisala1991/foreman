@@ -35,7 +35,13 @@ Order (a failure at any step stops, never forces, and leaves the PR open if ther
     exit 2; a row fails or the lifeline loses a command, exit 1; it allows something new without --opens, exit 3
     (nothing merged, a progress line; with --opens the command is in the guard's internal group `permissions`, the
     owner's yes); else it goes on and the note says what changed. The other reserved files in the repo (Claude
-    Code's settings, a state, the registry) are risky paths. --check shows the same and what it would do;
+    Code's settings, a state, the registry) are risky paths. Then, in a repo with `review = "auto"`, the review
+    gate (review.py): the line «== review: STATE»; a branch that needs a review (delicate paths, more than
+    `review_lines` lines of code, a partial delivery) goes in only with a review that covers its tip and leaves 0 H
+    and 0 M open; otherwise exit 2, nothing done, with the next step. --no-review "why" lets in a branch whose only
+    reason is its size and that has no review yet (never delicate paths nor a partial delivery); after round 2 with
+    H or M still open only the owner's yes (--approved) lets it in as it is; both go into the note. --check shows the
+    same and what it would do;
     (--check stops here, after printing what the backlog close would do);
  3. in a `public` repo, each commit message of main..BRANCH passes the public scan (a stop names the commit and the
     rule, never the text); then the local CI in the worktree (unless --no-ci): one run of `local_ci` per value of
@@ -87,7 +93,6 @@ FOREMAN_GH overrides the gh executable (tests).
 
 from __future__ import annotations
 
-import fnmatch
 import functools
 import inspect
 import os
@@ -100,7 +105,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_pages, commands, config, delivery, guard, i18n, notes, permissions, plain, util
+from . import backlog_pages, commands, config, delivery, guard, i18n, notes, permissions, plain, review, util
 from .backlog import Backlog, BacklogError
 
 if TYPE_CHECKING:
@@ -173,6 +178,8 @@ class Integration:
         self.s = i18n.for_project(project)
         self.touched: list[str] = []
         self.perm_note = ""  # the note's part on the live permissions the branch changes (permissions_gate)
+        self.outcome: str | None = None  # the agent's delivery (show())
+        self.review_note = ""  # the note's part on the branch's review (review_gate)
 
     def gh(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return sh([self.gh_exe, *args], cwd=self.main_path, check=check)
@@ -388,18 +395,10 @@ class Integration:
 
     def risky(self) -> list[str]:
         """Risky paths the branch touches: "dir/", "file", a glob, or "file:text" (a changed line contains text)."""
-        changed = git(self.main_path, "diff", "--name-only", f"{self.main}...{self.branch}").splitlines()
-        hits: list[str] = []
-        for entry in self.repo.get("risky_paths", []):
-            path, _, needle = entry.partition(":")
-            for f in changed:
-                if f == path or (path.endswith("/") and f.startswith(path)) or fnmatch.fnmatch(f, path):
-                    if needle:
-                        diff = git(self.main_path, "diff", f"{self.main}...{self.branch}", "--", f)
-                        if not any(ln[:1] in "+-" and needle in ln for ln in diff.splitlines()[4:]):
-                            continue
-                    hits.append(entry if entry == f else f"{f} ({entry})")
-        return sorted(set(hits))
+        try:
+            return review.paths_touched(self.main_path, self.main, self.branch, self.repo.get("risky_paths", []))
+        except RuntimeError as e:
+            raise Stop(str(e)) from e
 
     def merged_tree(self) -> str:
         """The tree main will hold after this integration: the branch's own when it contains main, else the clean
@@ -480,7 +479,7 @@ class Integration:
         if issue["subs"]:
             self.out(f"== sub-issues of {self.issue}: {backlog_pages.render_subs(self.backlog, issue['subs'])}")
         agent = next((x.get("agent") for x in issue["subs"] if x.get("branch") == self.branch), None)
-        outcome = delivery.outcome_of(self.p, branch=self.branch, name=agent)
+        outcome = self.outcome = delivery.outcome_of(self.p, branch=self.branch, name=agent)
         if outcome:
             note = {
                 "partial": ": only part of the task, read the report before merging",
@@ -1043,6 +1042,56 @@ class Integration:
             self.out(out)
             raise Stop("remote checks failed: the PR stays open")
 
+    def review_gate(self) -> None:
+        """Whether the branch's review lets it in (review.state(): only `not needed` and `clean` pass), with a line
+        «== review: …» when the repo's `review` is auto. Otherwise it stops, nothing done (exit 2), saying the next
+        step; --check stops the same way. --no-review "why" lets in a branch whose only reason is its size and that
+        has no review yet (a mechanical split proven by its tests), never one for delicate paths nor a partial
+        delivery; after round 2 with H or M open only the owner's yes (--approved) lets it in as it is. Both go into
+        the note."""
+        a, ref = self.a, f"{self.repo['key']}:{self.branch}"
+        if review.mode(self.repo) != "auto":
+            if a.no_review is not None:
+                self.out(f"== --no-review ignored: review is off for {self.repo['key']}")
+            return
+        try:
+            st = review.state(self.p, self.repo, self.branch, self.outcome)
+        except RuntimeError as e:
+            raise Stop(f"review: {e}", 2) from e
+        self.out(f"== review: {st.line()}")
+        if st.passes:
+            if a.no_review is not None:
+                self.out(f"== --no-review ignored: the review is {st.status}")
+            if st.status == review.CLEAN and st.review:
+                self.review_note = f"review clean: {st.review.path}, round {st.review.round}"
+            return
+        if a.no_review is not None:
+            why = a.no_review.strip()
+            if st.size_only and st.status == review.NEEDED and why:
+                self.review_note = f"no review, size only ({st.reasons[0].text}): {why}"
+                self.out(f"== --no-review: {ref} goes in without a review ({why}); the note says so")
+                return
+            raise Stop(
+                f"--no-review is only for a branch whose one reason is its size and that has no review yet, with "
+                f"why: {ref} is {st.line()}; nothing done",
+                2,
+            )
+        if st.status == review.OWNER and a.approved and st.review:
+            self.review_note = f"review: the owner lets it in with {st.review.counts()} open ({st.review.path})"
+            self.out(f"== review: the owner's yes ({a.approved}) lets it in with {st.review.counts()} open")
+            return
+        nxt = {
+            review.NEEDED: f"a reviewer agent that did not write it reviews it (round {st.round}): its review under "
+            f"the reviews folder starts with «Branch: {ref}», «Tip: SHA», «Round: {st.round}», «Open: H n, M n»",
+            review.IN_REVIEW: "wait for its review",
+            review.FINDINGS: "send the findings back to the agent that made the branch: it fixes or refutes each H "
+            "and M with proof; then round 2 reviews the fixes",
+            review.FIXED: f"round {review.MAX_ROUNDS}: the reviewer checks the fixes on the new tip",
+            review.OWNER: "no third round: ask the owner (a question); the branch waits for the answer, and their "
+            'yes to let it in as it is goes in --approved "who, when"',
+        }[st.status]
+        raise Stop(f"{ref} needs its review first ({st.line()}): {nxt}; nothing done", 2)
+
     def needs_approval(self) -> list[str]:
         why: list[str] = []
         if self.repo.get("require_approval"):
@@ -1127,6 +1176,7 @@ class Integration:
             + f" ({self.main} {head}; {ci_text}"
             + (f"; approved: {self.a.approved}" if self.a.approved else "")
             + (f"; {self.perm_note}" if self.perm_note else "")
+            + (f"; {self.review_note}" if self.review_note else "")
             + (f"; {post}" if post else "")
             + ")",
         )
@@ -1325,10 +1375,20 @@ class Integration:
         if a.keep_branch and not a.measure:
             raise Stop("--keep-branch is for --measure (a merged branch is always deleted)", 2)
         if a.measure and (
-            a.rebase_from or a.ci or a.no_ci or a.approved or a.opens or a.title or a.body or a.body_file
+            a.rebase_from
+            or a.ci
+            or a.no_ci
+            or a.approved
+            or a.opens
+            or a.title
+            or a.body
+            or a.body_file
+            or a.no_review is not None
         ):
             raise Stop(
-                "--measure merges nothing: no --rebase-from, --ci, --no-ci, --approved, --opens, --title or --body", 2
+                "--measure merges nothing: no --rebase-from, --ci, --no-ci, --approved, --opens, --no-review, --title "
+                "or --body",
+                2,
             )
         if a.report is None:
             a.report = self.default_report()
@@ -1354,6 +1414,7 @@ class Integration:
         self.preflight()
         self.show()
         self.permissions_gate()
+        self.review_gate()
         if a.check:
             self.out("== backlog after the merge (dry run):")
             for d in did or ["nothing to change"]:
@@ -1470,6 +1531,12 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         help="one run of local_ci with ARGS as {ci}; repeatable, replaces ci_runs (--ci=--flag with «=»)",
     )
     a.add_argument("--no-ci", action="store_true")
+    a.add_argument(
+        "--no-review",
+        metavar="WHY",
+        help="integrate without a review a branch that needs one only for its size (a mechanical split proven by its "
+        "tests); never for delicate paths or a partial delivery. WHY goes into the note",
+    )
     a.add_argument(
         "--opens",
         action="store_true",

@@ -658,17 +658,36 @@ COMMAND_KEYS = (
     "post_merge",
     "post_create",
 )
-BRAKE_KEYS = ("require_approval", "publish_on_merge", "public", "remote_checks", "risky_paths")
+BRAKE_KEYS = (
+    "require_approval",
+    "publish_on_merge",
+    "public",
+    "remote_checks",
+    "risky_paths",
+    "review",
+    "review_paths",
+    "review_lines",
+)
 # A brake comes off when its value goes from the strict one to another: a flag from true to false, remote_checks from
-# required (risky_paths: an entry removed, in point_changes()).
-_BRAKE_ON = {"require_approval": True, "publish_on_merge": True, "public": True, "remote_checks": "required"}
+# required, review from auto (risky_paths and review_paths: an entry removed; review_lines: raised, or set to 0, which
+# turns the size off).
+_BRAKE_ON = {
+    "require_approval": True,
+    "publish_on_merge": True,
+    "public": True,
+    "remote_checks": "required",
+    "review": "auto",
+}
 
 
 def _brake_off(key: str, before: Any, after: Any) -> tuple[Any, Any] | None:
     """(before, after) to show when the brake `key` comes off, else None (it stays, or gets stricter)."""
-    if key == "risky_paths":
+    if key in ("risky_paths", "review_paths"):
         lost = [x for x in before or [] if x not in (after or [])]
         return (lost, None) if lost else None
+    if key == "review_lines":
+        b, a = int(before or 0), int(after or 0)
+        return (before, after) if b and (not a or a > b) else None
     on = _BRAKE_ON[key]
     return (before, after) if (bool(before) if on is True else before == on) and after != before else None
 

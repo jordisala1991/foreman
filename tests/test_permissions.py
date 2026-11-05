@@ -552,6 +552,29 @@ class OpensTest(PermissionsCase):
         self.assertEqual(len(permissions.also_changes(self.project, gone)), 4)
         self.assertEqual(permissions.also_changes(self.project, self.project), [])
 
+    def test_review_brakes(self):
+        repo = '\n[repos.web]\npath = "."\nreview = "auto"\n'
+        repo += 'review_paths = ["lib/guard.py", "hooks/"]\nreview_lines = 400\n'
+        self.write_toml(TOML + repo)
+        self.project = config.load_project(self.home)
+        live = (self.home / "foreman.toml").read_text()
+        brake = "a brake of the integration comes off"
+        self.assertEqual(self.opened(live.replace('"auto"', '"off"')), [f"[repos.web] review, {brake}: «auto» → «off»"])
+        self.assertEqual(
+            self.opened(live.replace('"lib/guard.py", ', "")),
+            [f"[repos.web] review_paths, {brake}: «lib/guard.py» → —"],
+        )
+        out = self.opened(live.replace("= 400", "= 900"))
+        self.assertEqual(out, [f"[repos.web] review_lines, {brake}: 400 → 900"])
+        self.assertEqual(self.opened(live.replace("= 400", "= 0")), [f"[repos.web] review_lines, {brake}: 400 → 0"])
+        for stricter in (live.replace("= 400", "= 200"), live.replace('"hooks/"]', '"hooks/", "x/"]')):
+            with self.subTest(stricter=stricter):
+                self.assertEqual(self.opened(stricter), [])
+        # turning it on from the default (off) only restricts
+        self.write_toml(TOML + '\n[repos.web]\npath = "."\n')
+        self.project = config.load_project(self.home)
+        self.assertEqual(self.opened(TOML + repo), [])
+
     def test_looser(self):
         self.assertTrue(permissions._looser("deny", "allow"))
         self.assertTrue(permissions._looser("deny", "lock:a"))
