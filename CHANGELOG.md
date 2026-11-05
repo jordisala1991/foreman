@@ -20,6 +20,14 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Changed
 
+- The texts of hidden acceptance checks: the planner writes the check when its brief asks (part of the criterion's
+  rows in the plan, the rest in `<holdout>/ID/`, the plan saying only the contract and the count); the orchestrator
+  reads every command before `foreman holdout seal` when it approves the plan, since `integrate` runs them with its
+  power outside the guard, and sends a failing branch's agent only the symptom block; a production agent is told
+  such cases exist and not to look for them (agents/planner.md, skills/review-plan, docs/orchestrator.md,
+  docs/agent.md). When the behaviour has cases, a plan's acceptance criterion is a table, input → expected result.
+- The `review_needed` notice, for an issue with a hidden check, says to run it first (`foreman holdout run`): a
+  branch that fails it needs another review anyway.
 - `foreman backlog show`, `backlog get ID subs`, `foreman start` and `foreman integrate` print a report or a
   question's page as its path in the home (`report reviews/…md`, `Page: reviews/…md`) instead of a Markdown link
   relative to the old pages folder (`../reviews/…`). The module `backlog_pages` is now `backlog_text`.

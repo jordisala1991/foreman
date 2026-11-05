@@ -194,6 +194,16 @@ they disagree.
      - **Size waiver:** `--no-review "why"`, noted in the integration, only for a branch whose only reason is its
        size and that has no review yet: a mechanical change proven by its tests (a split checked by the golden
        corpus). Never for delicate paths nor a `partial` delivery; those wait for their review or the owner.
+   - **A hidden check** (an issue with a `holdout.toml`, written by its planner and sealed by you when you approved
+     the plan: skill `review-plan`; docs/config.md, «`[paths] holdout`»): `--check` prints `== hidden check (ID):
+     …` and stops while it is not sealed or changed since; `integrate` runs it after the local CI, before anything
+     is pushed or merged. On a branch that also needs a review, run it first (`foreman holdout run REPO BRANCH ID`,
+     as the notice says): it is cheap, and a branch that fails it needs another review anyway. When it fails, read
+     the log (`foreman holdout status ID`) before anything else: a wrong case (tied to a name the agent chose, a
+     wrong expected value) is fixed by the planner or you and sealed again, the rounds start over and the agent
+     hears nothing. Else send the agent, with SendMessage, the block after «send the agent only this», as it is;
+     two rounds, then the owner (`--approved`), as with reviews. The cases, their commands and files never go in a
+     brief, a message, a note, a decision or the backlog; a reviewer gets at most «hidden check k/N».
    - Then without `--check`, with `--title`, `--body` (English for public repos, without internal IDs),
      `--report reviews/…`, `--note "…"` and, if it closes the issue, `--result "…"` (and `--verdict` if it has an
      acceptance criterion); title, body and result are read by the owner: docs/owner.md. The command runs the local CI, pushes, opens the PR, waits for the remote checks, merges

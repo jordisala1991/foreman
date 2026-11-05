@@ -49,6 +49,7 @@ from . import (
     approved,
     backlog_check,
     delivery,
+    holdout,
     i18n,
     identity,
     lock,
@@ -1015,20 +1016,25 @@ def review_notices(
         )
         if st.status == review.NEEDED or (st.status == review.FIXED and rv):
             launch = f"`foreman launch {base}-rv{st.round} --review {ref} --issue {iid} --sub {sid}`"
+            first = (  # the cheap gate first: a branch that fails it needs another review anyway
+                f"first its hidden check, `foreman holdout run {repo} {br} {iid}`; if it passes, "
+                if holdout.exists(project, iid)
+                else ""
+            )
             keys["needed"].append(case)
             if st.status == review.FIXED and rv:
                 prev = review.reviewer_of(everyone, repo, br)
                 resume = f"resume the reviewer {who(prev)} with SendMessage, or launch one: " if prev else "launch: "
                 needed.append(
                     f"{ref} ({iid} {sid}; round {st.round}: the fixes are in, {rv.path} left {rv.counts()} open): "
-                    f"{resume}{launch}, brief: the previous review, the plan and the report; it checks each finding "
-                    "and only what the fixes changed"
+                    f"{first}{resume}{launch}, brief: the previous review, the plan and the report; it checks each "
+                    "finding and only what the fixes changed"
                 )
             else:
                 again = f"; {rv.path} reviewed another diff" if rv else ""
                 bad = f"; header unreadable: {', '.join(st.problems)}" if st.problems else ""
                 needed.append(
-                    f"{ref} ({iid} {sid}; {why}{again}{bad}; round {st.round}): {launch}, brief: the plan, the "
+                    f"{ref} ({iid} {sid}; {why}{again}{bad}; round {st.round}): {first}{launch}, brief: the plan, the "
                     f"report and «round {st.round}»"
                 )
         elif st.status == review.FINDINGS and rv:
