@@ -112,6 +112,19 @@ class ReviewLoop(LoopCase):
         self.assertIn("app:ab1", self.ready())
         self.assertFalse({"review_needed", "review_findings"} & set(self.ns()))
 
+    def test_an_issue_with_a_hidden_check_runs_it_before_the_review(self):
+        hidden = self.home.parent / "hidden"
+        self.project.raw["paths"]["holdout"] = str(hidden)
+        self.commit({"lib/guard.py": "x = 2\n"})
+        self.assertNotIn("hidden check", self.text("review_needed"))
+        (hidden / "AB-1").mkdir(parents=True)
+        (hidden / "AB-1/holdout.toml").write_text('issue = "AB-1"\n')
+        self.assertIn(
+            "round 1): first its hidden check, `foreman holdout run app ab1 AB-1`; if it passes, `foreman launch "
+            "w1-rv1 --review app:ab1",
+            self.text("review_needed"),
+        )
+
     def test_round_two_open_asks_the_owner_and_waits(self):
         tip = self.commit({"lib/guard.py": "x = 2\n"})
         self.write_review(tip, high=1)

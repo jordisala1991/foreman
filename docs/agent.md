@@ -49,7 +49,9 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   stash, restore or rm of foreman.toml or the guard table…): do it in your worktree (`git -C <worktree> …`, `cd
   <worktree> && git …`), or limit it to the files you mean (`git stash push -- PATH`, `git checkout -- PATH`).
 - **What you check yourself:** what the CI does not see: tests of what you touch and the checks the plan asks for.
-  The full suite and the remote checks are the orchestrator's (`foreman integrate`).
+  The full suite and the remote checks are the orchestrator's (`foreman integrate`). A plan with a «Hidden check»
+  has more cases, run at integration, that you cannot see: meet its contract and criterion, do not look for them;
+  if one fails you are sent its symptom.
 - **Time limits:** `foreman time-limit SECONDS command…` inside the lock (outside, the wait counts). A server of
   yours is stopped with `kill -TERM` and, if it does not exit in ~30 s, `kill -KILL` (not `kill -INT`: a process
   started with `&` from a non-interactive shell ignores SIGINT); never an unbounded wait while holding a lock.

@@ -11,7 +11,7 @@ asking for changes to a plan is the orchestrator's; approved means it can run no
 
 - **Who writes it:** a short `planner` agent (reads code, builds and runs nothing) in
   `reviews/YYYY-MM-DD-plan-<ID>.md`: starting state checked in the code (no invented names), goal and acceptance
-  criterion with its baseline, approach, what it touches with file:line, collisions with branches in progress, risks,
+  criterion with its baseline (a table input → expected result when the behaviour has cases), approach, what it touches with file:line, collisions with branches in progress, risks,
   how it is checked (agent and orchestrator), the API line if the project uses one, **integrable sub-issues** (T0,
   T1…, each checkable alone) and open questions. **No hour estimates.** Small or measure-only issues: the brief is
   the plan. A review by a `reviewer` agent that lists fix sub-issues counts as that plan once you have added your
@@ -29,6 +29,14 @@ asking for changes to a plan is the orchestrator's; approved means it can run no
   that keeps the meaning needs no question.
   A question the owner found hard to answer (notes, «question hard to answer»): write the next ones with what each
   option changes in their day.
+- **A hidden check** (docs/config.md, «`[paths] holdout`»): for behaviour a command can judge, ask the planner in
+  its brief for one: some rows of the criterion's table go in the plan, the others in `<holdout>/ID/`, where
+  production agents and reviewers cannot look. Before approving, read `holdout.toml` and every file under it:
+  each command and `setup` step runs with your power, outside the guard, at every integration of the issue, so seal
+  only what you would run yourself. The cases test only the contract the plan's «Hidden check» section writes,
+  and each `symptom` tells what a user would notice, not the test. Then `foreman holdout seal ID`: the run on main
+  must fail the new cases and pass the regression ones, else the case or the plan is wrong. Never quote the hidden
+  part in a brief, note, decision or the backlog.
 - **Blocks:** apart, with `foreman backlog block ID "reason"` (and `unblock ID`), or by relation with
   `foreman backlog relate A blocks B`: B stays blocked while A is open and is freed when A closes (nothing to
   unblock by hand). A `ready` issue may be blocked. The ready target counts only unblocked ones, and not those
@@ -40,4 +48,5 @@ asking for changes to a plan is the orchestrator's; approved means it can run no
   **behind** the `ready` ones already there; if its brief is enough as the plan, it goes straight to `ready`.
 - **Old plans:** before launching one, check the files it cites have not changed (`git diff --stat <plan commit>
   main`); if they did, review it against main.
-- **Integrating:** `foreman integrate … --check` shows the plan's check section to compare with the agent's report.
+- **Integrating:** `foreman integrate … --check` shows the plan's check section to compare with the agent's report,
+  and whether the issue's hidden check is sealed (docs/orchestrator.md, «Every pass», step 2).
