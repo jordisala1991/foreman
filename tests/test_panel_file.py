@@ -131,6 +131,10 @@ class PanelDecisionFieldsTest(PanelCase):
             d["details"] = {"A: bottom": {"effect": "one more order on screen", "undo": "yes"}}
             d["unanswered"] = {"waits": "the export stays as it is", "by": "2026-11-12"}
             d["page"] = page
+            d["blocks"] = ["PF-1 T1", "PF-3", "PF-2"]  # PF-2 is closed below: it holds nothing any more
+            lst, n, _ = Backlog.find(data, "PF-2")
+            lst[n]["status"] = "canceled"
+            data["decisions"][0]["blocks"] = ["PF-3"]  # Area J1, without details
         self.assertEqual(self.cli("check").returncode, 0)
         dec = {x["id"]: x for x in self.req("/api/state?p=fake")[1]["project"]["decisions"]}
         j2 = dec["Area J2"]
@@ -139,6 +143,8 @@ class PanelDecisionFieldsTest(PanelCase):
         self.assertEqual(j2["details"], {"A: bottom": {"effect": "one more order on screen", "undo": "yes"}})
         self.assertEqual(j2["unanswered"], {"waits": "the export stays as it is", "by": "2026-11-12"})
         self.assertEqual(j2["page"], page)
+        # the open work it holds, with its names (a sub-issue without a title, its issue's)
+        self.assertEqual(j2["holds"], [{"ref": "PF-1 T1", "title": "Issue 1"}, {"ref": "PF-3", "title": "Issue 3"}])
         self.assertEqual(
             sorted(dec["Area J1"]),
             sorted(["id", "title", "text", "lead", "recommendation", "recommended", "options", "date", "answer"]),
@@ -148,20 +154,147 @@ class PanelDecisionFieldsTest(PanelCase):
 
     def test_page_shows_the_extras_only_when_there(self):
         js = (ROOT / "panel/app.js").read_text()
-        more = js[js.index("const decisionMore") : js.index("// the «other answer» boxes")]
-        self.assertIn("x.answer || !(hasDetails(x) || (x.unanswered && x.unanswered.waits) || x.page) ? ''", more)
+        more = js[js.index("const decisionMore") : js.index("// A question that says what each option changes")]
+        self.assertIn("x.answer || !((x.unanswered && x.unanswered.waits) || x.page) ? ''", more)
         dec = js[js.index("  dec(key){") : js.index("  msg(key, obj){")]
-        self.assertIn("(hasDetails(x) ? sect(t('dec_effects')", dec)
+        # with what each option changes, told in order; without, as before (options and recommendation in the table)
+        self.assertIn("(rich ? decDetailRich(x) : props([", dec)
+        self.assertIn("[t('options'), x.options.map(o => optLabel(x, o)).join(' · ')]", dec)
         self.assertIn('(x.page ? `<div id="mpage"', dec)
-        self.assertNotIn("dec_page", dec)
-        # options and recommendation once: in the top table only without details, below only with them
-        self.assertIn("...(hasDetails(x) ? [] : [[t('options')", dec)
-        self.assertIn('<div class="drec">', dec)
-        self.assertIn("mdFull(r.md, x.p, r.path)", dec)
+        self.assertIn("mdFull(rich ? r.md.replace(", dec)
+        you = js[js.index("function renderYou") : js.index("function renderGrants")]
+        self.assertIn("card(hasDetails(x) && !x.answer ? decCardRich(x) :", you)
         for lang in ("en", "es"):
             st = self.req(f"/api/strings?lang={lang}")[1]
-            for k in ("dec_effects", "undo_yes", "undo_hard", "undo_no", "dec_waits_by", "dec_see_page"):
+            for k in ("dec_waits_by", "dec_see_page", "dec_if_none", "dec_holds_n", "chip_undo_no", "dec_back"):
                 self.assertIn(k, st)
+
+    def rich(self, script):
+        """The output of node running the panel's decision code with `script` (stubs for the rest of the page)."""
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("no node")
+        js = (ROOT / "panel/app.js").read_text()
+        part = "\n".join(
+            js[js.index(a) : js.index(z)]
+            for a, z in (
+                ("const esc =", "const lsGet"),
+                ("const decisionActions", "// ---- Trabajo"),
+            )
+        )
+        strings = json.loads((ROOT / "panel/strings.en.json").read_text())
+        stub = (
+            f"const S = {json.dumps(strings)};\n"
+            "function t(key, vars){ let s = S[key]; if(s == null) s = key;"
+            " return String(s).replace(/\\{(\\w+)\\}/g, (m, k) => vars && vars[k] != null ? vars[k] : m); }\n"
+            "const tn = (key, n, vars) => t(`${key}_${n===1 ? '1' : 'n'}`, {n, ...vars});\n"
+            "const md = s => s, ptag = () => '', canWrite = () => true, decKey = x => `${x.p}|${x.title}`;\n"
+            "const posted = [], sheet = [];\n"
+            "const post = (path, p) => posted.push(path);\n"
+            "const $ = id => id === 'csheet' ? null : {focus(){}, set onclick(f){ this.f = f; }};\n"
+            "const document = {addEventListener(){}, body: {insertAdjacentHTML: (w, h) => sheet.push(h)}};\n"
+            "let lastData = null;\n"
+        )
+        r = subprocess.run([node, "-e", stub + part + script], capture_output=True, text=True, check=False)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        return r.stdout
+
+    def test_rich_question_layout(self):
+        """A question with what each option changes: the card shows each option as a row with its name, chips and own
+        «Choose»; the detail tells the situation, what is at stake with the tasks it holds by
+        name, one card per option in the order written with its own button, «Other answer» after them and the page
+        folded; the «Asked» and «Status» rows are gone."""
+        out = json.loads(
+            self.rich("""
+const x = {p: 'fake', id: 'AP-7 J1', title: 'AP-7 J1, How?', text: 'Situation.', lead: 'Situation.',
+  options: ['A: app', 'B: mail', 'C: retry'], recommended: 'A: app', recommendation: 'almost as much as C',
+  details: {'A: app': {effect: 'banner', undo: 'yes', cost: '2 days'}, 'B: mail': {effect: 'mail', undo: 'yes'},
+            'C: retry': {effect: 'retries alone', undo: 'no', cost: 'bank annex'}},
+  unanswered: {waits: 'nothing changes', by: '2026-11-12'}, page: 'reviews/q.md',
+  holds: [{ref: 'AP-7', title: 'Warn the customer'}, {ref: 'AP-8 T2', title: 'Support panel'}]};
+const easy = {...x, details: {'A: app': {effect: 'banner', undo: 'yes'}, 'B: mail': {effect: 'mail', undo: 'yes'},
+                              'C: retry': {effect: 'retries', undo: 'yes'}}};
+console.log(JSON.stringify({card: decCardRich(x), easy: decCardRich(easy), detail: decDetailRich(x)}));
+""")
+        )
+        card, easy, detail = out["card"], out["easy"], out["detail"]
+        # the card: each option as a row, in the order written, with its whole name, its chips and its own «Choose»
+        # (the one that cannot be undone asks for the confirmation: data-undo="no"); then what it holds, the reminder
+        self.assertLess(card.index("A: app"), card.index("B: mail"))
+        self.assertLess(card.index("B: mail"), card.index("C: retry"))
+        self.assertEqual(card.count('<div class="orow"') + card.count('<div class="orow rec"'), 3)
+        self.assertEqual(card.count('class="orow rec"'), 1)
+        self.assertEqual(card.count(">Recommended</span>"), 1)
+        self.assertIn("no way back", card)
+        self.assertIn(">2 days</span>", card)
+        self.assertEqual([card.count(f">Choose {k}</button>") for k in "ABC"], [1, 1, 1])
+        self.assertEqual(card.count('data-undo="no"'), 1)
+        self.assertEqual(easy.count('data-undo="yes"'), 3)
+        self.assertIn("holds 2 tasks · reminder on 2026-11-12", card)
+        self.assertNotIn("Why:", card)
+        self.assertNotIn("Asked", detail)
+        self.assertNotIn("waits for your answer", detail)
+        self.assertLess(detail.index("Situation."), detail.index("If you do not answer: nothing changes"))
+        self.assertIn("I will remind you on 2026-11-12.", detail)
+        self.assertIn("Holds 2 tasks", detail)
+        self.assertIn("Warn the customer", detail)
+        self.assertIn("Support panel", detail)
+        # the cards in the order written, each with its own button; the recommended one marked, its why inside
+        self.assertLess(detail.index("A: app"), detail.index("B: mail"))
+        self.assertLess(detail.index("B: mail"), detail.index("C: retry"))
+        self.assertEqual([detail.count(f">Choose {k}</button>") for k in "ABC"], [1, 1, 1])
+        self.assertEqual(detail.count('class="ocard rec"'), 1)
+        self.assertEqual(detail.count("Why:"), 1)
+        self.assertEqual(detail.count("almost as much as C"), 1)  # shown once
+        self.assertEqual(detail.count("Situation."), 1)
+        self.assertLess(detail.index("Choose C"), detail.index("Other answer"))
+        self.assertLess(detail.index("Other answer"), detail.index("See more detail"))
+        self.assertIn('<details class="sect dpage"', detail)
+
+    def test_confirm_only_what_cannot_be_undone(self):
+        """An option that can be undone (or with work) answers on one tap; one that cannot opens a sheet with what it
+        changes and «Back» focused, and answers only with «Choose C»."""
+        out = json.loads(
+            self.rich("""
+lastData = {decisions: [{p: 'fake', title: 'AP-7 J1, How?', options: ['A: app', 'C: retry'],
+  details: {'A: app': {effect: 'banner', undo: 'yes'},
+            'C: retry': {effect: 'retries alone', undo: 'no', cost: 'annex'}}}]};
+const b = (op, undo) => ({dataset: {id: 'AP-7 J1', d: 'AP-7 J1, How?', op, p: 'fake', undo}});
+decideOpt(b('A: app', 'yes')); decideOpt(b('B: mail', 'hard'));
+const before = posted.length;
+decideOpt(b('C: retry', 'no'));
+const after = posted.length;
+console.log(JSON.stringify({before, after, posted, sheet}));
+""")
+        )
+        self.assertEqual(out["before"], 2)
+        self.assertEqual(out["after"], 2)  # C waits for its confirmation
+        self.assertIn("op=A%3A%20app", out["posted"][0])
+        self.assertEqual(len(out["sheet"]), 1)
+        sheet = out["sheet"][0]
+        self.assertIn("C cannot be undone", sheet)
+        self.assertIn("retries alone", sheet)
+        self.assertIn("cost: annex", sheet)
+        self.assertLess(sheet.index(">Back</button>"), sheet.index(">Choose C</button>"))
+        self.assertIn('id="csback"', sheet)
+
+    def test_old_question_unchanged(self):
+        """A question without what each option changes keeps its card and its detail: decisionActions's output is the
+        one of before (the option buttons, «Other answer» in the same row) and the rich layout is never used."""
+        out = json.loads(
+            self.rich("""
+const x = {p: 'fake', id: 'J1', title: 'J1, Ship?', text: 'Context.', options: ['a: yes', 'b: no'],
+  recommended: 'b: no', recommendation: 'b'};
+const FREE = []; console.log(JSON.stringify({rich: hasDetails(x), actions: decisionActions(x), more: decisionMore(x)}));
+""")
+        )
+        self.assertFalse(out["rich"])
+        self.assertEqual(out["more"], "")
+        a = out["actions"]
+        self.assertTrue(a.startswith('<div class="btns"><button class="sec" data-id="J1"'))
+        self.assertIn('onclick="decide(this)">a: yes</button>', a)
+        other = '<button class="sec other" data-fk="fake|J1" onclick="freeToggle(this)">Other answer</button></div>'
+        self.assertIn(other, a)
 
     def test_document_images(self):
         """mdInline with a document's options: a relative image goes to /api/file joined to the document's folder;

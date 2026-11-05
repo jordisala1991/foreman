@@ -73,12 +73,47 @@ nav button.on{color:var(--acc)}
 button.sec.rec,.chip.rec{border-color:var(--acc)}.recm{color:var(--muted);font-weight:400}
 .answered{margin-top:var(--sp2);font-size:var(--fs-m)}
 .free{margin-top:var(--sp2)}.free textarea{min-height:56px}.answered.warn{margin-bottom:-4px}
-/* what a decision says besides its text: under the card's buttons, and each option in its detail */
+/* what a decision says besides its text: under the card's buttons */
 .dmore{margin-top:10px;padding-top:var(--sp2);border-top:1px solid var(--line);display:flex;flex-direction:column;gap:var(--sp1);font-size:var(--fs-m)}
 .dmore .slink{font-size:var(--fs-m)}
-.dopts{border:1px solid var(--line);border-radius:var(--r);background:var(--card)}
-.dopts .dopt{padding:var(--sp2) var(--sp3);border-top:1px solid var(--line)}.dopts .dopt:first-child{border-top:0}
-.drec{margin-top:var(--sp2);padding:0 var(--sp3)}
+/* a question that says what each option changes, told in order: situation, what is at stake, the options as cards of
+   the same size with their own button (side by side from 700 px), «Other answer», the page folded */
+.dsit p:first-child{margin-top:0}.dsit p:last-child{margin-bottom:0}
+.dstake{margin:var(--sp3) 0 var(--sp4);padding:2px 0 2px var(--sp3);border-left:3px solid var(--warn);font-size:var(--fs-m)}
+.dholds{margin-top:var(--sp1)}.dholds>summary{cursor:pointer;font-weight:600}.dholds ul{margin:var(--sp1) 0 0;padding-left:18px}
+.dholds li{overflow-wrap:anywhere}.dholds .mono{font-size:var(--fs-s);color:var(--muted)}
+.ochips{display:flex;flex-wrap:wrap;align-items:flex-start;align-content:flex-start;gap:6px;margin-top:var(--sp2)}
+.ochip{font-size:var(--fs-s);line-height:18px;border:1px solid var(--line);border-radius:var(--r-s);padding:1px 9px;background:var(--card)}
+.ochip.ok{color:var(--ok);border-color:var(--ok)}.ochip.warn{color:var(--warn);border-color:var(--warn)}.ochip.bad{color:var(--bad);border-color:var(--bad)}
+.ochip.rec{border-color:var(--acc)}
+/* the list card of such a question: one row per option, its name and chips at the left, its «Choose» at the right */
+.orows{display:flex;flex-direction:column;margin-top:10px;border:1px solid var(--line);border-radius:var(--r)}
+.orow{display:flex;align-items:center;gap:var(--sp3);padding:var(--sp2) var(--sp3);border-top:1px solid var(--line)}.orow:first-child{border-top:0}
+.orow.rec{box-shadow:inset 3px 0 0 var(--acc)}
+.otxt{flex:1;min-width:0}.oname{font-size:var(--fs-m);line-height:1.4}.oname .obadge{display:inline-block;margin-left:4px;vertical-align:1px}
+.orow .ochips{margin-top:var(--sp1)}.orow button{flex:none;white-space:nowrap}
+.orows+.csub{margin-top:var(--sp2)}
+.ocards{display:grid;gap:10px;margin:var(--sp4) 0 var(--sp2)}
+.ocard{display:flex;flex-direction:column;gap:var(--sp2);min-width:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:var(--sp3) 14px}
+.ocard.rec{border-color:var(--acc)}
+.ocard .ochips{margin-top:0}
+.ohead{display:flex;align-items:flex-start;gap:var(--sp2);font-size:var(--fs-l);line-height:1.35}.ohead b{flex:1;min-width:0}
+.obadge{flex:none;margin-top:1px;font-size:var(--fs-xs);font-weight:600;line-height:16px;color:var(--acc);border:1px solid var(--acc);border-radius:999px;padding:1px 8px}
+.oeff,.owhy{font-size:var(--fs-m);line-height:1.45}.owhy{color:var(--muted)}.owhy b{color:var(--fg)}
+.ogo{margin-top:auto;padding-top:var(--sp1)}.ogo button{width:100%;min-height:44px}
+@media(max-width:699px){.ocard>:empty{display:none}}
+@media(min-width:700px){.ocards.n2{grid-template-columns:repeat(2,1fr)}.ocards.n3{grid-template-columns:repeat(3,1fr)}.ocards.n4{grid-template-columns:repeat(4,1fr)}
+  .ocards.n2,.ocards.n3,.ocards.n4{grid-template-rows:repeat(5,auto)}
+  .ocards.n2 .ocard,.ocards.n3 .ocard,.ocards.n4 .ocard{display:grid;grid-row:span 5;grid-template-rows:subgrid;row-gap:var(--sp2)}}
+.mbody details.dpage>summary{font-size:var(--fs-b);color:var(--acc)}
+.dpage .wdoc{margin-top:var(--sp2)}
+/* the confirmation of an option that cannot be undone: a sheet from the bottom (a dialog from 700 px), «Back» first */
+.csheet{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.cpanel{width:100%;max-width:520px;background:var(--bg);border-radius:var(--r-l) var(--r-l) 0 0;padding:var(--sp4) var(--sp4) calc(var(--sp4) + env(safe-area-inset-bottom));font-size:var(--fs-m);line-height:1.45}
+.cpanel h3{margin:0 0 var(--sp2);font-size:var(--fs-l)}.cpanel p{margin:var(--sp1) 0}
+.cpanel .btns{margin-top:var(--sp4)}.cpanel .btns button{flex:1;min-height:44px}
+button.sec.bad{background:var(--card);color:var(--bad);border-color:var(--bad)}
+@media(min-width:700px){.csheet{align-items:center}.cpanel{border-radius:var(--r-l)}}
 
 /* ---- List of one-line rows: icon, ID, name, title with ellipsis, metadata on the right; tap opens the detail */
 .list{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:0 0 10px}

@@ -265,6 +265,22 @@ def backlog_cards(project: Project) -> Cards:
         loose = [card("", i, False) for i in data.get("issues", [])]
         archive = [card(g["project"], i, True) for g in data["archive"] for i in g["issues"]]
 
+        def hold_title(ref: str) -> str:
+            """The title of what a hold reference «XX-1 T3» or «XX-1» names (the sub-issue's when it has one)."""
+            iid, sid = Backlog.split_hold(ref)
+            lst, n, _ = Backlog.find(data, iid)
+            i = lst[n]
+            sub = next((s for s in i["subs"] if s["id"] == sid), None) if sid else None
+            return clean((sub or {}).get("title") or i["title"])
+
+        def holds(d: Record) -> dict[str, Any]:
+            """The open work a decision with details holds ({ref, title} each), for the detail's «holds N tasks»; none
+            for a decision without details, so a decision of before is sent as before."""
+            if not d.get("details"):
+                return {}
+            out = [{"ref": r, "title": hold_title(r)} for r in d.get("blocks") or [] if Backlog.hold_open(data, r)]
+            return {"holds": out} if out else {}
+
         def decision(d: Record) -> dict[str, Any]:
             return {
                 "id": d.get("id", ""),
@@ -282,6 +298,7 @@ def backlog_cards(project: Project) -> Cards:
                 # what each option changes, what waits until the answer and the page: only when the decision has them,
                 # so a decision of before is sent as before
                 **{k: d[k] for k in ("details", "unanswered", "page") if d.get(k)},
+                **holds(d),
             }
 
         decisions = [decision(d) for d in data.get("decisions", [])]

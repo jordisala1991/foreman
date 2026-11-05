@@ -1615,9 +1615,7 @@ console.log(JSON.stringify(out));
         js = (ROOT / "panel/app.js").read_text()
         self.assertIn("(x.lead ? `<div class=\"clead\">${esc(x.lead)}</div>` : '')", js)
         self.assertIn("o===x.recommended ? ` <span class=\"recm\">${t('recommended_mark')}</span>` : ''", js)
-        self.assertEqual(
-            js.count("${optLabel(x, o)}"), 3
-        )  # the button, the chip, the detail's «what each option changes»
+        self.assertEqual(js.count("${optLabel(x, o)}"), 2)  # the button and the chip
         self.assertIn("[t('options'), x.options.map(o => optLabel(x, o)).join(' · ')]", js)
         self.assertIn("x.recommendation && [t('recommendation'), esc(x.recommendation)]", js)
         self.assertIn(".clead{", (ROOT / "panel/app.css").read_text())
