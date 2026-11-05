@@ -46,6 +46,8 @@ KINDS = (
     "lock_long",
     "lock_queue",
     "ready_to_integrate",
+    "review_needed",
+    "review_findings",
     "measure_delivered",
     "loose_worktrees",
     "branch_no_worktree",

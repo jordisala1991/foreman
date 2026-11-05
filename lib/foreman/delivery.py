@@ -197,6 +197,8 @@ def kind_of(project: Project, branch: str | None = None, name: str | None = None
 
     best = None
     for h in loop.agents(project).values():
+        if h.get("review"):
+            continue  # a reviewer of the branch (launch --review): its delivery is not the branch's
         mine = h.get("delivered") and ((branch and h.get("branch") == branch) or (name and h.get("name") == name))
         if mine and (best is None or h["delivered"] > best["delivered"]):
             best = h
@@ -366,6 +368,8 @@ def report_of(project: Project, branch: str | None = None, name: str | None = No
 
     best = None
     for h in loop.agents(project).values():
+        if h.get("review"):
+            continue  # a reviewer of the branch (launch --review): its delivery is not the branch's
         mine = h.get("delivered") and ((branch and h.get("branch") == branch) or (name and h.get("name") == name))
         if mine and (best is None or h["delivered"] > best["delivered"]):
             best = h
@@ -686,6 +690,8 @@ def outcome_of(project: Project, branch: str | None = None, name: str | None = N
 
     best = None
     for h in loop.agents(project).values():
+        if h.get("review"):
+            continue  # a reviewer of the branch (launch --review): its delivery is not the branch's
         mine = h.get("delivered") and ((branch and h.get("branch") == branch) or (name and h.get("name") == name))
         if mine and (best is None or h["delivered"] > best["delivered"]):
             best = h

@@ -1047,15 +1047,20 @@ class Integration:
         «== review: …» when the repo's `review` is auto. Otherwise it stops, nothing done (exit 2), saying the next
         step; --check stops the same way. --no-review "why" lets in a branch whose only reason is its size and that
         has no review yet (a mechanical split proven by its tests), never one for delicate paths nor a partial
-        delivery; after round 2 with H or M open only the owner's yes (--approved) lets it in as it is. Both go into
-        the note."""
+        delivery; while a reviewer launched on it (`launch --review`) is live, it is in review; after round 2 with H
+        or M open only the owner's yes (--approved) lets it in as it is. Both go into the note."""
         a, ref = self.a, f"{self.repo['key']}:{self.branch}"
         if review.mode(self.repo) != "auto":
             if a.no_review is not None:
                 self.out(f"== --no-review ignored: review is off for {self.repo['key']}")
             return
+        from . import loop
+
+        busy = review.reviewer_of(loop.live_agents(self.p), self.repo["key"], self.branch)
         try:
-            st = review.state(self.p, self.repo, self.branch, self.outcome)
+            st = review.state(
+                self.p, self.repo, self.branch, self.outcome, (busy.get("name") or busy["id"][:8]) if busy else ""
+            )
         except RuntimeError as e:
             raise Stop(f"review: {e}", 2) from e
         self.out(f"== review: {st.line()}")

@@ -21,8 +21,11 @@ whose open sub-issues are all measurements (delivery.branch_kind) is not ready t
 `measure_delivered`, to close with `foreman integrate --measure`; one whose sub-issues are all closed without a
 commit (closed on purpose) comes in neither. A local branch with commits not in main and no worktree, named by an open
 sub-issue with no live agent, is `branch_no_worktree` (recreate the worktree, then integrate), and its issue is not
-`orphan_in_progress`. One that no sub-issue names, that the backlog's text does not mention, that is not on the
-remote (as the last fetch left it) and whose content is not in main (cherry-picked or squashed) is `loose_branches`.
+`orphan_in_progress`. A delivered branch whose review does not let it in yet (review.py, a repo with `review =
+"auto"`) is not ready either: it comes as `review_needed` (launch a reviewer) or `review_findings` (back to its agent,
+or after round 2 a question for the owner). One that no sub-issue names, that the backlog's text does not mention,
+that is not on the remote (as the last fetch left it) and whose content is not in main (cherry-picked or squashed)
+is `loose_branches`.
 
 Everything here only reads, except the markers that keep a notice from repeating, the `loop` heartbeat and the
 pass's line in `<state>/loop.jsonl` (the history of the passes `foreman catchup` reads).
@@ -52,6 +55,7 @@ from . import (
     notes,
     orchestrator,
     pause,
+    review,
     util,
     worktree,
 )
@@ -753,14 +757,17 @@ def ready_branches(
     heads: Mapping[str, str],
     ids: Mapping[str, Identity],
     kind: str = "code",
+    held: list[tuple[str, str, str, review.State]] | None = None,
 ) -> list[tuple[str, str, str]]:
     """The worktrees ready to integrate, [(repo, branch, worktree path)]: a branch the backlog names (`b`, its loaded
     `data`) whose worktree (`wts`, worktree.all_worktrees) no live agent (`live`, with `heads` and `ids` as in
     notices_for_pass) has, by its recorded branch, by the agent the sub-issue names, or by its brief citing the
     worktree's path, and whose `delivery.branch_kind` is KIND: "code" (to integrate) or "measure" (measurements to
     close with `integrate --measure`); a branch whose sub-issues are all closed without a commit ("closed") is in
-    neither. The one rule of the pass's `ready_to_integrate` and `measure_delivered` and the orchestrator's band
-    (band.py)."""
+    neither. A code branch whose review does not let it in yet (review.state: a repo with `review = "auto"`, the
+    branch needs a review and has none clean on its tip) is not ready either: it goes to HELD, when given, with its
+    state (the pass's `review_needed` and `review_findings`). The one rule of the pass's `ready_to_integrate` and
+    `measure_delivered` and the orchestrator's band (band.py)."""
     live_names = {i["name"] for i in ids.values()} - {None}
     live_branches = {h["branch"] for h in live if h.get("branch")}  # recorded at launch or by hand
     guessed = [h for h in live if not ids[h["id"]]["registered"]]  # no recorded identity: the fallbacks apply
@@ -779,8 +786,26 @@ def ready_branches(
             continue  # a live agent with no recorded identity names its worktree
         if delivery.branch_kind(b.project, br, data) != kind:
             continue
+        if kind == "code":
+            st = review_state(b.project, repo, br, agent_of.get(br))
+            if st is not None and not st.passes:
+                if held is not None:
+                    held.append((repo, br, path, st))
+                continue
         out.append((repo, br, path))
     return out
+
+
+def review_state(project: Project, repo: str, br: str, agent: str | None) -> review.State | None:
+    """review.state of a delivered branch (its outcome from its delivery); None when the repo's review is off or
+    git cannot tell (then `integrate` says it)."""
+    tab = project.repo(repo)
+    if review.mode(tab) != "auto":
+        return None
+    try:
+        return review.state(project, tab, br, delivery.outcome_of(project, branch=br, name=agent))
+    except RuntimeError:
+        return None
 
 
 def unworktreed_branches(project: Project) -> list[tuple[str, str]]:
@@ -929,6 +954,159 @@ def no_worktree_line(
     return f"{repo}:{br} ({'; '.join(parts)})"
 
 
+def review_target(data: Data, b: Backlog, br: str) -> tuple[str, str]:
+    """(issue, sub-issue) of the open sub-issue that names BR, else of any that does; ("ID", "Tn") when none."""
+    subs = [(i["id"], s) for _, i, _ in b.iter_issues(data) for s in i["subs"] if s.get("branch") == br]
+    subs.sort(key=lambda x: x[1].get("status") in delivery.SUB_CLOSED)
+    return (subs[0][0], subs[0][1]["id"]) if subs else ("ID", "Tn")
+
+
+def agent_entry(project: Project, name: str | None, br: str) -> Agent | None:
+    """The latest agents.json entry (with its `id`) of the agent NAME that made BR (not a reviewer); None without
+    one."""
+    mine = [
+        {"id": aid, **h}
+        for aid, h in agents(project).items()
+        if not h.get("review") and ((name and h.get("name") == name) or h.get("branch") == br)
+    ]
+    return max(mine, key=lambda h: str(h.get("start") or "")) if mine else None
+
+
+def who(h: Mapping[str, Any] | None) -> str:
+    """`name (id 1234abcd)` of an agents.json entry with its `id`."""
+    if not h:
+        return "?"
+    return f"{h.get('name') or h['id'][:8]} (id {h['id'][:8]})"
+
+
+def review_notices(
+    project: Project,
+    b: Backlog,
+    data: Data,
+    held: Sequence[tuple[str, str, str, review.State]],
+    agent_of: Mapping[str, str | None],
+    act: bool,
+) -> list[Notice]:
+    """`review_needed` and `review_findings`: the delivered branches whose review does not let them in yet
+    (ready_branches' HELD), each with its next step. Needed (round 1, or round 2 once the fixes moved the tip):
+    launch a reviewer with `foreman launch NAME --review REPO:BRANCH`, or resume the one of round 1. Findings (round
+    1): send them back to the agent that made the branch (SendMessage), or launch a new one on its worktree (plan B).
+    For the owner (round 2 left H or M open; no third round): a question for the owner (`decision add` with the
+    review as its page), then nothing while it is pending (one notice, not actionable), then what to do with their
+    answer. Not actionable while the product is paused (ACT)."""
+    needed: list[str] = []
+    findings: list[str] = []
+    waiting: list[str] = []
+    keys: dict[str, list[str]] = {"needed": [], "findings": [], "waiting": []}  # the case of each: branch@state
+    everyone = [{"id": aid, **h} for aid, h in agents(project).items()]
+    owner = project.owner
+    for repo, br, _, st in held:
+        ref = f"{repo}:{br}"
+        iid, sid = review_target(data, b, br)
+        name = agent_of.get(br)
+        dev = agent_entry(project, name, br)
+        base = name or (dev or {}).get("name") or re.sub(r"[^\w.-]", "-", br)
+        why = "; ".join(r.text for r in st.reasons)
+        rv = st.review
+        case = f"{ref}@{st.status}" + (f"@{rv.path}" if rv else "")
+        plan_b = (
+            f"`foreman launch {base}-fix --repo {repo} --branch {br} --issue {iid} --sub {sid}` (it reuses the "
+            "branch's worktree), brief: the plan, its report and the review"
+        )
+        if st.status == review.NEEDED or (st.status == review.FIXED and rv):
+            launch = f"`foreman launch {base}-rv{st.round} --review {ref} --issue {iid} --sub {sid}`"
+            keys["needed"].append(case)
+            if st.status == review.FIXED and rv:
+                prev = review.reviewer_of(everyone, repo, br)
+                resume = f"resume the reviewer {who(prev)} with SendMessage, or launch one: " if prev else "launch: "
+                needed.append(
+                    f"{ref} ({iid} {sid}; round {st.round}: the fixes are in, {rv.path} left {rv.counts()} open): "
+                    f"{resume}{launch}, brief: the previous review, the plan and the report; it checks each finding "
+                    "and only what the fixes changed"
+                )
+            else:
+                again = f"; {rv.path} reviewed another diff" if rv else ""
+                bad = f"; header unreadable: {', '.join(st.problems)}" if st.problems else ""
+                needed.append(
+                    f"{ref} ({iid} {sid}; {why}{again}{bad}; round {st.round}): {launch}, brief: the plan, the "
+                    f"report and «round {st.round}»"
+                )
+        elif st.status == review.FINDINGS and rv:
+            keys["findings"].append(case)
+            back = (
+                f"send it back to {who(dev)} with SendMessage"
+                if dev
+                else "no agent of it is recorded to send it back to"
+            )
+            findings.append(
+                f"{ref}: {rv.counts()} open ({rv.path}, round {rv.round} of {review.MAX_ROUNDS}): {back}: fix or "
+                f"refute each H and M with proof (a test, or the line that disproves it), a «Review, round "
+                f"{rv.round}» section in its report, commit, `foreman progress --done` again; if it cannot be "
+                f"resumed: {plan_b}"
+            )
+        elif st.status == review.OWNER and rv:
+            page = os.path.realpath(project.home / rv.path)
+            asked = [d for d in data["decisions"] if d.get("page") and os.path.realpath(b.page_path(d["page"])) == page]
+            answered = [
+                d
+                for d in data.get("decisions_resolved") or []
+                if d.get("page") and os.path.realpath(b.page_path(d["page"])) == page
+            ]
+            if asked:
+                keys["waiting"].append(f"{case}@{asked[-1]['id']}")
+                waiting.append(f"{ref} waits for {owner}'s answer to {asked[-1]['id']} «{asked[-1].get('title', '')}»")
+            elif answered:
+                d = answered[-1]
+                keys["findings"].append(f"{case}@{d['id']}")
+                findings.append(
+                    f"{ref}: {owner} answered {d['id']}: «{d.get('answer', '')}»: act on it: in as it is, "
+                    f'`foreman integrate {repo} {br} "{iid} {sid}" --approved "{owner}, {d.get("resolved", "")} '
+                    f'({d["id"]})"`; fixed by another agent, {plan_b}, then a review with «Round: '
+                    f"{rv.round + 1}»; dropped, cancel the sub-issue and remove the branch with a note giving its tip"
+                )
+            else:
+                keys["findings"].append(case)
+                findings.append(
+                    f"{ref}: round {rv.round} of {review.MAX_ROUNDS} left {rv.counts()} open ({rv.path}): no third "
+                    f"round: ask {owner} with a question written for them (docs/owner.md), the review as its page: "
+                    f"`foreman backlog decision add --issue {iid} --blocks {sid} --page {rv.path} --title …` with "
+                    "the options in as it is with the problem noted, fixed by another agent then reviewed again, or "
+                    "dropped, each with its --effect; the branch waits for the answer"
+                )
+    out: list[Notice] = []
+    if needed:
+        out.append(
+            notice(
+                "review_needed",
+                act,
+                "Need a review by an agent that did not write them before integrating: "
+                + "; ".join(needed)
+                + ". The review starts with «Branch: REPO:BRANCH», «Tip: SHA», «Round: N», «Open: H n, M n»; the "
+                "reviewer holds the branch while it lives.",
+                "review_needed:" + ";".join(keys["needed"]),
+            )
+        )
+    if findings:
+        out.append(
+            notice(
+                "review_findings",
+                act,
+                "Review findings before integrating: " + "; ".join(findings) + ".",
+                "review_findings:" + ";".join(keys["findings"]),
+            )
+        )
+    if waiting:
+        out.append(
+            notice(
+                "review_findings",
+                False,
+                "Waiting for the owner after round 2: " + "; ".join(waiting) + ".",
+                "review_findings:waiting:" + ";".join(keys["waiting"]),
+            )
+        )
+    return out
+
+
 def branch_notices(
     project: Project, live: Iterable[Agent], heads: Mapping[str, str], ids: Mapping[str, Identity]
 ) -> list[Notice]:
@@ -957,7 +1135,8 @@ def branch_notices(
         if s.get("branch")
     }
     ready: list[str] = []
-    for repo, br, path in ready_branches(b, data, wts, live, heads, ids):
+    withheld: list[tuple[str, str, str, review.State]] = []
+    for repo, br, path in ready_branches(b, data, wts, live, heads, ids, held=withheld):
         ready.append(ready_line(project, data, repo, br, path, agent_of.get(br)))
     # paused: integrate is blocked, so a delivered branch only informs until the owner resumes the product
     act = not pause.since(project)
@@ -970,6 +1149,7 @@ def branch_notices(
                 "ready_to_integrate:" + ";".join(r.split(" (")[0] for r in ready),
             )
         )
+    out += review_notices(project, b, data, withheld, agent_of, act)
     measured = [
         ready_line(project, data, repo, br, path, agent_of.get(br))
         for repo, br, path in ready_branches(b, data, wts, live, heads, ids, kind="measure")
