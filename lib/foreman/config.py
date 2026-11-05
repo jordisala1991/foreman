@@ -92,8 +92,8 @@ REMOVED: dict[tuple[str, str], str] = {
     ("agents", "planner_types"): "only planner agents count as planners",
     ("project", "owner_plain"): "foreman's checks of what the owner reads are always on",
     **{
-        ("backlog", k): "foreman no longer writes text copies of the backlog (the panel and `foreman backlog "
-        "list|show` show it); delete the file it names too"
+        ("backlog", k): "foreman no longer writes text copies of the backlog, seen in the panel or with `foreman "
+        "backlog list|show`; delete the file it names too"
         for k in ("page", "archive_page", "decisions_page", "decisions_section")
     },
 }
