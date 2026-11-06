@@ -317,3 +317,32 @@ class ShareTest(unittest.TestCase):
     def test_workers_are_added_when_the_share_grows(self):
         events = self.run_with(1, lambda events: 3)
         self.assertEqual(sorted({w for e, w in events if e == "send"}), ["w0", "w1"])  # one more, while there is work
+
+
+class OrderTest(unittest.TestCase):
+    """The queue of classes: the ones never timed on this machine first, then the others by their past seconds."""
+
+    def test_the_longest_last_time_starts_first_and_the_run_is_timed(self):
+        from unittest import mock
+
+        tmp = Path(tempfile.mkdtemp(prefix="foreman-order-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        slots = tmp / "slots"
+        slots.mkdir()
+        (slots / selftest.TIMES).write_text(json.dumps({"test_selftest.Probe": 1.0, "test_selftest.Another": 9.0}))
+        names = ["test_selftest.Probe.check_passes", "test_selftest.Another.check_passes"]
+        suite = unittest.TestLoader().loadTestsFromNames([*names, "test_selftest.Survives.check_passes"])
+        sent, send = [], selftest.Worker.send
+
+        def sending(w, key, ids):
+            sent.append(key)
+            send(w, key, ids)
+
+        with mock.patch.dict(os.environ, {selftest.SLOTS_ENV: str(slots)}):
+            with mock.patch.object(selftest.Worker, "send", sending), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(selftest.run_parallel(suite, False, 1, 0.0, static=False), 0)
+            times = selftest.past_seconds()
+        self.assertEqual(sent, ["test_selftest.Survives", "test_selftest.Another", "test_selftest.Probe"])
+        self.assertEqual(sorted(times), ["test_selftest.Another", "test_selftest.Probe", "test_selftest.Survives"])
+        self.assertLess(times["test_selftest.Another"], 9.0)  # this run's seconds replace the last ones
+        self.assertEqual([f.name for f in slots.iterdir()], [selftest.TIMES])

@@ -70,7 +70,9 @@ def fired(marker):
     return sorted(set(marker.read_text().split())) if marker.exists() else []
 
 
-class IntegrateTest(ProjectCase):
+class IntegrateCase(ProjectCase):
+    """Integration through pull requests: three repos with a bare remote each, gh is tests/fake_gh.py."""
+
     toml = TOML
 
     def setUp(self):
@@ -116,6 +118,17 @@ class IntegrateTest(ProjectCase):
 
     def remote_log(self, repo="app"):
         return git(self.tmp / f"{repo}.git", "log", "--format=%P|%s", "main").splitlines()
+
+    def pr_state(self):
+        return json.loads((self.tmp / "ghstate/state.json").read_text())["prs"]["1"]
+
+    def progress(self):
+        f = self.project.state / "progress.jsonl"
+        return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
+
+
+class WorktreeTest(IntegrateCase):
+    """`foreman worktree`: post_create, existing and remote branches, no git hook run."""
 
     def test_worktree_post_create(self):
         wt = self.worktree()
@@ -189,6 +202,20 @@ class IntegrateTest(ProjectCase):
         self.assertEqual(r.returncode, 1)
         self.assertFalse((self.tmp / "wt/app-w7").exists())
         self.assertEqual(git(self.tmp / "app", "rev-parse", "pr3"), sha)
+
+    def test_worktree_runs_no_hook(self):
+        marker = self.tmp / "fired.log"
+        plant_hooks(self.tmp / "app", marker)
+        r = self.cli("worktree", "app", "w1", "ab1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue((self.tmp / "wt/app-w1/made.txt").exists())
+        self.assertEqual(fired(marker), [])
+        git(self.tmp / "wt/app-w1", "checkout", "-q", "-b", "probe")  # the hooks are live: plain git runs them
+        self.assertIn("post-checkout", fired(marker))
+
+
+class IntegrateTest(IntegrateCase):
+    """The pull request path: merge methods, red CI or checks, a main that is not clean, remote branches."""
 
     def test_check_only(self):
         self.worktree()
@@ -278,6 +305,67 @@ class IntegrateTest(ProjectCase):
         self.assertFalse(any(c[:2] == ["pr", "merge"] for c in self.calls()))
         self.assertEqual(self.b.issue(self.b.load(), "AB-1")["status"], "in progress")
 
+    def test_dirty_or_unsynced_main_stops(self):
+        self.worktree()
+        (self.tmp / "app/README.md").write_text("dirty\n")
+        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("must be on a clean main", r.stderr)
+
+    def test_branch_without_main_stops_with_a_remote(self):
+        wt = self.worktree()
+        tip = git(wt, "rev-parse", "HEAD")
+        app = self.tmp / "app"
+        (app / "ops").mkdir()
+        (app / "ops/notes.md").write_text("pass\n")
+        git(app, "add", "-A")
+        git(app, "commit", "-q", "-m", "pass")
+        git(app, "push", "-q", "origin", "main")
+        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("does not contain main and the repo has a remote (origin)", r.stderr)
+        self.assertEqual(git(wt, "rev-parse", "HEAD"), tip)
+        self.assertEqual(git(wt, "status", "--porcelain"), "")
+        self.assertEqual(git(self.tmp / "app.git", "rev-parse", "main"), git(app, "rev-parse", "main"))
+        self.assertFalse(any(c[:2] in (["pr", "create"], ["pr", "merge"]) for c in self.calls()))
+        self.assertNotIn("local-ci-ok", r.stdout)
+
+    def test_integrate_with_a_remote_runs_pre_push_and_no_other_hook(self):
+        self.worktree()
+        marker = self.tmp / "fired.log"
+        # not reference-transaction: a push updates its remote-tracking refs and runs it, as it runs pre-push
+        plant_hooks(self.tmp / "app", marker, (*(h for h in QUIET_HOOKS if h != "reference-transaction"), "pre-push"))
+        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b", "--result", "ok")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(fired(marker), ["pre-push"])  # the push of the branch, and its deletion after the merge
+        self.assertEqual(marker.read_text().split().count("pre-push"), 2)
+
+    def test_remote_branch_deleted_on_merge_is_silent(self):
+        wt = self.worktree()
+        r = self.integrate(
+            "app", "ab1", "AB-1", "--title", "t", "--body", "b", "--result", "ok", env={"FAKE_GH_DELETE_HEAD": "1"}
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("could not delete", r.stdout + r.stderr)
+        self.assertFalse(wt.exists())
+        self.assertEqual(self.b.issue(self.b.load(), "AB-1")["status"], "done")
+
+    def test_remote_branch_that_cannot_be_deleted_warns(self):
+        hook = self.tmp / "app.git/hooks/pre-receive"  # refuses deleting refs, lets the merge through
+        hook.write_text(
+            '#!/bin/sh\nwhile read old new ref; do [ "$new" = 0000000000000000000000000000000000000000 ] '
+            "&& exit 1; done\nexit 0\n"
+        )
+        hook.chmod(0o755)
+        self.worktree()
+        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b", "--result", "ok")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("could not delete origin/ab1", r.stdout)
+
+
+class GateTest(IntegrateCase):
+    """Risky paths, publish_on_merge and the verdict: approval first, or nothing merged."""
+
     def test_risky_path_waits_for_approval_then_merges(self):
         self.worktree(files={"feature.txt": "x\n", "migrations/001.sql": "create table t();\n"})
         r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b")
@@ -308,31 +396,6 @@ class IntegrateTest(ProjectCase):
         r = self.integrate("landing", "land1", "AB-1", "--title", "t", "--body", "b")
         self.assertEqual(r.returncode, 3)
         self.assertIn("merging this repo publishes", r.stderr)
-
-    def test_dirty_or_unsynced_main_stops(self):
-        self.worktree()
-        (self.tmp / "app/README.md").write_text("dirty\n")
-        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b")
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("must be on a clean main", r.stderr)
-
-    def test_branch_without_main_stops_with_a_remote(self):
-        wt = self.worktree()
-        tip = git(wt, "rev-parse", "HEAD")
-        app = self.tmp / "app"
-        (app / "ops").mkdir()
-        (app / "ops/notes.md").write_text("pass\n")
-        git(app, "add", "-A")
-        git(app, "commit", "-q", "-m", "pass")
-        git(app, "push", "-q", "origin", "main")
-        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b")
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("does not contain main and the repo has a remote (origin)", r.stderr)
-        self.assertEqual(git(wt, "rev-parse", "HEAD"), tip)
-        self.assertEqual(git(wt, "status", "--porcelain"), "")
-        self.assertEqual(git(self.tmp / "app.git", "rev-parse", "main"), git(app, "rev-parse", "main"))
-        self.assertFalse(any(c[:2] in (["pr", "create"], ["pr", "merge"]) for c in self.calls()))
-        self.assertNotIn("local-ci-ok", r.stdout)
 
     def assert_nothing_merged(self, wt):
         self.assertFalse(any(c[:2] in (["pr", "create"], ["pr", "merge"]) for c in self.calls()))
@@ -370,47 +433,9 @@ class IntegrateTest(ProjectCase):
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assert_nothing_merged(wt)
 
-    def test_worktree_runs_no_hook(self):
-        marker = self.tmp / "fired.log"
-        plant_hooks(self.tmp / "app", marker)
-        r = self.cli("worktree", "app", "w1", "ab1")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertTrue((self.tmp / "wt/app-w1/made.txt").exists())
-        self.assertEqual(fired(marker), [])
-        git(self.tmp / "wt/app-w1", "checkout", "-q", "-b", "probe")  # the hooks are live: plain git runs them
-        self.assertIn("post-checkout", fired(marker))
 
-    def test_integrate_with_a_remote_runs_pre_push_and_no_other_hook(self):
-        self.worktree()
-        marker = self.tmp / "fired.log"
-        # not reference-transaction: a push updates its remote-tracking refs and runs it, as it runs pre-push
-        plant_hooks(self.tmp / "app", marker, (*(h for h in QUIET_HOOKS if h != "reference-transaction"), "pre-push"))
-        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b", "--result", "ok")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(fired(marker), ["pre-push"])  # the push of the branch, and its deletion after the merge
-        self.assertEqual(marker.read_text().split().count("pre-push"), 2)
-
-    def test_remote_branch_deleted_on_merge_is_silent(self):
-        wt = self.worktree()
-        r = self.integrate(
-            "app", "ab1", "AB-1", "--title", "t", "--body", "b", "--result", "ok", env={"FAKE_GH_DELETE_HEAD": "1"}
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertNotIn("could not delete", r.stdout + r.stderr)
-        self.assertFalse(wt.exists())
-        self.assertEqual(self.b.issue(self.b.load(), "AB-1")["status"], "done")
-
-    def test_remote_branch_that_cannot_be_deleted_warns(self):
-        hook = self.tmp / "app.git/hooks/pre-receive"  # refuses deleting refs, lets the merge through
-        hook.write_text(
-            '#!/bin/sh\nwhile read old new ref; do [ "$new" = 0000000000000000000000000000000000000000 ] '
-            "&& exit 1; done\nexit 0\n"
-        )
-        hook.chmod(0o755)
-        self.worktree()
-        r = self.integrate("app", "ab1", "AB-1", "--title", "t", "--body", "b", "--result", "ok")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("could not delete origin/ab1", r.stdout)
+class PublicRepoTest(IntegrateCase):
+    """A public repo: internal ids and the privacy scan in the summary and the commit messages."""
 
     def test_public_repo_rejects_internal_ids(self):
         self.write_toml(TOML.replace('merge = "squash"', 'merge = "squash"\npublic = true'))
@@ -458,11 +483,14 @@ class IntegrateTest(ProjectCase):
         r = self.integrate("app", "ab1", "AB-1", "--title", "Add it", "--body", "b", "--result", "ok")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    # ---------- local CI runs (--ci, ci_runs, ci_summary) ----------
+
+class CiRunsTest(IntegrateCase):
+    """The local CI runs (--ci, ci_runs, ci_summary) before the pull request."""
 
     CI_LOCAL = (
         'local_ci = "echo run:{ci} >> {tmp}/runs.log && echo out{ci} && test -f feature.txt && test x{ci} != x--bad"'
     )
+
     CI_SUMMARY = "ci_summary = \"sed -n 's/^out/summary of /p'\""
 
     def ci_toml(self, *extra):
@@ -471,9 +499,6 @@ class IntegrateTest(ProjectCase):
     def runs(self):
         f = self.tmp / "runs.log"
         return f.read_text().splitlines() if f.exists() else []
-
-    def pr_state(self):
-        return json.loads((self.tmp / "ghstate/state.json").read_text())["prs"]["1"]
 
     def test_two_ci_runs_in_order_with_their_summary(self):
         self.write_toml(self.ci_toml(self.CI_SUMMARY))
@@ -575,13 +600,23 @@ class IntegrateTest(ProjectCase):
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.project.state / "integrate").exists())
 
-    # ---------- post_merge ----------
+    def test_bad_ci_keys_are_config_errors(self):
+        for bad in (
+            'ci_runs = "--toy"',
+            "ci_runs = []",
+            "ci_runs = [1]",
+            "ci_summary = 3",
+            "post_merge = 3",
+            'post_merge = ["a"]',
+        ):
+            with self.assertRaises(config.ConfigError, msg=bad):
+                self.write_toml(TOML.replace('merge = "squash"', f'merge = "squash"\n{bad}'))
+
+
+class PostMergeTest(IntegrateCase):
+    """post_merge after the pull request is merged."""
 
     POST_OK = 'post_merge = "echo {before}..{head} > {tmp}/post.txt && pwd && echo surface unchanged on {branch}"'
-
-    def progress(self):
-        f = self.project.state / "progress.jsonl"
-        return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
     def test_post_merge_runs_after_the_pr_merge_with_before_and_head(self):
         self.write_toml(TOML.replace('merge = "squash"', 'merge = "squash"\n' + self.POST_OK))
@@ -655,18 +690,6 @@ class IntegrateTest(ProjectCase):
         self.assertEqual(self.calls(), [])
         self.assertTrue(wt.exists())
 
-    def test_bad_ci_keys_are_config_errors(self):
-        for bad in (
-            'ci_runs = "--toy"',
-            "ci_runs = []",
-            "ci_runs = [1]",
-            "ci_summary = 3",
-            "post_merge = 3",
-            'post_merge = ["a"]',
-        ):
-            with self.assertRaises(config.ConfigError, msg=bad):
-                self.write_toml(TOML.replace('merge = "squash"', f'merge = "squash"\n{bad}'))
-
 
 LOCAL_TOML = """
 [project]
@@ -684,7 +707,7 @@ local_ci = "test -f feature.txt && test ! -f MAINFAIL && echo \\"$PWD\\" >> {tmp
 """
 
 
-class LocalIntegrateTest(ProjectCase):
+class LocalIntegrateCase(ProjectCase):
     """A repo without a remote whose home lives inside it (ops/), like foreman's own."""
 
     toml = LOCAL_TOML
@@ -738,6 +761,29 @@ class LocalIntegrateTest(ProjectCase):
     def assert_no_gh(self):
         self.assertFalse((self.tmp / "ghstate/calls.log").exists())
         self.assertEqual(git(self.repo, "remote"), "")
+
+    def main_commits(self, path, text, msg="pass"):
+        """Commits PATH (under the repo) on main, and only it: the fixture leaves ops/backlog.json uncommitted."""
+        f = self.repo / path
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text)
+        git(self.repo, "add", "--", path)
+        git(self.repo, "commit", "-q", "-m", msg, "--", path)
+        return self.head()
+
+    def assert_branch_untouched(self, wt, tip):
+        self.assertEqual(git(wt, "rev-parse", "HEAD"), tip)
+        self.assertEqual(git(wt, "status", "--porcelain"), "")
+        self.assertNotEqual(
+            subprocess.run(
+                ["git", "-C", str(wt), "rev-parse", "-q", "--verify", "MERGE_HEAD"], capture_output=True, check=False
+            ).returncode,
+            0,
+        )
+
+
+class LocalIntegrateTest(LocalIntegrateCase):
+    """Integrating without a remote: the fast-forward, --check, a dirty home, a red CI, approvals."""
 
     def test_fast_forward_green_path(self):
         wt = self.worktree()
@@ -866,24 +912,83 @@ class LocalIntegrateTest(ProjectCase):
         self.assertEqual((self.home / "backlog.json").read_text(), backlog)  # the uncommitted home survives
         self.assertEqual(self.b.issue(self.b.load(), "AB-1")["status"], "in progress")
 
-    def main_commits(self, path, text, msg="pass"):
-        """Commits PATH (under the repo) on main, and only it: the fixture leaves ops/backlog.json uncommitted."""
-        f = self.repo / path
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(text)
-        git(self.repo, "add", "--", path)
-        git(self.repo, "commit", "-q", "-m", msg, "--", path)
-        return self.head()
+    def test_check_says_it_would_merge_and_writes_nothing(self):
+        wt = self.worktree()
+        tip = git(wt, "rev-parse", "HEAD")
+        before = self.main_commits("ops/notes/x.md", "pass\n")
+        status = git(self.repo, "status", "--porcelain")
+        r = self.integrate("app", "ab1", "AB-1", "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("would merge main (1 commit, only under ops/) into ab1: clean", r.stdout)
+        self.assertEqual((self.head(), git(self.repo, "status", "--porcelain")), (before, status))
+        self.assert_branch_untouched(wt, tip)
+        self.assertEqual(self.ci_runs(), [])
 
-    def assert_branch_untouched(self, wt, tip):
-        self.assertEqual(git(wt, "rev-parse", "HEAD"), tip)
-        self.assertEqual(git(wt, "status", "--porcelain"), "")
-        self.assertNotEqual(
-            subprocess.run(
-                ["git", "-C", str(wt), "rev-parse", "-q", "--verify", "MERGE_HEAD"], capture_output=True, check=False
-            ).returncode,
-            0,
-        )
+    def test_approval_gate_exits_3_without_merging(self):
+        self.write_toml(LOCAL_TOML.replace('remote = "none"', 'remote = "none"\nrequire_approval = true'))
+        wt = self.worktree()
+        before = self.head()
+        r = self.integrate("app", "ab1", "AB-1")
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("awaiting the owner's approval", r.stderr)
+        self.assertEqual(self.head(), before)
+        self.assertTrue(wt.exists())
+        self.assert_no_gh()
+        r = self.integrate("app", "ab1", "AB-1", "--approved", "Owner, panel 10:00", "--result", "ok")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.head(), git(self.repo, "log", "-1", "--format=%H"))
+        self.assertEqual(self.b.issue(self.b.load(), "AB-1")["status"], "done")
+
+    def test_bad_verdict_merges_nothing(self):
+        with self.b.mutate() as d:
+            self.b.set_outcome(d, self.b.issue(d, "AB-1"), criterion="the feature works")
+        wt = self.worktree()
+        before = self.head()
+        backlog = (self.home / "backlog.json").read_text()
+        r = self.integrate("app", "ab1", "AB-1", "--result", "ok", "--verdict", "met: it works")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("bad verdict 'met: it works': one of met", r.stderr)
+        self.assertEqual(self.head(), before)
+        self.assertTrue(wt.exists())
+        self.assertIn("ab1", git(self.repo, "branch"))
+        self.assertEqual(self.ci_runs(), [])
+        self.assertEqual((self.home / "backlog.json").read_text(), backlog)
+        self.assertEqual(list((self.home / "notes").glob("*.md")) if (self.home / "notes").exists() else [], [])
+        self.assert_no_gh()
+
+    def test_check_shows_a_numbered_check_section(self):
+        (self.home / "reviews").mkdir(exist_ok=True)
+        for n, heading in enumerate(("## 6. How to check", "## 2 Cómo se comprueba", "## How to check")):
+            (self.home / "reviews/plan.md").write_text(
+                f"# Plan\n\n## 1. Goal\n\nthe goal\n\n{heading}\n\nrun probe {n}\n\n## 7. Risks\n\nnone\n"
+            )
+            with self.b.mutate() as d:
+                self.b.edit(d, "AB-1", plan=["reviews/plan.md"])
+            self.worktree() if n == 0 else None
+            r = self.integrate("app", "ab1", "AB-1", "--check")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            shown = r.stdout.split("what the plan asks to check", 1)[1]
+            self.assertIn(f"run probe {n}", shown, heading)
+            self.assertNotIn("none", shown.split("==", 1)[0], heading)
+            self.assertNotIn("section)", shown.split("==", 1)[0], heading)
+
+    def test_check_touches_nothing(self):
+        wt = self.worktree()
+        before = self.head()
+        status = git(self.repo, "status", "--porcelain")
+        r = self.integrate("app", "ab1", "AB-1", "--check")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("would do: AB-1 T1", r.stdout)
+        self.assertIn("git merge --ff-only ab1", r.stdout)
+        self.assertIn("merge = squash does not apply", r.stdout)
+        self.assertEqual((self.head(), git(self.repo, "status", "--porcelain")), (before, status))
+        self.assertTrue(wt.exists())
+        self.assertEqual(self.ci_runs(), [])
+        self.assert_no_gh()
+
+
+class LocalMainMovedTest(LocalIntegrateCase):
+    """Main moved since the branch: merged in when only the home changed, stops otherwise."""
 
     def test_main_moved_outside_the_home_stops(self):
         wt = self.worktree()
@@ -1013,49 +1118,9 @@ class LocalIntegrateTest(ProjectCase):
         self.assertEqual(self.head(), before)
         self.assertEqual(git(wt, "rev-parse", "HEAD^2"), before)  # the branch keeps the merge, as by hand
 
-    def test_check_says_it_would_merge_and_writes_nothing(self):
-        wt = self.worktree()
-        tip = git(wt, "rev-parse", "HEAD")
-        before = self.main_commits("ops/notes/x.md", "pass\n")
-        status = git(self.repo, "status", "--porcelain")
-        r = self.integrate("app", "ab1", "AB-1", "--check")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("would merge main (1 commit, only under ops/) into ab1: clean", r.stdout)
-        self.assertEqual((self.head(), git(self.repo, "status", "--porcelain")), (before, status))
-        self.assert_branch_untouched(wt, tip)
-        self.assertEqual(self.ci_runs(), [])
 
-    def test_approval_gate_exits_3_without_merging(self):
-        self.write_toml(LOCAL_TOML.replace('remote = "none"', 'remote = "none"\nrequire_approval = true'))
-        wt = self.worktree()
-        before = self.head()
-        r = self.integrate("app", "ab1", "AB-1")
-        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
-        self.assertIn("awaiting the owner's approval", r.stderr)
-        self.assertEqual(self.head(), before)
-        self.assertTrue(wt.exists())
-        self.assert_no_gh()
-        r = self.integrate("app", "ab1", "AB-1", "--approved", "Owner, panel 10:00", "--result", "ok")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.head(), git(self.repo, "log", "-1", "--format=%H"))
-        self.assertEqual(self.b.issue(self.b.load(), "AB-1")["status"], "done")
-
-    def test_bad_verdict_merges_nothing(self):
-        with self.b.mutate() as d:
-            self.b.set_outcome(d, self.b.issue(d, "AB-1"), criterion="the feature works")
-        wt = self.worktree()
-        before = self.head()
-        backlog = (self.home / "backlog.json").read_text()
-        r = self.integrate("app", "ab1", "AB-1", "--result", "ok", "--verdict", "met: it works")
-        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
-        self.assertIn("bad verdict 'met: it works': one of met", r.stderr)
-        self.assertEqual(self.head(), before)
-        self.assertTrue(wt.exists())
-        self.assertIn("ab1", git(self.repo, "branch"))
-        self.assertEqual(self.ci_runs(), [])
-        self.assertEqual((self.home / "backlog.json").read_text(), backlog)
-        self.assertEqual(list((self.home / "notes").glob("*.md")) if (self.home / "notes").exists() else [], [])
-        self.assert_no_gh()
+class LocalReportTest(LocalIntegrateCase):
+    """Where the report of a delivery is found, and when it is missing."""
 
     def test_report_outside_reviews_merges_nothing(self):
         wt = self.worktree()
@@ -1131,35 +1196,9 @@ class LocalIntegrateTest(ProjectCase):
         self.assertTrue(wt.exists())
         self.assertEqual(self.ci_runs(), [])
 
-    def test_check_shows_a_numbered_check_section(self):
-        (self.home / "reviews").mkdir(exist_ok=True)
-        for n, heading in enumerate(("## 6. How to check", "## 2 Cómo se comprueba", "## How to check")):
-            (self.home / "reviews/plan.md").write_text(
-                f"# Plan\n\n## 1. Goal\n\nthe goal\n\n{heading}\n\nrun probe {n}\n\n## 7. Risks\n\nnone\n"
-            )
-            with self.b.mutate() as d:
-                self.b.edit(d, "AB-1", plan=["reviews/plan.md"])
-            self.worktree() if n == 0 else None
-            r = self.integrate("app", "ab1", "AB-1", "--check")
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            shown = r.stdout.split("what the plan asks to check", 1)[1]
-            self.assertIn(f"run probe {n}", shown, heading)
-            self.assertNotIn("none", shown.split("==", 1)[0], heading)
-            self.assertNotIn("section)", shown.split("==", 1)[0], heading)
 
-    def test_check_touches_nothing(self):
-        wt = self.worktree()
-        before = self.head()
-        status = git(self.repo, "status", "--porcelain")
-        r = self.integrate("app", "ab1", "AB-1", "--check")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("would do: AB-1 T1", r.stdout)
-        self.assertIn("git merge --ff-only ab1", r.stdout)
-        self.assertIn("merge = squash does not apply", r.stdout)
-        self.assertEqual((self.head(), git(self.repo, "status", "--porcelain")), (before, status))
-        self.assertTrue(wt.exists())
-        self.assertEqual(self.ci_runs(), [])
-        self.assert_no_gh()
+class LocalCiRunsTest(LocalIntegrateCase):
+    """The CI on main after the fast-forward (ci_runs, main_ci) and post_merge."""
 
     def test_ci_runs_repeat_on_main_after_the_fast_forward(self):
         self.write_toml(
@@ -1346,7 +1385,9 @@ class LocalIntegrateTest(ProjectCase):
         with self.assertRaises(config.ConfigError):
             self.write_toml(LOCAL_TOML.replace('remote = "none"', 'remote = "a b"'))
 
-    # ---------- measurements (--measure) ----------
+
+class LocalMeasureTest(LocalIntegrateCase):
+    """Measurements (--measure): closed without merging."""
 
     def as_measure(self, sid="T1"):
         with self.b.mutate() as d:
@@ -1479,7 +1520,9 @@ class LocalIntegrateTest(ProjectCase):
         r = self.cli("backlog", "sub", "AB-1", "T1", "--status", "done")
         self.assertNotIn("warning", r.stderr)  # merged
 
-    # ---------- a branch that changes the live foreman.toml or guard table ----------
+
+class LivePermissionsTest(LocalIntegrateCase):
+    """A branch that changes the live foreman.toml or guard table."""
 
     PERM_TOML = (
         LOCAL_TOML
@@ -1491,6 +1534,7 @@ patterns = ["make deploy", "make release"]
 guard_table = "tests/guard.tsv"
 """
     )
+
     PERM_TABLE = "deny\tmake deploy\nallow\tgit status\n"
 
     def live_permissions(self):
