@@ -276,9 +276,11 @@ the product pass, in every product:
 
 The folder of each git is the session's, moved by the line's `cd` and `pushd` and its `-C`, plus a `--work-tree` or
 `GIT_WORK_TREE` it is given; also inside `sh -c`, `$(…)` and the other nested commands. A `cd` that may not have run
-(after `;`, `||`, in a subshell) keeps the folder before it too, but `cd DIR && git …` runs only in DIR, also when the
-line cannot name it (`cd "$X" && git merge main` passes; `cd "$X"; git merge main` from the main checkout does not). A
-folder the line cannot name passes unless the line names a main checkout as text. A git alias is read as the command
+or arrived (after `||`, in a subshell, `;` after a folder that does not exist) keeps the folder before it too; `cd DIR
+&& git …` runs only in DIR. A folder the line cannot name (`cd "$X"`, `git -C "$X"`) also keeps the one before, since
+an empty `$X` is the current folder: from the main checkout `git -C "$X" merge main` is refused, from a worktree it
+passes. Write the folder literally. The unknown folder itself counts only when the line names a main checkout as
+text. A git alias is read as the command
 it stands for. Not seen: a git command that writes the `.git` its worktree shares with the main checkout (its writes
 by name are the `git` class, «The reserved files»), a
 branch moved without touching files (`update-ref`, `branch -f`: the copy is then dirty and `foreman integrate` stops),

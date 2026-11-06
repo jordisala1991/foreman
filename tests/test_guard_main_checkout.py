@@ -178,9 +178,9 @@ class FoldersTest(MainCheckoutCase):
         cases = {
             f"cd {wt} && git merge main": "allow",
             f"cd {top} && git merge main": "orchestrator",
-            'cd "$X" && git merge main': "allow",  # if the cd fails, the git does not run (O5)
+            'cd "$X" && git merge main': "orchestrator",  # an empty "$X" is the current folder
             'cd "$X"; git merge main': "orchestrator",  # it may run in the main checkout
-            'git -C "$X" merge main': "allow",  # a folder the line cannot name (O6)
+            'git -C "$X" merge main': "orchestrator",  # a folder the line cannot name keeps the one before
             f'X={top}; git -C "$X" merge main': "orchestrator",  # ... unless the line names the main checkout
             "git -C ~/nowhere merge main": "allow",
             f"(cd {wt}; git merge main)": "orchestrator",  # in a subshell the cd may not have run

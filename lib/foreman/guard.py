@@ -104,10 +104,11 @@ with a `.git` entry, a stat per level, never git) of its live config or guard ta
 [repos.*] paths that exists (a home outside its code repo leaves that repo in), for an agent only (main_checkouts; a
 worktree outside it, one nested in .claude/worktrees and a submodule have their own `.git` file, so they are not
 it). The folder of each git is gitpush.folders' (the event's cwd, the line's cd and pushd with the
-values the line gives them, unknown_chain: a cd the line cannot name followed by && leaves only that unknown folder,
-one followed by || keeps the one before) with its -C applied, plus a --work-tree or GIT_WORK_TREE the line gives;
-also in what the line runs nested (_walk: sh -c, eval, $(…), a pipe or heredoc into a shell, xargs, find -exec; not
-ssh). A folder it cannot name passes unless the line names such a checkout as text (_names_top). What rewrites it
+values the line gives them; a cd that may not have run or arrived, or whose folder the line cannot name, keeps the one
+before) with its -C applied (gitpush.moved: one the line cannot name keeps the one before too), plus a --work-tree or
+GIT_WORK_TREE the line gives; also in what the line runs nested (_walk: sh -c, eval, $(…), a pipe or heredoc into a
+shell, xargs, find -exec; not ssh). Only a folder it cannot name passes unless the line names such a checkout as text
+(_names_top). What rewrites it
 (_git_rewrites): merge, pull, rebase, cherry-pick, revert, am, switch, clean, filter-branch and checkout-index
 always; bisect but log|view|visualize; read-tree -u|--reset; sparse-checkout but list; submodule update; apply but
 --check|--stat|--numstat|--summary|--cached; reset --hard|--merge|--keep; stash with no subcommand, push without
@@ -118,7 +119,7 @@ lies under the folder of its literal start; a `:` pathspec): checkout -- PATHS (
 --staged alone), rm (but --cached), mv (sources and destination), stash push -- PATHS. Everything else passes:
 reading (log, diff, show, status, stash list|show…), commit (a commit on main in a main checkout is not seen: the
 projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset (the index only). A git
-alias is read in that folder's config (and the line's -c): to a git command, as that command; `!`, as a shell
+alias is read in that folder's config (and the line's -c; gitpush.aliased): to a git command, as that command; `!`, as a shell
 command from the same folder; a subcommand the line computes (`git $C`) rewrites. A line the lexer cannot read is
 refused when it has `git [options] SUB` with SUB one of those (GIT_REWRITE_TEXT) and names such a checkout or runs
 in one. A failure of the rule refuses only a line that has such a `git SUB` and names such a
@@ -441,7 +442,8 @@ def _deny(
     info = [runs(w) for w in words_of]
     here = gitpush.folders(segs, words_of, info, at[1]) if at else []
     heads = gitpush.branches(segs, words_of, info, here) if at else []
-    before = gitpush.changes(words_of, info, at[2]) if at else []
+    before = gitpush.changes(words_of, info, at[2], segs, here) if at else []
+    fn = gitpush.called(segs, words_of, info, cmd) if at and lx.redefines else {}
 
     def sub(k: int, more: bool = False) -> At | None:  # what a command nested in segment k starts in
         if not at:
@@ -527,8 +529,9 @@ def _deny(
         if at and prog is not None and prog.literal and PurePath(prog.value).name == "git":
             try:
                 shells: list[tuple[str, frozenset[str], gitpush.Changes]] = []
-                for t, d in at[0].resolve(w, r.prog, here[k], heads[k], before[k], shells):
-                    resolved.setdefault(t, d)
+                for v in gitpush.variants(w, r.prog, fn.get(k)):
+                    for t, d in at[0].resolve(v, r.prog, here[k], heads[k], before[k], shells):
+                        resolved.setdefault(t, d)
                 nested += [(c, False, False, "", (at[0], dirs, ch)) for c, dirs, ch in shells]  # `!` aliases
             except Exception as e:  # a push it cannot resolve is never let through: check() denies
                 raise gitpush.Failed(type(e).__name__) from e
@@ -1106,7 +1109,6 @@ def _walk(
     depth: int,
     visit: Visit,
     unparsed: Any,
-    unknown_chain: bool = False,
 ) -> None:
     """Calls visit with every line the command runs, from the folders each segment may run in (the line's cd and
     pushd, gitpush.folders, with the values the line gives its variables): the command itself, then what is nested
@@ -1119,7 +1121,7 @@ def _walk(
     env = dict(env)
     _assigned(words_of, info, env)
     known = _cd_known(words_of, info, env)
-    here = gitpush.folders(segs, known, info, start, exists=False, unknown_chain=unknown_chain)
+    here = gitpush.folders(segs, known, info, start, exists=False)
     visit(cmd, segs, words_of, info, here, env)
     nested: list[tuple[str, frozenset[str]]] = [(c, start) for c in lx.body_subs]
     printers = {k for k, w in enumerate(words_of) if printer(w)}
@@ -1139,7 +1141,7 @@ def _walk(
                     nested.append((" ".join(str(x.value) for x in fw[info[f].prog + 1 :]), here[k]))
     for text, dirs in nested:
         try:
-            _walk(text, dirs, env, depth + 1, visit, unparsed, unknown_chain)
+            _walk(text, dirs, env, depth + 1, visit, unparsed)
         except Unparsed:
             unparsed(text)
 
@@ -1510,9 +1512,7 @@ def _main_checkout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
             sub = str(t.value) if t.literal else None
             if sub is not None and sub in gitpush.BUILTINS and sub not in GIT_REWRITES:
                 return None  # it reads, or changes no file of the copy
-            here = set(dirs)
-            for d in c.dirs:
-                here = {gitpush.UNKNOWN if d is None else gitpush._join(x, d, exists=False) for x in here}
+            here = gitpush.moved(dirs, c.dirs, exists=False)
             trees: list[str | None] = list(env.get("GIT_WORK_TREE", []))
             for k in range(prog + 1, c.sub):
                 v = str(w[k].value) if w[k].literal else None
@@ -1523,7 +1523,7 @@ def _main_checkout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
                 elif v is None and w[k].raw.lstrip("\"'").startswith("--work-tree"):
                     trees.append(None)
             for wt in trees:  # the work tree it is given, besides the folder (whose repo it still changes)
-                here |= {gitpush.UNKNOWN if wt is None else gitpush._join(x, wt, exists=False) for x in set(here)}
+                here |= gitpush.moved(here, [wt], exists=False)
             all_tops = tops()
             if not all_tops:
                 return None
@@ -1545,38 +1545,25 @@ def _main_checkout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
                 return _git_hit(t.raw, top, part)
             if sub not in gitpush.BUILTINS:  # an alias (with the config of that folder and the line's -c)
                 repo = gitpush.read_repo(folder or top[0])
-                cfg = gitpush.overlay(repo.config if repo else {}, c.changes.config)
-                seen: set[str] = set()
-                while sub not in gitpush.BUILTINS:
-                    value = (cfg.get(f"alias.{sub.lower()}") or [None])[-1]
-                    if value is None or sub.lower() in seen:
-                        return None  # no such command: git refuses it
-                    seen.add(sub.lower())
-                    if value.startswith("!"):  # a shell command, from the same folder
-                        inner = " ".join([value[1:], *(x.raw for x in args)])
-                        _walk(inner, frozenset({folder or gitpush.UNKNOWN}), env, 1, visit, unparsed, True)
-                        return found[0] if found else None
-                    try:
-                        parts = shlex.split(value)
-                    except ValueError:
-                        return None
-                    if not parts:
-                        return None
-                    sub, args = parts[0], [gitpush._tok(x) for x in parts[1:]] + list(args)
-                if sub not in GIT_REWRITES:
-                    return None
+                for cfg in gitpush.overlay(repo.config if repo else {}, c.changes.config):
+                    ex = gitpush.aliased(w[prog:], gitpush.Repo(None, None, cfg))
+                    if isinstance(ex, str):  # a shell command, from the same folder
+                        _walk(ex, frozenset({folder or gitpush.UNKNOWN}), env, 1, visit, unparsed)
+                    elif ex is not None:  # a git command, or one the line computes, from the same folders
+                        found.extend(h for h in [one(ex, 0, dirs, env, line)] if h)
+                return found[0] if found else None
             got = _git_rewrites(sub, args, folder)
             if got is True or (isinstance(got, list) and any(_reaches(x, folder, _fold(top[0]), top[2]) for x in got)):
                 return _git_hit(sub, top, part)
             return None
 
         def visit(line: str, segs: Any, words_of: Any, info: Any, here: Any, env: dict[str, list[str]]) -> None:
+            fn = gitpush.called(segs, words_of, info, line) if any(s.sep == "(" for s in segs) else {}
             for k, w in enumerate(words_of):
-                if found:
-                    return
-                hit = one(w, info[k].prog, here[k], env, line)
-                if hit is not None:
-                    found.append(hit)
+                for v in gitpush.variants(w, info[k].prog, fn.get(k)):
+                    hit = None if found else one(v, info[k].prog, here[k], env, line)
+                    if hit is not None:
+                        found.append(hit)
 
         def unparsed(text: str) -> None:  # a text the lexer cannot read: git and a checkout it names, as text
             if found or not GIT_REWRITE_TEXT.search(text):
@@ -1589,7 +1576,7 @@ def _main_checkout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
                 found.append(_git_hit("?", tops()[key], text))
 
         try:
-            _walk(cmd, frozenset({cwd}), {"HOME": [str(Path.home())]}, 0, visit, unparsed, True)
+            _walk(cmd, frozenset({cwd}), {"HOME": [str(Path.home())]}, 0, visit, unparsed)
         except Unparsed:
             unparsed(cmd)
         return found[0] if found else None
