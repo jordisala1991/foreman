@@ -74,8 +74,9 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
 - Report in `reviews/YYYY-MM-DD-<task>.md`: what changes, how it was checked, figures, whether it meets the issue's
   acceptance criterion, what fails or is missing, and every abandoned run with its reason. When the change touches
   code: the total coverage and that of the touched modules (`bin/foreman selftest --coverage`). No report, not delivered.
-  It stays technical (the orchestrator and the next agent read it); a question in it for the owner follows
-  docs/owner.md.
+  It stays technical (the orchestrator and the next agent read it). You never add a question for the owner
+  yourself (`foreman backlog decision add`): propose it in the report, written as docs/owner.md says, and the
+  orchestrator decides whether it goes to the owner, is decided by the orchestrator or is made and told.
 - **What misled you**, in the report, at the start of a line: `Misled: <where>: <what> (<cost>)`, one line per thing
   in what you were given that was wrong, stale or unclear and cost you time; `<where>` is one of `brief`, `plan`,
   `issue`, `rules` (the project's), `procedure` (this page or your agent type's definition), `docs`, `foreman` (a

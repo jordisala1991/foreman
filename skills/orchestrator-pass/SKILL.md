@@ -63,8 +63,9 @@ project's rules win. Whatever you tell the owner (chat, decisions, inbox replies
      yourself; if you think one is wrong, say so in the message: the agent refutes it with proof and the reviewer
      judges it in round 2. If it cannot be resumed (another session, an agent of another day), the plan B command
      the line gives: a new agent on the branch's worktree, brief: the plan, its report and the review. After round
-     2 with H or M open there is no third round: ask the owner with the command the line gives (`--page` the review:
-     that is how the pass finds the question), written as `foreman docs owner` says, each option with its effect;
+     2 with H or M open there is no third round: ask the owner with the command the line gives (`--page` a page
+     written for the question that links the review on its last line: that is how the pass finds the question),
+     written as `foreman docs owner` says, each option with its effect;
      while it is pending the line only informs. With their answer, do what the line says (in as it is with
      `--approved`, another agent and a round 3, or dropped).
    - *Measurements delivered (nothing to merge)* (`measure_delivered`): the branch only brought a report (its

@@ -194,7 +194,9 @@ USAGE = """\
                                      day to remind them. --page: a .md under the reviews or notes folders
                                      (screenshots, tables) that explains the question. Warnings on stderr, never
                                      blocking: an option without --effect, two questions in one, a reminder date
-                                     in the past, a page that is missing or larger than 400 KB
+                                     in the past, a page that is missing, larger than 400 KB or not written
+                                     for the question (over 60 lines, another question's page, a report or a
+                                     plan, or names left unexplained: docs/owner.md «Question page»)
   decision blocks ID REF ... | decision blocks ID --none [--issue ISSUE]
                                      change what a pending decision holds (REF as in --blocks)
   decision list [--json]             the pending decisions in the order to go through them with the owner: those
@@ -744,7 +746,10 @@ def run(project: Project, args: argparse.Namespace) -> int:
                         )
                     )
                     holding = data["decisions"][-1].get("blocks", [])
-                    advice = [f"{data['decisions'][-1]['id']}: {w}" for w in b.decision_warnings(data["decisions"][-1])]
+                    advice = [
+                        f"{data['decisions'][-1]['id']}: {w}"
+                        for w in b.decision_warnings(data["decisions"][-1], data=data)
+                    ]
                 elif args.action == "blocks":
                     if not args.id or bool(args.refs) == args.none:
                         raise BacklogError("decision blocks needs the decision id and either references or --none")

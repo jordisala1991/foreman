@@ -61,7 +61,7 @@ from . import (
     worktree,
 )
 from . import backlog as backlog_mod
-from .backlog import Backlog, BacklogError, Data, Holds, Issue
+from .backlog import Backlog, BacklogError, Data, Holds, Issue, Record
 from .notices import Notice, changed_mark, notice, render, run_checks
 from .notices import idle as nothing_actionable
 
@@ -980,6 +980,21 @@ def who(h: Mapping[str, Any] | None) -> str:
     return f"{h.get('name') or h['id'][:8]} (id {h['id'][:8]})"
 
 
+def asks_about(b: Backlog, d: Record, review_file: Path) -> bool:
+    """Whether decision `d` is the owner's question about the review `review_file`: its page is a page that names
+    the review's file (the question page links it, docs/owner.md) or, as questions asked before, the review itself."""
+    page = d.get("page")
+    if not page:
+        return False
+    f = b.page_path(page)
+    if os.path.realpath(f) == os.path.realpath(review_file):
+        return True
+    try:
+        return review_file.name in f.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
 def review_notices(
     project: Project,
     b: Backlog,
@@ -992,9 +1007,9 @@ def review_notices(
     (ready_branches' HELD), each with its next step. Needed (round 1, or round 2 once the fixes moved the tip):
     launch a reviewer with `foreman launch NAME --review REPO:BRANCH`, or resume the one of round 1. Findings (round
     1): send them back to the agent that made the branch (SendMessage), or launch a new one on its worktree (plan B).
-    For the owner (round 2 left H or M open; no third round): a question for the owner (`decision add` with the
-    review as its page), then nothing while it is pending (one notice, not actionable), then what to do with their
-    answer. Not actionable while the product is paused (ACT)."""
+    For the owner (round 2 left H or M open; no third round): a question for the owner (`decision add` with a page
+    written for it that links the review, `asks_about`), then nothing while it is pending (one notice, not
+    actionable), then what to do with their answer. Not actionable while the product is paused (ACT)."""
     needed: list[str] = []
     findings: list[str] = []
     waiting: list[str] = []
@@ -1051,13 +1066,8 @@ def review_notices(
                 f"resumed: {plan_b}"
             )
         elif st.status == review.OWNER and rv:
-            page = os.path.realpath(project.home / rv.path)
-            asked = [d for d in data["decisions"] if d.get("page") and os.path.realpath(b.page_path(d["page"])) == page]
-            answered = [
-                d
-                for d in data.get("decisions_resolved") or []
-                if d.get("page") and os.path.realpath(b.page_path(d["page"])) == page
-            ]
+            asked = [d for d in data["decisions"] if asks_about(b, d, project.home / rv.path)]
+            answered = [d for d in data.get("decisions_resolved") or [] if asks_about(b, d, project.home / rv.path)]
             if asked:
                 keys["waiting"].append(f"{case}@{asked[-1]['id']}")
                 waiting.append(f"{ref} waits for {owner}'s answer to {asked[-1]['id']} «{asked[-1].get('title', '')}»")
@@ -1074,8 +1084,9 @@ def review_notices(
                 keys["findings"].append(case)
                 findings.append(
                     f"{ref}: round {rv.round} of {review.MAX_ROUNDS} left {rv.counts()} open ({rv.path}): no third "
-                    f"round: ask {owner} with a question written for them (docs/owner.md), the review as its page: "
-                    f"`foreman backlog decision add --issue {iid} --blocks {sid} --page {rv.path} --title …` with "
+                    f"round: ask {owner} with a question written for them, its page written for it (docs/owner.md, "
+                    f"«Question page») and linking the review ({rv.path}) on its last line: "
+                    f"`foreman backlog decision add --issue {iid} --blocks {sid} --page PAGE --title …` with "
                     "the options in as it is with the problem noted, fixed by another agent then reviewed again, or "
                     "dropped, each with its --effect; the branch waits for the answer"
                 )

@@ -153,7 +153,7 @@ class PanelCase(ProjectCase):
         panel_locks.OWNER.__init__()
         self.srv, self.token = panel.make_server("127.0.0.1", 0, token="k3y")
         self.port = self.srv.server_address[1]
-        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        threading.Thread(target=self.srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
 
     def tearDown(self):
         self.srv.shutdown()
