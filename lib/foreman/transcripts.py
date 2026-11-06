@@ -179,6 +179,28 @@ def calls(path: PathLike, since: datetime | None = None, until: datetime | None 
     ]
 
 
+TOKEN_KEYS = ("input", "cache_write", "cache_write_1h", "cache_read", "output")
+
+
+def usage(
+    path: PathLike, since: datetime | None = None, until: datetime | None = None
+) -> tuple[dict[str, dict[str, int]], datetime | None, datetime | None]:
+    """What a transcript spent, from `calls` (one per response id): ({model: {"calls", "input", "cache_write",
+    "cache_write_1h", "cache_read", "output"}}, first time, last time). `cache_write` includes `cache_write_1h`.
+    Responses with no model count under "unknown". ({}, None, None) for a missing file. Never raises."""
+    out: dict[str, dict[str, int]] = {}
+    first = last = None
+    for c in calls(path, since, until):
+        m = out.setdefault(c["model"] or "unknown", dict.fromkeys(("calls", *TOKEN_KEYS), 0))
+        m["calls"] += 1
+        for k in TOKEN_KEYS:
+            m[k] += c[k]
+        if c["ts"] is not None:
+            first = c["ts"] if first is None or c["ts"] < first else first
+            last = c["ts"] if last is None or c["ts"] > last else last
+    return out, first, last
+
+
 def context(call: Call) -> int:
     """The context tokens of one call (see the module's docstring): input + cache read + cache write."""
     return call["input"] + call["cache_read"] + call["cache_write"]
@@ -320,6 +342,16 @@ def last_text(path: PathLike) -> str | None:
     except (OSError, TypeError, ValueError):
         pass
     return None
+
+
+_LIMIT = re.compile(r"hit your [\w -]*?limit\s*·\s*resets ([^\n]+?)\s*$", re.I)
+
+
+def limit_reset(path: PathLike) -> str | None:
+    """«3:30am (Europe/Madrid)»: when the usage limit renews, if a subagent's last text is Claude Code's
+    «You've hit your 5-hour limit · resets 3:30am (Europe/Madrid)» (it stopped there); None otherwise."""
+    m = _LIMIT.search(last_text(path) or "")
+    return m.group(1) if m else None
 
 
 SKIP = ("<", "Caveat:", "[Request interrupted")  # prompts no person typed (notifications, command output)

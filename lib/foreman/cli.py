@@ -101,6 +101,11 @@ agents --misled [--since YYYY-MM-DD] [--type T] [--model M] [--json]
                                    (default: the last `*-review-harness*.md`, else 7 days), with date, agent,
                                    type, model and report; the footer counts the reports with something, `none`
                                    and without the line
+agents --cost [--by issue|sub|type|model|week|day] [--since D] [--until D] [--backfill D] [--json]
+                                   what the agents cost at API list prices, from their transcripts (recorded at
+                                   `progress --done`, or when the pass sees one stopped; --backfill D records the
+                                   agents of the machine since D): runs, rework, minutes, MTok, $, share of tokens
+                                   on Sonnet or Haiku
 init HOME --name NAME [--owner O] [--language en|es] [--repo KEY=PATH]… [--local-ci [KEY=]CMD]… [--slots N]
      [--every-min N] [--sample [--prefix PX]] [--mode active|inactive] [--no-register] [--dry-run]
                                    a new project's home: a minimal foreman.toml, starting rules, notes/, reviews/,
@@ -763,6 +768,21 @@ def build_parser(only: str | None = None) -> argparse.ArgumentParser:
     )
     a.add_argument("--type", dest="agent_type", metavar="T", help="with --misled: only this type of agent")
     a.add_argument("--model", metavar="M", help="with --misled: only the models whose id has M")
+    a.add_argument(
+        "--cost",
+        action="store_true",
+        help="what the agents cost (list prices, from their transcripts), by --by; --since/--until by day; --json",
+    )
+    a.add_argument(
+        "--by",
+        choices=("issue", "sub", "type", "model", "week", "day"),
+        default="issue",
+        help="with --cost: group by (default issue)",
+    )
+    a.add_argument("--until", metavar="YYYY-MM-DD", help="with --cost: before this day")
+    a.add_argument(
+        "--backfill", metavar="YYYY-MM-DD", help="with --cost: first record the agents of the machine since this day"
+    )
     a = sp.add_parser("check", help="validate foreman.toml, the backlog and the guard table")
     a.add_argument(
         "--run-checks",
@@ -1005,7 +1025,26 @@ def cmd_progress(p: Project, args: argparse.Namespace) -> int:
         agent_type=agent_type,
         model=model,
     )
+    if args.done:
+        from . import costs
+
+        costs.record(p, aid, who, args.outcome or "ok")
     plain.warn(p, "progress line", " ".join(args.text))  # the owner reads it (docs/owner.md): never blocks
+    return 0
+
+
+def agents_cost(p: Project, args: argparse.Namespace) -> int:
+    from . import costs
+
+    for flag in ("since", "until", "backfill"):
+        v = getattr(args, flag)
+        if v and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            print(f"foreman agents: --{flag} {v}: a day as YYYY-MM-DD", file=sys.stderr)
+            return 2
+    if args.backfill:
+        print(f"recorded {costs.backfill(p, args.backfill)} agents since {args.backfill}", file=sys.stderr)
+    res = costs.rows(p, args.by, args.since, args.until)
+    print(json.dumps(res, ensure_ascii=False, indent=1) if args.json else costs.text(res))
     return 0
 
 
@@ -1189,8 +1228,13 @@ def cmd_agents(p: Project, args: argparse.Namespace) -> int:
         res = delivery.misled(p, since=args.since, type_=args.agent_type, model=args.model)
         print(json.dumps(res, ensure_ascii=False, indent=1) if args.json else delivery.misled_text(res))
         return 0
-    if args.since or args.agent_type or args.model:
-        print("foreman agents: --since, --type and --model go with --misled", file=sys.stderr)
+    if args.cost:
+        return agents_cost(p, args)
+    if args.since or args.agent_type or args.model or args.until or args.backfill:
+        print(
+            "foreman agents: --since, --type and --model go with --misled; --until, --by and --backfill with --cost",
+            file=sys.stderr,
+        )
         return 2
     if args.stop:
         hits = loop.stop_agent(p, args.stop)

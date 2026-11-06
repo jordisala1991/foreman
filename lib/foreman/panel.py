@@ -58,7 +58,9 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import (
     config,
+    costs,
     heartbeat,
+    hooks_mod,
     i18n,
     identity,
     install,
@@ -475,6 +477,8 @@ def project_state(project: Project, lock_list: list[Status]) -> Obj:
     live_branches = {a["branch"] for a in agent_list if a["branch"] and not a["end"]}
     repos = [repo_view(project, k, live_branches) for k in project.repos]
     live = issue_live(bl, agent_list, {b["branch"] for r in repos for b in r["branches"]})
+    for iid, line in costs.by_issue(project).items():
+        live.setdefault(iid, {})["cost"] = line
     worktree_of = {b["branch"]: b["worktree"] for r in repos for b in r["branches"] if b.get("worktree")}
     for a in agent_list:
         wt = worktree_of.get(a["branch"])
@@ -996,6 +1000,7 @@ class Handler(BaseHTTPRequestHandler):
                     "projects": overview(lock_list),
                     "locks": lock_list,
                     "mac": mac_stats(),
+                    "quota": hooks_mod.quota(REG.projects.values()),
                     "errors": REG.errors,
                     "language": REG.language(),
                     "version": page_version(),

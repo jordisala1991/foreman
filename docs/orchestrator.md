@@ -94,6 +94,7 @@ they disagree.
    | `wip_production` | yes if production < slots and a launchable ready issue is there (unblocked, and not held by a pending decision; the text names what waits for which decision); no while the session waits for its renewal (`context_rotate`) |
    | `wip_ready` | yes if ready < target, an unblocked backlog/refining issue can be planned and no planner is live; with only triage, no |
    | `dead_agents`, `stalled_agents` | yes (`dead_agents`: a live agent whose session's heartbeat is gone or missing, or that this session's `$.agent.list()` reports failed or killed; `stalled_agents` adds its status there, as `idle`) |
+   | `quota_high`, `quota_limit` | yes. `quota_high`: a usage-limit window of the Claude account (5 h or 7 days, Claude Code's own figure from the hooks module's last measure, not an estimate) is at 80 % or more: pause what can wait; `quota_limit`: live agents whose last text is the «hit your … limit · resets …» message, with the renewal time: resume them after it. Nothing when usage is low |
    | `delivery_incomplete` | yes: a production agent the delivery check let stop after 2 tries with something still missing (commits, report, `progress --done`); until it is resumed or delivers complete |
    | `orchestrator_only_denied` | yes, once per refusal: an agent, another session or another Claude Code process of yours (a copy started with `--resume`) tried a command of a `[deny.grants]` group and the guard refused it (`<state>/approved.jsonl`) |
    | `nameless_agents` | live production agents with no name by any path (no launch line, not named by hand): yes once per set, then no |
@@ -284,7 +285,9 @@ they disagree.
      time an agent stops to wait for a background task of its own (that one is `waiting`, and still live for 3 h at
      most). When you stop one: `foreman agents --stop NAME`. What misled the agents: `foreman agents --misled
      [--since D] [--type T] [--model M]`, the reports' `Misled:` lines with date, agent, type and model (from the
-     delivery that named the report), and a footer counting the reports with something, `none` and without the line.
+     delivery that named the report), and a footer counting the reports with something, `none` and without the line. What they cost: `foreman agents --cost [--by issue|sub|type|model|week|day] [--since D]
+     [--json]` (runs, rework, minutes, MTok, $ at API list prices, share of tokens on Sonnet or Haiku), kept in
+     `costs.jsonl` beside the backlog from the agents' transcripts (lib/foreman/costs.py).
    - **The delivery check**: when a production agent with a launch line and a branch stops, the agents hook
      checks its delivery from local files and git: a `progress --done` recorded, commits on its branch beyond main,
      and the report under `[ids] report_prefixes` in its branch (with the home outside the repo: written in the home

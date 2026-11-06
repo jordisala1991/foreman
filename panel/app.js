@@ -452,6 +452,7 @@ function renderChips(d){
     ...d.locks.map(l => chip('', `${esc(lockName(l.name))} <b>${esc(holder(l) || t('lock_free_lc'))}</b>`, 'now')),
     chip(alive.some(a => a.status==='maybe stuck') ? 'bad' : '', `${t('chip_agents')} <b>${alive.length}</b>`, 'work'),
     prs.some(r => r.prs.length) ? chip(prs.some(r => r.prs.some(x => x.checks.fail)) ? 'bad' : '', `${t('chip_prs')} <b>${prs.reduce((n, r) => n + r.prs.length, 0)}</b>`, 'work') : '',
+    ...((OVER || {}).quota || []).map(q => chip(q.percent_used>=95?'bad':q.percent_used>=80?'warn':'', `${t(q.kind==='five_hour'?'chip_quota5':'chip_quota7')} <b>${Math.round(q.percent_used)} %</b>`, 'system')),
     chip(memU>=80?'bad':memU>=65?'warn':'', `${t('chip_memory')} <b>${memU ?? '?'} %</b>`, 'system'),
     chip(mm.disk_free_gb<50?'bad':mm.disk_free_gb<100?'warn':'', `${t('chip_disk')} <b>${mm.disk_free_gb ?? '?'} GB</b>`, 'system'),
   ].join('');
@@ -1026,6 +1027,7 @@ const VIEWS = {
         [t('priority'), isActive(c) ? t('rank', {k: k+1, n: sib.length, epic: esc(ekey(c.epic))}) : `<span class="muted">${c.lane==='done' ? t('done_lc') : c.lane==='archive' ? t('archived_lc') : esc(laneName(c.lane).toLowerCase())}</span>`],
         [t('agent'), c.agent ? `${dot(scol(c.agent_status))}${agentLink(c.agent)}${c.agent_status ? ` · ${esc(sname(c.agent_status))}` : ''}` : c.no_agent ? `<span class="bad">${t('no_agent_nor_branch')}</span>` : ''],
         [t('branch'), c.branch ? branchLink(c.branch) : ''],
+        [t('cost'), c.cost ? esc(c.cost) : ''],
         [t('blocked_by'), c.blocked ? `${BLOCK_ICON()} ${storyLinks(c.blocked)}` : ''],
         [t('blocks'), by.concat((rel.blocks || []).map(id => BL.find(x => x.id===id && x.p===c.p) || {id, title: ''}).filter(x => !by.includes(x))).map(x => `<div>${storyLink(x.id)} ${esc(x.title)}</div>`).join('')],
         (rel.blocked_by || []).length && [t('blocked_by_issues'), rel.blocked_by.map(id => relLink(id, (c.blocked_rel || []).includes(id))).join('')],
