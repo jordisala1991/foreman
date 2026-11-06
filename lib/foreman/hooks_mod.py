@@ -304,13 +304,7 @@ def measure(ev: Event) -> dict[str, Any]:
     util.write_json(f, rec)
     out: dict[str, Any] = {"stored": True}
     out.update(renew_measured(project, ev.get("session"), rec["tokens"]))
-    cut = time.time() - MEASURE_DAYS * 86400
-    for old in f.parent.glob("*.json"):
-        try:
-            if old != f and old.stat().st_mtime < cut:
-                old.unlink()
-        except OSError:
-            pass
+    util.prune_older(f.parent, "*.json", MEASURE_DAYS, keep=f)
     return out
 
 

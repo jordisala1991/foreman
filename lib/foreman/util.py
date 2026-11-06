@@ -2,6 +2,10 @@
 atomic writes, local ISO times, process ids and git.
 
 - `read_json(path, default)`: the parsed file, or `default` if it is missing or not JSON.
+- `read_jsonl(path, tail=None, numbered=False)`: the JSON objects (dicts) of the readable lines of a line file, the
+  last `tail` lines only when given; [] if it is missing. With `numbered`, (line number, object) pairs.
+- `prune_older(folder, pattern, days, keep=None)`: deletes the files of `folder` matching `pattern` whose mtime is
+  more than `days` old (not `keep`; `now`, epoch seconds, replaces the clock); what cannot be read or deleted is left.
 - `write_text_atomic(path, text)`: writes only if the content changes (temporary file in the same folder, fsync,
   rename; keeps the file's permissions); True if it wrote.
 - `write_json(path, obj)`: `obj` as indented UTF-8 JSON through write_text_atomic.
@@ -29,6 +33,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
@@ -61,6 +66,43 @@ def read_json(path: PathLike, default: Any) -> Any:
             return json.load(f)
     except (OSError, ValueError):
         return default
+
+
+def read_jsonl(path: PathLike, tail: int | None = None, numbered: bool = False) -> list[Any]:
+    """The dicts of the readable lines of a line file ([] if missing); the last `tail` lines when given. With
+    `numbered`, (line number, dict) pairs: the number counts every line, readable or not."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return []
+    first = max(len(lines) - tail, 0) if tail is not None else 0
+    out: list[Any] = []
+    for n, ln in enumerate(lines[first:], first + 1):
+        try:
+            d = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(d, dict):
+            out.append((n, d) if numbered else d)
+    return out
+
+
+def prune_older(
+    folder: PathLike, pattern: str, days: float, keep: PathLike | None = None, now: float | None = None
+) -> None:
+    """Deletes the files of `folder` matching `pattern` last changed more than `days` days ago, except `keep`;
+    `now` (epoch seconds) is the clock, default the real one."""
+    cut = (time.time() if now is None else now) - days * 86400
+    try:
+        for f in Path(folder).glob(pattern):
+            try:
+                if f != keep and f.stat().st_mtime < cut:
+                    f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 def write_text_atomic(path: PathLike, text: str) -> bool:

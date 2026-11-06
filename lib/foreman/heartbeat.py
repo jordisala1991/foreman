@@ -122,17 +122,7 @@ def end(project: Project, session: object, now: datetime | None = None) -> bool:
 
 
 def prune(project: Project, now: datetime | None = None) -> None:
-    cut = (now or util.now()).timestamp() - KEEP_DAYS * 86400
-    try:
-        files = list(sessions_dir(project).glob("*.json"))
-    except OSError:
-        return
-    for f in files:
-        try:
-            if f.stat().st_mtime < cut:
-                f.unlink()
-        except OSError:
-            pass
+    util.prune_older(sessions_dir(project), "*.json", KEEP_DAYS, now=(now or util.now()).timestamp())
 
 
 def read(project: Project, session: object) -> Rec | None:
