@@ -76,6 +76,8 @@ FORBIDDEN = frozenset(  # as names, attributes and imported names
     )
 )
 FORBIDDEN_PREFIXES = ("exec", "spawn", "popen", "fork", "posix_spawn")  # execv, spawnl, Popen, forkpty… (any case)
+FRAMES = re.compile(r"(gi|cr|ag|f|tb|co)_")  # attributes of generators, coroutines, frames, tracebacks and code:
+# a frame reaches the builtins and the globals (g.gi_frame.f_builtins)
 STRING_UNITS = ("FSTRING", "TSTRING")  # tokenize names of f-strings (3.12+) and t-strings (3.14+): _START … _END
 FAILS = (SyntaxError, ValueError, MemoryError, RecursionError)
 PATHS = frozenset(("Path", "PurePath", "PosixPath", "PurePosixPath", "WindowsPath", "PureWindowsPath"))
@@ -113,6 +115,8 @@ def program(w: Sequence[Tok], prog: int) -> bool:
 
 def _forbidden(name: str, attr: bool) -> bool:
     """True if a name may not appear; attr: it is an attribute (`re.compile` is not the builtin compile)."""
+    if attr and FRAMES.match(name):
+        return True
     return name in FORBIDDEN or name.lower().startswith(FORBIDDEN_PREFIXES) or (not attr and name in BUILTINS)
 
 
@@ -282,10 +286,10 @@ def writes(tree: ast.AST) -> frozenset[str] | None:
                 name = a.asname or a.name.split(".")[0]
                 names.append(name)
                 imported[name] = f"{node.module}.{a.name}" if isinstance(node, ast.ImportFrom) else a.name
-        elif isinstance(node, (ast.arg, ast.ExceptHandler, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names = [x for x in (getattr(node, "arg", None), getattr(node, "name", None)) if x]
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
             names = list(node.names)
+        elif not isinstance(node, (ast.keyword, ast.alias)):  # an argument, a def, an except or a match pattern
+            names = [x for x in (getattr(node, f, None) for f in ("arg", "name", "rest")) if isinstance(x, str)]
         for n in names:
             binds[n] = binds.get(n, 0) + 1
     known = {n: v for n, v in known.items() if binds.get(n) == len(v)}
