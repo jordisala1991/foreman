@@ -50,7 +50,8 @@ Git aliases. A subcommand that is no git command is looked up in alias.<name> (w
 to `push` (through other aliases too) is resolved as that push; one that starts with `!` is a shell command, compared
 as a command of its own (guard.py, from the same folder; under --git-dir or GIT_DIR, which git hands to it, from an
 unknown folder). A subcommand the line computes (`git $CMD`) counts as a push, except a function's "$@" or $1 when the
-line defines the function and calls it only with a literal first argument (called()). The strings of `ssh HOST` run on another machine and are not resolved.
+line defines the function and calls it only with a literal first argument (called()). The strings of `ssh HOST` run
+on another machine and are not resolved.
 """
 
 from __future__ import annotations

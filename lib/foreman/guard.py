@@ -119,8 +119,9 @@ lies under the folder of its literal start; a `:` pathspec): checkout -- PATHS (
 --staged alone), rm (but --cached), mv (sources and destination), stash push -- PATHS. Everything else passes:
 reading (log, diff, show, status, stash list|show…), commit (a commit on main in a main checkout is not seen: the
 projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset (the index only). A git
-alias is read in that folder's config (and the line's -c; gitpush.aliased): to a git command, as that command; `!`, as a shell
-command from the same folder; a subcommand the line computes (`git $C`) rewrites. A line the lexer cannot read is
+alias is read in that folder's config (and the line's -c; gitpush.aliased): to a git command, as that command; `!`,
+as a shell command from the same folder; a subcommand the line computes (`git $C`) rewrites, but a function's "$@"
+(gitpush.called). A line the lexer cannot read is
 refused when it has `git [options] SUB` with SUB one of those (GIT_REWRITE_TEXT) and names such a checkout or runs
 in one. A failure of the rule refuses only a line that has such a `git SUB` and names such a
 checkout as text. Not seen: a git command that writes the shared .git/config or .git/hooks (`git config`, `git
