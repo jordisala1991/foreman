@@ -33,8 +33,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-# Claude Code version this reader was written against (the `version` of its records); another one still reads, but a
-# caller that cares can say the format was not tested with it.
 if TYPE_CHECKING:
     from .util import PathLike
 
