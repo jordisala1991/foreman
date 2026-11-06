@@ -421,6 +421,38 @@ class LoopNoticesTest(NoticesCase):
             self.assertEqual(d["a1"]["state"], "working")
             self.assertEqual(d["a1"]["identity"]["name"], "zed7")
 
+    def test_quota_high_and_agents_stopped_by_the_limit(self):
+        measure = self.project.state / "measure" / "S9.json"
+        reset = (datetime.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+        def put(five, resets=reset):
+            util.write_json(
+                measure,
+                {
+                    "at": "2026-11-06T10:00:00",
+                    "rate_limits": [{"kind": "five_hour", "percent_used": five, "resets_at": resets}],
+                },
+            )
+
+        put(40)
+        self.assertNotIn("quota_high", self.kinds("S0"))  # low: nothing
+        put(85)
+        self.assertEqual(self.kinds("S0")["quota_high"], [True])
+        put(99, "2020-01-01T00:00:00.000Z")  # a window that already renewed says nothing
+        self.assertNotIn("quota_high", self.kinds("S0"))
+        self.agent("a1", "zed7", session="S0", minutes_ago=1)
+        t = Path(loop.agents(self.project)["a1"]["transcript"])
+        msg = "You've hit your 5-hour limit · resets 1:30pm (Europe/Madrid)"
+        rec = {
+            "type": "assistant",
+            "isSidechain": True,
+            "message": {"role": "assistant", "content": [{"type": "text", "text": msg}]},
+        }
+        t.write_text(json.dumps(rec) + "\n")
+        n = [x for x in self.notices("S0") if x["kind"] == "quota_limit"]
+        self.assertEqual(len(n), 1)
+        self.assertIn("zed7 (resets 1:30pm (Europe/Madrid))", n[0]["text"])
+
     def test_dead_and_stalled_agents(self):
         self.agent("a1", "zed7", session="S0", minutes_ago=1)
         self.assertNotIn("dead_agents", self.kinds("S0"))
