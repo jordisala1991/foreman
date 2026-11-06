@@ -54,6 +54,14 @@ unknown folder; a `!` alias is compared as a command of its own. A line the lexe
 is compared as a push of every branch and tag from the event's folder and every repo of the project. All three lists
 see it (deny(…, at)). A failure of the resolver is a deny. A ctx without the cwd key compares only the text; a table
 run gives each row its @DIR, else the project's home.
+One reading per check (_Check): those texts are read once with the pushes resolved and once without (for the two
+built-in lists), and each list is compared with them (an empty list is not); each line the command runs is read once
+(_read) for those texts and for the rules below (_walk: the command and each line nested in it as sh -c, eval, $(…),
+a heredoc or a pipe into a shell, xargs and find -exec run it, not what ssh runs; each segment with the folders it may
+run in, gitpush.folders from the event's cwd, else the process's, with the values the line gives its variables); the
+registry, who calls and what git says of a folder (the Resolver, shared by the pushes and the main-checkout rule),
+once each. A rule below that fails compares the line's text only (_either): a failure of foreman blocks only what
+that text names.
 What the guard does not see: a script written to a file and run later (or read as code by another program by its
 own convention, a shell's startup file), a forbidden command built inside a program
 (python -c, `os.system("x")` in a heredoc to python, for an anchored pattern; a python program that passes the gate
@@ -92,54 +100,48 @@ to the hooks module's question, like any group; so does `foreman integrate … -
 foreman.toml or guard table that way, integrate.py). The internal group is compared only for a command that names
 them (names_internal).
 
-Three built-in rules for an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups; _agent_only),
-each ("orchestrator", Hit) with why=agent; the orchestrator and the other sessions of the product (the owner's
-chats) pass, and only a caller that _who calls an agent (no process is compared) is checked. INTEGRATE: a segment
-whose program is foreman (shell.foreman_call: bare, a path, `python3 bin/foreman`, --project P, behind the wrappers
-runs() skips) running `integrate`, also nested (sh -c, $(…), a pipe into a shell…; the regex only for a text the
-lexer cannot read), in any folder and any product, but with --help, -h or --check as a word of its own (argparse
-takes no abbreviation; --check stops before anything is written); the text of a note, a commit message, a sed script
-or a heredoc to an interpreter is never such a call.
+Three built-in rules for an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups; _agent_only), each
+("orchestrator", Hit) with why=agent; the orchestrator and the other sessions of the product (the owner's chats) pass,
+and only a caller that _who calls an agent (no process is compared) is checked. INTEGRATE: a segment whose program is
+foreman (shell.foreman_call: bare, a path, `python3 bin/foreman`, --project P, behind the wrappers runs() skips) running
+`integrate` in any line _walk gives (the regex for a text the lexer cannot read), in any folder and any product, but
+with --help, -h or --check as a word of its own (argparse takes no abbreviation; --check stops before anything is
+written); the text of a note, a commit message, a sed script or a heredoc to an interpreter is never such a call.
 MAIN_CHECKOUT: a git that rewrites a main checkout of any product of the registry: the checkout (the nearest folder up
-with a `.git` entry, a stat per level, never git) of its live config or guard table, and that of each of its
-[repos.*] paths that exists (a home outside its code repo leaves that repo in), for an agent only (main_checkouts; a
-worktree outside it, one nested in .claude/worktrees and a submodule have their own `.git` file, so they are not
-it). The folder of each git is gitpush.folders' (the event's cwd, the line's cd and pushd with the
-values the line gives them; a cd that may not have run or arrived, or whose folder the line cannot name, keeps the one
-before) with its -C applied (gitpush.moved: one the line cannot name keeps the one before too), plus a --work-tree or
-GIT_WORK_TREE the line gives; also in what the line runs nested (_walk: sh -c, eval, $(…), a pipe or heredoc into a
-shell, xargs, find -exec; not ssh). Only a folder it cannot name passes unless the line names such a checkout as text
-(_names_top). What rewrites it
-(_git_rewrites): merge, pull, rebase, cherry-pick, revert, am, switch, clean, filter-branch and checkout-index
-always; bisect but log|view|visualize; read-tree -u|--reset; sparse-checkout but list; submodule update; apply but
---check|--stat|--numstat|--summary|--cached; reset --hard|--merge|--keep; stash with no subcommand, push without
-paths, save, pop, apply, branch; checkout of a branch or a commit (-b, -B, --orphan, --detach, -f alone, `X --`, one
-word that is no path in that folder); and, by paths, when one reaches a live file (_reaches: the file, a folder that
-holds it, a .claude folder or settings file of the checkout; a path with a variable or a wildcard, when a live file
-lies under the folder of its literal start; a `:` pathspec): checkout -- PATHS (or TREE PATHS), restore (but
---staged alone), rm (but --cached), mv (sources and destination), stash push -- PATHS. Everything else passes:
-reading (log, diff, show, status, stash list|show…), commit (a commit on main in a main checkout is not seen: the
-projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset (the index only). A git
-alias is read in that folder's config (and the line's -c; gitpush.aliased): to a git command, as that command; `!`,
-as a shell command from the same folder; a subcommand the line computes (`git $C`) rewrites, but a function's "$@"
-(gitpush.called). A line the lexer cannot read is
-refused when it has `git [options] SUB` with SUB one of those (GIT_REWRITE_TEXT) and names such a checkout or runs
-in one. A failure of the rule refuses only a line that has such a `git SUB` and names such a
-checkout as text. Not seen: a git command that writes the shared .git/config or .git/hooks (`git config`, `git
-remote add`; their writes by name are the git class of the reserved files, below), a
-branch moved without touching files (update-ref, branch -f: the copy is then dirty and integrate stops), patch, tar
-or unzip over it, git run by a program or a script, a variable from outside the line.
+with a `.git` entry, a stat per level, never git) of its live config or guard table, and that of each of its [repos.*]
+paths that exists (a home outside its code repo leaves that repo in), for an agent only (main_checkouts; a worktree
+outside it, one nested in .claude/worktrees and a submodule have their own `.git` file, so they are not it). The folder
+of each git, in every line _walk gives, is its segment's with its -C applied (gitpush.moved: one the line cannot name
+keeps the one before), plus a --work-tree or GIT_WORK_TREE the line gives. Only a folder it cannot name passes unless
+the line names such a checkout as text (_names_top). What rewrites it (_git_rewrites): merge, pull, rebase, cherry-pick,
+revert, am, switch, clean, filter-branch and checkout-index always; bisect but log|view|visualize; read-tree -u|--reset;
+sparse-checkout but list; submodule update; apply but --check|--stat|--numstat|--summary|--cached; reset
+--hard|--merge|--keep; stash with no subcommand, push without paths, save, pop, apply, branch; checkout of a branch or a
+commit (-b, -B, --orphan, --detach, -f alone, `X --`, one word that is no path in that folder); and, by paths, when one
+reaches a live file (_reaches: the file, a folder that holds it, a .claude folder or settings file of the checkout; a
+path with a variable or a wildcard, when a live file lies under the folder of its literal start; a `:` pathspec):
+checkout -- PATHS (or TREE PATHS), restore (but --staged alone), rm (but --cached), mv (sources and destination), stash
+push -- PATHS. Everything else passes: reading (log, diff, show, status, stash list|show…), commit (a commit on main in
+a main checkout is not seen: the projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset
+(the index only). A git alias is read in that folder's config (and the line's -c; gitpush.aliased): to a git command, as
+that command; `!`, as a shell command from the same folder; a subcommand the line computes (`git $C`) rewrites, but a
+function's "$@" (gitpush.called). A line the lexer cannot read is refused when it has `git [options] SUB` with SUB one
+of those (GIT_REWRITE_TEXT) and names such a checkout or runs in one. A failure of the rule refuses only a line that has
+such a `git SUB` and names such a checkout as text. Not seen: a git command that writes the shared .git/config or
+.git/hooks (`git config`, `git remote add`; their writes by name are the git class of the reserved files, below), a
+branch moved without touching files (update-ref, branch -f: the copy is then dirty and integrate stops), patch, tar or
+unzip over it, git run by a program or a script, a variable from outside the line.
 HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product of the
 registry that exists: none, and only `foreman holdout` is compared), for an agent holdout_reader refuses (every type
 but a planner's: the ctx's agent_type, else <state>/agents.json; an unknown one is refused). Refused: `foreman
 holdout` as INTEGRATE reads it but with --help or -h; a line that names such a folder as text (`~`, $HOME); a word
-of a segment (also a redirection's file, the value of `--opt=VALUE`, nested lines as _walk gives them) that, expanded
+of a segment (also a redirection's file, the value of `--opt=VALUE`, in every line _walk gives) that, expanded
 and joined to each folder the segment may run in, reaches one (_holdout_reach: the real path in or at the folder; a
 wildcard that may match it, `**` any depth; with a program that walks, _walks: WALKERS or WALK_FLAGS, a folder that
 holds it, and given no existing path, the folder it runs in); a segment that runs inside one. Any other tool: its
 places as `cat PLACE` (so a Read, Write or Edit in it), and a Grep whose path (else the call's cwd) holds one or a
 Glob whose pattern may reach one. Not seen: a path a program builds, a variable from outside the line, a link to a
-folder above walked by a program that follows links. A failure compares the line's text only.
+folder above walked by a program that follows links.
 
 For the resource prefixes quoted strings are dropped (a note that mentions `make up` is not a command); the
 command is split at && || ; | newlines and $(; leading VAR=value, env, time, nice, exec, command, sudo and the
@@ -190,23 +192,20 @@ guard.tsv, projects.toml, settings.json or settings.local.json), never one of th
 git_entries gives no entry): a failure of foreman never stops the agents' writes.
 A Bash command that writes one of them by name gets the same verdict (_bash_file, in check() after the built-in rules
 and PERMISSIONS_APPLY, before [deny] patterns), with hit.bash set and hit.part the command around the name: the files
-shell.writes() reads in the line (redirections, tee, the destination of cp/mv/ln/install/rsync/ditto/scp and the
-sources of mv, sed -i, gsed -i, perl -i, rm, rmdir, unlink, truncate, touch, shred, chmod, chown, chgrp, chflags, dd
-of=, curl -o, wget -O, a find that deletes), behind the wrappers runs() skips, and in what the line runs nested (sh -c,
-eval, $(…), xargs, find -exec, a heredoc or a printer piped into a shell; not ssh's), and the files the code of an
-interpreter (python -c, node -e, a heredoc to perl…) may write (_code_writes: Python that passes pyscript's gate by
-what it writes, other code by the quoted literals in the arguments of a call that writes; from the segment's
-folders and from HOME, `~` expanded). A target is expanded (`~` when
-unquoted, $HOME and the line's own literal assignments) and joined to each folder the segment may run in
-(gitpush.folders: the ctx's cwd, else the process's, and the line's cd and pushd), then compared as check_file does,
-also as the link itself (rm, mv, ln -sf change a link); a copy into a folder also as each source's name in it; a
-recursive one (rm -r, chmod -R, cp -R, rsync -a, ditto, the source of mv) also when a reserved file or folder lies
-under it. A target still not known (an expansion, a glob, a folder the line cannot name) is reserved only when its
-text names a reserved path (_names); a text the lexer cannot read, only when it also looks like a write (WRITE_WORDS).
-A failure of the rule denies only such a text. Not seen: a script file that writes it (python x.py), code piped into
-an interpreter (`echo … | python3`), git checkout or restore in the main checkout (an agent's: MAIN_CHECKOUT
-above), an archive unpacked over it, `find … -exec rm {}` below a folder that is not itself reserved, a variable
-from outside the line or set by a loop.
+shell.writes() reads in the line (redirections, tee, the destination of cp/mv/ln/install/rsync/ditto/scp and the sources
+of mv, sed -i, gsed -i, perl -i, rm, rmdir, unlink, truncate, touch, shred, chmod, chown, chgrp, chflags, dd of=, curl
+-o, wget -O, a find that deletes), behind the wrappers runs() skips, in every line _walk gives, and the files the code
+of an interpreter (python -c, node -e, a heredoc to perl…) may write (_code_writes: Python that passes pyscript's gate
+by what it writes, other code by the quoted literals in the arguments of a call that writes; from the segment's folders
+and from HOME, `~` expanded). A target is expanded (`~` when unquoted, $HOME and the line's own literal assignments) and
+joined to each folder the segment may run in, then compared as check_file does, also as the link itself (rm, mv, ln -sf
+change a link); a copy into a folder also as each source's name in it; a recursive one (rm -r, chmod -R, cp -R, rsync
+-a, ditto, the source of mv) also when a reserved file or folder lies under it. A target still not known (an expansion,
+a glob, a folder the line cannot name) is reserved only when its text names a reserved path (_names); a text the lexer
+cannot read, only when it also looks like a write (WRITE_WORDS). A failure of the rule denies only such a text. Not
+seen: a script file that writes it (python x.py), code piped into an interpreter (`echo … | python3`), git checkout or
+restore in the main checkout (an agent's: MAIN_CHECKOUT above), an archive unpacked over it, `find … -exec rm {}` below
+a folder that is not itself reserved, a variable from outside the line or set by a loop.
 The owner's one-off yes: a call of the main thread (no agent_id) of any session of the product that writes
 a file of ONCE_KINDS (claude, registry) passes when grants.json holds the owner's one-use yes for that very call
 (grants.take_once: the ctx's session and tool_use_id, and the same real path, or the same command for Bash), which it
@@ -217,6 +216,7 @@ asked and never passes. config and table change only through `foreman permission
 from __future__ import annotations
 
 import fnmatch
+import functools
 import json
 import os
 import re
@@ -449,16 +449,21 @@ At = tuple[gitpush.Resolver, frozenset[str], gitpush.Changes]  # the resolver of
 # starts in and what the line around it changed in git's config before it
 
 
-def _texts(
-    cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | None = None
-) -> Generator[Text, None, str]:
-    """The texts the command is compared as, in order (module doc); returns the command with its data values blanked.
-    feeds: the output of the command is run by a shell (it is $(…) in a program's place, or a pipe into one). at:
-    resolve its pushes (gitpush.py), after every other text of their line."""
+@functools.lru_cache(maxsize=256)
+def _read(cmd: str, depth: int) -> tuple[list[Seg], Any, list[list[Tok]], list[Runs]]:
+    """(segments, the lexer, the words of each, what each runs) of a line (shell.lex, pipelines, runs): read once
+    for _texts and _walk alike (nothing changes them once read). Raises Unparsed."""
     segs, lx = lex(cmd, depth)
     segs = pipelines(segs)
     words_of = [[t for t in s.toks if t.kind == "word"] for s in segs]
-    info = [runs(w) for w in words_of]
+    return segs, lx, words_of, [runs(w) for w in words_of]
+
+
+def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | None = None) -> Generator[Text, None, str]:
+    """The texts the command is compared as, in order (module doc); returns the command with its data values blanked.
+    feeds: the output of the command is run by a shell (it is $(…) in a program's place, or a pipe into one). at:
+    resolve its pushes (gitpush.py), after every other text of their line."""
+    segs, lx, words_of, info = _read(cmd, depth)
     here = gitpush.folders(segs, words_of, info, at[1]) if at else []
     fn = gitpush.called(segs, words_of, info, cmd) if at and lx.redefines else {}
     heads = gitpush.branches(segs, words_of, info, here, fn) if at else []
@@ -684,7 +689,7 @@ class _Check:
     too, raised again to each rule that asks): the registry, who calls, the lines the command runs (_walk), its texts
     with and without its pushes resolved (_texts) and what git says of each folder (the Resolver)."""
 
-    def __init__(self, project: Project, cmd: str, ctx: Ctx | None, projects: Sequence[Project] | None = None):
+    def __init__(self, project: Project, cmd: str, ctx: Ctx | None, projects: Sequence[Project] | None) -> None:
         self.project, self.cmd, self.ctx = project, cmd, ctx
         cwd = (ctx or {}).get("cwd")
         self.cwd = os.path.normpath(os.path.expanduser(cwd or os.getcwd()))
@@ -1211,12 +1216,9 @@ def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int
     (sh -c, eval, $(…), a heredoc or a pipe into a shell, xargs and find -exec; not what ssh runs); a text the lexer
     cannot read (the command itself, or one nested) is given as its str."""
     try:
-        segs, lx = lex(cmd, depth)
+        segs, lx, words_of, info = _read(cmd, depth)
     except Unparsed:
         return [cmd]
-    segs = pipelines(segs)
-    words_of = [[t for t in s.toks if t.kind == "word"] for s in segs]
-    info = [runs(w) for w in words_of]
     env = dict(env)
     _assigned(words_of, info, env)
     known = _cd_known(words_of, info, env)
@@ -1657,17 +1659,8 @@ def _main_checkout(chk: _Check) -> Hit | None:
         if sub is not None and sub in gitpush.BUILTINS and sub not in GIT_REWRITES:
             return None  # it reads, or changes no file of the copy
         here = gitpush.moved(dirs, c.dirs, exists=False)
-        trees: list[str | None] = list(env.get("GIT_WORK_TREE", []))
-        for k in range(prog + 1, c.sub):
-            v = str(w[k].value) if w[k].literal else None
-            if v is not None and v.startswith("--work-tree="):
-                trees.append(v.partition("=")[2])
-            elif v == "--work-tree" and k + 1 < c.sub:
-                trees.append(str(w[k + 1].value) if w[k + 1].literal else None)
-            elif v is None and w[k].raw.lstrip("\"'").startswith("--work-tree"):
-                trees.append(None)
-        for wt in trees:  # the work tree it is given, besides the folder (whose repo it still changes)
-            here |= gitpush.moved(here, [wt], exists=False)
+        for wt in [*env.get("GIT_WORK_TREE", []), *c.trees]:  # the work tree it is given, besides the folder
+            here |= gitpush.moved(here, [wt], exists=False)  # (whose repo it still changes)
         all_tops = tops()
         if not all_tops:
             return None
@@ -1736,13 +1729,13 @@ def _main_checkout(chk: _Check) -> Hit | None:
 
 def main_checkout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None:
     """The MAIN_CHECKOUT Hit of a command an agent runs in cwd (permissions.touches: the rows of the rule)."""
-    return _main_checkout(_Check(project, cmd, {"cwd": cwd} if cwd else None))
+    return _main_checkout(_Check(project, cmd, {"cwd": cwd} if cwd else None, None))
 
 
 def holdout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None:
     """The HOLDOUT Hit of a command an agent (not a planner) runs in cwd (permissions.touches: the rows of the
     rule)."""
-    return _holdout(_Check(project, cmd, {"cwd": cwd} if cwd else None))
+    return _holdout(_Check(project, cmd, {"cwd": cwd} if cwd else None, None))
 
 
 def names_integrate(cmd: str) -> bool:

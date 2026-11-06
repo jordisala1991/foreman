@@ -21,8 +21,9 @@ folder only blocks more.
 
 What git says. For each folder, once per check (the Resolver's cache, which the main-checkout rule shares):
 `symbolic-ref -q HEAD` (which also says whether it is a repo) and `config --list -z`, with no pager, no prompt, no
-optional locks, no fsmonitor, and TIMEOUT seconds each. None of them runs a hook or a filter. A folder that is not a repo has no remote: the text keeps
-the remote as written (git would fail anyway); its config is the global and system one (their aliases).
+optional locks, no fsmonitor, and TIMEOUT seconds each. None of them runs a hook or a filter. A folder that is not a
+repo has no remote: the text keeps the remote as written (git would fail anyway); its config is the global and system
+one (their aliases).
 
 The remote: the first argument (or --repo), else branch.<b>.pushRemote, remote.pushDefault, branch.<b>.remote and
 origin; its pushurls (insteadOf applied) or else its urls (pushInsteadOf, else insteadOf); a name that is no
@@ -434,12 +435,14 @@ class Push:
 
 class Call:
     """A `git [global options] SUB …`: the folders of its -C options in order (None: not literal), what its -c and
-    --config-env change (Changes), its --git-dir ("" none, None not literal) and the index of SUB (len(w): none)."""
+    --config-env change (Changes), its --git-dir ("" none, None not literal), its --work-tree values (None: not
+    literal) and the index of SUB (len(w): none)."""
 
-    __slots__ = ("dirs", "changes", "git_dir", "sub")
+    __slots__ = ("dirs", "changes", "git_dir", "trees", "sub")
 
     def __init__(self) -> None:
         self.dirs: list[str | None] = []
+        self.trees: list[str | None] = []
         self.changes = NONE
         self.git_dir: str | None = ""
         self.sub = 0
@@ -474,8 +477,8 @@ def parse_git(w: Sequence[Tok], prog: int) -> Call | None:
         if not w[k].literal:  # an option the line computes (`--git-dir=$D`): whatever it changes is unknown
             name, eq, _ = w[k].raw.lstrip("\"'").partition("=")
             k += 2 if name in GIT_VALUE_OPTS and not eq else 1
-            if name.startswith("-C"):
-                c.dirs.append(None)
+            if name.startswith("-C") or name == "--work-tree":
+                (c.dirs if name.startswith("-C") else c.trees).append(None)
             else:
                 c.changes = c.changes.plus(LOST)
                 c.git_dir = None if name == "--git-dir" else c.git_dir
@@ -504,6 +507,8 @@ def parse_git(w: Sequence[Tok], prog: int) -> Call | None:
             c.changes = c.changes.plus(LOST)
         elif name == "--git-dir":
             c.git_dir = value
+        elif name == "--work-tree":
+            c.trees.append(value)
     c.sub = k
     return c
 
