@@ -27,6 +27,7 @@ from foreman import (
     config,
     heartbeat,
     lock,
+    loop,
     notes,
     orchestrator,
     panel,
@@ -897,6 +898,40 @@ console.log(JSON.stringify(out));
         self.assertTrue(locks["gadget"]["takeable"])
         self.assertFalse(locks["gpu"]["takeable"])  # only an inactive product uses it
         self.assertFalse(any("delegated" in x or "via" in x for x in d["locks"]))
+
+    def test_state_files_of_another_type(self):
+        """agents.json, inbox.json and heartbeats.json holding JSON of another type (a list for a table, a table for a
+        list) read as empty: the panel, `foreman agents`, the loop's inbox and a new message work without a
+        traceback."""
+        st = self.project.state
+        (st / "agents.json").write_text("[1, 2]")
+        (st / "inbox.json").write_text('{"id": 1}')
+        (st / "heartbeats.json").write_text("[]")
+        for path in ("/api/state?p=fake", "/api/projects"):
+            code, d = self.req(path)
+            self.assertEqual(code, 200, d)
+        self.assertEqual(self.req("/api/state?p=fake")[1]["project"]["agents"], [])
+        self.assertEqual((loop.agents(self.project), notes.heartbeats(self.project)), ({}, {}))
+        self.assertEqual(notes.inbox_new(self.project), [])
+        self.assertEqual(json.loads(loop.agents_json(self.project)), {})
+        loop.agents_compact(self.project)
+        self.assertEqual(notes.inbox_add(self.project, "hi")["id"], 1)
+
+    def test_registry_read_once_while_nothing_changes(self):
+        """The panel reads and parses the registry again only when its file changes: after a change, two requests
+        read it once."""
+        f = self.tmp / "projects.toml"
+        f.write_text(f.read_text() + "\n")
+        real, reads = config.read_registry, []
+
+        def counted():
+            reads.append(1)
+            return real()
+
+        with mock.patch.object(config, "read_registry", counted):
+            for _ in range(2):
+                self.assertEqual(self.req("/api/state?p=fake")[0], 200)
+        self.assertEqual(len(reads), 1)
 
     def test_active_project_state(self):
         code, d = self.req("/api/state?p=fake")

@@ -1,7 +1,8 @@
 """Small helpers shared by the whole package, with no foreman dependencies (no config, no project): JSON files,
 atomic writes, local ISO times, process ids and git.
 
-- `read_json(path, default)`: the parsed file, or `default` if it is missing or not JSON.
+- `read_json(path, default)`: the parsed file, or `default` if it is missing, not JSON, or JSON of another type than
+  a `default` table or list.
 - `read_jsonl(path, tail=None, numbered=False)`: the JSON objects (dicts) of the readable lines of a line file, the
   last `tail` lines only when given; [] if it is missing. With `numbered`, (line number, object) pairs.
 - `prune_older(folder, pattern, days, keep=None)`: deletes the files of `folder` matching `pattern` whose mtime is
@@ -63,9 +64,10 @@ def now() -> datetime:
 def read_json(path: PathLike, default: Any) -> Any:
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            d = json.load(f)
     except (OSError, ValueError):
         return default
+    return default if isinstance(default, (dict, list)) and type(d) is not type(default) else d
 
 
 def read_jsonl(path: PathLike, tail: int | None = None, numbered: bool = False) -> list[Any]:

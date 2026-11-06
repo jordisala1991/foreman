@@ -1201,9 +1201,9 @@ def registry_scan(reg: Table | None = None) -> tuple[list[RegistryEntry], list[B
     return entries, broken, warnings
 
 
-def panel_settings() -> dict[str, Any]:
-    """The registry's [panel] table with its defaults: language (en) and who (owner)."""
-    panel = read_registry().get("panel", {})
+def panel_settings(reg: Table | None = None) -> dict[str, Any]:
+    """The registry's [panel] table with its defaults: language (en) and who (owner). `reg`: the registry as read."""
+    panel = (read_registry() if reg is None else reg).get("panel", {})
     return {"language": "en", "who": "owner", **(panel if isinstance(panel, dict) else {})}
 
 
@@ -1220,12 +1220,15 @@ def load_entry(
 
 
 def registered_projects(
-    errors: list[str] | None = None, broken: list[BrokenEntry] | None = None, warnings: list[str] | None = None
+    errors: list[str] | None = None,
+    broken: list[BrokenEntry] | None = None,
+    warnings: list[str] | None = None,
+    reg: Table | None = None,
 ) -> list[Project]:
     """Every registry project that loads (tolerantly: with its warnings). The others are left out and listed in
     `errors` (as text), `broken` ({name, home, mode, config, error}) if given; the registry's own warnings go to
-    `warnings`."""
-    reg = read_registry()
+    `warnings`. `reg`: the registry as read."""
+    reg = read_registry() if reg is None else reg
     entries, bad, reg_warnings = registry_scan(reg)
     machine = machine_resources(reg)
     settings = machine_settings(reg)

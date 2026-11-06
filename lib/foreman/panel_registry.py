@@ -16,40 +16,49 @@ if TYPE_CHECKING:
 
 
 class Registry:
-    """The registry's projects, reloaded when the registry or a foreman.toml changes. Read tolerantly: a project with
-    warnings is in `projects` (its Project.warnings shown on it); one that does not load is in `broken`
-    ({name, mode, error}), shown in the picker with its error; `errors` lists both kinds of problem as text."""
+    """The registry's projects, reloaded when the registry or a foreman.toml changes (the registry is read and parsed
+    again only when its own file changes). Read tolerantly: a project with warnings is in `projects` (its
+    Project.warnings shown on it); one that does not load is in `broken` ({name, mode, error}), shown in the picker
+    with its error; `errors` lists both kinds of problem as text."""
 
     def __init__(self) -> None:
         self._sig: tuple[Any, ...] | None = None
+        self._read: tuple[Any, ...] | None = None  # (registry path, its file_sig) when `_reg` and `_files` were read
+        self._reg: Table | config.ConfigError = {}
+        self._files: list[Path] = []
         self.projects: dict[str, Project] = {}
         self.broken: list[dict[str, Any]] = []
         self.errors: list[str] = []
         self.settings: dict[str, Any] = {}
         self.machine: dict[str, Table] = {}
 
-    def config_files(self) -> list[Path]:
-        files = [config.registry_path()]
+    def read(self) -> None:
+        """The registry (or its ConfigError) and the config files to watch, read again when the registry changes."""
+        path = config.registry_path()
+        key = (str(path), file_sig([path]))  # taken before reading: a change while reading is seen next time
+        if key == self._read:
+            return
         try:
-            entries, broken, _ = config.registry_scan()
-            for e in entries + broken:
-                home = e.get("home")
-                if home:
-                    files.append(e["config"] or home / "foreman.toml")
-        except config.ConfigError:
-            pass
-        return files
+            self._reg = config.read_registry()
+            entries, broken, _ = config.registry_scan(self._reg)
+        except config.ConfigError as e:
+            self._reg, entries, broken = e, [], []
+        self._read = key
+        self._files = [path] + [x["config"] or h / "foreman.toml" for x in entries + broken if (h := x.get("home"))]
 
     def refresh(self) -> None:
-        files = self.config_files()
+        self.read()
+        files = self._files
         sig = (tuple(map(str, files)), file_sig(files))
         if sig == self._sig:
             return
         errors, broken, warnings = [], [], []
         try:
-            projects = config.registered_projects(errors, broken, warnings)
-            settings = config.panel_settings()
-            machine = config.machine_resources()[0]
+            if isinstance(self._reg, config.ConfigError):
+                raise self._reg
+            projects = config.registered_projects(errors, broken, warnings, reg=self._reg)
+            settings = config.panel_settings(self._reg)
+            machine = config.machine_resources(self._reg)[0]
         except config.ConfigError as e:
             projects, settings, errors, machine = [], {"language": "en", "who": "owner"}, [str(e)], {}
         self.projects = {p.name: p for p in projects}
