@@ -922,7 +922,7 @@ def report_part(project: Project, data: Data, repo: str, br: str, path: str | No
         main_path=tab.get("path"),
         data=data,
         delivered=delivery.report_of(project, branch=br, name=agent, agents=ags),
-        since=delivery.started(project, br),
+        since=delivery.started(project, br, ags),
     )
     oc = delivery.outcome_of(project, branch=br, name=agent, agents=ags)
     oc = f"; outcome {oc}" if oc else ""

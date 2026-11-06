@@ -62,6 +62,8 @@ if TYPE_CHECKING:
     from .identity import Agent
     from .util import PathLike
 
+    Agents = Mapping[str, Agent]  # agents.json, read once by a caller that looks up several deliveries
+
 Result = dict[str, Any]  # check(): items
 
 OUTCOMES = ("ok", "partial", "failed")
@@ -196,7 +198,7 @@ def delivered_kind(project: Project, aid: str | None, h: Agent) -> str | None:
 
 
 def last_delivery(
-    project: Project, branch: str | None = None, name: str | None = None, agents: Mapping[str, Agent] | None = None
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
 ) -> dict[str, Any] | None:
     """The last delivery of the agent with this branch or name: its newest `delivered` entry in agents.json (AGENTS
     when given, read once by the caller), reviewers left out (launch --review: their delivery is not the branch's);
@@ -214,28 +216,28 @@ def last_delivery(
 
 
 def kind_of(
-    project: Project, branch: str | None = None, name: str | None = None, agents: Mapping[str, Agent] | None = None
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
 ) -> str | None:
     """The `--kind` ("measure" or None) of the agent's last delivery (`last_delivery`)."""
     return (last_delivery(project, branch, name, agents) or {}).get("kind") or None
 
 
 def report_of(
-    project: Project, branch: str | None = None, name: str | None = None, agents: Mapping[str, Agent] | None = None
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
 ) -> str | None:
     """The report named by the agent's last delivery (`last_delivery`), or None when it named none or none is known."""
     return (last_delivery(project, branch, name, agents) or {}).get("report")
 
 
 def outcome_of(
-    project: Project, branch: str | None = None, name: str | None = None, agents: Mapping[str, Agent] | None = None
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
 ) -> str | None:
     """The outcome of the agent's last delivery (`last_delivery`), or None when none is known."""
     d = last_delivery(project, branch, name, agents)
     return (d.get("outcome") or "ok") if d else None
 
 
-def sub_is_measure(project: Project, s: Mapping[str, Any], agents: Mapping[str, Agent] | None = None) -> bool:
+def sub_is_measure(project: Project, s: Mapping[str, Any], agents: Agents | None = None) -> bool:
     """Whether a sub-issue is a measurement: `kind = "measure"`, or its agent's last delivery said `--kind measure`."""
     agent = s.get("agent")
     return s.get("kind") == "measure" or bool(agent and kind_of(project, name=agent, agents=agents) == "measure")
@@ -255,9 +257,7 @@ def load_backlog(project: Project) -> Data | None:
         return None
 
 
-def branch_kind(
-    project: Project, branch: str, data: Data | None = None, agents: Mapping[str, Agent] | None = None
-) -> str:
+def branch_kind(project: Project, branch: str, data: Data | None = None, agents: Agents | None = None) -> str:
     """What BRANCH brings, by the backlog (`data`, loaded when None) and the deliveries: "closed" when every
     sub-issue naming it is closed (done, canceled, moved) and none has a commit (closed on purpose without
     integrating); "measure" when its open sub-issues are all measurements (`kind = "measure"`, or their agent's last
@@ -411,11 +411,13 @@ def is_plan(name: str) -> bool:
     return re.match(r"(?:\d{4}-\d{2}-\d{2}-)?plan(?:[-_.]|$)", name.lower()) is not None
 
 
-def started(project: Project, branch: str) -> float | None:
-    """When the first agent of agents.json with this branch started (epoch), or None when none is recorded."""
+def started(project: Project, branch: str, agents: Agents | None = None) -> float | None:
+    """When the first agent of agents.json (AGENTS, read when None) with this branch started (epoch), or None when
+    none is recorded."""
     from . import loop
 
-    times = [util.iso_epoch(h.get("start")) for h in loop.agents(project).values() if h.get("branch") == branch]
+    agents = loop.agents(project) if agents is None else agents
+    times = [util.iso_epoch(h.get("start")) for h in agents.values() if h.get("branch") == branch]
     known = [t for t in times if t]
     return min(known) if known else None
 
