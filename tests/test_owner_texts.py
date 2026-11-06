@@ -28,7 +28,7 @@ class OwnerTextsTest(ProjectCase):
     def decision(self, title, *extra, text=GOOD_TEXT, options=("yes", "no")):
         args = ["backlog", "decision", "add", "--issue", "AB-1", "--title", title, "--text", text]
         for o in options:
-            args += ["--option", o]
+            args += ["--option", o, "--effect", "x"]
         return self.cli(*args, *extra)
 
     # ---------- decisions: refused, accepted, --as-is ----------

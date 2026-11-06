@@ -58,7 +58,7 @@ The owner decides from the panel, often on a phone, with only what you wrote. Wr
 
 - **Decision:** title = the question in one plain sentence, **one question per decision** (two questions in the
   title or the text get a warning; a question quoted «…» does not count); text = what it is about and why it comes
-  now; options = short answers, they are the buttons; after each `--option`, its `--effect` (what the owner will see
+  now; options = short answers, they are the buttons; after each `--option`, its `--effect`, required: a question with an option without it is refused (what the owner will see
   or do differently), its `--cost` when it has one (cost or risk) and its `--undo` (`yes`, `hard`: with work, `no`);
   recommendation = the option and why, and which option it is (`--recommend-option` with the exact text of that
   option: the panel marks its button «(recommended)»). When work waits for the answer, `--if-no-answer` says what

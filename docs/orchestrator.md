@@ -370,7 +370,8 @@ they disagree.
      never in the repo: screenshots may show the product's data), its images beside it and linked relative
      (`![before](before-390.png)`); any .md under the reviews or notes folders or a report prefix is accepted, up to
      400 KB. Write it for that question alone, with the template of docs/owner.md («Question page»), never a report
-     or a study. `decision add` warns, without blocking, of an option without `--effect`, two questions in one, a
+     or a study. `decision add` refuses (exit 2, naming it) an option without `--effect` unless `--as-is`, and warns, without
+     blocking, of two questions in one, a
      reminder date in the past and a page that is missing, too large or not written for the question: fix them
      while the question is fresh. The effects, costs and what waits pass `foreman plain` like the title.
      `decision list --json` gives `details`, `unanswered` and `page` with `page_path` (absolute) when set. Record such a question only when `foreman session --all

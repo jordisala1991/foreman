@@ -299,6 +299,7 @@ options:
                                      marks. Texts that name ids or internal names
                                      without explaining them (foreman plain) are refused (exit 2) unless --as-is,
                                      which records it anyway and marks it ("as_is": true, a warning in check).
+                                     An --option without --effect is refused too (exit 2, naming it) unless --as-is.
                                      --blocks: what waits for the answer while it is pending (none by default):
                                      Tn or "issue" relative to --issue, or "ISSUE" / "ISSUE Tn"
                                      Each --option is a short answer (a button); after it, --effect what the
@@ -307,7 +308,7 @@ options:
                                      until the owner answers (foreman never answers for them); --answer-by: the
                                      day to remind them. --page: a .md under the reviews or notes folders
                                      (screenshots, tables) that explains the question. Warnings on stderr, never
-                                     blocking: an option without --effect, two questions in one, a reminder date
+                                     blocking: two questions in one, a reminder date
                                      in the past, a page that is missing, larger than 400 KB or not written
                                      for the question (over 60 lines, another question's page, a report or a
                                      plan, or names left unexplained: docs/owner.md «Question page»)
