@@ -57,6 +57,7 @@ Nothing here raises into a hook: the hook wraps every call.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import shutil
@@ -514,3 +515,168 @@ def claude_code_below_min(version: str | None) -> bool:
     """Whether `version` is a parsable version lower than CLAUDE_CODE_MIN (unknown: False)."""
     t = version_tuple(version)
     return t is not None and t < (version_tuple(CLAUDE_CODE_MIN) or (0, 0, 0))
+
+
+ORPHAN_TOLD_SECONDS = 600  # without a session id, the «older foreman» line is not repeated for this long
+ORPHAN_TOLD_SESSIONS = 20  # session ids remembered per root
+
+
+def orphan_told_file() -> Path:
+    return install.install_dir() / "orphan-told.json"
+
+
+def orphan_told(root: str, version: str, env: Mapping[str, str] | None = None, now: float | None = None) -> bool:
+    """Whether the «older foreman» line for `root` at `version` was already said: in the same session
+    (CLAUDE_CODE_SESSION_ID) or, without one, in the last ORPHAN_TOLD_SECONDS. Records it when it was not.
+    `<state root>/install/orphan-told.json`: {root: {version, at, sessions: [...]}}."""
+    env = os.environ if env is None else env
+    now = time.time() if now is None else now
+    session = env.get("CLAUDE_CODE_SESSION_ID") or None
+    f = orphan_told_file()
+    with notes.file_lock(f):
+        d = util.read_json(f, {})
+        d = d if isinstance(d, dict) else {}
+        e = d.get(root)
+        e = e if isinstance(e, dict) else {}
+        same = e.get("version") == version
+        seen = list(e.get("sessions") or []) if same else []
+        if same and (session in seen if session else now - float(e.get("at") or 0) < ORPHAN_TOLD_SECONDS):
+            return True
+        if session:
+            seen = (seen + [session])[-ORPHAN_TOLD_SESSIONS:]
+        d[root] = {"version": version, "at": now, "sessions": seen}
+        util.write_json(f, d)
+    return False
+
+
+def orphan_line(
+    root: PathLike | None = None, once: bool = False, env: Mapping[str, str] | None = None, now: float | None = None
+) -> str | None:
+    """The stderr line of a CLI that runs from a plugin folder Claude Code marked `.orphaned_at` (this session was
+    left on a replaced version), None otherwise; the caller asks only for the commands that act (cli.acts). One stat
+    unless it is orphaned. None too during the grace after the new install (settling: the session may still load it
+    by itself).
+    With `once`, None too when it was already said for this root and version (orphan_told)."""
+    root = str(install.ROOT if root is None else root)
+    if not orphaned(root):
+        return None
+    me = own({}, root=root)
+    if me["kind"] != "installed":
+        return None
+    if settling({"root": root, "installed_root": None}, time.time() if now is None else now):
+        return None
+    if once and orphan_told(root, me["version"], env=env, now=now):
+        return None
+    inst = installed(me)
+    newer = f"replaced by {inst['version']}" if inst else "replaced by a newer install"
+    return (
+        f"foreman: this is foreman {me['version']}, the one this session started with ({newer}): the owner "
+        "types /reload-plugins in this session to run the installed one"
+    )
+
+
+def session_version_line(session: str) -> str:
+    """The foreman a marked session runs (`foreman session`): recorded, or estimated with «≈»; never changes the exit
+    code."""
+    try:
+        v = of_session(session, env={})
+    except Exception:  # noqa: BLE001 (a version notice is optional: no record means 'not known')
+        v = None
+    if not v:
+        return "foreman version of that session not known (no record, no estimate)"
+    lbl = label(v)
+    est = " (estimated: no record of its own)" if v["estimated"] else ""
+    b = v["behind"]
+    if b and b.get("settling"):
+        inst = b.get("installed") or "a newer install"
+        return (
+            f"foreman {lbl} in that session{est}, {inst} installed a moment ago: the session may still load it by "
+            f"itself (some hosts do, the desktop app among them); not behind until {GRACE_S // 60} min "
+            "after the install"
+        )
+    if b:
+        inst = b.get("installed") or "a newer install"
+        return (
+            f"foreman {lbl} in that session{est}, {inst} installed: behind; the owner types /reload-plugins "
+            "there (the desktop app loads it by itself)"
+        )
+    if v.get("kind") in ("working_copy", "inline"):
+        return f"foreman {lbl} in that session ({v['kind'].replace('_', ' ')})"
+    return f"foreman {lbl} in that session{est}" + (", the installed one" if v.get("installed") else "")
+
+
+def sessions_command(only_behind: bool = False, as_json: bool = False) -> int:
+    """`foreman session --all`: the live sessions of the registered products with their foreman; exit 0 always.
+    `only_behind`: those on an older foreman, behind or still settling after the install. The installed foreman is
+    looked for from this CLI's own root too: run from a replaced folder (an older session's PATH), the newer sibling
+    is the installed one even before any session recorded it."""
+    inst = installed(own({}))
+    entries = sorted(live_sessions(inst=inst), key=lambda e: (e["project"], e.get("name") or "", e["session"]))
+    if only_behind:
+        entries = [e for e in entries if e["behind"] or e.get("settling")]
+    if as_json:
+        keep = (
+            "session",
+            "name",
+            "project",
+            "cwd",
+            "started",
+            "status",
+            "version",
+            "root",
+            "kind",
+            "estimated",
+            "behind",
+            "settling",
+            "orchestrator",
+            "entrypoint",
+        )
+        print(
+            json.dumps(
+                {"installed": inst, "sessions": [{k: e.get(k) for k in keep} for e in entries]},
+                ensure_ascii=False,
+                indent=1,
+            )
+        )
+        return 0
+    print(
+        f"installed foreman {inst['version']} ({inst['root']})"
+        if inst
+        else "installed foreman: not known (no session has recorded an installed copy yet)"
+    )
+    if not entries:
+        print("no live session runs an older foreman" if only_behind else "no live session in the registered products")
+        return 0
+    rows = [
+        (
+            e["project"],
+            e.get("name") or e["session"][:8],
+            label(e),
+            " ".join(
+                x
+                for x in (
+                    "BEHIND" if e["behind"] else "settling" if e.get("settling") else "",
+                    "orchestrator" if e["orchestrator"] else "",
+                )
+                if x
+            ),
+            e["session"],
+        )
+        for e in entries
+    ]
+    widths = [max(len(r[i]) for r in rows) for i in range(4)]
+    for r in rows:
+        print("  ".join(r[i].ljust(widths[i]) for i in range(4)) + "  " + r[4])
+    if any(e["estimated"] for e in entries):
+        print(
+            "≈: estimated (no record of its own: it started on a foreman older than the per-session record): the "
+            "highest version installed before it started, or before its last /reload-plugins"
+        )
+    if any(e.get("settling") for e in entries):
+        print(
+            f"settling: on an older foreman less than {GRACE_S // 60} min after the new one was installed; "
+            "it may load it by itself (the desktop app does): nothing to ask yet"
+        )
+    if any(e["behind"] for e in entries):
+        print("behind: the owner types /reload-plugins in each one (only they can), or it is relaunched")
+    return 0

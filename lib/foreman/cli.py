@@ -139,17 +139,16 @@ import os
 import re
 import subprocess
 import sys
-import time
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from . import __version__, config, util
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from .config import Project
-    from .util import PathLike
 
 
 def doc() -> str:
@@ -281,186 +280,6 @@ def acts(argv: list[str]) -> bool:
     return True
 
 
-ORPHAN_TOLD_SECONDS = 600  # without a session id, the «older foreman» line is not repeated for this long
-ORPHAN_TOLD_SESSIONS = 20  # session ids remembered per root
-
-
-def orphan_told_file() -> Path:
-    from . import install
-
-    return install.install_dir() / "orphan-told.json"
-
-
-def orphan_told(root: str, version: str, env: Mapping[str, str] | None = None, now: float | None = None) -> bool:
-    """Whether the «older foreman» line for `root` at `version` was already said: in the same session
-    (CLAUDE_CODE_SESSION_ID) or, without one, in the last ORPHAN_TOLD_SECONDS. Records it when it was not.
-    `<state root>/install/orphan-told.json`: {root: {version, at, sessions: [...]}}."""
-    from . import notes
-
-    env = os.environ if env is None else env
-    now = time.time() if now is None else now
-    session = env.get("CLAUDE_CODE_SESSION_ID") or None
-    f = orphan_told_file()
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
-        d = d if isinstance(d, dict) else {}
-        e = d.get(root)
-        e = e if isinstance(e, dict) else {}
-        same = e.get("version") == version
-        seen = list(e.get("sessions") or []) if same else []
-        if same and (session in seen if session else now - float(e.get("at") or 0) < ORPHAN_TOLD_SECONDS):
-            return True
-        if session:
-            seen = (seen + [session])[-ORPHAN_TOLD_SESSIONS:]
-        d[root] = {"version": version, "at": now, "sessions": seen}
-        util.write_json(f, d)
-    return False
-
-
-def orphan_line(
-    argv: list[str],
-    root: PathLike | None = None,
-    once: bool = False,
-    env: Mapping[str, str] | None = None,
-    now: float | None = None,
-) -> str | None:
-    """The stderr line of a CLI that runs from a plugin folder Claude Code marked `.orphaned_at` (this session was
-    left on a replaced version), for commands that act; None otherwise. One stat unless it is orphaned.
-    None too during the grace after the new install (versions.settling: the session may still load it by itself).
-    With `once`, None too when it was already said for this root and version (orphan_told)."""
-    if not acts(argv):
-        return None
-    from . import install, versions
-
-    root = str(install.ROOT if root is None else root)
-    if not versions.orphaned(root):
-        return None
-    me = versions.own({}, root=root)
-    if me["kind"] != "installed":
-        return None
-    if versions.settling({"root": root, "installed_root": None}, time.time() if now is None else now):
-        return None
-    if once and orphan_told(root, me["version"], env=env, now=now):
-        return None
-    inst = versions.installed(me)
-    newer = f"replaced by {inst['version']}" if inst else "replaced by a newer install"
-    return (
-        f"foreman: this is foreman {me['version']}, the one this session started with ({newer}): the owner "
-        "types /reload-plugins in this session to run the installed one"
-    )
-
-
-def session_version_line(session: str) -> str:
-    """The foreman a marked session runs (`foreman session`): recorded, or estimated with «≈»; never changes the exit
-    code."""
-    from . import versions
-
-    try:
-        v = versions.of_session(session, env={})
-    except Exception:  # noqa: BLE001 (a version notice is optional: no record means 'not known')
-        v = None
-    if not v:
-        return "foreman version of that session not known (no record, no estimate)"
-    lbl = versions.label(v)
-    est = " (estimated: no record of its own)" if v["estimated"] else ""
-    b = v["behind"]
-    if b and b.get("settling"):
-        inst = b.get("installed") or "a newer install"
-        return (
-            f"foreman {lbl} in that session{est}, {inst} installed a moment ago: the session may still load it by "
-            f"itself (some hosts do, the desktop app among them); not behind until {versions.GRACE_S // 60} min "
-            "after the install"
-        )
-    if b:
-        inst = b.get("installed") or "a newer install"
-        return (
-            f"foreman {lbl} in that session{est}, {inst} installed: behind; the owner types /reload-plugins "
-            "there (the desktop app loads it by itself)"
-        )
-    if v.get("kind") in ("working_copy", "inline"):
-        return f"foreman {lbl} in that session ({v['kind'].replace('_', ' ')})"
-    return f"foreman {lbl} in that session{est}" + (", the installed one" if v.get("installed") else "")
-
-
-def sessions_command(only_behind: bool = False, as_json: bool = False) -> int:
-    """`foreman session --all`: the live sessions of the registered products with their foreman; exit 0 always.
-    `only_behind`: those on an older foreman, behind or still settling after the install. The installed foreman is
-    looked for from this CLI's own root too: run from a replaced folder (an older session's PATH), the newer sibling
-    is the installed one even before any session recorded it."""
-    from . import versions
-
-    inst = versions.installed(versions.own({}))
-    entries = sorted(versions.live_sessions(inst=inst), key=lambda e: (e["project"], e.get("name") or "", e["session"]))
-    if only_behind:
-        entries = [e for e in entries if e["behind"] or e.get("settling")]
-    if as_json:
-        keep = (
-            "session",
-            "name",
-            "project",
-            "cwd",
-            "started",
-            "status",
-            "version",
-            "root",
-            "kind",
-            "estimated",
-            "behind",
-            "settling",
-            "orchestrator",
-            "entrypoint",
-        )
-        print(
-            json.dumps(
-                {"installed": inst, "sessions": [{k: e.get(k) for k in keep} for e in entries]},
-                ensure_ascii=False,
-                indent=1,
-            )
-        )
-        return 0
-    print(
-        f"installed foreman {inst['version']} ({inst['root']})"
-        if inst
-        else "installed foreman: not known (no session has recorded an installed copy yet)"
-    )
-    if not entries:
-        print("no live session runs an older foreman" if only_behind else "no live session in the registered products")
-        return 0
-    rows = [
-        (
-            e["project"],
-            e.get("name") or e["session"][:8],
-            versions.label(e),
-            " ".join(
-                x
-                for x in (
-                    "BEHIND" if e["behind"] else "settling" if e.get("settling") else "",
-                    "orchestrator" if e["orchestrator"] else "",
-                )
-                if x
-            ),
-            e["session"],
-        )
-        for e in entries
-    ]
-    widths = [max(len(r[i]) for r in rows) for i in range(4)]
-    for r in rows:
-        print("  ".join(r[i].ljust(widths[i]) for i in range(4)) + "  " + r[4])
-    if any(e["estimated"] for e in entries):
-        print(
-            "≈: estimated (no record of its own: it started on a foreman older than the per-session record): the "
-            "highest version installed before it started, or before its last /reload-plugins"
-        )
-    if any(e.get("settling") for e in entries):
-        print(
-            f"settling: on an older foreman less than {versions.GRACE_S // 60} min after the new one was installed; "
-            "it may load it by itself (the desktop app does): nothing to ask yet"
-        )
-    if any(e["behind"] for e in entries):
-        print("behind: the owner types /reload-plugins in each one (only they can), or it is relaunched")
-    return 0
-
-
 def launch_backlog(
     p: Project,
     issue: str,
@@ -528,8 +347,6 @@ def launch_held_text(name: str, held: list[dict[str, Any]], what: str) -> str:
 def launch_command(p: Project, args: argparse.Namespace) -> int:
     """`foreman launch`: exit 0 recorded (a backlog that could not be updated is a warning), 1 the worktree could
     not be made, 2 bad arguments or a NAME already in use."""
-    import re
-
     from . import backlog, identity, worktree
 
     def fail(msg: object, rc: int = 2) -> int:
@@ -801,7 +618,6 @@ def build_parser(only: str | None = None) -> argparse.ArgumentParser:
     """foreman's argument parser (COMMAND_GROUPS orders its commands for the README's table). `only`: the command
     to be run; the commands that live in their own modules are then registered by name only (nothing to parse
     for them), so their modules stay unloaded."""
-    from importlib import import_module
 
     def module_parser(name: str, module: str | None = None) -> None:
         if only is None or only == name:
@@ -1033,18 +849,410 @@ def build_parser(only: str | None = None) -> argparse.ArgumentParser:
     return ap
 
 
+def cmd_lock(project_name: str | None, argv: list[str]) -> int:
+    from . import identity, lock
+
+    if len(argv) < 3:
+        print('usage: foreman lock RESOURCE run "what" cmd… | acquire "what" [s] | release | check', file=sys.stderr)
+        return 2
+    p = config.maybe_resolve(project_name)
+    who, _, default = identity.who("agent", "lock", [project_name, *argv])
+    try:
+        return lock.run(p, argv[1], argv[2:], who=who, default=default)
+    except lock.LockError as e:
+        print(f"foreman lock: {e}", file=sys.stderr)
+        return 2
+
+
+def cmd_wait(project_name: str | None, argv: list[str]) -> int:
+    from . import waits
+
+    rest, timeout, every = argv[1:], 0, 10
+    while rest[:1] in (["-t"], ["-i"]) and len(rest) > 1:
+        if rest[0] == "-t":
+            timeout = float(rest[1])
+        else:
+            every = float(rest[1])
+        rest = rest[2:]
+    if not rest:
+        print(waits.DOC, file=sys.stderr)
+        return 2
+    return waits.run(config.maybe_resolve(project_name), rest[0], rest[1:], timeout, every)
+
+
+def cmd_selftest(args: argparse.Namespace) -> int:
+    from . import selftest
+
+    return selftest.run(
+        verbose=args.v,
+        pattern=args.pattern,
+        jobs=args.j,
+        python=args.python,
+        update_golden=args.update_golden,
+        quality=args.quality,
+        quality_only=args.quality_only,
+        fix=args.fix,
+        mods=args.mods,
+        coverage=args.coverage,
+    )
+
+
+def cmd_docs(args: argparse.Namespace) -> int:
+    docs = HERE.parents[1] / "docs"
+    if not args.name or not (docs / f"{args.name}.md").exists():
+        print("docs: " + ", ".join(sorted(f.stem for f in docs.glob("*.md"))))
+        return 0 if not args.name else 2
+    print((docs / f"{args.name}.md").read_text())
+    return 0
+
+
+def cmd_panel(args: argparse.Namespace) -> int:
+    from . import panel
+
+    follow = args.argv[args.argv.index("panel") + 1 :] if args.follow_installed else None
+    return panel.serve(args.host, args.port, args.token, follow=follow)
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    if not args.projects:
+        d = need_project(args).as_dict()
+        print(json.dumps(d, ensure_ascii=False, indent=1, default=str) if args.json else config_text(d))
+        return 0
+    if args.json:
+        print("foreman config: --projects goes alone", file=sys.stderr)
+        return 2
+    try:
+        broken = []
+        for p in config.registered_projects(broken=broken):
+            print(
+                f"{p.name}\t{p.mode}\t{p.home}"
+                + (f"\t{len(p.warnings)} config warnings (foreman check)" if p.warnings else "")
+            )
+        for b in broken:
+            print(f"{b['name']}\t{b.get('mode') or '?'}\t{b.get('home') or '?'}\tdoes not load: {b['error']}")
+    except config.ConfigError as e:
+        print(f"foreman: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_plain(args: argparse.Namespace) -> int:
+    from . import plain
+
+    p = config.maybe_resolve(args.global_project)
+    return plain.run_stats(p, args.since, args.session, args.json) if args.stats else plain.run(p, args.text, args.json)
+
+
+def cmd_backlog(args: argparse.Namespace) -> int:
+    from . import backlog_cli
+
+    if args.bcmd == "list" and args.all_products:
+        return backlog_cli.run_list(None, args)
+    return backlog_cli.run(need_project(args), args)
+
+
+def module_command(module: str, function: str = "run") -> Callable[[Project, argparse.Namespace], int]:
+    """A command its module runs whole, as `function(project=, args=)`."""
+    return lambda p, args: getattr(import_module(f".{module}", __package__), function)(project=p, args=args)
+
+
+def cmd_note(p: Project, args: argparse.Namespace) -> int:
+    from . import notes
+
+    body = " ".join(args.text) or notes.read_stdin_briefly()
+    try:
+        print(notes.note(p, args.title, body))
+    except ValueError as e:
+        print(f"foreman note: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_progress(p: Project, args: argparse.Namespace) -> int:
+    from . import identity, notes, plain
+
+    for flag, what in (
+        ("outcome", "the delivery's outcome"),
+        ("report", "the delivery's report"),
+        ("kind", "what the delivery brings"),
+    ):
+        if getattr(args, flag) is not None and not args.done:
+            print(f"foreman progress: --{flag} goes with --done ({what})", file=sys.stderr)
+            return 2
+    who, aid, _ = identity.who("orchestrator", "progress", [args.global_project, *args.argv])
+    report = agent_type = model = None
+    if args.report is not None or args.done:
+        from . import delivery
+
+        if args.report is not None:
+            try:
+                report = delivery.named_report(p, args.report, [*delivery.worktrees_of(p, aid, who), os.getcwd()])
+            except ValueError as e:
+                print(f"foreman progress: --report {args.report}: {e}; nothing written", file=sys.stderr)
+                return 2
+        if args.done:
+            agent_type, model = delivery.type_and_model(p, aid, who)
+    notes.progress(
+        p,
+        " ".join(args.text),
+        who=who,
+        done=args.done,
+        agent_id=aid,
+        outcome=(args.outcome or "ok") if args.done else None,
+        report=report,
+        kind=args.kind if args.done else None,
+        agent_type=agent_type,
+        model=model,
+    )
+    plain.warn(p, "progress line", " ".join(args.text))  # the owner reads it (docs/owner.md): never blocks
+    return 0
+
+
+def cmd_inbox(p: Project, args: argparse.Namespace) -> int:
+    from . import notes
+
+    if args.action == "new":
+        for m in notes.inbox_new(p):
+            print(notes.inbox_line(m))
+    elif args.action == "read":
+        notes.inbox_read(p, args.rest)
+    elif args.action == "reply":
+        notes.inbox_add(p, " ".join(args.rest), sender="orchestrator")
+        from . import plain
+
+        plain.warn(p, "inbox reply", " ".join(args.rest))  # the owner reads it (docs/owner.md): never blocks
+    else:
+        notes.inbox_add(p, " ".join(args.rest), sender="owner")
+    return 0
+
+
+def cmd_recurring(p: Project, args: argparse.Namespace) -> int:
+    from . import notes
+
+    if args.action == "done" or args.name:
+        if args.action != "done" or not args.name:
+            print("usage: foreman recurring [done NAME]", file=sys.stderr)
+            return 2
+        print(notes.beat(p, args.name))
+        return 0
+    for t in notes.recurring(p):
+        parts = ", ".join(
+            f"{x['label'] or 'last'} {x['last'] or 'never'}"
+            + (f" (daily at {x['at']})" if x.get("at") else "")
+            + (f" (new model: {', '.join(x['new'])})" if x.get("new") else "")
+            + (" LATE" if x["late"] else "")
+            for x in t["parts"]
+        )
+        print(f"{'LATE ' if t['late'] else 'ok   '}{t['name']} ({t['every']}): {parts}")
+    return 0
+
+
+def cmd_worktree(p: Project, args: argparse.Namespace) -> int:
+    from . import identity, worktree
+
+    if args.list:
+        for repo, br, path in worktree.all_worktrees(p):
+            print(f"{repo}\t{br}\t{path}")
+        return 0
+    if not (args.repo and args.name and args.branch):
+        print("usage: foreman worktree REPO NAME BRANCH [BASE] | foreman worktree --list", file=sys.stderr)
+        return 2
+    try:
+        wt, how, warnings = worktree.create(p, args.repo, args.name, args.branch, args.base)
+    except (worktree.WorktreeError, config.ConfigError) as e:
+        print(f"foreman worktree: {e}", file=sys.stderr)
+        return 1
+    for w in warnings:
+        print(f"foreman worktree: warning: {w}", file=sys.stderr)
+    print(f"{wt} ({args.branch} {how})")
+    taken = identity.name_taken(p, args.name)
+    if taken:
+        print(f"foreman worktree: warning: no launch recorded: {taken}", file=sys.stderr)
+        return 0
+    token, rec = identity.new_launch(p, args.name, repo=args.repo, branch=args.branch, worktree=wt)
+    print(identity.launch_line(token, rec))
+    return 0
+
+
+def cmd_loop(p: Project, args: argparse.Namespace) -> int:
+    from . import loop, notices, orchestrator
+
+    o = orchestrator.current(p)  # the marked session: dead agents, context
+    ns = loop.notices_for_pass(p, o["session"] if o else None, mark=False)
+    if args.json:
+        print(json.dumps(ns, ensure_ascii=False, indent=1))
+    else:
+        print(
+            "\n".join(f"- {'' if n['actionable'] else notices.INFO}{n['text']}" for n in ns)
+            if ns
+            else "nothing asks for action"
+        )
+    return 0
+
+
+def cmd_session(args: argparse.Namespace) -> int:
+    from . import versions
+
+    if args.all or args.behind or args.json:
+        if not args.all or args.session_id or args.name:
+            print("usage: foreman session --all [--behind] [--json]", file=sys.stderr)
+            return 2
+        return versions.sessions_command(args.behind, args.json)
+    from . import grants, hooks_mod, orchestrator, renew
+
+    p = need_project(args)
+    before = None
+    if args.session_id:
+        before = orchestrator.current(p)
+        try:
+            o = orchestrator.mark(p, args.session_id, args.name, os.environ.get("CLAUDE_CODE_SESSION_ID"))
+        except orchestrator.Refused as e:
+            print(
+                f"foreman session: session {args.session_id} is marked by another Claude Code process that "
+                f"still runs (pid {e.args[0]}): a copy of the session (`--resume`, `--session-id`) does not "
+                "take its mark. Nothing changed; once that process ends, mark it again.",
+                file=sys.stderr,
+            )
+            return 1
+    else:
+        o = orchestrator.current(p)
+    if not o:
+        print(f"{p.name}: no orchestrator now")
+        return 1
+    print(f"{p.name}: orchestrated by {o['name'] or '(no name)'} (session {o['session']}, since {o['since']})")
+    if before and before["session"] != o["session"]:  # a new session took the mark: say whom it relieves
+        dead = orchestrator.liveness(p, before["session"])["state"] == "gone"
+        print(
+            f"  relieves {before['name'] or '(no name)'} (session {before['session']}) since {before['since']}"
+            + (" (not alive)" if dead else "")
+        )
+    line = orchestrator.health_line(p, orchestrator.health(p, o))
+    if line:
+        print("  " + line)
+    if grants.patterns(p):
+        print("  " + orchestrator.process_line(p))
+    print("  " + versions.session_version_line(o["session"]))
+    print("  context " + hooks_mod.context_text(hooks_mod.read_measure(p, o["session"])))
+    print("  " + renew.status_line(p, o["session"]))
+    return 0
+
+
+def cmd_renew(p: Project, args: argparse.Namespace) -> int:
+    from . import identity, renew
+
+    sid = (os.environ.get("CLAUDE_CODE_SESSION_ID") or "").strip() or None
+    aid, _ = identity.recorded_caller("renew", [args.global_project, *args.argv])
+    if aid is not None:  # a subagent shares the session id: only the orchestrator's own thread renews it
+        print(
+            "foreman renew: run by an agent of the orchestrator's session"
+            + (" (or one of several calls at once)" if aid == "ambiguous" else "")
+            + ": only the orchestrator itself renews its session",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        rec = renew.request(p, sid, note=args.note, now=args.now)
+    except renew.RenewError as e:
+        print(f"foreman renew: {e}", file=sys.stderr)
+        return 1
+    print(
+        f"{p.name}: renewal asked for session {rec['session']}"
+        + (" (--now)" if rec["now"] else "")
+        + ": foreman's hooks module compacts this session at its next idle minute (after this turn"
+        + ("" if rec["now"] else ", once no agent of the session is live")
+        + ") and gives it back foreman's pack; nothing else to do."
+    )
+    return 0
+
+
+def cmd_agents(p: Project, args: argparse.Namespace) -> int:
+    from . import loop
+
+    if args.name:
+        from . import identity
+
+        try:
+            aid = identity.name_hand(
+                p,
+                args.name[0],
+                args.name[1],
+                issue=args.issue,
+                sub=args.sub,
+                repo=args.repo,
+                branch=args.branch,
+                worktree=args.worktree,
+            )
+        except identity.IdentityError as e:
+            print(f"foreman agents: {e}", file=sys.stderr)
+            return 2
+        print(f"named: {aid} is {args.name[1]}")
+        return 0
+    if args.misled:
+        from . import delivery
+
+        if args.since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.since):
+            print(f"foreman agents: --since {args.since}: a day as YYYY-MM-DD", file=sys.stderr)
+            return 2
+        res = delivery.misled(p, since=args.since, type_=args.agent_type, model=args.model)
+        print(json.dumps(res, ensure_ascii=False, indent=1) if args.json else delivery.misled_text(res))
+        return 0
+    if args.since or args.agent_type or args.model:
+        print("foreman agents: --since, --type and --model go with --misled", file=sys.stderr)
+        return 2
+    if args.stop:
+        hits = loop.stop_agent(p, args.stop)
+        print(f"stopped: {', '.join(hits)}" if hits else f"no agent {args.stop}")
+        return 0 if hits else 1
+    print(loop.agents_json(p) if args.json else loop.agents_compact(p))
+    return 0
+
+
+# Each command of build_parser() but `guard` (main() keeps its branch) -> its function. Those that may run without a
+# project take the parsed arguments (with `global_project` and `argv`) and resolve it themselves when they need it;
+# the others, (project, arguments).
+NO_PROJECT_COMMANDS = {
+    "selftest": cmd_selftest,
+    "docs": cmd_docs,
+    "panel": cmd_panel,
+    "config": cmd_config,
+    "plain": cmd_plain,
+    "init": lambda args: import_module(".init", __package__).run(args),
+    "backlog": cmd_backlog,
+    "session": cmd_session,
+}
+COMMANDS = {
+    "catchup": module_command("catchup"),
+    "start": module_command("start"),
+    "integrate": module_command("integrate"),
+    "holdout": module_command("holdout", "run_command"),
+    "permissions": module_command("permissions"),
+    "note": cmd_note,
+    "progress": cmd_progress,
+    "inbox": cmd_inbox,
+    "recurring": cmd_recurring,
+    "worktree": cmd_worktree,
+    "launch": launch_command,
+    "loop": cmd_loop,
+    "renew": cmd_renew,
+    "agents": cmd_agents,
+    "check": lambda p, args: check(p, args.run_checks),
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    # Pass-through commands (their arguments are a command line, not options of ours).
     project_name = None
     if argv[:1] == ["--project"] and len(argv) > 1:
         project_name, argv = argv[1], argv[2:]
-    try:
-        line = orphan_line(argv, once=True)
-    except Exception:  # noqa: BLE001 (never block a command over this line)
-        line = None
-    if line:
-        print(line, file=sys.stderr)
+    if acts(argv):
+        try:
+            from . import versions
+
+            line = versions.orphan_line(once=True)
+        except Exception:  # noqa: BLE001 (never block a command over this line)
+            line = None
+        if line:
+            print(line, file=sys.stderr)
     if argv == ["--version"]:
         print(f"foreman {__version__}")
         return 0
@@ -1068,238 +1276,20 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["hung-shells"]:
         return subprocess.run(["bash", str(HERE / "sh/hung_shells.sh"), *argv[1:]], check=False).returncode
     if argv[:1] == ["lock"]:
-        from . import identity, lock
-
-        if len(argv) < 3:
-            print(
-                'usage: foreman lock RESOURCE run "what" cmd… | acquire "what" [s] | release | check', file=sys.stderr
-            )
-            return 2
-        p = config.maybe_resolve(project_name)
-        who, _, default = identity.who("agent", "lock", [project_name, *argv])
-        try:
-            lock.run(p, argv[1], argv[2:], who=who, default=default)
-        except lock.LockError as e:
-            print(f"foreman lock: {e}", file=sys.stderr)
-            return 2
+        return cmd_lock(project_name, argv)
     if argv[:1] == ["wait"]:
-        from . import waits
-
-        rest, timeout, every = argv[1:], 0, 10
-        while rest[:1] in (["-t"], ["-i"]) and len(rest) > 1:
-            if rest[0] == "-t":
-                timeout = float(rest[1])
-            else:
-                every = float(rest[1])
-            rest = rest[2:]
-        if not rest:
-            print(waits.DOC, file=sys.stderr)
-            return 2
-        return waits.run(config.maybe_resolve(project_name), rest[0], rest[1:], timeout, every)
+        return cmd_wait(project_name, argv)
 
     lazy = ("backlog", "integrate", "holdout", "init", "start", "catchup", "permissions")
     ap = build_parser(argv[0] if argv[:1] and argv[0] in lazy else None)
     args = util.no_abbrev(ap).parse_args(argv)
-    args.global_project = project_name
+    args.global_project, args.argv = project_name, argv
     c = args.cmd
-
-    if c == "selftest":
-        from . import selftest
-
-        return selftest.run(
-            verbose=args.v,
-            pattern=args.pattern,
-            jobs=args.j,
-            python=args.python,
-            update_golden=args.update_golden,
-            quality=args.quality,
-            quality_only=args.quality_only,
-            fix=args.fix,
-            mods=args.mods,
-            coverage=args.coverage,
-        )
-    if c == "docs":
-        docs = HERE.parents[1] / "docs"
-        if not args.name or not (docs / f"{args.name}.md").exists():
-            print("docs: " + ", ".join(sorted(f.stem for f in docs.glob("*.md"))))
-            return 0 if not args.name else 2
-        print((docs / f"{args.name}.md").read_text())
-        return 0
-    if c == "panel":
-        from . import panel
-
-        follow = argv[argv.index("panel") + 1 :] if args.follow_installed else None
-        return panel.serve(args.host, args.port, args.token, follow=follow)
-    if c == "config" and args.projects:
-        if args.json:
-            print("foreman config: --projects goes alone", file=sys.stderr)
-            return 2
-        try:
-            broken = []
-            for p in config.registered_projects(broken=broken):
-                print(
-                    f"{p.name}\t{p.mode}\t{p.home}"
-                    + (f"\t{len(p.warnings)} config warnings (foreman check)" if p.warnings else "")
-                )
-            for b in broken:
-                print(f"{b['name']}\t{b.get('mode') or '?'}\t{b.get('home') or '?'}\tdoes not load: {b['error']}")
-        except config.ConfigError as e:
-            print(f"foreman: {e}", file=sys.stderr)
-            return 2
-        return 0
-    if c == "session" and (args.all or args.behind or args.json):
-        if not args.all or args.session_id or args.name:
-            print("usage: foreman session --all [--behind] [--json]", file=sys.stderr)
-            return 2
-        return sessions_command(args.behind, args.json)
-    if c == "plain":
-        from . import plain
-
-        if args.stats:
-            return plain.run_stats(config.maybe_resolve(project_name), args.since, args.session, args.json)
-        return plain.run(config.maybe_resolve(project_name), args.text, args.json)
-    if c == "init":
-        from . import init
-
-        return init.run(args)
-    if c == "backlog" and args.bcmd == "list" and args.all_products:
-        from . import backlog_cli
-
-        return backlog_cli.run_list(None, args)
+    if c in NO_PROJECT_COMMANDS:
+        return NO_PROJECT_COMMANDS[c](args)
     p = need_project(args)
-    if c == "catchup":
-        from . import catchup
-
-        return catchup.run(args, p)
-    if c == "start":
-        from . import start
-
-        return start.run(args, p)
-    if c == "backlog":
-        from . import backlog_cli
-
-        return backlog_cli.run(p, args)
-    if c == "integrate":
-        from . import integrate
-
-        return integrate.run(p, args)
-    if c == "holdout":
-        from . import holdout
-
-        return holdout.run_command(p, args)
-    from . import loop, notes, notices
-
-    if c == "note":
-        body = " ".join(args.text) or notes.read_stdin_briefly()
-        try:
-            print(notes.note(p, args.title, body))
-        except ValueError as e:
-            print(f"foreman note: {e}", file=sys.stderr)
-            return 2
-        return 0
-    if c == "progress":
-        from . import identity
-
-        if args.outcome and not args.done:
-            print("foreman progress: --outcome goes with --done (the delivery's outcome)", file=sys.stderr)
-            return 2
-        if args.report is not None and not args.done:
-            print("foreman progress: --report goes with --done (the delivery's report)", file=sys.stderr)
-            return 2
-        if args.kind and not args.done:
-            print("foreman progress: --kind goes with --done (what the delivery brings)", file=sys.stderr)
-            return 2
-        who, aid, _ = identity.who("orchestrator", "progress", [project_name, *argv])
-        report = None
-        if args.report is not None:
-            from . import delivery
-
-            try:
-                report = delivery.named_report(p, args.report, [*delivery.worktrees_of(p, aid, who), os.getcwd()])
-            except ValueError as e:
-                print(f"foreman progress: --report {args.report}: {e}; nothing written", file=sys.stderr)
-                return 2
-        agent_type = model = None
-        if args.done:
-            from . import delivery
-
-            agent_type, model = delivery.type_and_model(p, aid, who)
-        notes.progress(
-            p,
-            " ".join(args.text),
-            who=who,
-            done=args.done,
-            agent_id=aid,
-            outcome=(args.outcome or "ok") if args.done else None,
-            report=report,
-            kind=args.kind if args.done else None,
-            agent_type=agent_type,
-            model=model,
-        )
-        from . import plain
-
-        plain.warn(p, "progress line", " ".join(args.text))  # the owner reads it (docs/owner.md): never blocks
-        return 0
-    if c == "inbox":
-        if args.action == "new":
-            for m in notes.inbox_new(p):
-                print(notes.inbox_line(m))
-        elif args.action == "read":
-            notes.inbox_read(p, args.rest)
-        elif args.action == "reply":
-            notes.inbox_add(p, " ".join(args.rest), sender="orchestrator")
-            from . import plain
-
-            plain.warn(p, "inbox reply", " ".join(args.rest))  # the owner reads it (docs/owner.md): never blocks
-        else:
-            notes.inbox_add(p, " ".join(args.rest), sender="owner")
-        return 0
-    if c == "recurring":
-        if args.action == "done" or args.name:
-            if args.action != "done" or not args.name:
-                print("usage: foreman recurring [done NAME]", file=sys.stderr)
-                return 2
-            print(notes.beat(p, args.name))
-            return 0
-        for t in notes.recurring(p):
-            parts = ", ".join(
-                f"{x['label'] or 'last'} {x['last'] or 'never'}"
-                + (f" (daily at {x['at']})" if x.get("at") else "")
-                + (f" (new model: {', '.join(x['new'])})" if x.get("new") else "")
-                + (" LATE" if x["late"] else "")
-                for x in t["parts"]
-            )
-            print(f"{'LATE ' if t['late'] else 'ok   '}{t['name']} ({t['every']}): {parts}")
-        return 0
-    if c == "worktree":
-        from . import worktree
-
-        if args.list:
-            for repo, br, path in worktree.all_worktrees(p):
-                print(f"{repo}\t{br}\t{path}")
-            return 0
-        if not (args.repo and args.name and args.branch):
-            print("usage: foreman worktree REPO NAME BRANCH [BASE] | foreman worktree --list", file=sys.stderr)
-            return 2
-        try:
-            wt, how, warnings = worktree.create(p, args.repo, args.name, args.branch, args.base)
-        except (worktree.WorktreeError, config.ConfigError) as e:
-            print(f"foreman worktree: {e}", file=sys.stderr)
-            return 1
-        for w in warnings:
-            print(f"foreman worktree: warning: {w}", file=sys.stderr)
-        print(f"{wt} ({args.branch} {how})")
-        from . import identity
-
-        taken = identity.name_taken(p, args.name)
-        if taken:
-            print(f"foreman worktree: warning: no launch recorded: {taken}", file=sys.stderr)
-            return 0
-        token, rec = identity.new_launch(p, args.name, repo=args.repo, branch=args.branch, worktree=wt)
-        print(identity.launch_line(token, rec))
-        return 0
-    if c == "launch":
-        return launch_command(p, args)
+    if c in COMMANDS:
+        return COMMANDS[c](p, args)
     if c == "guard":
         from . import guard
 
@@ -1324,137 +1314,5 @@ def main(argv: list[str] | None = None) -> int:
             print(pause.guard_message(p, held))
             return 2
         print("allowed" + (f" (orchestrator only: «{ctx['passed']}»)" if ctx and "passed" in ctx else ""))
-        return 0
-    if c == "permissions":
-        from . import permissions
-
-        return permissions.run(args, p)
-    if c == "loop":
-        from . import orchestrator
-
-        o = orchestrator.current(p)  # the marked session: dead agents, context
-        ns = loop.notices_for_pass(p, o["session"] if o else None, mark=False)
-        if args.json:
-            print(json.dumps(ns, ensure_ascii=False, indent=1))
-        else:
-            print(
-                "\n".join(f"- {'' if n['actionable'] else notices.INFO}{n['text']}" for n in ns)
-                if ns
-                else "nothing asks for action"
-            )
-        return 0
-    if c == "session":
-        from . import hooks_mod, orchestrator
-
-        before = None
-        if args.session_id:
-            before = orchestrator.current(p)
-            try:
-                o = orchestrator.mark(p, args.session_id, args.name, os.environ.get("CLAUDE_CODE_SESSION_ID"))
-            except orchestrator.Refused as e:
-                print(
-                    f"foreman session: session {args.session_id} is marked by another Claude Code process that "
-                    f"still runs (pid {e.args[0]}): a copy of the session (`--resume`, `--session-id`) does not "
-                    "take its mark. Nothing changed; once that process ends, mark it again.",
-                    file=sys.stderr,
-                )
-                return 1
-        else:
-            o = orchestrator.current(p)
-        if not o:
-            print(f"{p.name}: no orchestrator now")
-            return 1
-        print(f"{p.name}: orchestrated by {o['name'] or '(no name)'} (session {o['session']}, since {o['since']})")
-        if before and before["session"] != o["session"]:  # a new session took the mark: say whom it relieves
-            dead = orchestrator.liveness(p, before["session"])["state"] == "gone"
-            print(
-                f"  relieves {before['name'] or '(no name)'} (session {before['session']}) since {before['since']}"
-                + (" (not alive)" if dead else "")
-            )
-        line = orchestrator.health_line(p, orchestrator.health(p, o))
-        if line:
-            print("  " + line)
-        from . import grants
-
-        if grants.patterns(p):
-            print("  " + orchestrator.process_line(p))
-        print("  " + session_version_line(o["session"]))
-        print("  context " + hooks_mod.context_text(hooks_mod.read_measure(p, o["session"])))
-        from . import renew
-
-        print("  " + renew.status_line(p, o["session"]))
-        return 0
-    if c == "renew":
-        from . import identity, renew
-
-        sid = (os.environ.get("CLAUDE_CODE_SESSION_ID") or "").strip() or None
-        aid, _ = identity.recorded_caller("renew", [project_name, *argv])
-        if aid is not None:  # a subagent shares the session id: only the orchestrator's own thread renews it
-            print(
-                "foreman renew: run by an agent of the orchestrator's session"
-                + (" (or one of several calls at once)" if aid == "ambiguous" else "")
-                + ": only the orchestrator itself renews its session",
-                file=sys.stderr,
-            )
-            return 1
-        try:
-            rec = renew.request(p, sid, note=args.note, now=args.now)
-        except renew.RenewError as e:
-            print(f"foreman renew: {e}", file=sys.stderr)
-            return 1
-        print(
-            f"{p.name}: renewal asked for session {rec['session']}"
-            + (" (--now)" if rec["now"] else "")
-            + ": foreman's hooks module compacts this session at its next idle minute (after this turn"
-            + ("" if rec["now"] else ", once no agent of the session is live")
-            + ") and gives it back foreman's pack; nothing else to do."
-        )
-        return 0
-    if c == "agents":
-        if args.name:
-            from . import identity
-
-            try:
-                aid = identity.name_hand(
-                    p,
-                    args.name[0],
-                    args.name[1],
-                    issue=args.issue,
-                    sub=args.sub,
-                    repo=args.repo,
-                    branch=args.branch,
-                    worktree=args.worktree,
-                )
-            except identity.IdentityError as e:
-                print(f"foreman agents: {e}", file=sys.stderr)
-                return 2
-            print(f"named: {aid} is {args.name[1]}")
-            return 0
-        if args.misled:
-            from . import delivery
-
-            if args.since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.since):
-                print(f"foreman agents: --since {args.since}: a day as YYYY-MM-DD", file=sys.stderr)
-                return 2
-            res = delivery.misled(p, since=args.since, type_=args.agent_type, model=args.model)
-            print(json.dumps(res, ensure_ascii=False, indent=1) if args.json else delivery.misled_text(res))
-            return 0
-        if args.since or args.agent_type or args.model:
-            print("foreman agents: --since, --type and --model go with --misled", file=sys.stderr)
-            return 2
-        if args.stop:
-            hits = loop.stop_agent(p, args.stop)
-            print(f"stopped: {', '.join(hits)}" if hits else f"no agent {args.stop}")
-            return 0 if hits else 1
-        print(loop.agents_json(p) if args.json else loop.agents_compact(p))
-        return 0
-    if c == "check":
-        return check(p, args.run_checks)
-    if c == "config":
-        d = p.as_dict()
-        if args.json:
-            print(json.dumps(d, ensure_ascii=False, indent=1, default=str))
-        else:
-            print(config_text(d))
         return 0
     return 2

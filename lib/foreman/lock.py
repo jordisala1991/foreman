@@ -14,7 +14,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from . import config, util
 from .config import state_root
@@ -142,7 +142,9 @@ def command(
     return ["bash", str(LOCK_SH), *args], environment(name, res, who, default=default, project=project)
 
 
-def run(project: Project | None, name: str, args: Iterable[str], who: str | None = None, default: bool = False) -> None:
+def run(
+    project: Project | None, name: str, args: Iterable[str], who: str | None = None, default: bool = False
+) -> NoReturn:
     """`foreman lock NAME …`: replaces this process (run keeps the lock for the command's life)."""
     res = resource_config(project, name)
     argv, env = command(name, res, args, who, default, project)
