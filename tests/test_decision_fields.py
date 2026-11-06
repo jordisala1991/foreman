@@ -191,6 +191,41 @@ class DecisionFieldsTest(ProjectCase):
         r = self.add("--option", "a", "--effect", "x", **QUOTED_QUESTION)
         self.assertEqual((r.returncode, self.warnings(r)), (0, []), r.stderr)
 
+    def test_a_long_option_warns(self):
+        long = "x" * 61
+        r = self.add("--option", long, "--effect", "e", "--option", "y" * 60, "--effect", "e")
+        w = self.warnings(r)
+        self.assertEqual(len(w), 1, w)
+        self.assertIn("option 1 is 61 characters long (over 60)", w[0])
+
+    def test_the_same_title_as_a_pending_decision_warns(self):
+        self.assertEqual(self.warnings(self.add("--option", "a", "--effect", "e")), [])
+        r = self.add("--option", "a", "--effect", "e", title=TITLE.lower())
+        w = self.warnings(r)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(w), 1, w)
+        self.assertIn("the title is the same as that of the pending AB-1 J1", w[0])
+
+    def test_if_no_answer_with_nothing_to_hold_or_remind_warns(self):
+        base = ("--option", "a", "--effect", "e", "--if-no-answer", "the export waits")
+        w = self.warnings(self.add(*base))
+        self.assertEqual(len(w), 1, w)
+        self.assertIn("--if-no-answer without --blocks or --answer-by", w[0])
+        self.assertEqual(self.warnings(self.add(*base, "--answer-by", later(5), title="Another one?")), [])
+        self.assertEqual(self.warnings(self.add(*base, "--blocks", "AB-1", title="A third one?")), [])
+
+    def test_pointing_elsewhere_warns(self):
+        for n, text in enumerate(
+            ("Detalle en el informe de ayer.", "Ver el estudio.", "Details in the notes.", "See the report.")
+        ):
+            r = self.add("--option", "a", "--effect", "e", title=f"Question {n}?", text=text)
+            w = self.warnings(r)
+            self.assertEqual(len(w), 1, (text, w))
+            self.assertIn("sends the owner to another document", w[0])
+        r = self.add("--option", "see the plan", "--effect", "e", title="Option one?")
+        self.assertIn("option 1 sends the owner", "\n".join(self.warnings(r)))
+        self.assertEqual(self.warnings(self.add("--option", "a", "--effect", "e", title="Plain one?")), [])
+
     def test_past_date_and_page_warn(self):
         r = self.add(
             *("--option", "a", "--effect", "x", "--if-no-answer", "the export waits"),
