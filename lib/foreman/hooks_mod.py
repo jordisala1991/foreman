@@ -182,6 +182,7 @@ that works again drops its own) and calls Python again at the next event; only a
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -439,7 +440,8 @@ def _tick_pass(project: Project, session: str, o: Mark, ev: Event) -> dict[str, 
         out = {"marked": True, "due": False, **renewing}
     elif not prompt or ev.get("busy") is True or not pass_due(project, o):  # never behind a running turn
         out: dict = {"marked": True, "due": False}
-        snap = loop.Snapshot(project, session)
+        with contextlib.suppress(Exception):  # unreadable: the notices and the band each fail in their own guard
+            snap = loop.Snapshot(project, session)
         texts = between_notices(project, session, snap)
         if texts:
             out["notices"] = texts
