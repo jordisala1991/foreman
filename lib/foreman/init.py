@@ -42,10 +42,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog, config, i18n, util
+from . import backlog, config, i18n, toml_reader, util
 
 if TYPE_CHECKING:
-    from .config import Table
+    pass
 
 NAME = r"^[a-z0-9][a-z0-9._-]*$"  # [project] name (config.problems)
 REPO_KEY = r"^[a-z0-9][a-z0-9_-]*$"
@@ -131,10 +131,6 @@ def git_root(path: Path) -> Path | None:
     return Path(top).resolve() if top else None
 
 
-def inside(path: Path, root: Path) -> bool:
-    return path == root or root in path.parents
-
-
 def repo_table(path: Path, local_ci: str) -> dict[str, Any]:
     """The [repos.KEY] keys of a repo that differ from foreman's defaults, read from git."""
     t: dict[str, Any] = {}
@@ -201,7 +197,7 @@ def worktrees_folder(home: Path, repos: list[Repo]) -> Path | None:
     if top:
         roots.append(top)
     for root in sorted(roots, key=lambda p: len(str(p))):
-        if inside(default, root):
+        if config.inside(default, root):
             return root.parent / f"{root.name}-wt"
     return None
 
@@ -226,7 +222,7 @@ def render_toml(plan: Plan, args: argparse.Namespace, repos: list[Repo], worktre
     if args.every_min is not None and args.every_min != config.DEFAULTS["loop"]["every_min"]:
         out += ["", "[loop]", f"every_min = {args.every_min}"]
     for r in repos:
-        rel = os.path.relpath(r.path, plan.home) if inside(plan.home, r.path) else str(r.path)
+        rel = os.path.relpath(r.path, plan.home) if config.inside(plan.home, r.path) else str(r.path)
         out += ["", f"[repos.{r.key}]", f"path = {toml_value(rel)}"]
         out += [f"{k} = {toml_value(v)}" for k, v in r.table.items()]
     return "\n".join(out) + "\n"
@@ -273,7 +269,7 @@ def make_plan(args: argparse.Namespace, cwd: Path) -> Plan:
     )
     repos = parse_repos(args, cwd)
     plan.toml = render_toml(plan, args, repos, worktrees_folder(home, repos))
-    err, warn = config.problems(parse_toml(plan.toml))
+    err, warn = config.problems(toml_reader.loads(plan.toml))
     if err or warn:  # a bug of init's, never the user's: what it writes must load strictly
         raise InitError("foreman.toml would not load: " + "; ".join(err + warn))
     keep_toml(plan, args)
@@ -308,10 +304,8 @@ def keep_toml(plan: Plan, args: argparse.Namespace) -> None:
             f"{', '.join(given)} it is kept as it is and only what is missing is made)"
         )
     text = f.read_text()
-    from . import toml_reader
-
     try:
-        raw = parse_toml(text)
+        raw = toml_reader.loads(text)
     except toml_reader.TOMLDecodeError as e:
         raise InitError(f"{f} does not read: {e}") from e
     err, _ = config.problems(raw)
@@ -322,12 +316,6 @@ def keep_toml(plan: Plan, args: argparse.Namespace) -> None:
         raise InitError(f"{f} is the home of {name!r}, not of {plan.name!r}: init never rewrites it")
     merged = config.merge_defaults(raw)
     plan.toml, plan.language, plan.owner = text, merged["project"]["language"], merged["project"]["owner"]
-
-
-def parse_toml(text: str) -> Table:
-    from . import toml_reader
-
-    return toml_reader.loads(text)
 
 
 def plan_files(plan: Plan) -> None:
@@ -357,7 +345,7 @@ def plan_files(plan: Plan) -> None:
 
 def project_of(plan: Plan) -> config.Project:
     """The project as foreman.toml will load it (in memory: it may not be written yet)."""
-    return config.Project(plan.home, config.merge_defaults(parse_toml(plan.toml)), plan.mode)
+    return config.Project(plan.home, config.merge_defaults(toml_reader.loads(plan.toml)), plan.mode)
 
 
 def rules_path(plan: Plan) -> Path:
@@ -409,7 +397,7 @@ def plan_registry(plan: Plan, text: str) -> None:
     """Decides the registry step from its text: already there, to append, or InitError."""
     reg = config.registry_path()
     try:
-        entries, broken, _ = config.registry_scan(parse_toml(text) if text else {})
+        entries, broken, _ = config.registry_scan(toml_reader.loads(text) if text else {})
     except (config.ConfigError, ValueError) as e:
         raise InitError(f"{reg} does not read ({e}): init leaves it alone; fix it first") from e
     for e in [*entries, *broken]:

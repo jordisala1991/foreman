@@ -442,7 +442,7 @@ def _tick_pass(project: Project, session: str, o: Mark, ev: Event) -> dict[str, 
     else:
         renewed = renewed_since_pass(project, o)  # before loop_pass, which writes the `loop` heartbeat
         text, ns = loop.loop_pass(project, session, send=renewed)
-        if loop.skips(project, ns) and not renewed:
+        if loop.nothing_actionable(ns) and not renewed:
             out = {"marked": True, "due": True, "log": loop.idle_line(project, ns)}
         else:
             out = {"marked": True, "due": True, "submit": f"{prompt}\n\n{text}"}

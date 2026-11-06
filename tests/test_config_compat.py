@@ -7,7 +7,7 @@ foreman's file from a typo. Everything on fake projects in the temporary directo
 import json
 import unittest
 
-from helpers import ROOT, ProjectCase, config
+from helpers import ROOT, ProjectCase, config, config_problems
 
 from foreman import i18n, loop, toml_reader
 from foreman.backlog import Backlog
@@ -97,7 +97,7 @@ class ConfigCompatTest(ProjectCase):
                 with self.assertRaises(config.ConfigError) as cm:
                     config.load_project(self.home, strict=True)
                 self.assertIn(word, str(cm.exception))
-                self.assertNotEqual(config.validate(toml_reader.loads(text)), [])
+                self.assertNotEqual(config_problems(toml_reader.loads(text)), [])
 
     def test_strings_are_checked(self):
         """[strings]: an unknown key is a warning (strict: an error), a value of the wrong kind an error."""
@@ -260,7 +260,7 @@ class ConfigCompatTest(ProjectCase):
         f = ROOT / "ops/foreman.toml"
         if not f.exists():
             self.skipTest("no ops/ home in this checkout")
-        self.assertEqual(config.validate(toml_reader.loads(f.read_text())), [])
+        self.assertEqual(config_problems(toml_reader.loads(f.read_text())), [])
 
     # ---------- the CLI ----------
     def test_check_is_strict(self):
@@ -359,7 +359,7 @@ class ConfigCompatTest(ProjectCase):
         self.assertIn("futuro", ctx)
         self.cli("session", "S1")
         self.assertIn("futuro", self.who("S1"))  # the orchestrator too
-        lines = loop.summary(self.project)
+        lines = [n["text"] for n in loop.notices_for_pass(self.project)]
         self.assertTrue(lines[0].startswith("Config warnings"), lines)
         self.assertIn("config schema 99", lines[0])
 

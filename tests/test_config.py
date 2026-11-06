@@ -7,7 +7,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from helpers import BIN, ROOT, ProjectCase, config
+from helpers import BIN, ROOT, ProjectCase, config, config_problems
 
 from foreman import cli, release, toml_reader, util
 from foreman_dev import snapshot
@@ -17,7 +17,7 @@ class ConfigTest(ProjectCase):
     def test_examples_validate(self):
         for f in (ROOT / "examples").glob("*.toml"):
             with self.subTest(f=f.name):
-                self.assertEqual(config.validate(toml_reader.loads(f.read_text())), [])
+                self.assertEqual(config_problems(toml_reader.loads(f.read_text())), [])
 
     def test_machine_examples(self):
         """examples/machine/: the example registry reads without warnings and its gpu is a machine resource; the
@@ -453,18 +453,10 @@ worktree = "{{worktrees}}/{{repo}}-{{name}}"
                     for c in act.choices:
                         self.assertIn(c, blocks[name], f"help: {name} --as lacks {c}")
 
-    def test_replaced_commands(self):
-        """A command folded into another (cli.REPLACED) says, for one version, which command replaces it, and exits
-        2 without doing anything; the new form works, and `foreman -h` names neither the old one nor a line for it."""
-        out = self.cli("-h").stdout
-        for old, new in cli.REPLACED.items():
-            r = self.cli(old, "x")
-            self.assertEqual(r.returncode, 2, old)
-            self.assertIn(f"replaced by `foreman {new}`", r.stderr)
-            self.assertEqual(r.stdout, "")
-            self.assertNotRegex(out, rf"[{{,]{old}[,}}]")
-            self.assertNotRegex(out, rf"(?m)^{old}\b")
-        self.assertEqual(self.cli("--project", "fake", "heartbeat", "loop").returncode, 2)
+    def test_folded_commands(self):
+        """The commands folded into others are gone (argparse's error, exit 2); the new forms work and bad ones fail."""
+        for old in ("heartbeat", "sessions", "projects", "grants"):
+            self.assertEqual(self.cli(old, "x").returncode, 2, old)
         self.assertFalse((self.project.state / "heartbeats.json").exists())
         r = self.cli("recurring", "done", "loop")
         self.assertEqual(r.returncode, 0, r.stderr)

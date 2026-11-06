@@ -1244,7 +1244,9 @@ class PauseTest(ProjectCase):
         self.assertNotIn("WIP", r.stdout)
         # Spanish
         self.write_toml(TOML.replace('owner = "Owner"', 'owner = "Owner"\nlanguage = "es"'))
-        self.assertTrue(loop.summary(self.project)[0].startswith("PAUSADO desde el panel (desde las 21:07)"))
+        self.assertTrue(
+            loop.notices_for_pass(self.project)[0]["text"].startswith("PAUSADO desde el panel (desde las 21:07)")
+        )
 
     def test_pause_agents(self):
         self.cli("session", "S1")

@@ -8,7 +8,7 @@ import subprocess
 import sys
 import unittest
 
-from helpers import ROOT
+from helpers import ROOT, config_problems
 
 from foreman import cli, commands, config, notices, toml_reader
 
@@ -184,7 +184,7 @@ class DocsTiedTest(unittest.TestCase):
         text = (ROOT / "docs/config.md").read_text()
         block = text.split("## `foreman.toml` (in the home)", 1)[1].split("```toml\n", 1)[1].split("```", 1)[0]
         data = toml_reader.loads(block)
-        self.assertEqual(config.validate(data), [])
+        self.assertEqual(config_problems(data), [])
         self.assertEqual(data["project"]["config_schema"], config.CONFIG_SCHEMA)
 
         def shown(key, table):  # set, or a commented line when its default is «unset»
