@@ -76,6 +76,7 @@ class Launch(_Launch, total=False):
     model: str  # the model asked for, only when given
     despite: list[dict[str, str]]  # [{decision, why}]: pending decisions that held it (launch --despite), when any
     review: bool  # launched to review its repo:branch (launch --review), only when so
+    planned: str  # the sub-issue's `type` (TYPE[/MODEL]) when it has one: the call may not be dearer (call_too_dear)
 
 
 class Identity(TypedDict):
@@ -163,6 +164,43 @@ def agent_definition_name(f: Path) -> str:
     return m.group(1) if m else f.stem
 
 
+MODELS = ("haiku", "sonnet", "opus", "fable")  # by price, cheapest first
+
+
+def price_rank(agent_type: str | None, model: str | None = None) -> int:
+    """Where an agent costs in MODELS: its `model` (a family name or a full id), else the `model:` of the type's
+    definition in agents/; `inherit`, no definition or an unknown name count as opus (the session's model)."""
+    if not model and agent_type:
+        f = FOREMAN_AGENTS / f"{agent_type.rsplit(':', 1)[-1]}.md"
+        try:
+            m = re.search(r"^model:\s*(\S+)", f.read_text().split("\n---", 1)[0], re.M)
+        except (OSError, UnicodeDecodeError):
+            m = None
+        model = m.group(1) if m else None
+    low = (model or "").lower()
+    return next((i for i, m in enumerate(MODELS) if m in low), MODELS.index("opus"))
+
+
+def split_type(planned: str) -> tuple[str, str | None]:
+    """`dev/sonnet` -> ("dev", "sonnet"); `mechanic` -> ("mechanic", None)."""
+    kind, _, model = planned.partition("/")
+    return kind, model or None
+
+
+def call_too_dear(project: Project, tool_input: dict[str, Any]) -> tuple[str, str] | None:
+    """The PreToolUse of an Agent/Task call whose brief has the launch line of a launch with a planned type: None
+    when the call is no dearer than the launch, else (planned, the model the call should ask for)."""
+    prompt = tool_input.get("prompt")
+    rec = util.read_json(launches_file(project), {}).get(token_in(prompt if isinstance(prompt, str) else ""))
+    planned = rec.get("planned") if rec else None
+    if not rec or not planned:
+        return None
+    kind, model = tool_input.get("subagent_type"), tool_input.get("model")
+    kind, model = (kind if isinstance(kind, str) else None), (model if isinstance(model, str) else None)
+    allowed = price_rank(rec.get("type"), rec.get("model"))
+    return None if price_rank(kind, model) <= allowed else (planned, MODELS[allowed])
+
+
 def shadowed_types(project: Project, user_dir: Path | None = None) -> list[tuple[str, Path]]:
     """foreman's agent types (agents/*.md of the plugin) that an agent file of the project defines again, [(type,
     file)]: in `.claude/agents/` of the home and of each repo's main checkout, and in the user's agents folder
@@ -230,6 +268,8 @@ def launch_line(token: str, rec: Launch) -> str:
         parts.append("production")
     if rec.get("review"):
         parts.append("review")
+    if "planned" in rec:
+        parts.append(f"plan {rec.get('planned')}")
     return f"[foreman launch {token}] " + " · ".join(parts)
 
 
@@ -305,6 +345,7 @@ def new_launch(
     model: str | None = None,
     despite: list[dict[str, str]] | None = None,
     review: bool = False,
+    planned: str | None = None,
 ) -> tuple[str, Launch]:
     """Records a launch; (token, record). `production` None: true with a worktree or a production type, otherwise
     decided when the agent is tied to it (by its type). `model`: the one asked for, recorded only when given.
@@ -332,6 +373,8 @@ def new_launch(
         rec["despite"] = despite
     if review:
         rec["review"] = True
+    if planned:
+        rec["planned"] = planned
     f = launches_file(project)
     with util.locked_json(f, {}) as cur:
         d = prune(cur, loop.agents(project))

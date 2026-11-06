@@ -262,7 +262,8 @@ options:
                                      duplicate; idea = triage, todo = ready) or
                                      sub-issue status (todo "in progress" done canceled moved unknown, or ▶ ✓ ✗ → ?)
   sub ID Tn [--title T] [--text T] [--status S] [--commit C] [--agent A] [--branch B] [--moved-to ID]
-            [--report PATH] [--kind measure|code] [--before Tm] [--remove]
+            [--report PATH] [--type T[/M]] [--kind measure|code] [--before Tm] [--remove]
+                                     --type: the agent type and model it is for (dev/sonnet): launch uses it
                                      --kind measure: a part that only measures (no code for main); code clears it
   edit ID [--title T] [--detail T] [--append T] [--prepend T] [--plan [LABEL=]PATH ...] [--claim T]
           [--criterion T] [--verdict V] [--result R] [--github owner/repo#n] [--short T]

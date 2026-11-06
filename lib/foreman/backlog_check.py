@@ -22,6 +22,7 @@ from .backlog import (
     SUB_ID,
     SUB_KINDS,
     SUB_SYMBOLS,
+    SUB_TYPE,
     UNANSWERED_KEYS,
     UNDO,
     WANTED,
@@ -96,6 +97,8 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
                 err.append(f"{where} {s.get('id')}: bad sub-issue status {s.get('status')!r}")
             if "kind" in s and s["kind"] not in SUB_KINDS:
                 err.append(f"{where} {s.get('id')}: bad sub-issue kind {s['kind']!r} ({'|'.join(SUB_KINDS)}, or none)")
+            if s.get("type") and not SUB_TYPE.match(s["type"]):
+                err.append(f"{where} {s.get('id')}: bad sub-issue type {s['type']!r} (TYPE or TYPE/MODEL)")
             if files and s.get("report") and not (b.root / s["report"]).is_file():
                 err.append(f"{where} {s.get('id')}: report {s['report']} does not exist")
             sids.append(s.get("id"))

@@ -545,12 +545,20 @@ def hook_pause_agents(project: Project, ev: Event) -> None:
     if ev.get("tool_name") not in ("Agent", "Task") or not is_orchestrator(project, ev):
         return
     at = pause.since(project)
-    kind = (ev.get("tool_input") or {}).get("subagent_type")
-    if not at or not isinstance(kind, str) or identity.role(project, kind) != "production":
+    ti = identity.tool_input(ev)
+    kind = ti.get("subagent_type")
+    reason = ""
+    if at and isinstance(kind, str) and identity.role(project, kind) == "production":
+        reason = i18n.for_project(project)["pause_agents"].format(
+            project=project.name, since=at, type=kind, owner=project.owner
+        )
+    dear = identity.call_too_dear(project, ti)
+    if dear and not reason:
+        reason = i18n.for_project(project)["launch_dearer"].format(
+            plan=dear[0], type=identity.split_type(dear[0])[0], model=dear[1]
+        )
+    if not reason:
         return
-    reason = i18n.for_project(project)["pause_agents"].format(
-        project=project.name, since=at, type=kind, owner=project.owner
-    )
     out(
         {
             "hookSpecificOutput": {
