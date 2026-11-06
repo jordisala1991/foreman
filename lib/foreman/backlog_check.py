@@ -4,6 +4,7 @@ ones that block a write. Functions that take the Backlog and its data."""
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 from .backlog import (
     CLOSED,
@@ -48,7 +49,7 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
     for pid in pids:
         if not b.project_id.match(pid):
             err.append(f"bad project id {pid!r}")
-    dup = {x for x in pids if pids.count(x) > 1}
+    dup = {x for x, n in Counter(pids).items() if n > 1}
     if dup:
         err.append(f"duplicate projects: {', '.join(sorted(dup))}")
     for p in data["projects"]:
@@ -61,6 +62,7 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
         if g["project"] and g["project"] not in pids:
             err.append(f"archive group {g['project']} is not a project")
     err += validate_projects(b, data)
+    ids = {x[1]["id"] for x in b.iter_issues(data)}
     seen = {}
     for pid, i, arch in b.iter_issues(data):
         where = f"{i.get('id')} ({pid}{', archive' if arch else ''})"
@@ -84,7 +86,7 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
                 err.append(f"{where}: line break in {field}")
         if i.get("github") and not re.match(r"^[\w.-]+/[\w.-]+#\d+$", i["github"]):
             err.append(f"{where}: bad github reference {i['github']!r} (owner/repo#n)")
-        err += validate_issue_fields(b, data, pid, i, where)
+        err += validate_issue_fields(b, ids, pid, i, where)
         sids = []
         for s in i["subs"]:
             if not SUB_ID.match(s.get("id", "")):
@@ -96,7 +98,7 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
             if files and s.get("report") and not (b.root / s["report"]).is_file():
                 err.append(f"{where} {s.get('id')}: report {s['report']} does not exist")
             sids.append(s.get("id"))
-        dup = {x for x in sids if sids.count(x) > 1}
+        dup = {x for x, n in Counter(sids).items() if n > 1}
         if dup:
             err.append(f"{where}: duplicate sub-issues {', '.join(sorted(dup))}")
         if files:
@@ -105,7 +107,7 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
                     err.append(f"{where}: plan {p['path']} does not exist")
         err += validate_outcome(b, data, i, where, arch)
     dids = [d["id"] for d in data["decisions"]]
-    dup = {x for x in dids if dids.count(x) > 1}
+    dup = {x for x, n in Counter(dids).items() if n > 1}
     if dup:
         err.append(f"duplicate decisions: {', '.join(sorted(dup))}")
     for d in data["decisions"] + data["decisions_resolved"]:
@@ -238,7 +240,7 @@ def validate_projects(b: Backlog, data: Data) -> list[str]:
     return err
 
 
-def validate_issue_fields(b: Backlog, data: Data, pid: str, i: Issue, where: str) -> list[str]:
+def validate_issue_fields(b: Backlog, ids: set[str], pid: str, i: Issue, where: str) -> list[str]:
     err = []
     if i.get("priority") and i["priority"] not in PRIORITIES:
         err.append(f"{where}: bad priority {i['priority']!r} ({', '.join(PRIORITIES)})")
@@ -249,7 +251,6 @@ def validate_issue_fields(b: Backlog, data: Data, pid: str, i: Issue, where: str
     rel = i.get("relations") or {}
     if set(rel) - {"blocks", "related", "duplicate_of"}:
         err.append(f"{where}: bad relations {sorted(rel)}")
-    ids = {x["id"] for _, x, _ in b.iter_issues(data)}
     for k in ("blocks", "related"):
         for x in rel.get(k, []):
             if x not in ids or x == i["id"]:
