@@ -1066,7 +1066,8 @@ def review_notices(s: Snapshot, held: Sequence[tuple[str, str, str, review.State
             "branch's worktree), brief: the plan, its report and the review"
         )
         if st.status == review.NEEDED or (st.status == review.FIXED and rv):
-            launch = f"`foreman launch {base}-rv{st.round} --review {ref} --issue {iid} --sub {sid}`"
+            model = "opus" if any(r.kind == "paths" for r in st.reasons) else "sonnet"  # delicate paths: the stronger
+            launch = f"`foreman launch {base}-rv{st.round} --review {ref} --issue {iid} --sub {sid} --model {model}`"
             first = (  # the cheap gate first: a branch that fails it needs another review anyway
                 f"first its hidden check, `foreman holdout run {repo} {br} {iid}`; if it passes, "
                 if holdout.exists(project, iid)
