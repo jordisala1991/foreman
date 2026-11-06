@@ -2330,6 +2330,30 @@ class TickTest(LivenessCase):
             self.assertEqual((out["marked"], len(own)), (marked, 1), (extra, callers))
             self.assertEqual("submit" in out or "log" in out, extra == {}, out)  # only the full tick ran the pass
 
+    def test_a_malformed_agents_file_does_not_fail_the_tick(self):
+        """agents.json valid as JSON but of another shape: the tick still gives its band (red when it cannot be
+        read) and its grants."""
+        self.mark("S1", since_ago=self.HOUR)
+        ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
+        for text, level in (("[]", "ok"), ('{"a1": "x"}', "bad")):
+            loop.agents_file(self.project).write_text(text)
+            out = hooks_mod.tick(ev)
+            self.assertEqual((out["band"]["level"], "grants" in out), (level, True), (text, out))
+
+    def test_a_tick_without_a_pass_reads_the_state_once(self):
+        """The notices between passes and the band of one tick share one loop.Snapshot: agents.json and the backlog
+        are read once; a tick with a pass reads them again for the band, after the pass."""
+        from unittest import mock
+
+        from foreman.backlog import Backlog
+
+        self.mark("S1", since_ago=self.HOUR)  # a pass is due, but a turn runs (busy): no pass
+        ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
+        with mock.patch.object(loop, "agents", wraps=loop.agents) as ags:
+            with mock.patch.object(Backlog, "load", autospec=True, side_effect=Backlog.load) as load:
+                out = hooks_mod.tick(ev)
+        self.assertEqual((out["due"], "band" in out, ags.call_count, load.call_count), (False, True, 1, 1), out)
+
     def test_start_and_end(self):
         self.mark("S1", since_ago=self.HOUR)
         root = str(Path(ENTRY).resolve().parent.parent)
