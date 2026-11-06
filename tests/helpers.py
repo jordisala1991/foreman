@@ -171,6 +171,12 @@ class ProjectCase(unittest.TestCase):
         return self.cli("hook", name, inp=json.dumps(event), cwd=cwd or self.home)
 
 
+def config_problems(raw):
+    """Every problem of a foreman.toml, read strictly (errors and warnings; empty = fine)."""
+    err, warn = config.problems(raw)
+    return err + warn
+
+
 GIT = shutil.which("git") or "git"
 
 

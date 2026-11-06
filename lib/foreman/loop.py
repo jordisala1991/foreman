@@ -731,12 +731,6 @@ def config_notices(project: Project, mark: bool = True) -> list[Notice]:
     ]
 
 
-def session_notices(project: Project, session: str | None, mark: bool = True) -> list[Notice]:
-    """The notices about the orchestrator's own session: its context (`context_rotate`)."""
-    ctx = context_notice(project, session, mark)
-    return [ctx] if ctx else []
-
-
 def stale_notice(project: Project, session: str | None, now: float | None = None) -> Notice | None:
     """The `loop_stale` notice between passes, or None: the marked orchestrator (this session) is alive but no pass
     came for more than orchestrator.loop_limit_min since the latest of the last pass, the mark and the start of its
@@ -1438,7 +1432,8 @@ def notices_for_pass(project: Project, session: str | None = None, mark: bool = 
     writing them, so looking does not use up a pass's notices. Each group of notices is one function."""
     s = Snapshot(project, session)
     out = paused_notices(project, s.paused) + config_notices(project, mark)
-    out += session_notices(project, session, mark)
+    ctx_notice = context_notice(project, session, mark)  # the orchestrator's own context (`context_rotate`)
+    out += [ctx_notice] if ctx_notice else []
     at_version = len(out)  # where foreman_behind goes (with_versions)
     found = foreman_versions(project, session)
     if not s.paused:  # paused: nothing to launch, so no WIP notice asking for it
@@ -1453,16 +1448,6 @@ def notices_for_pass(project: Project, session: str | None = None, mark: bool = 
     out += decision_notices(s, mark)
     out += run_checks(project)
     return with_versions(project, session, out, at_version, found, mark)
-
-
-def summary(project: Project, session: str | None = None, mark: bool = True) -> list[str]:
-    """The text of each notice of a loop pass (what `foreman loop` lists)."""
-    return [n["text"] for n in notices_for_pass(project, session, mark)]
-
-
-def skips(project: Project, ns: Iterable[Notice]) -> bool:
-    """Whether the pass is not sent to the model (hooks_mod.tick): no notice asks for action."""
-    return nothing_actionable(ns)
 
 
 def idle_line(project: Project, ns: Iterable[Notice]) -> str:
@@ -1485,12 +1470,12 @@ def loop_log_file(project: Project) -> Path:
 
 def log_pass(project: Project, session: str | None, ns: Sequence[Notice], seconds: float, send: bool = False) -> None:
     """One line in <state>/loop.jsonl for a pass: {time, session, skipped, notices (kinds, in order), actionable
-    (kinds), duration_s}; `send`: the pass goes to the model whatever skips() says (not skipped). Past
+    (kinds), duration_s}; `send`: the pass goes to the model whatever nothing_actionable() says (not skipped). Past
     LOOP_LOG_TRIM_BYTES it keeps only the last LOOP_LOG_DAYS days. Never raises."""
     line = {
         "time": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "session": session or None,
-        "skipped": not send and skips(project, ns),
+        "skipped": not send and nothing_actionable(ns),
         "notices": [n["kind"] for n in ns],
         "actionable": [n["kind"] for n in ns if n["actionable"]],
         "duration_s": round(seconds, 2),

@@ -677,11 +677,6 @@ def missing(project: Project, aid: str | None, h: Agent) -> list[tuple[str, str]
     return items
 
 
-def check(project: Project, aid: str | None, h: Agent) -> Result:
-    """The whole check of one entry: {"items": [(key, text)]}, empty when the delivery is complete."""
-    return {"items": missing(project, aid, h)}
-
-
 def block_reason(project: Project, result: Result, n: int) -> str:
     """The reason given back to the agent (plain English): what is missing and the command for each."""
     lines = [f"foreman delivery check (try {n} of {MAX_BLOCKS}): your delivery is not complete yet."]

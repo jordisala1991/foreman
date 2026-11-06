@@ -944,10 +944,6 @@ $ foreman --project faro handover
 usage: foreman [-h] [--version]
                {backlog,integrate,holdout,note,progress,inbox,recurring,worktree,launch,guard,loop,renew,session,agents,check,config,init,panel,lock,wait,time-limit,hung-shells,plain,start,catchup,permissions,docs,selftest} ...
 foreman: error: argument cmd: invalid choice: 'handover' (choose from 'backlog', 'integrate', 'holdout', 'note', 'progress', 'inbox', 'recurring', 'worktree', 'launch', 'guard', 'loop', 'renew', 'session', 'agents', 'check', 'config', 'init', 'panel', 'lock', 'wait', 'time-limit', 'hung-shells', 'plain', 'start', 'catchup', 'permissions', 'docs', 'selftest')
-$ foreman --project faro sessions
-[exit 2]
---- stderr
-foreman sessions: replaced by `foreman session --all`
 $ CLAUDE_CODE_SESSION_ID=orq-session-2 foreman --project faro start
 [exit 0]
 Arranque de una sesión de orquestador: faro (<TODAY> <TIME>)

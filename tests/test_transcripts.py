@@ -136,7 +136,7 @@ class TranscriptsTest(unittest.TestCase):
             self.assertEqual(transcripts.calls(p), [])
             self.assertIsNone(transcripts.last_context(p))
             self.assertIsNone(transcripts.model(p))
-            self.assertIsNone(transcripts.cost_state(p))
+            self.assertIsNone(transcripts.cost_state_at(p)[0])
             self.assertIsNone(transcripts.last_message(p))
             self.assertIsNone(transcripts.last_text(p))
             self.assertEqual(transcripts.head(p), "")
@@ -217,7 +217,7 @@ class TranscriptsTest(unittest.TestCase):
         subs = transcripts.subagents(session)
         self.assertEqual([(s["id"], s["meta"].get("agentType")) for s in subs], [("a", None), ("b", "foreman:dev")])
         total = sum(c["cache_read"] for p in [session] + [s["path"] for s in subs] for c in transcripts.calls(p))
-        cs = transcripts.cost_state(session)
+        cs = transcripts.cost_state_at(session)[0]
         self.assertEqual(total, cs["modelUsage"]["claude-opus-5-5"]["cacheReadInputTokens"])
         self.assertEqual(cs["totalCostUSD"], 1.5)
 

@@ -35,14 +35,6 @@ class LockError(Exception):
     pass
 
 
-def who_am_i() -> str:
-    """The holder's name from the environment only (identity.who, the same order as notes), else `agent`. The CLI
-    also looks up the call the guard wrote down (cli.py passes `who` to run)."""
-    from . import identity
-
-    return identity.who("agent")[0]
-
-
 def machine() -> dict[str, Table]:
     """The registry's machine resources ({} when the registry does not read: `foreman check` says why)."""
     try:
@@ -108,15 +100,15 @@ def environment(
         env[identity.LOCK_DEFAULT] = "1"
     env.update(
         {
-            "FOREMAN_LOCK_WHO": str(who or who_am_i()),
+            "FOREMAN_LOCK_WHO": str(who or identity.who("agent")[0]),
             "FOREMAN_LOCK_DIR": str(p["dir"]),
             "FOREMAN_LOCK_QUEUE": str(p["queue"]),
             "FOREMAN_LOCK_NEXT": str(p["next"]),
             "FOREMAN_LOCK_JUMPED": str(p["jumped"]),
             "FOREMAN_LOCK_LOG": str(p["log"]),
             "FOREMAN_LOCK_BUSY": res.get("busy", ""),
-            "FOREMAN_LOCK_BUSY_WAIT": str(res.get("busy_wait", 600)),
-            "FOREMAN_LOCK_SHORT_MAX": str(res.get("short_max", 300)),
+            "FOREMAN_LOCK_BUSY_WAIT": str(res.get("busy_wait", config.RESOURCE_DEFAULTS["busy_wait"])),
+            "FOREMAN_LOCK_SHORT_MAX": str(res.get("short_max", config.RESOURCE_DEFAULTS["short_max"])),
             "FOREMAN_LOCK_SLOTS": " ".join(res.get("slots", [])),
             "FOREMAN_LOCK_BUSY_TIMEOUT": str(int(commands.POINTS["resource.busy"].timeout or 5)),
             "FOREMAN_LOCK_BIN": str(commands.BIN),
@@ -282,8 +274,8 @@ def effective(name: str, res: Table) -> dict[str, Any]:
     out["busy"] = str(res.get("busy") or "")
     slots = res.get("slots") or []
     out["slots"] = " ".join(map(str, slots)) if isinstance(slots, list) else str(slots)
-    for key, default in (("busy_wait", 600), ("short_max", 300)):
-        v = res.get(key, default)
+    for key in ("busy_wait", "short_max"):
+        v = res.get(key, config.RESOURCE_DEFAULTS[key])
         try:
             out[key] = int(v)
         except (TypeError, ValueError):

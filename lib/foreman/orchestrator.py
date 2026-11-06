@@ -24,15 +24,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import heartbeat, notes, transcripts, util
+from . import heartbeat, notes, util
 
 if TYPE_CHECKING:
     from .config import Project
-
-# The transcript format is read in transcripts.py alone; these names stay as the callers know them.
-claude_projects_dir = transcripts.claude_projects_dir
-transcript_of = transcripts.transcript_of
-CONTEXT_FIRST_WINDOW = transcripts.CONTEXT_FIRST_WINDOW
 
 Mark = dict[str, Any]  # the marked orchestrator {session, name, since}: what current() reads (mark() adds the process)
 Health = dict[str, Any]  # health(): see its docstring for each key

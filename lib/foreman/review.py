@@ -275,12 +275,6 @@ def reviews(project: Project, repo_key: str, branch: str) -> tuple[list[Review],
     return found, bad
 
 
-def latest(project: Project, repo_key: str, branch: str) -> Review | None:
-    """The latest review of REPO_KEY:BRANCH: the highest round, then the newest file; None without one."""
-    found, _ = reviews(project, repo_key, branch)
-    return found[-1] if found else None
-
-
 def _own_patch_id(main_path: PathLike, main: str, commit: str) -> str | None:
     """`git patch-id --stable` of COMMIT's own diff (its merge-base with main..COMMIT), or None when git cannot."""
     base = util.git(main_path, "merge-base", main, commit, check=False)

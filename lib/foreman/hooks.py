@@ -156,12 +156,6 @@ def is_orchestrator(project: Project, ev: Event) -> bool:
     return orchestrator.is_orchestrator(project, ev.get("session_id"))
 
 
-def delivers(ev: Event) -> bool:
-    """Whether a PostToolUse event is a Bash that runs `foreman progress --done` (the agent's delivery)."""
-    words = done_words(ev)
-    return words is not None and delivery.outcome_in(words) is not None
-
-
 def done_words(ev: Event) -> list[str] | None:
     """The words after `progress` of the `foreman progress --done` a PostToolUse Bash runs, or None."""
     ti = ev.get("tool_input")
@@ -214,7 +208,7 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
     most delivery.MAX_BLOCKS times, then lets it go with `delivery_incomplete` in its entry (the loop's notice). Any
     error: no block."""
     try:
-        res = delivery.check(project, aid, entry)
+        res = {"items": delivery.missing(project, aid, entry)}
     except Exception:  # noqa: BLE001 (a delivery check never fails the hook)
         return
     now = time.strftime("%Y-%m-%dT%H:%M:%S")

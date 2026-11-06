@@ -499,7 +499,7 @@ class Project:
     def worktrees_shared(self) -> bool:
         """The worktrees folder is shared when it holds (or is) the home or a repo (e.g. a folder of projects)."""
         w = _resolved(self.worktrees_dir)
-        return any(_inside(root, w) for root in self._own_roots())
+        return any(inside(root, w) for root in self._own_roots())
 
     def workspace(self, others: Iterable[Project] = ()) -> Path | None:
         """The folder that holds the home and every repo (the home's parent), or None. It counts only if the project
@@ -507,12 +507,12 @@ class Project:
         it holds no home or repo of the `others` projects."""
         ws = _resolved(self.home.parent)
         repos = self._own_roots()[1:]
-        if not repos or not all(_inside(r, ws) for r in repos) or self.worktrees_shared():
+        if not repos or not all(inside(r, ws) for r in repos) or self.worktrees_shared():
             return None
-        if _inside(Path.home().resolve(), ws):
+        if inside(Path.home().resolve(), ws):
             return None
         for o in others:
-            if o is not self and any(_inside(r, ws) for r in o._own_roots()):
+            if o is not self and any(inside(r, ws) for r in o._own_roots()):
                 return None
         return ws
 
@@ -539,7 +539,7 @@ class Project:
         ws = self.workspace(others)
         if ws:
             roots.append(ws)
-        return any(_inside(c, root) for root in roots)
+        return any(inside(c, root) for root in roots)
 
 
 def _resolved(path: PathLike) -> Path:
@@ -549,7 +549,7 @@ def _resolved(path: PathLike) -> Path:
         return Path(path)
 
 
-def _inside(path: Path, root: Path) -> bool:
+def inside(path: Path, root: Path) -> bool:
     """True if `path` is `root` or below it."""
     return path == root or root in path.parents
 
@@ -764,12 +764,6 @@ def string_problems(section: Table, err: list[str], warn: list[str]) -> None:
     e, w = i18n.override_problems(texts, i18n.strings("en"), "[strings]")
     err += e
     warn += w
-
-
-def validate(raw: Table) -> list[str]:
-    """Every problem of a foreman.toml, read strictly (errors and warnings; empty = fine)."""
-    err, warn = problems(raw)
-    return err + warn
 
 
 def unknown_repo_keys(project: Project) -> list[tuple[str, list[str]]]:
@@ -1297,7 +1291,7 @@ def broken_for_cwd(cwd: PathLike) -> tuple[BrokenEntry, Project] | None:
         if p is None:
             continue
         try:
-            if p.owns(cwd, projects) or _inside(Path(cwd).expanduser().resolve(), p.home):
+            if p.owns(cwd, projects) or inside(Path(cwd).expanduser().resolve(), p.home):
                 hits.append((e, p))
         except (OSError, ValueError, KeyError):
             continue

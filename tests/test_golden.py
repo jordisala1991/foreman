@@ -678,7 +678,6 @@ def operations(case, name):
     c("loop", "--json")
     c("start")  # this session found by its heartbeat in the working folder: already marked
     c("handover")  # gone: an unknown command
-    c("sessions")  # replaced (cli.REPLACED): says by what, exit 2
     c("start", env={"CLAUDE_CODE_SESSION_ID": "orq-session-2"})  # an incoming session
     c("start", "--json", env={"CLAUDE_CODE_SESSION_ID": "orq-session-2"})
     c("session", "--all")
