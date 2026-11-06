@@ -256,7 +256,7 @@ def lock_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     known = {"orchestrator", project.owner.lower(), "owner"} | {
         h["name"] for h in s.agents.values() if h.get("name") and now - (util.iso_epoch(h.get("start")) or 0) < 86400
     }
-    seen = set(read_keys(project, "lock-notified"))
+    seen = read_keys(project, "lock-notified")
     out: list[Notice] = []
     keys: list[str] = []
     hint = ": check it is used well (`foreman lock RESOURCE check`)."
@@ -292,7 +292,7 @@ def lock_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
                         )
                     )
     if out and mark:
-        write_keys(project, "lock-notified", seen | set(keys), 4000)
+        write_keys(project, "lock-notified", [k for k in seen if k not in keys] + keys, 4000)
     return out
 
 
@@ -1394,7 +1394,7 @@ def decision_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     if s.data is None:
         return []  # backlog_unreadable says it
     due = backlog_mod.due_decisions(s.data)
-    seen = set(read_keys(project, "decision-due-notified"))
+    seen = read_keys(project, "decision-due-notified")
     out: list[Notice] = []
     for d in due:
         case = f"{d['id']}|{d['by']}"
@@ -1409,7 +1409,7 @@ def decision_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
                 "decision_due:" + case,
             )
         )
-        seen.add(case)
+        seen.append(case)
     if out and mark:
         write_keys(project, "decision-due-notified", seen, 4000)
     return out
@@ -1576,7 +1576,7 @@ def notices(project: Project, session: str | None = None, snap: Snapshot | None 
     last = set(read_keys(project, "notices-last"))
     keys = {between_key(n) for n in cand}
     if keys != last:
-        write_keys(project, "notices-last", keys)
+        write_keys(project, "notices-last", sorted(keys))
     out = merge_wip([n for n in cand if between_key(n) not in last])
     if locks:
         mark_locks(project, [n["key"] for n in out if n in locks])
@@ -1602,14 +1602,14 @@ def merge_wip(ns: list[Notice]) -> list[Notice]:
 def remember(project: Project, ns: Iterable[Notice]) -> None:
     """After a pass: its actionable keys become <state>/notices-last, so the notices between passes do not repeat
     what the pass just said (the next notices() call replaces the file with what it sees)."""
-    write_keys(project, "notices-last", {between_key(n) for n in ns if n["actionable"]})
+    write_keys(project, "notices-last", sorted({between_key(n) for n in ns if n["actionable"]}))
 
 
 def mark_locks(project: Project, keys: Collection[str]) -> None:
     """Add lock cases to <state>/lock-notified (lock_notices), so that what was said between passes is not repeated."""
     if not keys:
         return
-    write_keys(project, "lock-notified", set(read_keys(project, "lock-notified")) | set(keys), 4000)
+    write_keys(project, "lock-notified", [*read_keys(project, "lock-notified"), *keys], 4000)
 
 
 def stop_agent(project: Project, aid: str) -> list[str]:

@@ -230,11 +230,14 @@ def read_keys(project: Project, name: str) -> list[str]:
 
 
 def write_keys(project: Project, name: str, keys: Iterable[str], limit: int | None = None) -> None:
-    """Store `keys` as the mark <state>/<name>, sorted, cut to its last `limit` characters when given."""
+    """Store `keys` as the mark <state>/<name>, in the order given (repeats dropped): when `limit` characters are
+    exceeded, the oldest whole keys go and the newest stay."""
     f = project.state / name
     f.parent.mkdir(parents=True, exist_ok=True)
-    text = "\n".join(sorted(keys))
-    f.write_text(text[-limit:] if limit else text)
+    kept = list(dict.fromkeys(keys))
+    while limit and len("\n".join(kept)) > limit and len(kept) > 1:
+        kept.pop(0)
+    f.write_text("\n".join(kept))
 
 
 def idle(ns: Iterable[Notice]) -> bool:
