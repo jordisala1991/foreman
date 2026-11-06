@@ -44,7 +44,7 @@ class OwnerLock:
                 return
             prev = p["next"].read_text().strip() if p["next"].exists() else None
             p["next"].parent.mkdir(parents=True, exist_ok=True)
-            p["next"].write_text(f"{self.who()}: panel ({datetime.now():%H:%M})\n")
+            p["next"].write_text(f"{self.who()}: panel ({util.now():%H:%M})\n")
             self.st[name] = {
                 "state": "waiting",
                 "expires": None,

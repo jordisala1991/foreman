@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import i18n, identity, notes
+from . import i18n, identity, notes, util
 
 if TYPE_CHECKING:
     from .config import Project
@@ -46,7 +46,7 @@ def log_file(project: Project) -> Path:
 def _append(project: Project, rec: dict[str, Any]) -> None:
     f = log_file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f):
+    with util.file_lock(f):
         with open(f, "a") as out:
             out.write(json.dumps(rec, ensure_ascii=False) + "\n")
         if f.stat().st_size > TRIM_BYTES:

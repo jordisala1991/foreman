@@ -178,28 +178,15 @@ def run_checks(project: Project) -> list[Notice]:
     says its kind and whether it is actionable; a plain line is an actionable `check`). A check that times out or
     ends with a code other than 0 or 1 is `check_failed`, actionable."""
     out: list[Notice] = []
-    for cmd in project.section("loop").get("checks", []):
-        r = commands.run("loop.checks", cmd, project=project, cwd=project.home)
-        if r.timed_out:
-            out.append(
-                notice(
-                    "check_failed",
-                    True,
-                    f"check `{cmd}` timed out ({commands.POINTS['loop.checks'].timeout:g} s)",
-                    f"check_failed:{cmd}",
-                )
-            )
-            continue
-        out += [check_notice(cmd, ln) for ln in r.stdout.splitlines() if ln.strip()]
-        if r.rc not in (0, 1):
-            out.append(
-                notice(
-                    "check_failed",
-                    True,
-                    f"check `{cmd}` failed (rc {r.rc}): {r.stderr.strip()[:200]}",
-                    f"check_failed:{cmd}",
-                )
-            )
+    for run in try_checks(project):
+        out += [n for n, _ in run["lines"]]
+        if run["failed"]:
+            why = "timed out" if run["rc"] is None else f"failed (rc {run['rc']})"
+            if run["rc"] is None:
+                why += f" ({commands.POINTS['loop.checks'].timeout:g} s)"
+            else:
+                why += f": {run['stderr'].strip()[:200]}"
+            out.append(notice("check_failed", True, f"check `{run['cmd']}` {why}", f"check_failed:{run['cmd']}"))
     return out
 
 
@@ -219,6 +206,25 @@ def changed_mark(project: Project, name: str, value: str | None, mark: bool = Tr
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(value)
     return old != value
+
+
+def read_keys(project: Project, name: str) -> list[str]:
+    """The keys of the «already notified» mark <state>/<name> (one per line), in the order stored; none when absent."""
+    try:
+        return [k for k in (project.state / name).read_text().split("\n") if k]
+    except OSError:
+        return []
+
+
+def write_keys(project: Project, name: str, keys: Iterable[str], limit: int | None = None) -> None:
+    """Store `keys` as the mark <state>/<name>, in the order given (repeats dropped): when `limit` characters are
+    exceeded, the oldest whole keys go and the newest stay."""
+    f = project.state / name
+    f.parent.mkdir(parents=True, exist_ok=True)
+    kept = list(dict.fromkeys(keys))
+    while limit and len("\n".join(kept)) > limit and len(kept) > 1:
+        kept.pop(0)
+    f.write_text("\n".join(kept))
 
 
 def idle(ns: Iterable[Notice]) -> bool:

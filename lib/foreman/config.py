@@ -567,6 +567,16 @@ def merge_defaults(raw: Table) -> Table:
     return out
 
 
+def _whole(v: Any, low: int) -> bool:
+    """Whether v is a whole number (not a bool) of at least `low`."""
+    return isinstance(v, int) and not isinstance(v, bool) and v >= low
+
+
+def _text_list(v: Any, blank: bool = False) -> bool:
+    """Whether v is a list of strings, none empty (nor blank, unless `blank`)."""
+    return isinstance(v, list) and all(isinstance(x, str) and ((blank and x) or x.strip()) for x in v)
+
+
 def problems(raw: Table) -> tuple[list[str], list[str]]:
     """(errors, warnings) of a foreman.toml as read. Errors are bad values of known keys (the project cannot load);
     warnings are sections and keys this foreman does not know and a schema newer than CONFIG_SCHEMA (it loads)."""
@@ -639,19 +649,14 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
                 f"[repos.{key}] ci_runs must be a non-empty list of strings (each one run of local_ci, "
                 "its value in {ci})"
             )
-        if not isinstance(r.get("main_ci", ""), str):
-            err.append(f'[repos.{key}] main_ci must be a command (a string; "" runs nothing on main)')
-        if not isinstance(r.get("ci_summary", ""), str):
-            err.append(f"[repos.{key}] ci_summary must be a command (a string)")
-        if not isinstance(r.get("post_merge", ""), str):
-            err.append(f"[repos.{key}] post_merge must be a command (a string)")
+        for cmd, tail in (("main_ci", '; "" runs nothing on main'), ("ci_summary", ""), ("post_merge", "")):
+            if not isinstance(r.get(cmd, ""), str):
+                err.append(f"[repos.{key}] {cmd} must be a command (a string{tail})")
         if r.get("review", "off") not in ("auto", "off"):
             err.append(f"[repos.{key}] review must be auto or off")
-        paths = r.get("review_paths", [])
-        if not (isinstance(paths, list) and all(isinstance(x, str) and x for x in paths)):
+        if not _text_list(r.get("review_paths", []), blank=True):
             err.append(f'[repos.{key}] review_paths must be a list of paths ("dir/", "file", "glob*" or "file:text")')
-        lines = r.get("review_lines", 400)
-        if isinstance(lines, bool) or not isinstance(lines, int) or lines < 0:
+        if not _whole(r.get("review_lines", 400), 0):
             err.append(f"[repos.{key}] review_lines must be a whole number of lines, 0 or more (0: size never asks)")
     for key, r in raw.get("resources", {}).items():
         if not isinstance(r, dict):
@@ -668,8 +673,7 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
             re.compile(pat)
         except (re.error, TypeError) as e:
             err.append(f"[deny] bad pattern {pat!r}: {e}")
-    drop = deny.get("drop", [])
-    if not (isinstance(drop, list) and all(isinstance(d, str) and d.strip() for d in drop)):
+    if not _text_list(deny.get("drop", [])):
         err.append(
             "[deny] drop must be a list of inherited rules to remove: a pattern as the registry's [machine.deny] "
             'writes it, or "group:NAME" for a whole group'
@@ -682,17 +686,13 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
                 re.compile(pat)
             except (re.error, TypeError) as e:
                 err.append(f"[ids] {key}: {e}")
-    knows = raw.get("project", {}).get("owner_knows", [])
-    if not (isinstance(knows, list) and all(isinstance(t, str) and t.strip() for t in knows)):
+    if not _text_list(raw.get("project", {}).get("owner_knows", [])):
         err.append('[project] owner_knows must be a list of terms (strings) the owner knows, such as ["CI", "PR"]')
-    rot = raw.get("loop", {}).get("context_rotate", 0)
-    if isinstance(rot, bool) or not isinstance(rot, int) or rot < 0:
+    if not _whole(raw.get("loop", {}).get("context_rotate", 0), 0):
         err.append("[loop] context_rotate must be a whole number of tokens >= 0 (0 turns it off)")
-    types = raw.get("agents", {}).get("production_types", [])
-    if not (isinstance(types, list) and all(isinstance(t, str) and t.strip() for t in types)):
+    if not _text_list(raw.get("agents", {}).get("production_types", [])):
         err.append('[agents] production_types must be a list of agent types (strings), such as ["dev"]')
-    long_min = raw.get("loop", {}).get("lock_long_min", 60)
-    if isinstance(long_min, bool) or not isinstance(long_min, int) or long_min < 1:
+    if not _whole(raw.get("loop", {}).get("lock_long_min", 60), 1):
         err.append("[loop] lock_long_min must be a whole number of minutes, 1 or more")
     string_problems(raw.get("strings", {}), err, warn)
     for n, t in enumerate(raw.get("recurring", [])):
@@ -751,8 +751,7 @@ def grant_problems(deny: Table, err: list[str], warn: list[str]) -> None:
                 f"[deny.grants] {name}: in patterns too (patterns win: nobody runs it): {', '.join(sorted(both))}"
             )
     for key, low in (("grant_minutes", 1), ("ask_minutes", 0)):
-        v = deny.get(key, low)
-        if isinstance(v, bool) or not isinstance(v, int) or v < low:
+        if not _whole(deny.get(key, low), low):
             err.append(f"[deny] {key} must be a whole number of minutes, {low} or more")
 
 
@@ -810,9 +809,8 @@ def machine_resources(reg: Table | None = None) -> Machine:
             if key in table and not isinstance(table[key], str):
                 err.append(f"{where}: {key} must be a string")
         for key in ("busy_wait", "short_max"):
-            v = table.get(key, 0)
-            if isinstance(v, bool) or not isinstance(v, int) or v < 0:
-                err.append(f"{where}: {key} must be a whole number of seconds >= 0, not {v!r}")
+            if not _whole(table.get(key, 0), 0):
+                err.append(f"{where}: {key} must be a whole number of seconds >= 0, not {table.get(key, 0)!r}")
         slots = table.get("slots", [])
         if not isinstance(slots, list) or not all(isinstance(x, str) for x in slots):
             err.append(f"{where}: slots must be a list of strings")
@@ -1201,9 +1199,9 @@ def registry_scan(reg: Table | None = None) -> tuple[list[RegistryEntry], list[B
     return entries, broken, warnings
 
 
-def panel_settings() -> dict[str, Any]:
-    """The registry's [panel] table with its defaults: language (en) and who (owner)."""
-    panel = read_registry().get("panel", {})
+def panel_settings(reg: Table | None = None) -> dict[str, Any]:
+    """The registry's [panel] table with its defaults: language (en) and who (owner). `reg`: the registry as read."""
+    panel = (read_registry() if reg is None else reg).get("panel", {})
     return {"language": "en", "who": "owner", **(panel if isinstance(panel, dict) else {})}
 
 
@@ -1220,12 +1218,15 @@ def load_entry(
 
 
 def registered_projects(
-    errors: list[str] | None = None, broken: list[BrokenEntry] | None = None, warnings: list[str] | None = None
+    errors: list[str] | None = None,
+    broken: list[BrokenEntry] | None = None,
+    warnings: list[str] | None = None,
+    reg: Table | None = None,
 ) -> list[Project]:
     """Every registry project that loads (tolerantly: with its warnings). The others are left out and listed in
     `errors` (as text), `broken` ({name, home, mode, config, error}) if given; the registry's own warnings go to
-    `warnings`."""
-    reg = read_registry()
+    `warnings`. `reg`: the registry as read."""
+    reg = read_registry() if reg is None else reg
     entries, bad, reg_warnings = registry_scan(reg)
     machine = machine_resources(reg)
     settings = machine_settings(reg)

@@ -18,6 +18,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
+from unittest import mock
 
 from helpers import ENTRY, ProjectCase, git, make_repo
 
@@ -161,6 +162,17 @@ class NoticesCase(ProjectCase):
     def queued(self, who):
         """Waits until `who` is in the queue of `widget` (its ticket written)."""
         return self.wait_lock(lambda st: who in [q["who"] for q in st["queue"]])
+
+    def worktree(self, branch):
+        wt = self.tmp / "wt" / branch.replace("/", "-")
+        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
+        return wt
+
+    def hook_tick(self, session="S1", **ev):
+        """The module's tick run in this process, without the band."""
+        out = hooks_mod.tick({"cwd": str(self.home), "session": session, "busy": False, "agents": [], **ev})
+        out.pop("band", None)
+        return out
 
     def tick(self, session="S1", **extra):
         """What `foreman hook mod tick` answers the module for `session` (plus `extra` fields of its input), without
@@ -566,11 +578,6 @@ class LoopNoticesTest(NoticesCase):
         self.assertIsNone(lock.status("widget")["holders"][0]["alive"])
         self.assertEqual(self.kinds()["lock_queue"], [True])  # no pid: in doubt, actionable
 
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
-
     def test_ready_to_integrate_loose_and_orphan(self):
         self.issue("AB-1", "in progress", agent="zed7", branch="ab1/x")
         self.issue("AB-2", "in progress")
@@ -655,19 +662,19 @@ class LoopNoticesTest(NoticesCase):
         self.assertNotIn("recurring_late", self.kinds())  # the loop's own task never counts
 
     def test_recurring_at_is_actionable_in_the_pass(self):
-        """A daily task at a fixed time, with a fixed clock (notes.now)."""
+        """A daily task at a fixed time, with a fixed clock (FOREMAN_NOW)."""
         self.config(extra='\n[[recurring]]\nname = "watch"\nsources = [{ heartbeat = "watch", at = "09:30" }]')
         util.write_json(self.project.state / "heartbeats.json", {"watch": "2026-10-30T09:40:00"})
-        saved = notes.now
-        try:
-            notes.now = lambda: datetime(2026, 10, 31, 9, 29)
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2026-10-31T09:29:00"}):
             self.assertNotIn("recurring_late", self.kinds())
-            notes.now = lambda: datetime(2026, 10, 31, 9, 31)
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2026-10-31T09:31:00"}):
             self.assertEqual(self.kinds()["recurring_late"], [True])
             util.write_json(self.project.state / "heartbeats.json", {"watch": "2026-10-31T09:35:00"})
             self.assertNotIn("recurring_late", self.kinds())
-        finally:
-            notes.now = saved
+
+    def test_beat_writes_the_clock_of_foreman_now(self):
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2020-05-06T07:08:09"}):
+            self.assertEqual(notes.beat(self.project, "x"), "2020-05-06T07:08:09")
 
     def test_inbox(self):
         self.assertNotIn("inbox", self.kinds())
@@ -927,6 +934,40 @@ class BetweenPassesTest(NoticesCase):
         self.assertEqual(self.between(), [("lock_foreign", True)])
         self.assertEqual(self.between(), [])
         self.assertNotIn("lock_foreign", self.kinds())  # said between passes: the pass does not repeat it
+
+    def test_lock_marks_past_the_size_limit_keep_the_new_case(self):
+        """A long mark is cut to its newest whole keys: a new case whose key sorts first is not forgotten."""
+        self.project.state.mkdir(parents=True, exist_ok=True)
+        old = [f"long widget {'x' * 40} 2020-01-01 {i:04d}" for i in range(120)]  # more than 4,000 characters
+        (self.project.state / "lock-notified").write_text("\n".join(old))
+        r = self.cli("lock", "widget", "acquire", "by hand", "10", env={"FOREMAN_LOCK_WHO": "stranger"})
+        self.assertIn("LOCKED", r.stdout)
+        first = [n["kind"] for n in loop.lock_notices(loop.Snapshot(self.project))]
+        self.assertIn("lock_foreign", first)
+        second = [n["kind"] for n in loop.lock_notices(loop.Snapshot(self.project))]
+        self.assertNotIn("lock_foreign", second)
+
+    def test_decision_marks_past_the_size_limit_keep_the_new_case(self):
+        from datetime import date
+
+        self.project.state.mkdir(parents=True, exist_ok=True)
+        old = [f"zz{'x' * 40} {i:04d}|2020-01-01" for i in range(120)]
+        (self.project.state / "decision-due-notified").write_text("\n".join(old))
+        with self.b.mutate() as d:
+            d["decisions"].append(
+                {
+                    "id": "E1 J1",
+                    "title": "t",
+                    "date": date.today().isoformat(),
+                    "text": "",
+                    "options": ["a", "b"],
+                    "recommendation": "a",
+                    "unanswered": {"waits": "the release", "by": date.today().isoformat()},
+                }
+            )
+        first = [n["kind"] for n in loop.decision_notices(loop.Snapshot(self.project))]
+        self.assertEqual(first, ["decision_due"])
+        self.assertEqual(loop.decision_notices(loop.Snapshot(self.project)), [])
 
     def test_lock_not_actionable_is_left_for_the_pass(self):
         self.lock_run("stranger")
@@ -1248,11 +1289,6 @@ class IdentityPassTest(NoticesCase):
         f.parent.mkdir(parents=True, exist_ok=True)
         util.write_json(f, d)
 
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
-
     def notice_of(self, kind, mark=True):
         return next((n for n in self.notices("S1", mark) if n["kind"] == kind), None)
 
@@ -1389,11 +1425,6 @@ class DeliveredTest(NoticesCase):
         self.issue("AB-1", "in progress", agent="zed7", branch="ab1/x")
         self.wt = self.worktree("ab1/x")
 
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
-
     def send(self, name, aid="d1", **kw):
         t = self.tmp / "S1" / f"{aid}.jsonl"
         if not t.exists():
@@ -1422,11 +1453,9 @@ class DeliveredTest(NoticesCase):
         return [h["id"] for h in loop.live_agents(self.project)]
 
     def panel_status(self, aid="d1"):
-        from foreman import panel, sources
+        from foreman import panel
 
-        return {
-            a["id"]: a["status"] for a in panel.agents(self.project, sources.ProjectState(self.project), [], {})
-        }.get(aid)
+        return {a["id"]: a["status"] for a in panel.agents(self.project, [], {})}.get(aid)
 
     def age(self, aid="d1", **minutes):
         """Moves the entry's timestamps back (key=minutes ago); `activity` moves its transcript's time too."""
@@ -2332,6 +2361,30 @@ class TickTest(LivenessCase):
             self.assertEqual((out["marked"], len(own)), (marked, 1), (extra, callers))
             self.assertEqual("submit" in out or "log" in out, extra == {}, out)  # only the full tick ran the pass
 
+    def test_a_malformed_agents_file_does_not_fail_the_tick(self):
+        """agents.json valid as JSON but of another shape: the tick still gives its band (red when it cannot be
+        read) and its grants."""
+        self.mark("S1", since_ago=self.HOUR)
+        ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
+        for text, level in (("[]", "ok"), ('{"a1": "x"}', "bad")):
+            loop.agents_file(self.project).write_text(text)
+            out = hooks_mod.tick(ev)
+            self.assertEqual((out["band"]["level"], "grants" in out), (level, True), (text, out))
+
+    def test_a_tick_without_a_pass_reads_the_state_once(self):
+        """The notices between passes and the band of one tick share one loop.Snapshot: agents.json and the backlog
+        are read once; a tick with a pass reads them again for the band, after the pass."""
+        from unittest import mock
+
+        from foreman.backlog import Backlog
+
+        self.mark("S1", since_ago=self.HOUR)  # a pass is due, but a turn runs (busy): no pass
+        ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
+        with mock.patch.object(loop, "agents", wraps=loop.agents) as ags:
+            with mock.patch.object(Backlog, "load", autospec=True, side_effect=Backlog.load) as load:
+                out = hooks_mod.tick(ev)
+        self.assertEqual((out["due"], "band" in out, ags.call_count, load.call_count), (False, True, 1, 1), out)
+
     def test_start_and_end(self):
         self.mark("S1", since_ago=self.HOUR)
         root = str(Path(ENTRY).resolve().parent.parent)
@@ -2398,7 +2451,7 @@ class TickTest(LivenessCase):
     def test_bad_input(self):
         r = self.cli("hook", "mod", "tick", inp="[]")
         self.assertEqual(r.returncode, 2)
-        self.assertEqual(hooks_mod.every_min(self.project), 60)
+        self.assertEqual(orchestrator.every_min(self.project), 60)
 
 
 class GoneOrchestratorTest(LivenessCase):
@@ -2658,14 +2711,3 @@ class ChatReviewTest(NoticesCase):
         r = self.cli("plain", "--stats")
         self.assertEqual(r.returncode, 0)
         self.assertIn("no message", r.stdout)
-
-    def test_parse_since(self):
-        from foreman import plain
-
-        now = datetime(2026, 10, 31, 12, 0)
-        self.assertEqual(plain.parse_since("7d", now), datetime(2026, 10, 24, 12, 0))
-        self.assertEqual(plain.parse_since("12h", now), datetime(2026, 10, 31, 0, 0))
-        self.assertEqual(plain.parse_since("30m", now), datetime(2026, 10, 31, 11, 30))
-        self.assertEqual(plain.parse_since("2026-10-30 08:00", now), datetime(2026, 10, 30, 8, 0))
-        with self.assertRaises(ValueError):
-            plain.parse_since("yesterday", now)

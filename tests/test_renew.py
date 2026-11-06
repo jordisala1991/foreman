@@ -6,6 +6,7 @@ trigger, the cooldown, failures and what follows them (always another renewal, n
 import json
 import time
 from datetime import datetime
+from unittest import mock
 
 from test_loop_notices import NoticesCase
 
@@ -36,11 +37,6 @@ class RenewalCase(NoticesCase):
         if tokens is not None:
             ctx.update(tokens=tokens, percent=round(100 * tokens / window))
         return hooks_mod.measure({"cwd": str(self.home), "session": session, "context": ctx, "cost": None})
-
-    def tick(self, session="S1", **ev):
-        out = hooks_mod.tick({"cwd": str(self.home), "session": session, "busy": False, "agents": [], **ev})
-        out.pop("band", None)
-        return out
 
     def resume(self, source="compact", session="S1"):
         r = self.cli(
@@ -76,7 +72,7 @@ class RenewalTest(RenewalCase):
         self.assertTrue(n["actionable"])
         self.assertIn("then run `foreman renew`", n["text"])
         self.assertIn("«Renewal»", n["text"])
-        self.assertNotIn("renew", self.tick())  # no request, below the safety trigger
+        self.assertNotIn("renew", self.hook_tick())  # no request, below the safety trigger
         # the model writes its board, then asks
         r = self.cli("renew", "--note", "the owner asked for X", env={"CLAUDE_CODE_SESSION_ID": "S1"})
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -85,9 +81,9 @@ class RenewalTest(RenewalCase):
         self.assertFalse(n["actionable"])
         self.assertIn("the renewal of this session's memory is asked", n["text"])
         # not while a turn runs, nor while a pass is under way
-        self.assertNotIn("renew", self.tick(busy=True))
-        self.assertNotIn("renew", self.tick(hold=True))
-        got = self.tick()
+        self.assertNotIn("renew", self.hook_tick(busy=True))
+        self.assertNotIn("renew", self.hook_tick(hold=True))
+        got = self.hook_tick()
         self.assertEqual(set(got), {"marked", "due", "grants", "renew", "instructions", "log"})
         self.assertIn("foreman renews the memory of fake's orchestrator session in place", got["instructions"])
         self.assertEqual(
@@ -101,7 +97,7 @@ class RenewalTest(RenewalCase):
         )
         # while it waits for the compaction: no pass, no second attempt
         self.old_beat()
-        self.assertEqual(self.tick(), {"marked": True, "due": False, "grants": False})
+        self.assertEqual(self.hook_tick(), {"marked": True, "due": False, "grants": False})
         # the call settled (resolved): noted; the compaction's SessionStart settles it
         out = hooks_mod.renewed({"cwd": str(self.home), "session": "S1", "id": a["id"], "text": ""})
         self.assertEqual(out, {"recorded": True})
@@ -161,7 +157,7 @@ class RenewalTest(RenewalCase):
         self.assertTrue(self.notice()["actionable"])
         r = self.cli("renew", env={"CLAUDE_CODE_SESSION_ID": "S1"})
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("renew", self.tick())
+        self.assertIn("renew", self.hook_tick())
         f = hooks_mod.measure_file(self.project, "S1")
         before = datetime.fromtimestamp(time.time() - 60).strftime("%Y-%m-%dT%H:%M:%S")
         util.write_json(f, {**util.read_json(f, {}), "at": before})  # taken at the last turn, before /compact
@@ -179,7 +175,7 @@ class RenewalTest(RenewalCase):
         self.assertEqual(hooks_mod.read_measure(self.project, "S1")["tokens"], 213756)
         self.assertIsNone(renew.measure(self.project, "S1"))  # from before the compaction: not the context now
         self.assertIsNone(self.notice())
-        out = self.tick()
+        out = self.hook_tick()
         self.assertEqual(set(out), {"marked", "due", "grants", "submit"}, out)
         self.assertTrue(out["submit"].startswith("Fake orchestrator loop\n\nLoop pass "))
         self.assertNotIn("context_rotate", out["submit"])
@@ -194,7 +190,7 @@ class RenewalTest(RenewalCase):
 
     def test_the_first_pass_after_a_compaction_goes_even_with_nothing_to_do(self):
         self.compact_with_no_turn(213756, ready=False)
-        out = self.tick()
+        out = self.hook_tick()
         self.assertIn("submit", out)  # the session's only way to a turn: its pack says a pass comes
         rec = self.last_pass()
         self.assertEqual((rec["skipped"], rec["actionable"]), (False, []))  # sent, with nothing actionable
@@ -209,7 +205,7 @@ class RenewalTest(RenewalCase):
         before = datetime.fromtimestamp(time.time() - 3760).strftime("%Y-%m-%dT%H:%M:%S")
         util.write_json(m, {**util.read_json(m, {}), "at": before})
         self.assertFalse(hooks_mod.renewed_since_pass(self.project, orchestrator.current(self.project)))
-        out = self.tick()
+        out = self.hook_tick()
         self.assertEqual(set(out), {"marked", "due", "grants", "log"}, out)
         self.assertTrue(self.last_pass()["skipped"])
 
@@ -231,16 +227,16 @@ class RenewalTest(RenewalCase):
         self.assertIn("once the 1 live agents deliver", n["text"])
         self.assertIn("At 300K foreman renews it anyway", n["text"])
         renew.request(self.project, "S1")
-        self.assertNotIn("renew", self.tick())
-        self.assertNotIn("renew", self.tick(agents=[{"id": "x", "status": "running"}]))
+        self.assertNotIn("renew", self.hook_tick())
+        self.assertNotIn("renew", self.hook_tick(agents=[{"id": "x", "status": "running"}]))
         self.measure(310000)
         self.assertEqual(renew.due(self.project, "S1", {"busy": False, "agents": []})["why"], "request")
 
     def test_a_subagent_of_the_module_also_waits(self):
         self.measure(250000)
         renew.request(self.project, "S1")
-        self.assertNotIn("renew", self.tick(agents=[{"id": "x", "status": "running"}]))
-        self.assertIn("renew", self.tick(agents=[{"id": "x", "status": "completed"}]))
+        self.assertNotIn("renew", self.hook_tick(agents=[{"id": "x", "status": "running"}]))
+        self.assertIn("renew", self.hook_tick(agents=[{"id": "x", "status": "completed"}]))
 
     def tick_without_agents(self):  # `$.agent.list()` rejected, or the first ticks after a new mark
         out = hooks_mod.tick({"cwd": str(self.home), "session": "S1", "busy": False})
@@ -254,7 +250,7 @@ class RenewalTest(RenewalCase):
         self.assertIsNone(renew.due(self.project, "S1", {"busy": False, "agents": None}))
         self.assertEqual(self.records(), [])
         self.assertIsNotNone(renew.requested(self.project, "S1"))  # the request waits for a tick that can tell
-        self.assertIn("renew", self.tick(agents=[]))
+        self.assertIn("renew", self.hook_tick(agents=[]))
 
     def test_a_tick_without_agents_still_renews_when_forced(self):
         self.measure(310000)
@@ -264,7 +260,7 @@ class RenewalTest(RenewalCase):
 
     def test_the_safety_trigger_needs_no_request(self):
         self.measure(250000)
-        self.assertNotIn("renew", self.tick())
+        self.assertNotIn("renew", self.hook_tick())
         self.measure(300000)
         self.agent("a1", "zed7", session="S1")
         n = self.notice()
@@ -272,7 +268,7 @@ class RenewalTest(RenewalCase):
             "foreman renews this session's memory in place when this turn ends, live agents or not", n["text"]
         )
         self.assertTrue(n["actionable"])
-        got = self.tick()
+        got = self.hook_tick()
         self.assertIn("renew", got)
         self.assertEqual(self.records()[0]["why"], "safety")
 
@@ -367,14 +363,14 @@ class RenewalTest(RenewalCase):
     def test_the_tick_says_a_failure_once(self):
         self.measure(250000)
         renew.request(self.project, "S1")
-        self.assertIn("renew", self.tick())
+        self.assertIn("renew", self.hook_tick())
         f = renew.renewals_file(self.project)
         recs = self.records()
         recs[0]["at"] = "2020-01-01T00:00:00"
         f.write_text("".join(json.dumps(x) + "\n" for x in recs))
-        got = self.tick()
+        got = self.hook_tick()
         self.assertIn("did not work (no compaction came)", got["log"])
-        self.assertNotIn("log", self.tick())
+        self.assertNotIn("log", self.hook_tick())
 
     def test_a_call_that_settled_with_no_compaction(self):
         self.measure(250000)
@@ -416,8 +412,21 @@ class RenewalTest(RenewalCase):
 
     def test_only_the_marked_session(self):
         self.measure(310000, session="S2")
-        self.assertEqual(self.tick(session="S2"), {"marked": False, "grants": False})
+        self.assertEqual(self.hook_tick(session="S2"), {"marked": False, "grants": False})
         self.assertIsNone(renew.due(self.project, None, {"busy": False}))
+
+
+class PruneTest(RenewalCase):
+    def test_old_records_go_when_one_is_written(self):
+        """renewals.jsonl keeps RETAIN_DAYS days: writing a record drops the older ones, and keeps the rest."""
+        f = renew.renewals_file(self.project)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        old = {"at": "2026-01-01T10:00:00", "session": "S1", "id": "old", "state": "asked"}
+        recent = {"at": "2026-10-30T10:00:00", "session": "S1", "id": "recent", "state": "asked"}
+        f.write_text("".join(json.dumps(r) + "\n" for r in (old, recent)))
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2026-11-06T10:00:00"}):
+            renew._append(self.project, {"at": "2026-11-06T10:00:00", "session": "S1", "id": "new", "state": "asked"})
+        self.assertEqual([r["id"] for r in self.records()], ["recent", "new"])
 
 
 class PackTest(RenewalCase):

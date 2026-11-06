@@ -8,7 +8,7 @@ import re
 from helpers import ProjectCase, make_repo
 from test_identity import TOML
 
-from foreman import notes, util
+from foreman import notes
 from foreman.backlog import Backlog
 
 LINE = re.compile(r"^\[foreman launch ([a-z2-7]{10})\] (.*)$", re.M)
@@ -34,20 +34,9 @@ class LaunchHeldTest(ProjectCase):
         with self.b.mutate() as d:
             return self.b.add_decision(d, None, title, "why", ["a", "b"], issue=issue, blocks=blocks)
 
-    def launches(self):
-        return util.read_json(self.project.state / "launches.json", {})
-
-    def launch(self, *args, rc=0):
-        r = self.cli("launch", *args)
-        self.assertEqual(r.returncode, rc, r.stdout + r.stderr)
-        return r
-
     def prod(self, name, *extra, sub="T3", rc=0):
         args = [name, "--issue", "AB-1", *(["--sub", sub] if sub else []), "--repo", "app", "--branch", f"b/{name}"]
         return self.launch(*args, *extra, rc=rc)
-
-    def notes_text(self):
-        return "".join(f.read_text() for f in sorted(self.project.notes_dir.glob("*.md")))
 
     # criterion 2: refused, nothing made, both ways out named
     def test_a_held_sub_issue_is_refused_and_nothing_is_made(self):

@@ -182,6 +182,7 @@ that works again drops its own) and calls Python again at the next event; only a
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -304,13 +305,7 @@ def measure(ev: Event) -> dict[str, Any]:
     util.write_json(f, rec)
     out: dict[str, Any] = {"stored": True}
     out.update(renew_measured(project, ev.get("session"), rec["tokens"]))
-    cut = time.time() - MEASURE_DAYS * 86400
-    for old in f.parent.glob("*.json"):
-        try:
-            if old != f and old.stat().st_mtime < cut:
-                old.unlink()
-        except OSError:
-            pass
+    util.prune_older(f.parent, "*.json", MEASURE_DAYS, keep=f)
     return out
 
 
@@ -360,20 +355,14 @@ def context_text(m: dict[str, Any] | None, limit: int | None = None) -> str:
     return f"{n} tokens ({n // 1000}K{of}, at {m.get('at')}{rot})"
 
 
-def every_min(project: Project) -> float:
-    """[loop] every_min as a positive number of minutes (60 when it is not one)."""
-    every = project.section("loop").get("every_min", 60)
-    return every if isinstance(every, (int, float)) and not isinstance(every, bool) and every > 0 else 60
-
-
 def pass_due(project: Project, o: Mark, now: float | None = None) -> bool:
     """Whether the marked session `o` (orchestrator.current) is due a pass: no `loop` heartbeat, one older than
     [loop] every_min (less DUE_SLACK_S), or one older than the mark (a session marked since the last pass gets its
     first pass at its next tick) or than the session's last renewal (renew.compacted_at: the pass right after it)."""
-    from . import notes
+    from . import orchestrator
 
     now = time.time() if now is None else now
-    last = util.iso_epoch(notes.heartbeats(project).get("loop"))
+    last = util.iso_epoch(orchestrator.last_pass(project))
     if last is None:
         return True
     marked = util.iso_epoch(o.get("since"))
@@ -381,7 +370,7 @@ def pass_due(project: Project, o: Mark, now: float | None = None) -> bool:
         return True
     if renewed_since_pass(project, o):
         return True
-    return now - last >= every_min(project) * 60 - DUE_SLACK_S
+    return now - last >= orchestrator.every_min(project) * 60 - DUE_SLACK_S
 
 
 def renewed_since_pass(project: Project, o: Mark) -> bool:
@@ -389,7 +378,7 @@ def renewed_since_pass(project: Project, o: Mark) -> bool:
     heartbeat; none counts as before): the pass due then is sent to the model even with nothing actionable
     (_tick_pass), since after `/compact` the session gets no turn otherwise and its pack says a pass comes.
     Never raises."""
-    from . import notes, renew
+    from . import orchestrator, renew
 
     try:
         renewed_at = renew.compacted_at(project, o.get("session"))
@@ -397,7 +386,7 @@ def renewed_since_pass(project: Project, o: Mark) -> bool:
         return False
     if renewed_at is None:
         return False
-    last = util.iso_epoch(notes.heartbeats(project).get("loop"))
+    last = util.iso_epoch(orchestrator.last_pass(project))
     return last is None or renewed_at > last
 
 
@@ -439,12 +428,15 @@ def _tick_pass(project: Project, session: str, o: Mark, ev: Event) -> dict[str, 
     from . import band, loop
 
     prompt = project.section("loop").get("prompt") or ""
+    snap = None  # the state the in-between notices and the band share; a pass writes, so the band reads it again
     renewing = renew_due(project, session, ev)
     if renewing is not None:
         out = {"marked": True, "due": False, **renewing}
     elif not prompt or ev.get("busy") is True or not pass_due(project, o):  # never behind a running turn
         out: dict = {"marked": True, "due": False}
-        texts = between_notices(project, session)
+        with contextlib.suppress(Exception):  # unreadable: the notices and the band each fail in their own guard
+            snap = loop.Snapshot(project, session)
+        texts = between_notices(project, session, snap)
         if texts:
             out["notices"] = texts
     else:
@@ -454,7 +446,7 @@ def _tick_pass(project: Project, session: str, o: Mark, ev: Event) -> dict[str, 
             out = {"marked": True, "due": True, "log": loop.idle_line(project, ns)}
         else:
             out = {"marked": True, "due": True, "submit": f"{prompt}\n\n{text}"}
-    out["band"] = band.lines(project)  # after the pass, so its time is the new one
+    out["band"] = band.lines(project, snap=snap)  # after the pass, so its time is the new one
     return out
 
 
@@ -492,13 +484,13 @@ def failed_line(project: Project, session: str, a: dict[str, Any]) -> str:
     return t[key].format(why=why, minutes=renew.COOLDOWN_S // 60)
 
 
-def between_notices(project: Project, session: str | None) -> str:
+def between_notices(project: Project, session: str | None, snap: Any = None) -> str:
     """The in-between notices not said yet (loop.notices, which marks them said) as one text; '' when none or when
     they cannot be computed (the tick goes on: the next pass shows what is there)."""
     from . import loop
 
     try:
-        return " ".join(n["text"] for n in loop.notices(project, session))
+        return " ".join(n["text"] for n in loop.notices(project, session, snap))
     except Exception:  # noqa: BLE001 (a notice never fails the tick)
         return ""
 

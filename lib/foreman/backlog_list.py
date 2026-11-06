@@ -87,7 +87,7 @@ class Filter:
     """The filters of one `backlog list`, checked once (bad status, field or sub-issue status: BacklogError)."""
 
     def __init__(self, args: argparse.Namespace) -> None:
-        self.status = {Backlog.norm_status({}, s) for s in args.status}
+        self.status = {Backlog.norm_status(s) for s in args.status}
         self.open = args.open
         self.groups = {NO_GROUP if g in ("", NO_GROUP) else g for g in args.group}
         for spec in args.has:

@@ -38,7 +38,7 @@ import sys
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, TextIO
 
-from . import config, i18n, notes, util
+from . import config, i18n, util
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -425,35 +425,17 @@ def record(project: Project, session_id: str | None, msg: dict[str, str], found:
     }
     f = project.state / LOG
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f), open(f, "a") as out:
+    with util.file_lock(f), open(f, "a") as out:
         out.write(json.dumps(line, ensure_ascii=False) + "\n")
     return line
-
-
-def parse_since(value: str, now: datetime | None = None) -> datetime:
-    """`7d`, `12h`, `30m` or a date (`2026-10-31`, `2026-10-31 12:00`) → a datetime; ValueError otherwise."""
-    from datetime import datetime, timedelta
-
-    now = now or datetime.now()
-    m = re.fullmatch(r"\s*(\d+)\s*([dhm])\s*", value or "")
-    if m:
-        n, unit = int(m.group(1)), m.group(2)
-        unit = {"d": "days", "h": "hours", "m": "minutes"}[unit]
-        return now - timedelta(**{unit: n})
-    return util.fromiso(value)
 
 
 def stats(project: Project, since: datetime | None = None, session: str | None = None) -> dict[str, Any]:
     """{messages, flagged, share, days: [{day, messages, flagged, share}], kinds: {kind: messages}, what: {rule:
     messages}} from <state>/plain.jsonl, optionally since a datetime and for one session. share is a % (1 decimal)."""
     rows = []
-    try:
-        lines = (project.state / LOG).read_text().splitlines()
-    except OSError:
-        lines = []
-    for ln in lines:
+    for d in util.read_jsonl(project.state / LOG):
         try:
-            d = json.loads(ln)
             t = util.fromiso(d["time"])
         except (ValueError, KeyError, TypeError):
             continue
@@ -497,7 +479,7 @@ def run_stats(
         print("foreman plain --stats: needs a project (--project NAME or run it inside one)", file=sys.stderr)
         return 2
     try:
-        start = parse_since(since) if since else None
+        start = util.parse_when(since).astimezone().replace(tzinfo=None) if since else None
     except ValueError:
         print(f"foreman plain --stats: --since {since!r}: use 7d, 12h, 30m or a date (2026-10-31)", file=sys.stderr)
         return 2

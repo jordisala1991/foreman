@@ -7,13 +7,13 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_check, backlog_list, backlog_text
+from . import backlog_list, backlog_text
 from .backlog import CLOSED, Backlog, BacklogError, DecisionResolved
 
 if TYPE_CHECKING:
     import argparse
 
-    from .backlog import Data
+    from .backlog import Data, Issue, Record
     from .config import Project
     from .plain import Finding
 
@@ -53,7 +53,7 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
         lines = [f"## {obj['id']} · {obj['title']}  ({q['done']}/{q['total']} done)"]
         meta = backlog_text.render_project_meta(b, obj)
         if meta:
-            lines.append(re.sub(r"^\*|\*$", "", meta, flags=re.M))
+            lines.append(meta)
         lines.append(f"\n{obj['intro']}\n")
         lines += [f"  {i['id']:<7} {i['status']:<12} {i['title'][:100]}" for i in obj["issues"]]
         return "\n".join(lines)
@@ -84,13 +84,9 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
         + (f" · github {i['github']}" if i.get("github") else "")
         + (f" · short «{i['short']}»" if i.get("short") else "")
     ]
-    for line in (
-        backlog_text.render_fields(b, i),
-        backlog_text.render_outcome(b, data, i),
-        backlog_text.render_result(b, data, i),
-    ):
-        if line:
-            out.append(re.sub(r"\*\*", "", line))
+    # plain text: the bold an owner or an older foreman wrote in a goal, criterion or result is not shown
+    fields = (backlog_text.render_fields(b, i), backlog_text.render_outcome(b, i), backlog_text.render_result(b, i))
+    out += [re.sub(r"\*\*", "", line) for line in fields if line]
     r = b.relations_of(data, i["id"])
     rels = [f"{k.replace('_', ' ')} {', '.join(v) if isinstance(v, list) else v}" for k, v in r.items() if v]
     if rels:
@@ -103,11 +99,9 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
     return "\n".join(out)
 
 
-def dry_run_add(b: Backlog, args: argparse.Namespace) -> int:
-    """`backlog add --dry-run`: the same add on a copy of the data, with the same checks as the save, and the issue
-    shown as `show ID` would. Nothing is written."""
-    data = b.load()
-    iid = b.add_issue(
+def add_from_args(b: Backlog, data: Data, args: argparse.Namespace) -> str:
+    """`backlog add`: the issue its arguments describe, added to `data`; its id."""
+    return b.add_issue(
         data,
         args.project,
         args.id,
@@ -122,9 +116,14 @@ def dry_run_add(b: Backlog, args: argparse.Namespace) -> int:
         args.github,
         args.short,
     )
-    errors = backlog_check.hard(backlog_check.validate(b, data, files=False))
-    if errors:
-        raise BacklogError("not saved: " + "; ".join(errors))
+
+
+def dry_run_add(b: Backlog, args: argparse.Namespace) -> int:
+    """`backlog add --dry-run`: the same add on a copy of the data, with the same checks as the save, and the issue
+    shown as `show ID` would. Nothing is written."""
+    data = b.load()
+    iid = add_from_args(b, data, args)
+    b.check_or_raise(data)
     print(f"would add {iid} (dry run)")
     print(show_one(b, data, iid))
     return 0
@@ -326,40 +325,29 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
                 parser.error(f"{option_string} given twice for option {len(ns.details)}")
             ns.details[-1][self.dest] = values
 
-    a = bp.add_parser("decision")
+    dp = bp.add_parser("decision").add_subparsers(dest="dcmd", required=True)
+    a = dp.add_parser("add")
     a.set_defaults(details=[])
-    a.add_argument("action", choices=("add", "resolve", "blocks", "list"))
-    a.add_argument("id", nargs="?")
-    a.add_argument("refs", nargs="*", help="decision blocks: what waits for the answer")
     a.add_argument("--id", dest="did")
     a.add_argument("--issue")
-    a.add_argument("--title")
+    a.add_argument("--title")  # needed, but checked in run: argparse 3.9 and 3.13+ wrap a required one apart
     a.add_argument("--text", default="")
-    a.add_argument(
-        "--option",
-        action=OptionAction,
-        default=[],
-        help="decision add: an option (repeat it); decision resolve: the answer, by number (from 1) or exact text",
-    )
-    a.add_argument("--effect", action=DetailAction, help="decision add: what the --option before it changes")
-    a.add_argument("--cost", action=DetailAction, help="decision add: the cost or risk of the --option before it")
+    a.add_argument("--option", action=OptionAction, default=[], help="an option (repeat it)")
+    a.add_argument("--effect", action=DetailAction, help="what the --option before it changes")
+    a.add_argument("--cost", action=DetailAction, help="the cost or risk of the --option before it")
     a.add_argument(
         "--undo",
         action=DetailAction,
         choices=("yes", "hard", "no"),
-        help="decision add: whether the --option before it can be undone (hard: with work)",
+        help="whether the --option before it can be undone (hard: with work)",
     )
-    a.add_argument("--if-no-answer", default="", help="decision add: what stays stopped until the owner answers")
-    a.add_argument("--answer-by", default="", help="decision add: the day to remind the owner (YYYY-MM-DD)")
-    a.add_argument("--page", default="", help="decision add: a .md under the reviews or notes folders explaining it")
+    a.add_argument("--if-no-answer", default="", help="what stays stopped until the owner answers")
+    a.add_argument("--answer-by", default="", help="the day to remind the owner (YYYY-MM-DD)")
+    a.add_argument("--page", default="", help="a .md under the reviews or notes folders explaining it")
     a.add_argument("--recommend", default="")
     a.add_argument("--recommend-option", default="", help="the exact text of the recommended --option")
     a.add_argument("--date")
-    a.add_argument("--answer", default="")
-    a.add_argument("--by", default="", help="decision resolve: who answered and when, e.g. «Owner, 21:20 (chat)»")
     a.add_argument("--as-is", action="store_true", help="record the decision although its texts fail foreman plain")
-    a.add_argument("--free", action="store_true", help="decision resolve: --answer is the owner's own words")
-    a.add_argument("--json", action="store_true", help="decision list: as JSON")
     a.add_argument(
         "--blocks",
         nargs="+",
@@ -368,7 +356,18 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         metavar="REF",
         help="what waits for the answer: Tn or issue (with --issue), or ISSUE / ISSUE Tn",
     )
-    a.add_argument("--none", action="store_true", help="decision blocks: it holds nothing")
+    a = dp.add_parser("resolve")
+    a.add_argument("id")
+    a.add_argument("--option", action="append", default=[], help="the answer, by number (from 1) or exact text")
+    a.add_argument("--answer", default="")
+    a.add_argument("--by", default="", help="who answered and when, e.g. «Owner, 21:20 (chat)»")
+    a.add_argument("--free", action="store_true", help="--answer is the owner's own words")
+    a = dp.add_parser("blocks")
+    a.add_argument("id")
+    a.add_argument("refs", nargs="*", help="what waits for the answer")
+    a.add_argument("--issue")
+    a.add_argument("--none", action="store_true", help="it holds nothing")
+    dp.add_parser("list").add_argument("--json", action="store_true")
     a = bp.add_parser("import-gh")
     a.add_argument("repo")
     a.add_argument("--project", required=True)
@@ -405,22 +404,21 @@ def warn_owner_texts(project: Project, args: argparse.Namespace) -> None:
     c = args.bcmd
     if c in ("add", "edit"):
         plain.warn(project, "issue title", args.title)
-    if c in ("add", "edit"):
         plain.warn(project, "short name", args.short)
     if c in ("edit", "integrated") or (c == "status" and "/" not in args.ref):
         plain.warn(project, "result line", args.result)
 
 
-def sub_status(b: Backlog, data: Data, iid: str, sid: str) -> str | None:
-    """A sub-issue's status, or None when there is no such issue or sub-issue."""
+def issue_sub(b: Backlog, data: Data, iid: str, sid: str) -> tuple[Issue, Record]:
+    """(issue, sub-issue) of `iid` and `sid`; ({}, {}) when there is no such issue or sub-issue."""
     from .backlog import find_sub
 
     try:
         i = b.issue(data, b.resolve(data, iid))
     except BacklogError:
-        return None
+        return {}, {}
     k = find_sub(i, sid)
-    return i["subs"][k].get("status") if k is not None else None
+    return (i, i["subs"][k]) if k is not None else ({}, {})
 
 
 def closed_without_commit(project: Project, b: Backlog, data: Data, iid: str, sid: str, was: str | None) -> str:
@@ -428,14 +426,8 @@ def closed_without_commit(project: Project, b: Backlog, data: Data, iid: str, si
     unmerged in one of the project's repos: the pass takes a branch whose sub-issues are all closed without a commit
     for one closed on purpose (a measurement), so it will not show as ready to integrate. "" when there is none."""
     from . import util
-    from .backlog import find_sub
 
-    try:
-        i = b.issue(data, b.resolve(data, iid))
-    except BacklogError:
-        return ""
-    k = find_sub(i, sid)
-    s = i["subs"][k] if k is not None else {}
+    i, s = issue_sub(b, data, iid, sid)
     br = s.get("branch", "").strip("`")
     if was == "done" or s.get("status") != "done" or s.get("commit") or s.get("kind") == "measure" or not br:
         return ""
@@ -515,8 +507,6 @@ def resolve(b: Backlog, data: Data, args: argparse.Namespace) -> list[str]:
     import sys
     from datetime import datetime
 
-    if not args.id:
-        raise BacklogError("decision resolve needs the decision id")
     by = args.by or f"{b.project.owner}, {datetime.now():%Y-%m-%d %H:%M} (chat)"
     if args.option:
         return b.answer_decision(data, args.id, b.option_of(data, args.id, args.option[0]), by)
@@ -583,41 +573,22 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 added = b.import_gh(data, slug, args.project, args.prefix, args.status)
             print(f"imported {len(added)}: {', '.join(added)}" if added else "nothing new")
             return 0
-        if c == "decision" and args.action == "add" and args.title and not args.as_is:
+        d = args.dcmd if c == "decision" else ""
+        if d == "list":
+            print(show_review(b, b.load(), args.json))
+            return 0
+        if d == "add" and not args.title:
+            raise BacklogError("decision add needs --title")
+        if d == "add" and not args.as_is:
             bad = b.decision_findings(
                 args.title, args.text, args.option, args.recommend, args.details, args.if_no_answer
             )
             if bad:
                 return refuse_decision(bad)
-        if c == "decision":
-            if args.refs and args.action != "blocks":
-                raise BacklogError("references go after the id only in decision blocks; decision add takes --blocks")
-            if args.blocks and args.action != "add":
-                raise BacklogError("--blocks goes with decision add; decision blocks ID REF ... changes it later")
-            if args.none and args.action != "blocks":
-                raise BacklogError("--none goes with decision blocks")
-            if args.free and args.action != "resolve":
-                raise BacklogError("--free goes with decision resolve")
-            rich = [
-                f
-                for f, v in (
-                    ("--if-no-answer", args.if_no_answer),
-                    ("--answer-by", args.answer_by),
-                    ("--page", args.page),
-                )
-                if v
-            ]
-            rich += sorted({f"--{k}" for x in args.details for k in x})
-            if rich and args.action != "add":
-                raise BacklogError(f"{', '.join(rich)} go with decision add")
-            if args.json and args.action != "list":
-                raise BacklogError("--json goes with decision list (or backlog show ID --json)")
-            if args.action == "list":
-                data = b.load()
-                print(show_review(b, data, args.json))
-                return 0
-            if args.action == "resolve":
-                check_resolve_args(args)
+        if d == "resolve":
+            check_resolve_args(args)
+        if d == "blocks" and bool(args.refs) == args.none:
+            raise BacklogError("decision blocks takes either references or --none")
         if c == "add" and args.dry_run:
             return dry_run_add(b, args)
         freed = []
@@ -627,9 +598,9 @@ def run(project: Project, args: argparse.Namespace) -> int:
         with b.mutate() as data:
             if c == "status" and "/" in args.ref:
                 iid, _, sid = args.ref.partition("/")
-                closing = (iid, sid, sub_status(b, data, iid, sid))
+                closing = (iid, sid, issue_sub(b, data, iid, sid)[1].get("status"))
             elif c == "sub" and args.status and not args.commit and not args.remove:
-                closing = (args.id, args.sid, sub_status(b, data, args.id, args.sid))
+                closing = (args.id, args.sid, issue_sub(b, data, args.id, args.sid)[1].get("status"))
             if c == "status":
                 was = b.issue(data, b.resolve(data, args.ref.partition("/")[0])).get("status")
                 b.set_status(data, args.ref, args.value, args.result, args.verdict)
@@ -681,24 +652,7 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 else:
                     b.move_issue(data, args.id, args.before, args.after, args.project)
             elif c == "add":
-                freed.append(
-                    "issue "
-                    + b.add_issue(
-                        data,
-                        args.project,
-                        args.id,
-                        args.title,
-                        args.status,
-                        args.detail,
-                        args.blocked,
-                        args.plan,
-                        args.before,
-                        args.claim,
-                        args.criterion,
-                        args.github,
-                        args.short,
-                    )
-                )
+                freed.append("issue " + add_from_args(b, data, args))
             elif c == "project":
                 if args.action == "remove":
                     b.remove_project(data, args.id)
@@ -721,45 +675,38 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 b.relate(data, args.id, args.kind, args.other, args.remove)
             elif c == "archive":
                 b.archive(data, args.id)
-            elif c == "decision":
-                if args.action == "add":
-                    if not args.title:
-                        raise BacklogError("decision add needs --title")
-                    freed.append(
-                        "decision "
-                        + b.add_decision(
-                            data,
-                            args.did or args.id,
-                            args.title,
-                            args.text,
-                            args.option,
-                            args.recommend,
-                            args.date,
-                            args.issue,
-                            as_is=args.as_is,
-                            recommended=args.recommend_option,
-                            blocks=args.blocks,
-                            details=args.details,
-                            waits=args.if_no_answer,
-                            answer_by=args.answer_by,
-                            page=args.page,
-                        )
+            elif d == "add":
+                freed.append(
+                    "decision "
+                    + b.add_decision(
+                        data,
+                        args.did,
+                        args.title,
+                        args.text,
+                        args.option,
+                        args.recommend,
+                        args.date,
+                        args.issue,
+                        as_is=args.as_is,
+                        recommended=args.recommend_option,
+                        blocks=args.blocks,
+                        details=args.details,
+                        waits=args.if_no_answer,
+                        answer_by=args.answer_by,
+                        page=args.page,
                     )
-                    holding = data["decisions"][-1].get("blocks", [])
-                    advice = [
-                        f"{data['decisions'][-1]['id']}: {w}"
-                        for w in b.decision_warnings(data["decisions"][-1], data=data)
-                    ]
-                elif args.action == "blocks":
-                    if not args.id or bool(args.refs) == args.none:
-                        raise BacklogError("decision blocks needs the decision id and either references or --none")
-                    holding = b.set_decision_blocks(data, args.id, args.refs, args.issue)
-                    freed.append(f"{args.id} holds: {', '.join(holding) or 'nothing'}")
-                else:
-                    freed += resolve(b, data, args)
+                )
+                new = data["decisions"][-1]
+                holding = new.get("blocks", [])
+                advice = [f"{new['id']}: {w}" for w in b.decision_warnings(new, data=data)]
+            elif d == "blocks":
+                holding = b.set_decision_blocks(data, args.id, args.refs, args.issue)
+                freed.append(f"{args.id} holds: {', '.join(holding) or 'nothing'}")
+            elif d == "resolve":
+                freed += resolve(b, data, args)
         for line in freed:
             print(line)
-        for w in (b.hold_problems(b.load(), holding)[1] if holding else []) + advice:
+        for w in (b.hold_problems(data, holding)[1] if holding else []) + advice:
             print(f"foreman backlog: warning: {w}", file=sys.stderr)
         if closing:
             warn = closed_without_commit(project, b, data, *closing)

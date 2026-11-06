@@ -15,13 +15,10 @@
 
 from __future__ import annotations
 
-import contextlib
-import fcntl
 import json
 import re
 import sys
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -45,23 +42,6 @@ def who_am_i(default: str = "orchestrator") -> str:
     return identity.who(default)[0]
 
 
-@contextmanager
-def file_lock(path: Path, lock_dir: Path | None = None) -> Iterator[None]:
-    """Exclusive flock for the file `path`, on a `<path>.lock` file next to it; with `lock_dir` the lock file lives
-    there instead (`<lock_dir>/<name>.lock`). The product's home is the user's: note() locks in the state
-    (`<state>/locks-notes/`), so no `.lock` file appears among the notes."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lock = (lock_dir / path.name) if lock_dir is not None else path
-    if lock_dir is not None:
-        lock_dir.mkdir(parents=True, exist_ok=True)
-    with open(str(lock) + ".lock", "a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
-
-
 # ---------- notes ----------
 
 
@@ -74,7 +54,7 @@ def note(project: Project, title: str, body: str) -> Path:
     at = util.now()
     today, now = at.strftime("%Y-%m-%d"), at.strftime("%H:%M")
     f = d / f"{today}.md"
-    with file_lock(f, project.state / "locks-notes"):
+    with util.file_lock(f, project.state / "locks-notes"):
         if not f.exists():
             f.write_text(i18n.for_project(project)["notes_heading"].format(date=today) + "\n")
         with open(f, "a") as out:
@@ -139,7 +119,7 @@ def progress(
             line["type"] = agent_type.split(":", 1)[-1]
         if model:
             line["model"] = model
-    with file_lock(f), open(f, "a") as out:
+    with util.file_lock(f), open(f, "a") as out:
         out.write(json.dumps(line, ensure_ascii=False) + "\n")
     return line
 
@@ -161,7 +141,7 @@ def inbox_new(project: Project) -> list[Message]:
 
 def inbox_add(project: Project, text: str, sender: str = "owner", **extra: Any) -> Message:
     f = inbox_path(project)
-    with file_lock(f):
+    with util.file_lock(f):
         msgs = util.read_json(f, [])
         m = {
             "id": max((x["id"] for x in msgs), default=0) + 1,
@@ -178,7 +158,7 @@ def inbox_add(project: Project, text: str, sender: str = "owner", **extra: Any) 
 
 def inbox_read(project: Project, ids: Sequence[str] = ()) -> None:
     f = inbox_path(project)
-    with file_lock(f):
+    with util.file_lock(f):
         msgs = util.read_json(f, [])
         for m in msgs:
             if m.get("from") == "owner" and (not ids or str(m["id"]) in ids):
@@ -246,9 +226,9 @@ def heartbeats(project: Project) -> Beats:
 
 def beat(project: Project, name: str) -> str:
     f = project.state / "heartbeats.json"
-    with file_lock(f):
+    with util.file_lock(f):
         d = util.read_json(f, {})
-        d[name] = datetime.now().isoformat(timespec="seconds")
+        d[name] = util.now().isoformat(timespec="seconds")
         util.write_json(f, d)
     return d[name]
 
@@ -295,14 +275,9 @@ def models_seen(project: Project, after: datetime | None = None) -> dict[str, da
     for h in agents.values() if isinstance(agents, dict) else ():
         if isinstance(h, dict):
             add(h.get("model"), h.get("end") or h.get("activity") or h.get("start"))
-    with contextlib.suppress(OSError):
-        for ln in (project.state / "progress.jsonl").read_text(errors="replace").splitlines():
-            try:
-                x = json.loads(ln)
-            except ValueError:
-                continue
-            if isinstance(x, dict) and x.get("done"):
-                add(x.get("model"), x.get("time"))
+    for x in util.read_jsonl(project.state / "progress.jsonl"):
+        if x.get("done"):
+            add(x.get("model"), x.get("time"))
     return seen
 
 
@@ -330,11 +305,6 @@ def new_models(project: Project, source: Table, last: datetime | None) -> list[s
     return sorted(m for m in models_seen(project, last) if m not in known)
 
 
-def now() -> datetime:
-    """The local time the recurring tasks are judged at (a function, so tests can fix the clock)."""
-    return datetime.now()
-
-
 def last_at(at: str, when: datetime) -> datetime:
     """The last time the daily HH:MM `at` came round at or before `when` (today's if it has passed, else
     yesterday's), in local time."""
@@ -355,7 +325,7 @@ def recurring(project: Project, beats: Beats | None = None, when: datetime | Non
     not name (new_models; the part's `new` lists them), and after `max_h` hours only when `max_h` is given. Never
     run is late in every case."""
     beats = heartbeats(project) if beats is None else beats
-    when = now() if when is None else when
+    when = util.now() if when is None else when
     out: list[dict[str, Any]] = []
     for t in project.recurring:
         parts: list[dict[str, Any]] = []

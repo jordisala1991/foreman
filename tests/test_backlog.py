@@ -195,6 +195,19 @@ class BacklogTest(ProjectCase):
             b.set_status(d, "PF-1", "done", result="98 ms", verdict="met")
         self.assertIn("Result (met): 98 ms", self.show("PF-1"))
 
+    def test_show_is_plain_text(self):
+        """`show ID` drops the bold written in a goal, criterion or result (an owner's, or an older foreman's)."""
+        r = self.cli(
+            "backlog", "add", "E1", "--title", "Bold", "--id", "PF-1", "--claim", "x **y**", "--criterion", "a **b** c"
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        iid = r.stdout.split()[-1]
+        self.assertEqual(self.cli("backlog", "edit", iid, "--result", "r **s**").returncode, 0)
+        shown = self.cli("backlog", "show", iid).stdout
+        for text in ("x y", "a b c", "r s"):
+            self.assertIn(text, shown)
+        self.assertNotIn("**", shown)
+
     def test_add_short_and_dry_run(self):
         """`backlog add --short` stores the short name (and warns like `edit --short`); `--dry-run` shows the issue as
         `show ID` would and writes nothing; the errors are the same with and without it."""
@@ -385,7 +398,7 @@ class BacklogTest(ProjectCase):
         self.assertIn("no pending decision AB-9 J9", r.stderr)
         r = self.cli("backlog", "decision", "resolve", "AB-2 J2", "--blocks", "AB-1")
         self.assertEqual(r.returncode, 2)
-        self.assertIn("--blocks goes with decision add", r.stderr)
+        self.assertIn("unrecognized arguments: --blocks AB-1", r.stderr)
         # what an older foreman's canon() would drop, this one keeps
         self.assertEqual(self.b.canon(self.b.load())["decisions"][0]["blocks"], ["AB-1 T3"])
 
@@ -957,7 +970,7 @@ class LinearModelTest(ProjectCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("foreman 0.25 or older", r.stdout)
         self.assertEqual(self.b.data_path.read_bytes(), before)
-        self.assertEqual(self.b.norm_status({}, "idea"), "triage")  # the old name still means triage
+        self.assertEqual(self.b.norm_status("idea"), "triage")  # the old name still means triage
 
 
 def issue2(iid, status, **kw):

@@ -908,7 +908,7 @@ def log_refusal(project: Project, ev: Event, verdict: guard.Verdict) -> None:
         f = log_file(project)
         line = json.dumps(refusal(project, ev, verdict), ensure_ascii=False) + "\n"
         f.parent.mkdir(parents=True, exist_ok=True)
-        with notes.file_lock(f):
+        with util.file_lock(f):
             with open(f, "a") as out:
                 out.write(line)
             if f.stat().st_size > LOG_BYTES:

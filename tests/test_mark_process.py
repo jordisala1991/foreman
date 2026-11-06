@@ -249,9 +249,6 @@ class CarryTest(FakePs, ProjectCase):
         ev = {"cwd": str(self.home), "session": session, "claude_code": "2.1.314", "interactive": True}
         return hooks_mod.start({**ev, "previous": previous})
 
-    def notes_text(self):
-        return "".join(f.read_text() for f in sorted(self.project.notes_dir.glob("*.md")))
-
     def test_same_process_moves_the_mark(self):
         from foreman import heartbeat
 

@@ -27,13 +27,16 @@ before each merge (its home's `local_ci`, with macOS's `/usr/bin/python3`), and 
 Claude Code at a pinned version for the mods check). How often: while working, the tests of what you touch
 (`bin/foreman selftest NAME`); before delivering, that pass once, with any Python 3.9.
 
-foreman runs on Python 3.9 and newer (the oldest is the Mac's `/usr/bin/python3`). The static checks keep the code to
-3.9 without one (`py39_checks` in `lib/foreman/selftest.py`: the syntax, and the newer names, keywords and annotations
-it lists); behaviour that changed under the same name (`datetime.fromisoformat`, argparse's texts, docstrings) only
-the suite on 3.9 shows. TOML is read through `foreman.toml_reader` (tomllib, or on 3.9 and 3.10 the vendored copy of tomli in
+foreman runs on Python 3.9 and newer (the oldest is the Mac's `/usr/bin/python3`). Without one, ruff (`target-version
+= "py39"`) catches the newer syntax and pyright (`pythonVersion = "3.9"`, on `lib/foreman` and `dev/`) the newer
+standard library from 3.11 on and `X | Y` annotations; `py39_checks` in `lib/foreman/selftest.py` adds what neither
+sees (the 3.10 names, methods and keywords it lists, tomllib, and `lib/main.py` parsing on 3.6). Behaviour that
+changed under the same name (`datetime.fromisoformat`, argparse's texts, docstrings) only the suite on 3.9 shows. TOML is read through `foreman.toml_reader` (tomllib, or on 3.9 and 3.10 the vendored copy of tomli in
 `lib/foreman/_tomli/`, MIT, unmodified below its provenance header), never with `import tomllib`.
 
-The test classes run in parallel worker processes, the classes with more tests first. Without `-j N` a run takes
+The test classes run in parallel worker processes, longest first: those never timed on this machine (the classes
+with more tests first), then the others by the seconds they took the last time (`times.json` in the folder of the
+slots below). Without `-j N` a run takes
 its share of the machine: the cores divided by the selftest runs alive on it (each holds a locked file in
 `$TMPDIR/foreman-selftest-runs/`, or `$FOREMAN_SELFTEST_SLOTS`), at least 2, counted again while it runs (a worker
 over the share stops after its class, one is added under it); its first line says how many workers it starts with
@@ -200,7 +203,7 @@ scripts behind `lock`, `time-limit` and `hung-shells`). `tests/test_docs_tied.py
 | `timeline.py`, `transcripts.py` | the product's history (events in time order, what `foreman catchup` reads); the one reader of Claude Code's transcripts |
 | `start.py`, `plain.py`, `catchup.py`, `permissions.py` | the new orchestrator's start summary; the check of texts for the owner; `foreman catchup`, what the owner missed in four parts; `foreman permissions`, the permissions in bands and a candidate `foreman.toml` tested against the guard table and the orchestrator's lifeline, and `apply`, which puts it in place |
 | `init.py` | `foreman init`: a new project's home (minimal `foreman.toml`, starting rules, backlog) and its registry entry, appended |
-| `panel.py`, `panel_cache.py`, `panel_cards.py`, `panel_locks.py`, `panel_registry.py`, `panel_wiki.py`, `sources.py` | the web panel: server and routes, cache, backlog cards, locks, registry, wiki, and what it reads of a product's state |
+| `panel.py`, `panel_cache.py`, `panel_cards.py`, `panel_locks.py`, `panel_registry.py`, `panel_wiki.py` | the web panel: server and routes, cache, backlog cards, locks, registry, wiki |
 | `install.py`, `release.py`, `selftest.py`, `quality.py`, `cover.py`, `mods.py` | where foreman is installed and the panel service; version and release checks; the static checks and the test runner; the code quality checks (ruff, pyright); the coverage run; the hooks module's check (claude plugin validate/test) the selftest runs |
 | `i18n/` | the texts a person reads, `en.json` and `es.json` (same keys in both: a static check) |
 

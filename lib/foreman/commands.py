@@ -331,3 +331,17 @@ def run(
     return Result(
         proc.returncode, raw_out.decode(errors="replace"), raw_err.decode(errors="replace"), time.monotonic() - t0, cut
     )
+
+
+def run_logged(point: str, cmd: str, log: util.PathLike, head: str, **kw: Any) -> Result:
+    """run() with its output appended to LOG between a line «== TIME HEAD: CMD» and one «== rc N in S s» (« (cut)»
+    after N when the time limit stopped it; «== could not start: why» when it did not start)."""
+    from . import util
+
+    with open(log, "a") as f:
+        f.write(f"== {util.now():%Y-%m-%d %H:%M:%S} {head}: {cmd}\n")
+    r = run(point, cmd, log=log, **kw)
+    end = f"rc {r.rc}{' (cut)' if r.timed_out else ''} in {int(r.seconds)} s" if r.rc is not None else ""
+    with open(log, "a") as f:
+        f.write(f"== {end or 'could not start: ' + r.stderr}\n")
+    return r

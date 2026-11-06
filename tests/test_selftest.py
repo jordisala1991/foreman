@@ -148,33 +148,22 @@ if __name__ == "__main__":
 
 
 class Py39Test(unittest.TestCase):
-    """The static check that keeps the code to Python 3.9, on files written here: each construct is caught on its own
-    line, whatever Python runs the check (on 3.9 its own parser rejects those it cannot parse)."""
+    """The check that keeps the code to Python 3.9 where ruff and pyright do not look, on files written here: each
+    construct is caught on its own line, whatever Python runs the check (on 3.9 its own parser rejects match)."""
 
     NEWER: ClassVar[dict] = {
         "match": "match x:\n    case 1:\n        pass\n",
-        "f-string own quote": "x = f'{'a'}'\n",
-        "f-string own quote in the second of two parts": "x = f'{a}' f'{b['k']}'\n",
-        "f-string own quote nested": "x = f'{a}{f'{b}'}'\n",
-        "f-string backslash": "x = f\"{'\\\\n'.join(y)}\"\n",
-        "f-string comment": "x = f'''{1  # one\n}'''\n",
-        "starred subscript": "x = a[*b]\n",
-        "walrus subscript": "x = a[y := 1]\n",
-        "runtime annotation": "x: int | None = None\n",
-        "argument annotation": "def f(a: int | None):\n    pass\n",
         "zip strict": "x = zip(a, b, strict=True)\n",
         "tomllib": "import tomllib\n",
-        "from typing": "from typing import Self\n",
-        "datetime.UTC": "import datetime\nx = datetime.UTC\n",
-        "builtin": "x = anext(it)\n",
-        "method": "self.enterContext(cm)\n",
+        "from itertools": "from itertools import pairwise\n",
+        "typing.TypeAlias": "import typing\nx: typing.TypeAlias = int\n",
+        "method": "x = n.bit_count()\n",
         "dataclass slots": "from dataclasses import dataclass\n@dataclass(slots=True)\nclass A:\n    pass\n",
     }
     OLD = (
         "from __future__ import annotations\nx: int | None = None\n"
-        "y = f\"{x!r} {d['k']} {s.split('#', 1)} {'—'}\" + f'{a[(z := 1)]}'\n"
         "def f(a: 'int | None') -> 'str | None':\n    pass\n"
-        "from typing import Optional\nimport datetime\nz = datetime.timezone.utc\n"
+        "from typing import Optional\nimport datetime\nz = datetime.timezone.utc\nw = zip(a, b)\n"
     )
 
     def check(self, src):
@@ -192,18 +181,6 @@ class Py39Test(unittest.TestCase):
 
     def test_what_39_has_passes(self):
         self.assertEqual(self.check(self.OLD), [])
-
-    def test_each_concatenated_part_has_its_own_quote(self):
-        """A field may hold the quote its own part does not use, whatever the other parts of the concatenation use
-        (the formatter picks quotes part by part): not a 3.12 construct."""
-        for src in (
-            'x = f"{a}" f\'{b["k"]}\'\n',
-            "x = f'{a[\"j\"]}' f\"{b['k']}\" \"plain\" f'{c}'\n",
-            "x = (\n    f\"{a['j']}\"\n    f'{b[\"k\"]}'\n)\n",
-            "x = f\"{a}{f'{b}'}{c['j']}\"\n",
-        ):
-            with self.subTest(src=src):
-                self.assertEqual(self.check(src), [])
 
     def test_the_tree_runs_on_39(self):
         self.assertEqual(selftest.py39_checks(), [])
@@ -340,3 +317,32 @@ class ShareTest(unittest.TestCase):
     def test_workers_are_added_when_the_share_grows(self):
         events = self.run_with(1, lambda events: 3)
         self.assertEqual(sorted({w for e, w in events if e == "send"}), ["w0", "w1"])  # one more, while there is work
+
+
+class OrderTest(unittest.TestCase):
+    """The queue of classes: the ones never timed on this machine first, then the others by their past seconds."""
+
+    def test_the_longest_last_time_starts_first_and_the_run_is_timed(self):
+        from unittest import mock
+
+        tmp = Path(tempfile.mkdtemp(prefix="foreman-order-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        slots = tmp / "slots"
+        slots.mkdir()
+        (slots / selftest.TIMES).write_text(json.dumps({"test_selftest.Probe": 1.0, "test_selftest.Another": 9.0}))
+        names = ["test_selftest.Probe.check_passes", "test_selftest.Another.check_passes"]
+        suite = unittest.TestLoader().loadTestsFromNames([*names, "test_selftest.Survives.check_passes"])
+        sent, send = [], selftest.Worker.send
+
+        def sending(w, key, ids):
+            sent.append(key)
+            send(w, key, ids)
+
+        with mock.patch.dict(os.environ, {selftest.SLOTS_ENV: str(slots)}):
+            with mock.patch.object(selftest.Worker, "send", sending), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(selftest.run_parallel(suite, False, 1, 0.0, static=False), 0)
+            times = selftest.past_seconds()
+        self.assertEqual(sent, ["test_selftest.Survives", "test_selftest.Another", "test_selftest.Probe"])
+        self.assertEqual(sorted(times), ["test_selftest.Another", "test_selftest.Probe", "test_selftest.Survives"])
+        self.assertLess(times["test_selftest.Another"], 9.0)  # this run's seconds replace the last ones
+        self.assertEqual([f.name for f in slots.iterdir()], [selftest.TIMES])

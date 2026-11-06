@@ -3,10 +3,11 @@ finding and the bad ones exactly the flagged parts; examples come from the guide
 with invented names."""
 
 import json
+from datetime import datetime
 
 from helpers import ProjectCase
 
-from foreman import config, plain
+from foreman import config, plain, util
 
 TOML = """
 [project]
@@ -180,3 +181,12 @@ class PlainTest(ProjectCase):
         found = plain.findings(self.project, "J1 J2 J3 J4")
         self.assertEqual(plain.summary(found, limit=2).count("«"), 2)
         self.assertTrue(plain.summary(found, limit=2).endswith("and 2 more"))
+
+    def test_since_forms(self):
+        now = datetime(2026, 11, 10, 12, 0).astimezone()
+        naive = lambda text: util.parse_when(text, now).astimezone().replace(tzinfo=None)  # noqa: E731
+        self.assertEqual(naive("7d"), datetime(2026, 11, 3, 12, 0))
+        self.assertEqual(naive("12h"), datetime(2026, 11, 10, 0, 0))
+        self.assertEqual(naive("30m"), datetime(2026, 11, 10, 11, 30))
+        self.assertEqual(naive("2026-10-30 08:00"), datetime(2026, 10, 30, 8, 0))
+        self.assertEqual(self.cli("plain", "--stats", "--since", "yesterday").returncode, 2)

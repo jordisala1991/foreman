@@ -30,11 +30,9 @@ the checks in backlog_check and the `foreman backlog` command line in backlog_cl
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
 import re
 import subprocess
-import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -82,6 +80,7 @@ SYMBOL_STATUS = {v: k for k, v in SUB_SYMBOLS.items() if v}
 SUB_STATUS_ALIASES = {"doing": "in progress", "dropped": "canceled", "cancelled": "canceled"}
 SUB_ID = re.compile(r"^[A-Z]\d+[a-z0-9]*(?:[+–-][A-Z]?\d+[a-z0-9]*)*$")
 ISSUE_KEYS = ("id", "title", "status", "blocked", "plan", "subs", "detail")
+OUTCOME = "acceptance"  # the key of an issue's outcome block (OUTCOME_KEYS)
 OUTCOME_KEYS = ("claim", "criterion", "verdict", "aliases")
 SUB_KEYS = ("id", "title", "status", "commit", "agent", "branch", "moved_to", "text", "report", "kind")
 SUB_KINDS = ("measure",)  # the kinds a sub-issue stores; none is code (`--kind code` clears it)
@@ -250,6 +249,20 @@ def short_title(i: Issue) -> str:
     return (out or head[: SHORT_MAX - 1]) + "…"
 
 
+def tidy_relations(i: Issue) -> None:
+    """Drops the empty relations of issue `i`, and its `relations` when none is left."""
+    rel = {k: v for k, v in (i.get("relations") or {}).items() if v}
+    if rel:
+        i["relations"] = rel
+    else:
+        i.pop("relations", None)
+
+
+def on_branch(s: Record, branch: str) -> bool:
+    """Whether sub-issue `s` names `branch` (in backquotes too, as an older foreman wrote it)."""
+    return bool(branch) and s.get("branch", "").strip("`") == branch
+
+
 def find_sub(i: Issue, sid: str) -> int | None:
     for k, s in enumerate(i["subs"]):
         if s["id"] == sid:
@@ -336,7 +349,7 @@ class Backlog:
         return data
 
     @staticmethod
-    def norm_status(data: Data, v: str | None) -> str:
+    def norm_status(v: str | None) -> str:
         """An issue status (idea is triage; todo is ready)."""
         v = STATUS_ALIASES.get((v or "").strip().lower(), (v or "").strip().lower())
         if v not in ISSUE_STATUSES:
@@ -356,7 +369,6 @@ class Backlog:
 
     def canon(self, data: Data) -> Data:
         """The same data with every object's keys in the schema order (stable diffs)."""
-        ok = "acceptance"
 
         def issue(i: Issue) -> Issue:
             out = {k: i.get(k, [] if k in ("plan", "subs") else "") for k in ISSUE_KEYS}
@@ -364,14 +376,11 @@ class Backlog:
                 {"label": p.get("label", "plan"), "path": p["path"], "note": p.get("note", "")} for p in out["plan"]
             ]
             out["subs"] = [{k: s[k] for k in SUB_KEYS if s.get(k) or k in ("id", "status")} for s in out["subs"]]
-            h = {k: i[ok][k] for k in OUTCOME_KEYS if (i.get(ok) or {}).get(k)}
+            h = {k: i[OUTCOME][k] for k in OUTCOME_KEYS if (i.get(OUTCOME) or {}).get(k)}
             if h:
-                out[ok] = h
+                out[OUTCOME] = h
             out.update({k: i[k] for k in EXTRA_ISSUE_KEYS if i.get(k) not in (None, "", [], {})})
-            if "relations" in out:
-                out["relations"] = {k: v for k, v in out["relations"].items() if v} or None
-                if not out["relations"]:
-                    del out["relations"]
+            tidy_relations(out)
             return out
 
         def project(p: Record) -> Record:
@@ -412,38 +421,30 @@ class Backlog:
     @contextlib.contextmanager
     def locked(self, timeout: float = 30) -> Iterator[None]:
         """Exclusive lock next to the backlog file (panel, orchestrator and hooks may write at the same time)."""
-        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.lock_path, "a") as f:
-            end = time.monotonic() + timeout
-            while True:
-                try:
-                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() > end:
-                        raise BacklogError(
-                            f"{self.lock_path} is held by another writer for more than {timeout} s"
-                        ) from None
-                    time.sleep(0.05)
-            try:
+        try:
+            with util.file_lock(self.lock_path.with_suffix(""), timeout=timeout):  # .backlog.lock
                 yield
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+        except TimeoutError:
+            raise BacklogError(f"{self.lock_path} is held by another writer for more than {timeout} s") from None
 
     @contextlib.contextmanager
     def mutate(self, timeout: float = 30) -> Iterator[Data]:
-        """Lock (waiting `timeout` seconds at most), load (see `load`), let the caller change the data, validate and
-        save."""
-        from . import backlog_check
-
+        """Lock (waiting `timeout` seconds at most), load (see `load`), let the caller change the data, validate
+        (check_or_raise) and save."""
         with self.locked(timeout):
             data = self.load()
             yield data
-            errors = backlog_check.hard(backlog_check.validate(self, data, files=False))
-            if errors:
-                raise BacklogError("not saved: " + "; ".join(errors))
+            self.check_or_raise(data)
             data["updated"] = date.today().isoformat()
             util.write_text_atomic(self.data_path, self.dumps(data))
+
+    def check_or_raise(self, data: Data) -> None:
+        """BacklogError «not saved: …» when `data` fails the checks of a save (backlog_check, without the files)."""
+        from . import backlog_check
+
+        errors = backlog_check.hard(backlog_check.validate(self, data, files=False))
+        if errors:
+            raise BacklogError("not saved: " + "; ".join(errors))
 
     def init(self) -> Path:
         if self.exists():
@@ -480,6 +481,11 @@ class Backlog:
                     yield g["project"], i, True
 
     @staticmethod
+    def subs_of_branch(data: Data, branch: str, archived: bool = True) -> list[tuple[Issue, Record]]:
+        """(issue, sub-issue) of every sub-issue that names `branch` (on_branch), in file order."""
+        return [(i, s) for _, i, _ in Backlog.iter_issues(data, archived) for s in i["subs"] if on_branch(s, branch)]
+
+    @staticmethod
     def get_project(data: Data, pid: str) -> Record:
         for p in data["projects"]:
             if p["id"] == pid:
@@ -509,9 +515,8 @@ class Backlog:
     def resolve(self, data: Data, key: str) -> str:
         """The issue id for `key`: itself, or the issue that has `key` (a legacy id) among its aliases."""
         if self.is_legacy(key):
-            ok = "acceptance"
             for _, i, _ in self.iter_issues(data):
-                if i["id"] == key or key in (i.get(ok) or {}).get("aliases", []):
+                if i["id"] == key or key in (i.get(OUTCOME) or {}).get("aliases", []):
                     return i["id"]
         return key
 
@@ -618,13 +623,7 @@ class Backlog:
         """The exact text of the option `option` names for pending decision `did`: its number (from 1) or its exact
         text (a text that is an option wins over a number). DecisionResolved when `did` is resolved already;
         BacklogError when it is no decision or `option` names none of its options."""
-        d = next((x for x in data["decisions"] if x["id"] == did), None)
-        if d is None:
-            done = Backlog.resolved_decision(data, did)
-            if done is not None:
-                raise DecisionResolved(done)
-            raise BacklogError(f"no pending decision {did}")
-        opts = list(d.get("options", []))
+        opts = list(Backlog.pending_decision(data, did).get("options", []))
         if option in opts:
             return option
         if option.strip().isdigit() and 1 <= int(option) <= len(opts):
@@ -739,8 +738,8 @@ class Backlog:
             )
         return out
 
-    def verdict_label(self, data: Data, i: Issue) -> str:
-        return self.verdicts.get((i.get("acceptance") or {}).get("verdict", ""), "")
+    def verdict_label(self, i: Issue) -> str:
+        return self.verdicts.get((i.get(OUTCOME) or {}).get("verdict", ""), "")
 
     def counts(self, data: Data) -> dict[str, int]:
         """Launchable ready issues (unblocked, and not held by a pending decision: `launchable`) and refining issues
@@ -767,7 +766,6 @@ class Backlog:
 
     def set_outcome(
         self,
-        data: Data,
         i: Issue,
         claim: str | None = None,
         criterion: str | None = None,
@@ -775,8 +773,7 @@ class Backlog:
         result: str | None = None,
     ) -> None:
         """Outcome fields, verdict and result of issue `i`; None leaves a field, an empty string clears it."""
-        ok = "acceptance"
-        h = dict(i.get(ok) or {})
+        h = dict(i.get(OUTCOME) or {})
         for key, raw in (("claim", claim), ("criterion", criterion), ("verdict", verdict)):
             if raw is None:
                 continue
@@ -788,9 +785,9 @@ class Backlog:
         if h:
             if not h.get("criterion"):
                 raise BacklogError(f"{i['id']}: an outcome block needs its criterion (--criterion)")
-            i[ok] = h
+            i[OUTCOME] = h
         else:
-            i.pop(ok, None)
+            i.pop(OUTCOME, None)
         if result is not None:
             if clean_text(result):
                 i["result"] = clean_text(result)
@@ -804,7 +801,6 @@ class Backlog:
         its prefix is in `criterion_required`; one that is closed, its result (and verdict, with a criterion)."""
         iid, _, sid = ref.partition("/")
         i = self.issue(data, self.resolve(data, iid))
-        ok = "acceptance"
         if sid:
             if result is not None or verdict is not None:
                 raise BacklogError("--result and --verdict are for the issue, not for a sub-issue")
@@ -813,13 +809,13 @@ class Backlog:
                 raise BacklogError(f"{iid} has no sub-issue {sid}")
             i["subs"][k]["status"] = norm_sub_status(value)
             return
-        value = self.norm_status(data, value)
-        self.set_outcome(data, i, result=result, verdict=verdict)
+        value = self.norm_status(value)
+        self.set_outcome(i, result=result, verdict=verdict)
         if (
             value in self.needs_criterion
             and value != i["status"]
             and self.needs_crit(i["id"])
-            and not (i.get(ok) or {}).get("criterion")
+            and not (i.get(OUTCOME) or {}).get("criterion")
         ):
             raise BacklogError(
                 f"{i['id']} needs its acceptance criterion before {value} "
@@ -833,15 +829,19 @@ class Backlog:
                 pass
             elif not i.get("result"):
                 raise BacklogError(f'closing {i["id"]} needs its result: --result "figure + source"')
-            elif i.get(ok) and not i[ok].get("verdict"):
+            elif i.get(OUTCOME) and not i[OUTCOME].get("verdict"):
                 raise BacklogError(
                     f"{i['id']} has a criterion: closing it needs the verdict (--verdict {'|'.join(self.verdicts)})"
                 )
-            i["closed"] = date.today().isoformat()
-            i["blocked"] = ""  # a closed issue waits for nothing
+            self._close(i, value)
         elif value not in CLOSED:
             i.pop("closed", None)
         i["status"] = value
+
+    @staticmethod
+    def _close(i: Issue, status: str) -> None:
+        """Closes issue `i` as `status` today; a closed issue waits for nothing."""
+        i["status"], i["closed"], i["blocked"] = status, date.today().isoformat(), ""
 
     def set_sub(
         self, data: Data, iid: str, sid: str, before: str | None = None, remove: bool = False, **fields: str | None
@@ -921,7 +921,7 @@ class Backlog:
     ) -> None:
         """Changes what is given (None: left as it is); an empty priority, assignee or repo clears it."""
         i = self.issue(data, self.resolve(data, iid))
-        self.set_outcome(data, i, claim, criterion, verdict, result)
+        self.set_outcome(i, claim, criterion, verdict, result)
         self.set_field(i, "priority", self.norm_choice(priority, PRIORITIES, "priority"))
         self.set_field(i, "assignee", clean_text(assignee))
         if repo and self.project.repos and repo not in self.project.repos:
@@ -971,11 +971,10 @@ class Backlog:
         blocked by a relation only while its blocker is open).
         Returns (what was done, blocked issues left for the orchestrator to judge)."""
         i = self.issue(data, iid)
-        ok = "acceptance"
         did: list[str] = []
         sids = [x for x in (sid or "").split(",") if x]
-        if not sids and branch:
-            sids = [s["id"] for s in i["subs"] if s.get("branch", "").strip("`") == branch]
+        if not sids:
+            sids = [s["id"] for s in i["subs"] if on_branch(s, branch)]
         if report and self.report_prefixes and not report.startswith(self.report_prefixes):
             raise BacklogError(f"--report must be a path under {' or '.join(self.report_prefixes)} (got {report!r})")
         if report and not sids:
@@ -991,16 +990,15 @@ class Backlog:
             did.append(f"{iid} {one} ✓ {c}".rstrip() + (f", report {report}" if report else ""))
         pending = [s["id"] for s in i["subs"] if s["status"] in PENDING_SUBS]
         if not pending and i["status"] not in CLOSED:
-            self.set_outcome(data, i, result=result or None, verdict=verdict or None)
-            i["status"], i["closed"] = "done", date.today().isoformat()
-            i["blocked"] = ""
-            label = self.verdict_label(data, i)
+            self.set_outcome(i, result=result or None, verdict=verdict or None)
+            self._close(i, "done")
+            label = self.verdict_label(i)
             did.append(
                 f"{iid} done" + (f" ({label})" if label else "") + (f": {i['result']}" if i.get("result") else "")
             )
             if not i.get("result"):
                 did.append(f'warning: {iid} closed without result: foreman backlog edit {iid} --result "…"')
-            if i.get(ok) and not i[ok].get("verdict"):
+            if i.get(OUTCOME) and not i[OUTCOME].get("verdict"):
                 did.append(
                     f"warning: {iid} closed without the verdict of its criterion: foreman backlog edit {iid} "
                     f"--verdict …"
@@ -1052,12 +1050,7 @@ class Backlog:
             if dest is lst:
                 return
             it = lst.pop(k)
-            pos = (
-                next((n for n, x in enumerate(dest) if x["status"] in INACTIVE), len(dest))
-                if it["status"] not in INACTIVE
-                else len(dest)
-            )
-            dest.insert(pos, it)
+            dest.insert(self._insert_at(dest, it["status"]), it)
             return
         ref = before or after
         if not ref or ref == iid:
@@ -1066,6 +1059,14 @@ class Backlog:
         it = lst.pop(k)
         rk = next(n for n, x in enumerate(rlst) if x["id"] == ref)
         rlst.insert(rk if before else rk + 1, it)
+
+    @staticmethod
+    def _insert_at(lst: list[Issue], status: str) -> int:
+        """Where a new or moved issue of `status` goes in `lst`: an active one before the first inactive one (done,
+        canceled, triage), an inactive one last."""
+        if status in INACTIVE:
+            return len(lst)
+        return next((n for n, x in enumerate(lst) if x["status"] in INACTIVE), len(lst))
 
     @staticmethod
     def move_project(data: Data, pid: str, before: str | None = None, after: str | None = None) -> None:
@@ -1144,10 +1145,10 @@ class Backlog:
             raise BacklogError(f"bad issue id {iid!r} ({self.new_issue_id.pattern})")
         if any(i["id"] == iid for _, i, _ in self.iter_issues(data)):
             raise BacklogError(f"{iid} already exists")
-        status = self.norm_status(data, status)
+        status = self.norm_status(status)
         if status in CLOSED:
             raise BacklogError(f"bad status {status!r} for a new issue")
-        p = {"id": pid or "", "issues": self.issues_of(data, pid)}
+        lst = self.issues_of(data, pid)
         it = {
             "id": iid,
             "title": clean_text(title),
@@ -1161,22 +1162,13 @@ class Backlog:
             it["github"] = github
         if short and short.strip():
             it["short"] = clean_text(short)
-        self.set_outcome(data, it, claim, criterion)
+        self.set_outcome(it, claim, criterion)
         if status in self.needs_criterion and self.needs_crit(iid) and not criterion:
             raise BacklogError(f"{iid} needs an acceptance criterion: {status} needs --criterion, or start as triage")
-        if before:
-            k = next((n for n, x in enumerate(p["issues"]) if x["id"] == before), None)
-            if k is None:
-                raise BacklogError(f"{before} is not an issue of {pid}")
-        elif status in INACTIVE:
-            k = (
-                len(p["issues"])
-                if status == "triage"
-                else next((n for n, x in enumerate(p["issues"]) if x["status"] in CLOSED), len(p["issues"]))
-            )
-        else:
-            k = next((n for n, x in enumerate(p["issues"]) if x["status"] in INACTIVE), len(p["issues"]))
-        p["issues"].insert(k, it)
+        k = next((n for n, x in enumerate(lst) if x["id"] == before), None) if before else self._insert_at(lst, status)
+        if k is None:
+            raise BacklogError(f"{before} is not an issue of {pid}")
+        lst.insert(k, it)
         return iid
 
     def add_project(self, data: Data, pid: str, title: str, intro: str, before: str | None = None) -> None:
@@ -1194,13 +1186,6 @@ class Backlog:
         v = (v or "").strip().lower().replace("_", " ").replace("-", " ") if v else v
         if v and v not in choices:
             raise BacklogError(f"bad {what} {v!r}: {', '.join(choices)}")
-        return v
-
-    @staticmethod
-    def norm_date(v: str | None, what: str = "date") -> str:
-        v = (v or "").strip()
-        if v and not DATE.match(v):
-            raise BacklogError(f"bad {what} {v!r} (YYYY-MM-DD)")
         return v
 
     @staticmethod
@@ -1279,18 +1264,15 @@ class Backlog:
             else:
                 rel["duplicate_of"] = b["id"]
                 if a["status"] not in CLOSED:
-                    a["status"], a["closed"], a["blocked"] = "duplicate", date.today().isoformat(), ""
+                    self._close(a, "duplicate")
         else:
             if kind == "related" and remove:
                 other_rel = b.get("relations") or {}
                 if a["id"] in other_rel.get("related", []):
                     other_rel["related"].remove(a["id"])
             rel[kind] = self.edit_list(rel.get(kind), [] if remove else [b["id"]], [b["id"]] if remove else [])
-        for x in (a, b):
-            if x.get("relations") is not None:
-                x["relations"] = {k: v for k, v in x["relations"].items() if v}
-                if not x["relations"]:
-                    x.pop("relations")
+        tidy_relations(a)
+        tidy_relations(b)
 
     def relations_of(self, data: Data, iid: str) -> dict[str, Any]:
         """{blocks, blocked_by, related, duplicate_of, duplicates}: both directions of every relation of `iid`."""
@@ -1315,7 +1297,8 @@ class Backlog:
 
     # ---------- progress (Linear: completed issues over every issue that is not canceled) ----------
 
-    def project_progress(self, p: Record) -> dict[str, int]:
+    @staticmethod
+    def project_progress(p: Record) -> dict[str, int]:
         live = [i for i in p["issues"] if STATUS_CATEGORY.get(i["status"]) not in ("canceled", "triage")]
         return {
             "done": sum(1 for i in live if i["status"] == "done"),
@@ -1591,9 +1574,7 @@ class Backlog:
 
     def set_decision_blocks(self, data: Data, did: str, refs: Sequence[str], issue: str | None = None) -> list[str]:
         """Replace what pending decision `did` holds (`hold_refs`; empty: nothing) and return the stored references."""
-        d = next((x for x in data["decisions"] if x["id"] == did), None)
-        if d is None:
-            raise BacklogError(f"no pending decision {did}")
+        d = self.pending_decision(data, did, resolved="")
         held = self.hold_refs(data, refs, issue)
         if held:
             d["blocks"] = held
@@ -1643,19 +1624,29 @@ class Backlog:
         return next((d for d in reversed(data["decisions_resolved"]) if d["id"] == did), None)
 
     @staticmethod
+    def pending_decision(data: Data, did: str, resolved: str = "raise") -> Record:
+        """Pending decision `did`. When there is none: BacklogError «no pending decision», or, when `did` is resolved
+        already, DecisionResolved («raise»), BacklogError «already answered: …» («said») or that same «no pending
+        decision» («»)."""
+        d = next((x for x in data["decisions"] if x["id"] == did), None)
+        done = Backlog.resolved_decision(data, did) if d is None and resolved else None
+        if done is not None and resolved == "said":
+            raise BacklogError(f"already answered: {DecisionResolved.said(done)}")
+        if done is not None:
+            raise DecisionResolved(done)
+        if d is None:
+            raise BacklogError(f"no pending decision {did}")
+        return d
+
+    @staticmethod
     def resolve_decision(data: Data, did: str, answer: str = "", by: str = "", free: bool = False) -> list[str]:
         """Move pending decision `did` to the resolved ones (it keeps its `blocks` as history), with the answer and,
         when given, who answered and when (`by`) and whether the answer is free text (`free`), and return a line per
         open issue or sub-issue it held: «freed: XX-1 T3», or «XX-1 T3: still held by XX-1 J2» when another pending
         decision holds it too. A held issue as a whole also lists its sub-issues that another one still holds.
         DecisionResolved when `did` is no longer pending but resolved."""
-        k = next((n for n, d in enumerate(data["decisions"]) if d["id"] == did), None)
-        if k is None:
-            done = Backlog.resolved_decision(data, did)
-            if done is not None:
-                raise DecisionResolved(done)
-            raise BacklogError(f"no pending decision {did}")
-        d = data["decisions"].pop(k)
+        d = Backlog.pending_decision(data, did)
+        data["decisions"].remove(d)
         d.update(resolved=date.today().isoformat(), answer=clean_text(answer or ""))
         if by:
             d["by"] = clean_text(by)
@@ -1684,12 +1675,7 @@ class Backlog:
         text, marked `free` for the orchestrator to interpret), resolves it at once (resolve_decision, with `by`).
         BacklogError when the decision is not pending (already answered, or no such decision) or `option` is not one
         of its options (unless `free`)."""
-        d = next((x for x in data["decisions"] if x["id"] == did), None)
-        if d is None:
-            done = Backlog.resolved_decision(data, did)
-            if done is not None:
-                raise BacklogError(f"already answered: {DecisionResolved.said(done)}")
-            raise BacklogError(f"no pending decision {did}")
+        d = Backlog.pending_decision(data, did, resolved="said")
         if not free and option not in d.get("options", []):
             raise BacklogError(f"{did}: {option!r} is not one of its options")
         return Backlog.resolve_decision(data, did, option, by, free=free)
@@ -1722,20 +1708,19 @@ class Backlog:
         """Moves issue `iid` to dest_of(k, n) among the active issues of its project; returns (pid, k, dest, order
         ids) or None when nothing changes. The inactive ones (done, canceled, triage) keep their places."""
         for pid, lst in cls.containers(data):
-            p = {"id": pid, "issues": lst}
-            pos = [n for n, i in enumerate(p["issues"]) if i["status"] not in INACTIVE]
-            ids = [p["issues"][n]["id"] for n in pos]
+            pos = [n for n, i in enumerate(lst) if i["status"] not in INACTIVE]
+            ids = [lst[n]["id"] for n in pos]
             if iid not in ids:
                 continue
             k = ids.index(iid)
             dest = dest_of(k, len(pos))
             if not 0 <= dest < len(pos) or dest == k:
                 return None
-            order = [p["issues"][n] for n in pos]
+            order = [lst[n] for n in pos]
             order.insert(dest, order.pop(k))
             for n, it in zip(pos, order):
-                p["issues"][n] = it
-            return p["id"], k, dest, [i["id"] for i in order]
+                lst[n] = it
+            return pid, k, dest, [i["id"] for i in order]
         raise BacklogError(f"{iid} is not among the active issues of the backlog")
 
     def want(self, data: Data, iid: str, on: bool, when: str) -> None:
@@ -1760,7 +1745,7 @@ class Backlog:
         i = self.issue(data, iid)
         if i["status"] != "triage":
             raise BacklogError(f"{iid} is {i['status']}, not in triage: only a triage issue can be discarded")
-        crit = (i.get("acceptance") or {}).get("criterion")
+        crit = (i.get(OUTCOME) or {}).get("criterion")
         self.set_status(data, iid, "canceled", result=reason, verdict="discarded" if crit else None)
         i.pop("wanted", None)
 
@@ -1780,13 +1765,9 @@ class Backlog:
         if r.returncode != 0:
             raise BacklogError(f"gh issue list -R {repo_slug} failed: {r.stderr.strip()[:300]}")
         have = {i.get("github") for _, i, _ in self.iter_issues(data)}
-        nums = [
-            int(m.group(1))
-            for _, i, _ in self.iter_issues(data)
-            for m in [re.match(rf"^{re.escape(prefix)}-(\d+)$", i["id"])]
-            if m
-        ]
-        n = max(nums, default=0)
+        nxt = self.next_issue_ids(data).get(f"{prefix}-")  # «AP-7» when AP-6 is the highest
+        n = int(nxt[len(prefix) + 1 :]) - 1 if nxt else 0
+        key = next((k for k, r in self.project.repos.items() if r.get("github") == repo_slug), None)
         added: list[str] = []
         for gi in sorted(json.loads(r.stdout or "[]"), key=lambda x: x["number"]):
             ref = f"{repo_slug}#{gi['number']}"
@@ -1795,7 +1776,6 @@ class Backlog:
             n += 1
             iid = f"{prefix}-{n}"
             self.add_issue(data, pid, iid, gi["title"], status=status, detail=gi.get("url", ""), github=ref)
-            key = next((k for k, r in self.project.repos.items() if r.get("github") == repo_slug), None)
             if key:
                 self.issue(data, iid)["repo"] = key
             added.append(iid)

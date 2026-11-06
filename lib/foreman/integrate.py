@@ -97,6 +97,7 @@ FOREMAN_GH overrides the gh executable (tests).
 
 from __future__ import annotations
 
+import copy
 import functools
 import inspect
 import os
@@ -110,11 +111,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from . import backlog_text, commands, config, delivery, guard, holdout, i18n, notes, permissions, plain, review, util
-from .backlog import Backlog, BacklogError
+from .backlog import Backlog, BacklogError, on_branch
+from .worktree import worktrees
 
 if TYPE_CHECKING:
     import argparse
 
+    from .backlog import Data
     from .config import Project
     from .util import PathLike
 
@@ -166,8 +169,8 @@ class Integration:
         self.p = project
         self.repo = project.repo(repo_key)
         self.main_path = self.repo["path"]
-        self.main = self.repo.get("main", "main")
-        self.remote = self.repo.get("remote", "origin")
+        self.main = self.repo["main"]
+        self.remote = self.repo["remote"]
         self.local = self.remote == "none"
         self.branch = branch
         self.issue, _, sub = ref.partition(" ")
@@ -175,9 +178,7 @@ class Integration:
         self.a = args
         self.out = out
         self.gh_exe = os.environ.get("FOREMAN_GH") or "gh"
-        self.merged_main: tuple[int, str] | None = (
-            None  # (n commits, short sha) when main was merged into the branch first
-        )
+        self.merged_main: tuple[int, str] | None = None  # (n commits, short sha) when main was merged in first
         self.backlog = Backlog(project)
         self.s = i18n.for_project(project)
         self.touched: list[str] = []
@@ -186,6 +187,16 @@ class Integration:
         self.review_note = ""  # the note's part on the branch's review (review_gate)
         self.hidden: holdout.Status | None = None  # the issue's hidden acceptance check, when it applies (show())
         self.hidden_note = ""  # the note's part on it (hidden_gate)
+        self.data: Data | None = None  # the backlog, read once (backlog_data)
+        self.wt = ""  # the branch's worktree (preflight)
+        self.dirty_home: list[str] = []  # uncommitted files under a home inside the repo (preflight)
+        self.tree = ""  # what main will hold (merged_tree)
+        self.products: dict[str, Project] = {}  # the registered products (live_changes)
+        self.live: dict[str, set[str]] = {}  # {product: {config, table}} the merge changes (live_changes)
+        self.github_ref = ""  # the issue's `github` (show)
+        self.before = ""  # main before the PR's merge (merge)
+        self.ci_log_open = False  # the CI log is emptied once per integration (local_ci)
+        self.ci_passed_on: str | None = None  # the commit the local CI passed on in the worktree (local_ci)
 
     def gh(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return sh([self.gh_exe, *args], cwd=self.main_path, check=check)
@@ -193,19 +204,21 @@ class Integration:
     # ---------- steps ----------
 
     def worktree(self) -> str:
-        for block in git(self.main_path, "worktree", "list", "--porcelain").split("\n\n"):
-            lines = block.splitlines()
-            if f"branch refs/heads/{self.branch}" in lines:
-                return lines[0].removeprefix("worktree ")
-        raise Stop(f"no worktree for branch {self.branch} in {self.main_path}")
+        path = worktrees(self.main_path).get(self.branch)
+        if path is None:
+            raise Stop(f"no worktree for branch {self.branch} in {self.main_path}")
+        return path
 
     def home_in_repo(self) -> str | None:
         """The home's path relative to the main checkout when the home lives inside the repo (else None)."""
-        try:
-            rel = self.p.home.resolve().relative_to(self.main_path.resolve())
-        except ValueError:
-            return None
-        return str(rel) if str(rel) != "." else None
+        rel = delivery.home_in(self.main_path, self.p)
+        return str(rel) if rel is not None and str(rel) != "." else None
+
+    def backlog_data(self) -> Data:
+        """The backlog, read once per integration (a failed read is tried again by the next caller)."""
+        if self.data is None:
+            self.data = self.backlog.load()
+        return self.data
 
     def branch_adds(self, path: str) -> bool:
         """Whether the branch adds PATH (relative to the home) as a file that main lacks, with the home inside the
@@ -222,12 +235,12 @@ class Integration:
         the one the agent named at its delivery (`progress --done --report`), when it is a path under
         `[ids] report_prefixes` (relative to the home) that exists in the main checkout or that the branch adds."""
         try:
-            data = self.backlog.load()
+            data = self.backlog_data()
             subs = self.backlog.issue(data, self.issue)["subs"]
         except (BacklogError, OSError, ValueError):
             data, subs = None, []
         reports, _ = delivery.sub_reports(self.p, self.branch, data)
-        mine = [s for s in subs if s.get("branch", "").strip("`") == self.branch]
+        mine = [s for s in subs if on_branch(s, self.branch)]
         if not (self.sub or mine):  # no sub-issue to close: the backlog close would refuse a report
             return None
         agent = next((s.get("agent") for s in mine), None)
@@ -240,27 +253,21 @@ class Integration:
                 return r
         return None
 
-    def in_worktree(self, path: str) -> bool:
-        """Whether PATH (relative to the home) is a file in the home's folder of the branch's worktree (a
-        measurement's report the agent did not commit)."""
+    def in_worktree(self, path: str) -> Path | None:
+        """PATH (relative to the home) in the home's folder of the branch's worktree when it is a file there (a
+        measurement's report the agent did not commit), else None."""
         try:
             wh = delivery.worktree_home(self.p, self.worktree())
         except Stop:
-            return False
-        return wh is not None and (wh / path).is_file()
+            return None
+        return wh / path if wh is not None and (wh / path).is_file() else None
 
     def plan_check_section(self, text: str) -> str | None:
         """The body of the plan's check section, or None. Its heading is the repo's `plan_check_heading` or, by
         default, the one of either language; a leading section number is allowed («## 6. How to check»)."""
-        headings = (
-            [self.repo["plan_check_heading"]]
-            if self.repo.get("plan_check_heading")
-            else list(
-                dict.fromkeys(
-                    [self.s["plan_check_heading"]] + [i18n.strings(lang)["plan_check_heading"] for lang in ("en", "es")]
-                )
-            )
-        )
+        own = self.repo["plan_check_heading"]
+        langs = [self.s["plan_check_heading"]] + [i18n.strings(lang)["plan_check_heading"] for lang in ("en", "es")]
+        headings = [own] if own else list(dict.fromkeys(langs))
         for heading in headings:
             hashes, _, title = heading.strip().partition(" ")
             m = re.search(
@@ -272,6 +279,10 @@ class Integration:
             if m:
                 return m.group(1).strip()
         return None
+
+    def contains(self, a: str, b: str) -> bool:
+        """Whether commit A is an ancestor of B (B contains A), in the main checkout."""
+        return not util.git_run(self.main_path, "merge-base", "--is-ancestor", a, b).returncode
 
     def home_only_merge(self) -> tuple[bool, str, int]:
         """Whether main can be merged into the branch on its own: no remote, the home inside the repo, everything
@@ -295,20 +306,8 @@ class Integration:
         if outside:
             more = f" and {len(outside) - 5} more" if len(outside) > 5 else ""
             return False, f"{self.main} changed outside the home {home}/ ({', '.join(outside[:5])}{more})", n
-        r = sh(
-            [
-                "git",
-                *util.GIT_QUIET,
-                "-C",
-                str(self.main_path),
-                "merge-tree",
-                "--write-tree",
-                "--no-messages",
-                "--name-only",
-                self.main,
-                self.branch,
-            ],
-            check=False,
+        r = util.git_run(
+            str(self.main_path), "merge-tree", "--write-tree", "--no-messages", "--name-only", self.main, self.branch
         )
         if r.returncode == 1:
             files = sorted(set(r.stdout.splitlines()[1:]))
@@ -342,34 +341,19 @@ class Integration:
             if git(self.main_path, "rev-parse", self.main) != git(self.main_path, "rev-parse", upstream):
                 raise Stop(f"{self.main} differs from {upstream}: sync it (git pull --ff-only) first")
         if self.a.rebase_from:
-            if sh(
-                [
-                    "git",
-                    *util.GIT_QUIET,
-                    "-C",
-                    str(self.main_path),
-                    "rev-parse",
-                    "-q",
-                    "--verify",
-                    f"{self.a.rebase_from}^{{commit}}",
-                ],
-                check=False,
+            if util.git_run(
+                str(self.main_path), "rev-parse", "-q", "--verify", f"{self.a.rebase_from}^{{commit}}"
             ).returncode:
                 raise Stop(f"--rebase-from: {self.a.rebase_from} is not a commit")
             if self.a.check:
                 self.out(f"== --check: would run git rebase --onto {self.main} {self.a.rebase_from} in {self.wt}")
                 return
             self.out(f"== git rebase --onto {self.main} {self.a.rebase_from} ({self.branch})")
-            if sh(
-                ["git", *util.GIT_QUIET, "-C", self.wt, "rebase", "--onto", self.main, self.a.rebase_from], check=False
-            ).returncode:
+            if util.git_run(self.wt, "rebase", "--onto", self.main, self.a.rebase_from).returncode:
                 raise Stop(
                     f"rebase failed: git -C {self.wt} rebase --abort, or resolve it and rerun without --rebase-from"
                 )
-        if sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge-base", "--is-ancestor", self.main, self.branch],
-            check=False,
-        ).returncode:
+        if not self.contains(self.main, self.branch):
             ok, why, n = self.home_only_merge()
             if not ok:
                 raise Stop(
@@ -380,11 +364,9 @@ class Integration:
                 self.out(f"== --check: would merge {self.main} ({why}) into {self.branch}: clean")
                 return
             self.out(f"== git merge --no-ff --no-edit {self.main} in {self.wt} ({why})")
-            r = sh(
-                ["git", *util.GIT_QUIET, "-C", self.wt, "merge", "-q", "--no-ff", "--no-edit", self.main], check=False
-            )
+            r = util.git_run(self.wt, "merge", "-q", "--no-ff", "--no-edit", self.main)
             if r.returncode:
-                sh(["git", *util.GIT_QUIET, "-C", self.wt, "merge", "--abort"], check=False)
+                util.git_run(self.wt, "merge", "--abort")
                 raise Stop(
                     f"git merge {self.main} into {self.branch} failed (aborted, nothing merged): "
                     f"{(r.stderr or r.stdout).strip()[:300]}"
@@ -402,32 +384,16 @@ class Integration:
     def risky(self) -> list[str]:
         """Risky paths the branch touches: "dir/", "file", a glob, or "file:text" (a changed line contains text)."""
         try:
-            return review.paths_touched(self.main_path, self.main, self.branch, self.repo.get("risky_paths", []))
+            return review.paths_touched(self.main_path, self.main, self.branch, self.repo["risky_paths"])
         except RuntimeError as e:
             raise Stop(str(e)) from e
 
     def merged_tree(self) -> str:
         """The tree main will hold after this integration: the branch's own when it contains main, else the clean
         merge of both (`git merge-tree --write-tree`, as home_only_merge; it only adds loose objects)."""
-        if not sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge-base", "--is-ancestor", self.main, self.branch],
-            check=False,
-        ).returncode:
+        if self.contains(self.main, self.branch):
             return git(self.main_path, "rev-parse", f"{self.branch}^{{tree}}")
-        r = sh(
-            [
-                "git",
-                *util.GIT_QUIET,
-                "-C",
-                str(self.main_path),
-                "merge-tree",
-                "--write-tree",
-                "--no-messages",
-                self.main,
-                self.branch,
-            ],
-            check=False,
-        )
+        r = util.git_run(str(self.main_path), "merge-tree", "--write-tree", "--no-messages", self.main, self.branch)
         if r.returncode or not r.stdout.strip():
             raise Stop(self.s["integ_perm_error"].format(error=(r.stderr or r.stdout).strip()[:200] or "merge-tree"), 2)
         return r.stdout.split()[0]
@@ -469,8 +435,7 @@ class Integration:
         if self.repo.get("pre_merge_report"):
             self.out(self.pre_merge_report())
         try:
-            data = self.backlog.load()
-            issue = self.backlog.issue(data, self.issue)
+            issue = self.backlog.issue(self.backlog_data(), self.issue)
         except BacklogError as e:
             raise Stop(str(e)) from e
         self.github_ref = issue.get("github", "")
@@ -485,7 +450,7 @@ class Integration:
         if issue["subs"]:
             self.out(f"== sub-issues of {self.issue}: {backlog_text.render_subs(self.backlog, issue['subs'])}")
         self.show_hidden()
-        agent = next((x.get("agent") for x in issue["subs"] if x.get("branch") == self.branch), None)
+        agent = next((x.get("agent") for x in issue["subs"] if on_branch(x, self.branch)), None)
         outcome = self.outcome = delivery.outcome_of(self.p, branch=self.branch, name=agent)
         if outcome:
             note = {
@@ -582,11 +547,7 @@ class Integration:
 
     def blob(self, rel: str) -> bytes | None:
         """The file REL (relative to the main checkout) as merged_tree() holds it, or None when it has none."""
-        r = subprocess.run(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "cat-file", "blob", f"{self.tree}:{rel}"],
-            capture_output=True,
-            check=False,
-        )
+        r = util.git_run(self.main_path, "cat-file", "blob", f"{self.tree}:{rel}", binary=True)
         return None if r.returncode else r.stdout
 
     def judge_live(self, name: str, kinds: set[str], tmp: Path) -> dict[str, Any]:
@@ -867,19 +828,6 @@ class Integration:
     def label(ci: str) -> str:
         return f"`{ci}`" if ci else "(no arguments)"
 
-    def run_logged(
-        self, point: str, cmd: str, values: Mapping[str, Any], where: PathLike, log: PathLike
-    ) -> tuple[int, str, int]:
-        """Runs CMD in WHERE, its output (stdout and stderr) appended to LOG as it comes, without a time limit.
-        (rc, output, seconds)."""
-        with open(log, "a") as f:
-            f.write(f"== {time.strftime('%Y-%m-%d %H:%M:%S')} in {where}: {cmd}\n")
-        r = commands.run(point, cmd, project=self.p, values=values, cwd=where, log=log)
-        secs = int(r.seconds)
-        with open(log, "a") as f:
-            f.write(f"== rc {r.rc} in {secs} s\n" if r.rc is not None else f"== could not start: {r.stderr}\n")
-        return (r.rc if r.rc is not None else 127), r.stdout or r.stderr, secs
-
     def summary(self, ci: str, output: str, where: PathLike) -> str:
         """The `ci_summary` line of one run (its stdout, the run's output on stdin), as a bullet."""
         _, r = self.command("repo.ci_summary", "ci_summary", self.values(wt=where, ci=ci), cwd=where, stdin=output)
@@ -909,7 +857,7 @@ class Integration:
             self.ci_passed_on = git(where, "rev-parse", "HEAD")
         log = self.ci_log()
         log.parent.mkdir(parents=True, exist_ok=True)
-        if not getattr(self, "ci_log_open", False):  # one log per integration: the runs on main are appended
+        if not self.ci_log_open:  # one log per integration: the runs on main are appended
             log.write_text("")
             self.ci_log_open = True
         done: list[tuple[str, int, str]] = []
@@ -919,7 +867,8 @@ class Integration:
             cmd = commands.expand(point, tmpl, values)
             which = f" (run {n}/{len(runs)}, {self.label(ci)})" if len(runs) > 1 or ci else ""
             self.out(f"== {name} in {where}{which}: {cmd} (log: {log})")
-            rc, output, secs = self.run_logged(point, cmd, values, where, log)
+            r = commands.run_logged(point, cmd, log, f"in {where}", project=self.p, values=values, cwd=where)
+            rc, output, secs = (r.rc if r.rc is not None else 127), r.stdout or r.stderr, int(r.seconds)
             if rc:
                 sys.stderr.write(output[-4000:])
                 merged = (
@@ -954,7 +903,7 @@ class Integration:
         main_ci = self.repo.get("main_ci")
         if main_ci is None or self.a.no_ci or not self.repo.get("local_ci"):
             return self.local_ci(self.main_path)
-        passed = getattr(self, "ci_passed_on", None)
+        passed = self.ci_passed_on
         if head != passed:
             self.out(
                 f"== {self.main} is at {head[:7]}, not {(passed or '?')[:7]} where the local CI passed: the full "
@@ -1035,7 +984,6 @@ class Integration:
             cwd=self.main_path,
             timeout=cap,
         )
-        cut = r.timed_out
         rc = r.rc if r.rc is not None else 127
         output = (r.stdout + (r.stderr if rc else "")).rstrip()
         if output:
@@ -1043,29 +991,20 @@ class Integration:
         last = next((ln.strip() for ln in reversed(output.splitlines()) if ln.strip()), "")[:300]
         if not rc:
             return f"post_merge: {last or 'ok, no output'}"
-        if cut:
-            warn = (
-                f"post_merge cut after {cap:g} s after merging {self.repo['key']}:{self.branch} into {self.main} "
-                f"{head[:7]}; the merge stands, run it by hand"
-            )
-            self.out(f"warning: {warn}")
-            notes.progress(self.p, warn, who="orchestrator")
-            return f"post_merge cut after {cap:g} s (time limit)"
+        what, tail = (f"cut after {cap:g} s", "") if r.timed_out else (f"failed (rc {rc})", f": {last}" if last else "")
         warn = (
-            f"post_merge failed (rc {rc}) after merging {self.repo['key']}:{self.branch} into "
-            f"{self.main} {head[:7]}" + (f": {last}" if last else "") + "; the merge stands, run it by hand"
+            f"post_merge {what} after merging {self.repo['key']}:{self.branch} into {self.main} {head[:7]}{tail}; "
+            "the merge stands, run it by hand"
         )
         self.out(f"warning: {warn}")
         notes.progress(self.p, warn, who="orchestrator")
-        return f"post_merge failed (rc {rc})" + (f": {last}" if last else "")
+        return f"post_merge {what}" + (" (time limit)" if r.timed_out else tail)
 
     def merge_local(self) -> tuple[str, str, str, str]:
         """Fast-forwards main to the branch, runs the CI on main (ci_on_main) and removes the worktree and branch."""
         before = git(self.main_path, "rev-parse", self.main)
         self.out(f"== git merge --ff-only {self.branch} (no remote)")
-        if sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge", "-q", "--ff-only", self.branch], check=False
-        ).returncode:
+        if util.git_run(str(self.main_path), "merge", "-q", "--ff-only", self.branch).returncode:
             raise Stop(f"git merge --ff-only {self.branch} failed in {self.main_path}: nothing merged")
         head = git(self.main_path, "rev-parse", self.main)
         try:
@@ -1074,9 +1013,7 @@ class Integration:
             # back only if nobody moved main meanwhile; --keep never discards uncommitted changes (the home's)
             if (
                 git(self.main_path, "rev-parse", self.main) == head
-                and not sh(
-                    ["git", *util.GIT_QUIET, "-C", str(self.main_path), "reset", "-q", "--keep", before], check=False
-                ).returncode
+                and not util.git_run(str(self.main_path), "reset", "-q", "--keep", before).returncode
             ):
                 raise Stop(
                     f"{e.args[0]} after the fast-forward: {self.main} is back at {before[:7]}; "
@@ -1113,7 +1050,7 @@ class Integration:
         return url.rsplit("/", 1)[-1], url
 
     def remote_checks(self, pr: str) -> None:
-        if self.repo.get("remote_checks", "required") != "required":
+        if self.repo["remote_checks"] != "required":
             return
         self.out("== remote checks")
         for tries in range(6):
@@ -1193,8 +1130,19 @@ class Integration:
             why.append("risky paths: " + ", ".join(self.touched))
         return why
 
+    def approval_gate(self, progress: str, state: str) -> None:
+        """Step 6 (module doc): without --approved, a branch that needs the owner stops here (exit 3) with a progress
+        line «PROGRESS: why»; STATE says where it is left."""
+        why = "; ".join(self.needs_approval())
+        if why and not self.a.approved:
+            notes.progress(self.p, f"{progress}: {why}", who="orchestrator")
+            raise Stop(
+                f'awaiting the owner\'s approval ({why}): {state}; rerun with --approved "who, when" once approved',
+                AWAITING,
+            )
+
     def merge(self, pr: str, title: str, body: str) -> str:
-        method = self.repo.get("merge", "squash")
+        method = self.repo["merge"]
         self.out(f"== merge ({method})")
         args = ["pr", "merge", pr, f"--{method}", "--match-head-commit", git(self.wt, "rev-parse", "HEAD")]
         if method in ("squash", "merge"):
@@ -1203,36 +1151,22 @@ class Integration:
         self.before = git(self.main_path, "rev-parse", self.main)
         git(self.main_path, "pull", "-q", "--ff-only")
         oid = self.gh("pr", "view", pr, "--json", "mergeCommit", "--jq", ".mergeCommit.oid").stdout.strip()
-        if sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge-base", "--is-ancestor", oid, self.main],
-            check=False,
-        ).returncode:
+        if not self.contains(oid, self.main):
             raise Stop(f"merge commit {oid} is not in local {self.main}")
         head = git(self.main_path, "rev-parse", "--short", oid)
         # GitHub may have deleted it on merge already: only a branch that is still there is deleted (and warned about)
-        gone = (
-            sh(
-                [
-                    "git",
-                    *util.GIT_QUIET,
-                    "-C",
-                    str(self.main_path),
-                    "ls-remote",
-                    "--exit-code",
-                    "--heads",
-                    self.remote,
-                    f"refs/heads/{self.branch}",
-                ],
-                check=False,
-            ).returncode
-            == 2
-        )
-        if (
-            not gone
-            and sh(  # a push: with its hooks, as in open_pr
-                ["git", "-C", str(self.main_path), "push", "-q", self.remote, "--delete", self.branch], check=False
-            ).returncode
-        ):
+        heads = ["ls-remote", "--exit-code", "--heads", self.remote, f"refs/heads/{self.branch}"]
+        delete = [
+            "git",
+            "-C",
+            str(self.main_path),
+            "push",
+            "-q",
+            self.remote,
+            "--delete",
+            self.branch,
+        ]  # with its hooks
+        if util.git_run(str(self.main_path), *heads).returncode != 2 and sh(delete, check=False).returncode:
             self.out(f"could not delete {self.remote}/{self.branch}: delete it by hand")
         git(self.main_path, "worktree", "remove", "--force", self.wt)
         git(self.main_path, "branch", "-D", self.branch)
@@ -1241,20 +1175,11 @@ class Integration:
 
     def validate(self, commit: str = "<merge>") -> list[str]:
         """Everything the backlog close would reject (verdict, issue, sub-issue, report path, an outcome without
-        its criterion), checked before any effect: a dry run of `backlog integrated` on a fresh load, plus the
+        its criterion), checked before any effect: a dry run of `backlog integrated` on a copy of the data, plus the
         verdict even when this integration does not close the issue. Returns the dry run's lines."""
         try:
             self.backlog.norm_verdict(self.a.verdict)
-            did, _ = self.backlog.integrated(
-                self.backlog.load(),
-                self.issue,
-                self.sub,
-                commit,
-                self.branch,
-                self.a.report or "",
-                self.a.result or "",
-                self.a.verdict or "",
-            )
+            did, _ = self.backlog.integrated(copy.deepcopy(self.backlog_data()), *self._close_args(commit))
         except BacklogError as e:
             raise Stop(f"nothing done, the backlog close would fail: {e}", 2) from e
         return did
@@ -1277,19 +1202,23 @@ class Integration:
     def ref(self) -> str:
         return f"{self.issue}{' ' + self.sub if self.sub else ''}"
 
+    def _close_args(self, commit: str) -> tuple[str, str | None, str, str, str, str, str]:
+        """The arguments of `backlog.integrated` after the data, for the dry run (validate) and the close."""
+        return self.issue, self.sub, commit, self.branch, self.a.report or "", self.a.result or "", self.a.verdict or ""
+
     # ---------- measurements (--measure) ----------
 
     def targets(self) -> list[dict[str, Any]]:
         """The sub-issues this integration closes: the ones given («ID Tn», --sub), else the ones naming the branch
         (as `backlog integrated`); [] when the backlog cannot be read or the issue has none."""
         try:
-            subs = self.backlog.issue(self.backlog.load(), self.issue)["subs"]
+            subs = self.backlog.issue(self.backlog_data(), self.issue)["subs"]
         except (BacklogError, OSError, ValueError):
             return []
         sids = [x for x in (self.sub or "").split(",") if x]
         if sids:
             return [s for s in subs if s["id"] in sids]
-        return [s for s in subs if s.get("branch", "").strip("`") == self.branch]
+        return [s for s in subs if on_branch(s, self.branch)]
 
     def refuse_measure_as_code(self) -> None:
         """Case h: a merge of sub-issues that are all `kind = "measure"` stops (exit 2), so a measurement branch's lab
@@ -1329,10 +1258,9 @@ class Integration:
             return "home", None
         if self.branch_adds(r):
             return "branch", None
-        if self.in_worktree(r):
-            wh = delivery.worktree_home(self.p, self.worktree())
-            assert wh is not None
-            return "worktree", wh / r
+        src = self.in_worktree(r)
+        if src is not None:
+            return "worktree", src
         raise Stop(f"--report {r} does not exist (in the home, added by {self.branch} or in its worktree)", 2)
 
     def run_measure(self) -> int:
@@ -1394,24 +1322,19 @@ class Integration:
                 self.out("would do: " + d)
             self.out(f"== --check: would remove the worktree {self.wt}; branch {self.branch} {drop}")
             return 0
+        dest = self.p.home / a.report
+        if where != "home":
+            dest.parent.mkdir(parents=True, exist_ok=True)
         if where == "branch":
             rel = f"{self.home_in_repo()}/{a.report}"
-            dest = self.p.home / a.report
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shown = subprocess.run(
-                ["git", *util.GIT_QUIET, "-C", str(self.main_path), "show", f"{self.branch}:{rel}"],
-                capture_output=True,
-                check=False,
-            )
+            shown = util.git_run(self.main_path, "show", f"{self.branch}:{rel}", binary=True)
             if shown.returncode:
                 raise Stop(f"could not read {rel} from {self.branch}, nothing closed")
             dest.write_bytes(shown.stdout)
         elif where == "worktree" and src is not None:
-            dest = self.p.home / a.report
-            dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(src.read_bytes())
             src.unlink()  # copied into the home: the worktree is clean for its removal
-        r = sh(["git", *util.GIT_QUIET, "-C", str(self.main_path), "worktree", "remove", self.wt], check=False)
+        r = util.git_run(str(self.main_path), "worktree", "remove", self.wt)
         if r.returncode:
             raise Stop(f"git worktree remove {self.wt} failed, nothing closed: {(r.stderr or r.stdout).strip()[:300]}")
         if not a.keep_branch:
@@ -1430,16 +1353,7 @@ class Integration:
         self.out("== backlog (foreman backlog integrated):")
         try:
             with self.backlog.mutate() as data:
-                did, doubtful = self.backlog.integrated(
-                    data,
-                    self.issue,
-                    self.sub,
-                    head,
-                    self.branch,
-                    self.a.report or "",
-                    self.a.result or "",
-                    self.a.verdict or "",
-                )
+                did, doubtful = self.backlog.integrated(data, *self._close_args(head))
             for d in did or ["nothing to change"]:
                 self.out(d)
             for d in doubtful:
@@ -1460,17 +1374,8 @@ class Integration:
             )
         if a.keep_branch and not a.measure:
             raise Stop("--keep-branch is for --measure (a merged branch is always deleted)", 2)
-        if a.measure and (
-            a.rebase_from
-            or a.ci
-            or a.no_ci
-            or a.approved
-            or a.opens
-            or a.title
-            or a.body
-            or a.body_file
-            or a.no_review is not None
-        ):
+        merging = (a.rebase_from, a.ci, a.no_ci, a.approved, a.opens, a.title, a.body, a.body_file)
+        if a.measure and (any(merging) or a.no_review is not None):
             raise Stop(
                 "--measure merges nothing: no --rebase-from, --ci, --no-ci, --approved, --opens, --no-review, --title "
                 "or --body",
@@ -1543,18 +1448,9 @@ class Integration:
         try:
             self.remote_checks(pr)
             self.gh("pr", "comment", pr, "--body", ci_text)
-            why = self.needs_approval()
-            if why and not a.approved:
-                notes.progress(
-                    self.p,
-                    f"PR #{pr} ({self.repo['key']}:{self.branch}) green, awaiting approval: " + "; ".join(why),
-                    who="orchestrator",
-                )
-                raise Stop(
-                    f"awaiting the owner's approval ({'; '.join(why)}): PR open and green, {url}; rerun with "
-                    '--approved "who, when" once approved',
-                    AWAITING,
-                )
+            self.approval_gate(
+                f"PR #{pr} ({self.repo['key']}:{self.branch}) green, awaiting approval", f"PR open and green, {url}"
+            )
             head = self.merge(pr, a.title, body)
         except Stop as e:
             if e.rc != AWAITING:
@@ -1568,18 +1464,9 @@ class Integration:
         """The flow for a repo without a remote: no push, no gh."""
         ci_text = self.local_ci()
         self.hidden_gate()
-        why = self.needs_approval()
-        if why and not self.a.approved:
-            notes.progress(
-                self.p,
-                f"{self.repo['key']}:{self.branch} green, awaiting approval to merge: " + "; ".join(why),
-                who="orchestrator",
-            )
-            raise Stop(
-                f"awaiting the owner's approval ({'; '.join(why)}): local CI green, nothing merged; rerun with "
-                '--approved "who, when" once approved',
-                AWAITING,
-            )
+        self.approval_gate(
+            f"{self.repo['key']}:{self.branch} green, awaiting approval to merge", "local CI green, nothing merged"
+        )
         head, ci_main, before, after = self.merge_local()
         post = self.post_merge(before, after)
         if self.a.title:

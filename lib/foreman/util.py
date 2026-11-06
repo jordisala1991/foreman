@@ -1,7 +1,12 @@
 """Small helpers shared by the whole package, with no foreman dependencies (no config, no project): JSON files,
 atomic writes, local ISO times, process ids and git.
 
-- `read_json(path, default)`: the parsed file, or `default` if it is missing or not JSON.
+- `read_json(path, default)`: the parsed file, or `default` if it is missing, not JSON, or JSON of another type than
+  a `default` table or list.
+- `read_jsonl(path, tail=None, numbered=False)`: the JSON objects (dicts) of the readable lines of a line file, the
+  last `tail` lines only when given; [] if it is missing. With `numbered`, (line number, object) pairs.
+- `prune_older(folder, pattern, days, keep=None)`: deletes the files of `folder` matching `pattern` whose mtime is
+  more than `days` old (not `keep`; `now`, epoch seconds, replaces the clock); what cannot be read or deleted is left.
 - `write_text_atomic(path, text)`: writes only if the content changes (temporary file in the same folder, fsync,
   rename; keeps the file's permissions); True if it wrote.
 - `write_json(path, obj)`: `obj` as indented UTF-8 JSON through write_text_atomic.
@@ -23,11 +28,15 @@ atomic writes, local ISO times, process ids and git.
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
+import time
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
@@ -57,9 +66,47 @@ def now() -> datetime:
 def read_json(path: PathLike, default: Any) -> Any:
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            d = json.load(f)
     except (OSError, ValueError):
         return default
+    return default if isinstance(default, (dict, list)) and type(d) is not type(default) else d
+
+
+def read_jsonl(path: PathLike, tail: int | None = None, numbered: bool = False) -> list[Any]:
+    """The dicts of the readable lines of a line file ([] if missing); the last `tail` lines when given. With
+    `numbered`, (line number, dict) pairs: the number counts every line, readable or not."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return []
+    first = max(len(lines) - tail, 0) if tail is not None else 0
+    out: list[Any] = []
+    for n, ln in enumerate(lines[first:], first + 1):
+        try:
+            d = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(d, dict):
+            out.append((n, d) if numbered else d)
+    return out
+
+
+def prune_older(
+    folder: PathLike, pattern: str, days: float, keep: PathLike | None = None, now: float | None = None
+) -> None:
+    """Deletes the files of `folder` matching `pattern` last changed more than `days` days ago, except `keep`;
+    `now` (epoch seconds) is the clock, default the real one."""
+    cut = (time.time() if now is None else now) - days * 86400
+    try:
+        for f in Path(folder).glob(pattern):
+            try:
+                if f != keep and f.stat().st_mtime < cut:
+                    f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 def write_text_atomic(path: PathLike, text: str) -> bool:
@@ -87,6 +134,40 @@ def write_text_atomic(path: PathLike, text: str) -> bool:
             os.unlink(tmp)
         raise
     return True
+
+
+@contextlib.contextmanager
+def file_lock(path: Path, lock_dir: Path | None = None, timeout: float | None = None) -> Iterator[None]:
+    """Exclusive flock for the file `path`, on a `<path>.lock` file next to it; with `lock_dir` the lock file lives
+    there instead (`<lock_dir>/<name>.lock`). The product's home is the user's: note() locks in the state
+    (`<state>/locks-notes/`), so no `.lock` file appears among the notes. Waits for ever, or `timeout` seconds
+    (then TimeoutError)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = (lock_dir / path.name) if lock_dir is not None else path
+    if lock_dir is not None:
+        lock_dir.mkdir(parents=True, exist_ok=True)
+    with open(str(lock) + ".lock", "a") as f:
+        end = None if timeout is None else time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | (0 if end is None else fcntl.LOCK_NB))
+                break
+            except BlockingIOError:
+                if end is not None and time.monotonic() > end:
+                    raise TimeoutError(f"{lock}.lock is held by another process for more than {timeout} s") from None
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def locked_json(path: Path, default: Any) -> Iterator[Any]:
+    """Under `file_lock(path)`, yields what `read_json(path, default)` reads; the caller writes it back (write_json)
+    or not."""
+    with file_lock(path):
+        yield read_json(path, default)
 
 
 def write_json(path: PathLike, obj: Any) -> None:
@@ -146,14 +227,28 @@ def pid_alive(pid: int | str | None) -> bool | None:
 GIT_QUIET: tuple[str, ...] = ("-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false")
 
 
+def git_run(
+    repo: PathLike, *args: str, input: str | bytes | None = None, binary: bool = False, timeout: float | None = None
+) -> subprocess.CompletedProcess[Any]:
+    """git -C repo args, without hooks nor fsmonitor (GIT_QUIET): never for a push. Never raises on a status; an OSError
+    or a timeout propagates."""
+    return subprocess.run(
+        [shutil.which("git") or "git", *GIT_QUIET, "-C", str(repo), *args],
+        capture_output=True,
+        close_fds=False,  # Python's own fds are not inheritable; with the full path this lets 3.9+ use posix_spawn
+        text=not binary,
+        input=input,
+        timeout=timeout,
+        check=False,
+    )
+
+
 def git(
     repo: PathLike, *args: str, check: bool = True, error: type[Exception] = RuntimeError, timeout: float | None = None
 ) -> str:
-    """git -C repo args, without hooks nor fsmonitor (GIT_QUIET): never for a push."""
+    """The stripped stdout of git_run; on failure, `error` is raised (check) or "" returned."""
     try:
-        r = subprocess.run(
-            ["git", *GIT_QUIET, "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout, check=False
-        )
+        r = git_run(repo, *args, timeout=timeout)
     except (OSError, subprocess.SubprocessError) as e:
         if check:
             raise error(f"git {' '.join(args)}: {e}") from e

@@ -45,7 +45,6 @@ incomplete, and every delivery states its outcome.
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import time
@@ -125,9 +124,7 @@ def applies(project: Project, h: Agent) -> bool:
 
 def git(cwd: PathLike, *args: str) -> str:
     try:
-        r = subprocess.run(
-            ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=GIT_TIMEOUT, check=False
-        )
+        r = util.git_run(cwd, *args, timeout=GIT_TIMEOUT)
     except (OSError, subprocess.TimeoutExpired) as e:
         raise Unknown(str(e)) from e
     if r.returncode:
@@ -162,16 +159,8 @@ def progress_done(project: Project, aid: str | None, name: str | None, since: st
     """The last `done` line of this agent in progress.jsonl (by agent_id, else by name) at or after `since` (an ISO
     time, compared by the minute), or None."""
     since = (since or "").replace("T", " ")[:16]
-    try:
-        lines = (project.state / "progress.jsonl").read_text(errors="replace").splitlines()[-300:]
-    except OSError:
-        return None
-    for ln in reversed(lines):
-        try:
-            x = json.loads(ln)
-        except ValueError:
-            continue
-        if not isinstance(x, dict) or not x.get("done") or str(x.get("time", "")) < since:
+    for x in reversed(util.read_jsonl(project.state / "progress.jsonl", tail=300)):
+        if not x.get("done") or str(x.get("time", "")) < since:
             continue
         if (aid and x.get("agent_id") == aid) or (name and x.get("agent") == name):
             return x
@@ -268,7 +257,7 @@ def branch_kind(project: Project, branch: str, data: Data | None = None, agents:
 
     if data is None:
         data = load_backlog(project)
-    subs = [s for _, i, _ in Backlog.iter_issues(data) for s in i["subs"] if s.get("branch") == branch] if data else []
+    subs = [s for _, s in Backlog.subs_of_branch(data, branch)] if data else []
     if not subs:
         return "measure" if kind_of(project, branch=branch, agents=agents) == "measure" else "code"
     open_ = [s for s in subs if s.get("status") not in SUB_CLOSED]
@@ -286,12 +275,12 @@ def measures(project: Project, aid: str | None, h: Agent, branch: str) -> bool:
         return True
     data = load_backlog(project)
     if data is not None:
-        from .backlog import Backlog
+        from .backlog import Backlog, on_branch
 
         for _, i, _ in Backlog.iter_issues(data):
             for s in i["subs"]:
                 by_launch = h.get("issue") and h.get("sub") and (i["id"], s["id"]) == (h["issue"], h["sub"])
-                by_name = h.get("name") and s.get("agent") == h["name"] and s.get("branch") == branch
+                by_name = h.get("name") and s.get("agent") == h["name"] and on_branch(s, branch)
                 if (by_launch or by_name) and s.get("kind") == "measure":
                     return True
     return branch_kind(project, branch, data) == "measure"
@@ -448,13 +437,10 @@ def sub_reports(project: Project, branch: str, data: Data | None) -> tuple[list[
             return [], []
     reports: list[str] = []
     keys: list[str] = []
-    for _, i, _ in b.iter_issues(data, archived=False):
-        for s in i.get("subs") or []:
-            if s.get("branch") != branch:
-                continue
-            keys += [k for k in (i.get("id"), s.get("agent")) if k]
-            if s.get("report") and s["report"] not in reports:
-                reports.append(s["report"])
+    for i, s in b.subs_of_branch(data, branch, archived=False):
+        keys += [k for k in (i.get("id"), s.get("agent")) if k]
+        if s.get("report") and s["report"] not in reports:
+            reports.append(s["report"])
     return reports, keys
 
 
@@ -798,16 +784,8 @@ def is_review(name: str) -> bool:
 def deliveries_by_report(project: Project) -> dict[str, dict[str, Any]]:
     """{report: the last `done` line of progress.jsonl that names it}."""
     out: dict[str, dict[str, Any]] = {}
-    try:
-        lines = (project.state / "progress.jsonl").read_text(errors="replace").splitlines()
-    except OSError:
-        return out
-    for ln in lines:
-        try:
-            x = json.loads(ln)
-        except ValueError:
-            continue
-        if isinstance(x, dict) and x.get("done") and x.get("report"):
+    for x in util.read_jsonl(project.state / "progress.jsonl"):
+        if x.get("done") and x.get("report"):
             out[str(x["report"])] = x
     return out
 

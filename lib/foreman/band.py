@@ -34,8 +34,8 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from . import hooks_mod, i18n, identity, loop, notes, orchestrator, util, worktree
-from .backlog import Backlog, BacklogError, short_title
+from . import hooks_mod, i18n, loop, orchestrator, util
+from .backlog import short_title
 
 if TYPE_CHECKING:
     from .config import Project
@@ -79,14 +79,14 @@ def pass_part(project: Project, s: dict[str, Any], o: Mark | None, now: float) -
     had no pass for orchestrator.loop_limit_min; None without a [loop] prompt."""
     if not orchestrator.watches_loop(project):
         return None
-    last = util.iso_epoch(notes.heartbeats(project).get("loop"))
+    last = util.iso_epoch(orchestrator.last_pass(project))
     if o:
-        _, window = orchestrator.pass_window(project, o)
-        if window is not None and now - window > orchestrator.loop_limit_min(project) * 60:
-            return part(s["band_late"].format(time=_hhmm(last if last is not None else window)), "bad", PRIO_KEEP)
+        late = last if last is not None else orchestrator.pass_window(project, o)[1]
+        if late is not None and orchestrator.pass_late(project, o, now):
+            return part(s["band_late"].format(time=_hhmm(late)), "bad", PRIO_KEEP)
     if last is None:
         return part(s["band_no_pass"], "plain", PRIO_NEXT_PASS)
-    due = last + hooks_mod.every_min(project) * 60
+    due = last + orchestrator.every_min(project) * 60
     text = s["band_next_pass_due"] if due <= now else s["band_next_pass"].format(time=_hhmm(due))
     return part(text, "plain", PRIO_NEXT_PASS)
 
@@ -102,8 +102,7 @@ def memory_parts(project: Project, s: dict[str, Any], o: Mark | None, now: float
 
     m = hooks_mod.read_measure(project, o["session"]) if o else None
     tokens = m.get("tokens") if m else None
-    limit = project.section("loop").get("context_rotate", 200000)
-    limit = limit if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0 else 0
+    limit = renew.limit(project)
     if not isinstance(tokens, int) or isinstance(tokens, bool):
         out = [part(s["band_memory_bare"].format(tokens="—"), "plain", PRIO_MEMORY)]
     elif limit:
@@ -146,11 +145,11 @@ def job_parts(
     return out[:MAX_AGENTS] + [part(s["band_more"], "more", PRIO_KEEP, n=max(0, len(out) - MAX_AGENTS))]
 
 
-def lines(project: Project, now: float | None = None) -> Band:
-    """The band (module docstring); never raises."""
+def lines(project: Project, now: float | None = None, snap: loop.Snapshot | None = None) -> Band:
+    """The band (module docstring); never raises. `snap`: the tick's loop.Snapshot, else one of its own."""
     s = i18n.for_project(project)
     try:
-        return _lines(project, s, time.time() if now is None else now)
+        return _lines(project, s, time.time() if now is None else now, snap or loop.Snapshot(project))
     except Exception as e:  # noqa: BLE001 (the band never fails the tick)
         why = f"{type(e).__name__}: {e}"[:160]
         return {
@@ -159,24 +158,15 @@ def lines(project: Project, now: float | None = None) -> Band:
         }
 
 
-def _lines(project: Project, s: dict[str, Any], now: float) -> Band:
+def _lines(project: Project, s: dict[str, Any], now: float, snap: loop.Snapshot) -> Band:
     o = orchestrator.current(project)
-    live = loop.live_agents(project)
-    heads = {h["id"]: identity.transcript_head(h) for h in live}
-    ids = {h["id"]: identity.of(project, h, heads[h["id"]]) for h in live}
-    b = Backlog(project)
-    try:
-        data = b.load()
-    except (BacklogError, OSError, ValueError):
-        data = None  # the pass says the backlog cannot be read; the band leaves its parts out
     asks, ready, measure = None, 0, 0
     titles: dict[str, str] = {}
-    if data is not None:
-        asks = questions_part(s, len(data.get("decisions") or []))
-        wts = worktree.all_worktrees(project)
-        ready = len(loop.ready_branches(b, data, wts, live, heads, ids))
-        measure = len(loop.ready_branches(b, data, wts, live, heads, ids, kind="measure"))
-        titles = {i["id"]: short_title(i) for _, i, _ in b.iter_issues(data, archived=False)}
+    if snap.data is not None:  # else the pass says the backlog cannot be read; the band leaves its parts out
+        asks = questions_part(s, len(snap.data.get("decisions") or []))
+        ready = len(loop.ready_branches(snap))
+        measure = len(loop.ready_branches(snap, kind="measure"))
+        titles = {i["id"]: short_title(i) for i in snap.issues(archived=False)}
     pass_ = pass_part(project, s, o, now)
     first = [part(DOT, "dot", PRIO_KEEP)]
     if asks:
@@ -195,7 +185,7 @@ def _lines(project: Project, s: dict[str, Any], now: float) -> Band:
     first.append(part("foreman", "dim", PRIO_FOREMAN))
     bad = any(p["role"] == "bad" for p in first)
     level = "bad" if bad else "ask" if asks else "ok"
-    return {"level": level, "rows": [first, job_parts(project, live, ids, titles, s, now)]}
+    return {"level": level, "rows": [first, job_parts(project, snap.live, snap.ids, titles, s, now)]}
 
 
 def part_text(p: Part) -> str:
