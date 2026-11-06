@@ -146,11 +146,11 @@ def job_parts(
     return out[:MAX_AGENTS] + [part(s["band_more"], "more", PRIO_KEEP, n=max(0, len(out) - MAX_AGENTS))]
 
 
-def lines(project: Project, now: float | None = None) -> Band:
-    """The band (module docstring); never raises."""
+def lines(project: Project, now: float | None = None, snap: loop.Snapshot | None = None) -> Band:
+    """The band (module docstring); never raises. `snap`: the tick's loop.Snapshot, else one of its own."""
     s = i18n.for_project(project)
     try:
-        return _lines(project, s, time.time() if now is None else now)
+        return _lines(project, s, time.time() if now is None else now, snap or loop.Snapshot(project))
     except Exception as e:  # noqa: BLE001 (the band never fails the tick)
         why = f"{type(e).__name__}: {e}"[:160]
         return {
@@ -159,9 +159,8 @@ def lines(project: Project, now: float | None = None) -> Band:
         }
 
 
-def _lines(project: Project, s: dict[str, Any], now: float) -> Band:
+def _lines(project: Project, s: dict[str, Any], now: float, snap: loop.Snapshot) -> Band:
     o = orchestrator.current(project)
-    snap = loop.Snapshot(project)
     asks, ready, measure = None, 0, 0
     titles: dict[str, str] = {}
     if snap.data is not None:  # else the pass says the backlog cannot be read; the band leaves its parts out

@@ -112,13 +112,14 @@ class Snapshot:
     `session` the `$.agent.list()` statuses and the `dead` agents). `given`: parts the caller has (live, heads, ids)."""
 
     def __init__(self, project: Project, session: str | None = None, **given: Any) -> None:
-        self.project, self.session, self.b = project, session, Backlog(project)
+        self.project, self.session = project, session
         self.agents = agents(project)
         self.live = [{"id": aid, **h} for aid, h in self.agents.items() if agent_state(h) in LIVE_STATES]
         self.states: dict[str, str] = {}  # session id -> its orchestrator.liveness state (session_state)
-        self.__dict__.update(given)
+        self.__dict__.update({k: v for k, v in given.items() if v is not None})
         self.live_branches = {h["branch"] for h in self.live if h.get("branch")}  # recorded at launch or by hand
 
+    b = cached_property(lambda self: Backlog(self.project))
     heads = cached_property(lambda self: {h["id"]: identity.transcript_head(h) for h in self.live})
     ids = cached_property(lambda self: {h["id"]: identity.of(self.project, h, self.heads[h["id"]]) for h in self.live})
     live_names = cached_property(lambda self: {i["name"] for i in self.ids.values() if i["name"]})
@@ -1543,7 +1544,7 @@ def loop_pass(project: Project, session: str | None, send: bool = False) -> tupl
     return render(ns, f"Loop pass {datetime.now():%H:%M} (heartbeat written, {time.time() - t0:.1f} s)"), ns
 
 
-def notices(project: Project, session: str | None = None) -> list[Notice]:
+def notices(project: Project, session: str | None = None, snap: Snapshot | None = None) -> list[Notice]:
     """Between passes (UserPromptSubmit outside the loop, PostToolUse): the actionable notices whose `key` was not
     emitted yet. It computes the cheap part of a pass (new inbox messages, locks, the session's context, pipeline,
     idle agents, a loop with no pass (loop_stale); never the project checks, the checks of the backlog or git) and
@@ -1552,8 +1553,8 @@ def notices(project: Project, session: str | None = None) -> list[Notice]:
     Information-only notices never go out here (the pass shows them). The inbox (inbox-notified) and the locks
     (lock-notified) keep their own once-only marks, shared with the pass: a lock case said here is marked there, so
     the pass does not repeat it; one that is not actionable is left for the pass. The context (context-rotate-notified)
-    too: crossing the threshold said here is not actionable again in the pass."""
-    s = Snapshot(project, session)
+    too: crossing the threshold said here is not actionable again in the pass. `snap`: the tick's Snapshot."""
+    s = snap or Snapshot(project, session)
     cand: list[Notice] = []
     new = new_inbox(project)
     if new:

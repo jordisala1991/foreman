@@ -433,12 +433,14 @@ def _tick_pass(project: Project, session: str, o: Mark, ev: Event) -> dict[str, 
     from . import band, loop
 
     prompt = project.section("loop").get("prompt") or ""
+    snap = None  # the state the in-between notices and the band share; a pass writes, so the band reads it again
     renewing = renew_due(project, session, ev)
     if renewing is not None:
         out = {"marked": True, "due": False, **renewing}
     elif not prompt or ev.get("busy") is True or not pass_due(project, o):  # never behind a running turn
         out: dict = {"marked": True, "due": False}
-        texts = between_notices(project, session)
+        snap = loop.Snapshot(project, session)
+        texts = between_notices(project, session, snap)
         if texts:
             out["notices"] = texts
     else:
@@ -448,7 +450,7 @@ def _tick_pass(project: Project, session: str, o: Mark, ev: Event) -> dict[str, 
             out = {"marked": True, "due": True, "log": loop.idle_line(project, ns)}
         else:
             out = {"marked": True, "due": True, "submit": f"{prompt}\n\n{text}"}
-    out["band"] = band.lines(project)  # after the pass, so its time is the new one
+    out["band"] = band.lines(project, snap=snap)  # after the pass, so its time is the new one
     return out
 
 
@@ -486,13 +488,13 @@ def failed_line(project: Project, session: str, a: dict[str, Any]) -> str:
     return t[key].format(why=why, minutes=renew.COOLDOWN_S // 60)
 
 
-def between_notices(project: Project, session: str | None) -> str:
+def between_notices(project: Project, session: str | None, snap: Any = None) -> str:
     """The in-between notices not said yet (loop.notices, which marks them said) as one text; '' when none or when
     they cannot be computed (the tick goes on: the next pass shows what is there)."""
     from . import loop
 
     try:
-        return " ".join(n["text"] for n in loop.notices(project, session))
+        return " ".join(n["text"] for n in loop.notices(project, session, snap))
     except Exception:  # noqa: BLE001 (a notice never fails the tick)
         return ""
 

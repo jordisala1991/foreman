@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_text, i18n, lock, loop, notes, orchestrator, pause, transcripts
+from . import backlog_text, i18n, identity, lock, loop, notes, orchestrator, pause, transcripts
 from .backlog import Backlog, BacklogError
 
 if TYPE_CHECKING:
@@ -161,7 +161,7 @@ def agents_now(project: Project) -> list[dict[str, Any]]:
     s = loop.Snapshot(project)
     out: list[dict[str, Any]] = []
     for h in s.live:
-        ident = s.ids[h["id"]]
+        ident = identity.of(project, h)  # reads the brief only when the entry lacks something
         sid = loop.session_of(h)
         out.append(
             {
