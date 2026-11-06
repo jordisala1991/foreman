@@ -27,10 +27,11 @@ before each merge (its home's `local_ci`, with macOS's `/usr/bin/python3`), and 
 Claude Code at a pinned version for the mods check). How often: while working, the tests of what you touch
 (`bin/foreman selftest NAME`); before delivering, that pass once, with any Python 3.9.
 
-foreman runs on Python 3.9 and newer (the oldest is the Mac's `/usr/bin/python3`). The static checks keep the code to
-3.9 without one (`py39_checks` in `lib/foreman/selftest.py`: the syntax, and the newer names, keywords and annotations
-it lists); behaviour that changed under the same name (`datetime.fromisoformat`, argparse's texts, docstrings) only
-the suite on 3.9 shows. TOML is read through `foreman.toml_reader` (tomllib, or on 3.9 and 3.10 the vendored copy of tomli in
+foreman runs on Python 3.9 and newer (the oldest is the Mac's `/usr/bin/python3`). Without one, ruff (`target-version
+= "py39"`) catches the newer syntax and pyright (`pythonVersion = "3.9"`, on `lib/foreman` and `dev/`) the newer
+standard library from 3.11 on and `X | Y` annotations; `py39_checks` in `lib/foreman/selftest.py` adds what neither
+sees (the 3.10 names, methods and keywords it lists, tomllib, and `lib/main.py` parsing on 3.6). Behaviour that
+changed under the same name (`datetime.fromisoformat`, argparse's texts, docstrings) only the suite on 3.9 shows. TOML is read through `foreman.toml_reader` (tomllib, or on 3.9 and 3.10 the vendored copy of tomli in
 `lib/foreman/_tomli/`, MIT, unmodified below its provenance header), never with `import tomllib`.
 
 The test classes run in parallel worker processes, the classes with more tests first. Without `-j N` a run takes

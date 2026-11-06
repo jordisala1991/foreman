@@ -36,7 +36,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import tokenize
 import traceback
 import unittest
 import warnings
@@ -116,51 +115,26 @@ if _MIN_PYTHON is None:
 OLDEST = (int(_MIN_PYTHON.group(1)), int(_MIN_PYTHON.group(2)))
 # lib/main.py checks the version before importing anything, so it must parse on older Pythons still
 ENTRY_OLDEST = (3, 6)
-# names that exist only in newer Pythons (module: names, through `module.name` or `from module import name`; None:
-# the whole module)
+# What neither ruff (target py39) nor pyright (pythonVersion 3.9) sees: the standard library's additions of 3.10,
+# which typeshed no longer marks by version, and tomllib (3.11). Newer syntax is ruff's (an unparenthesized := in a
+# subscript, pyright's), the 3.11+ library and `X | Y` annotations pyright's in lib/foreman and dev/; the tests,
+# which pyright does not read, run whole on 3.9. Names (module: names, through `module.name` or `from module import
+# name`; None: the whole module), methods, and keyword arguments as (function or method name, keyword).
 NEWER_NAMES = {
-    "datetime": {"UTC"},
-    "enum": {"StrEnum"},
-    "itertools": {"pairwise", "batched"},
-    "hashlib": {"file_digest"},
-    "contextlib": {"chdir", "aclosing"},
-    "sys": {"orig_argv", "stdlib_module_names", "exception"},
-    "asyncio": {"TaskGroup", "timeout", "Runner"},
+    "itertools": {"pairwise"},
+    "contextlib": {"aclosing"},
+    "sys": {"orig_argv", "stdlib_module_names"},
     "tomllib": None,
-    "typing": {
-        "TypeAlias",
-        "ParamSpec",
-        "Concatenate",
-        "TypeGuard",
-        "Self",
-        "Never",
-        "LiteralString",
-        "Required",
-        "NotRequired",
-        "assert_never",
-        "assert_type",
-        "reveal_type",
-        "override",
-        "TypeVarTuple",
-        "Unpack",
-    },
+    "typing": {"TypeAlias", "ParamSpec", "Concatenate", "TypeGuard"},
 }
-NEWER_BUILTINS = {"aiter", "anext", "ExceptionGroup", "BaseExceptionGroup", "EncodingWarning"}
-NEWER_METHODS = {"hardlink_to", "enterContext", "enterClassContext", "add_note", "bit_count", "assertNoLogs"}
-# keyword arguments added after 3.9: (function or method name, keyword)
+NEWER_METHODS = {"hardlink_to", "bit_count", "assertNoLogs"}
 NEWER_KEYWORDS = {
     ("zip", "strict"),
     ("dataclass", "slots"),
     ("dataclass", "kw_only"),
-    ("Popen", "process_group"),
-    ("run", "process_group"),
-    ("rmtree", "onexc"),
     ("realpath", "strict"),
     ("glob", "root_dir"),
-    ("relative_to", "walk_up"),
-    ("NamedTemporaryFile", "delete_on_close"),
 }
-TRIPLE_QUOTES = ('"' * 3, "'" * 3)
 
 
 def py_sources() -> list[Path]:
@@ -176,129 +150,32 @@ def py_sources() -> list[Path]:
 
 
 def py39_checks(files: Iterable[Path] | None = None) -> list[str]:
-    """The code runs on Python 3.9 (OLDEST), checked without one: `ast.parse(feature_version=(3, 9))` (match, except*,
-    type statements and type parameters), and what feature_version lets through, found in the tree: f-strings that
-    reuse their quote, hold a backslash or a comment in a replacement field (3.12), `a[*b]` (3.11), `a[x := 1]`
-    (3.10), an annotation `X | Y` evaluated at run time (a module without `from __future__ import annotations`), and
-    the standard library's newer names, builtins, methods and keywords listed above (tomllib: through toml_reader).
-    What it misses: behaviour that changed under the same name (datetime.fromisoformat reads more forms since 3.11,
-    argparse's help texts, docstrings dedented since 3.13), `int | str` outside an annotation (isinstance), and any
-    newer API not in the lists. The suite on a 3.9 (`selftest --python /usr/bin/python3`) catches those it runs."""
+    """The code runs on Python 3.9 (OLDEST), checked without one where ruff and pyright do not look:
+    `ast.parse(feature_version=…)` (lib/main.py at 3.6, which it must still parse on to say the version is too old;
+    the rest at 3.9), and the newer names, methods and keywords listed above (tomllib: through toml_reader). The
+    suite on a 3.9 (`selftest --python /usr/bin/python3`) catches the rest it runs: behaviour that changed under the
+    same name (datetime.fromisoformat, argparse's help texts, docstrings dedented since 3.13)."""
     problems = []
     for f in files or py_sources():
         rel = f.relative_to(ROOT) if f.is_relative_to(ROOT) else f
-        src = f.read_text()
         version = ENTRY_OLDEST if f == ROOT / "lib/main.py" else OLDEST
         try:
-            tree = ast.parse(src, str(f), feature_version=version)
+            tree = ast.parse(f.read_text(), str(f), feature_version=version)
         except SyntaxError as e:
             problems.append(f"{rel}:{e.lineno}: not Python {'.'.join(map(str, version))}: {e.msg}")
             continue
         if rel.parts[:3] == ("lib", "foreman", "_tomli"):
             continue  # vendored as it is upstream (it parses on 3.9; tomli supports 3.8+)
-        problems += [f"{rel}:{line}: {why}" for line, why in newer_than_39(tree, src, f.name)]
+        problems += [f"{rel}:{line}: {why}" for line, why in newer_than_39(tree, f.name)]
     return problems
 
 
-def newer_than_39(tree: ast.Module, src: str, name: str) -> list[tuple[int, str]]:
-    """(line, why) for each construct of `tree` that feature_version lets through but Python 3.9 rejects or lacks."""
-    data = src.encode()  # ast's columns count UTF-8 bytes
-    starts = [0]
-    for ln in data.splitlines(True):
-        starts.append(starts[-1] + len(ln))
-
-    def text(node: Any) -> str:  # any ast node with a position
-        return data[
-            starts[node.lineno - 1] + node.col_offset : starts[node.end_lineno - 1] + node.end_col_offset
-        ].decode()
-
-    def has_comment(expr: str) -> bool:
-        try:
-            return any(
-                t.type == tokenize.COMMENT for t in tokenize.generate_tokens(io.StringIO(f"({expr}\n)").readline)
-            )
-        except (tokenize.TokenError, SyntaxError):
-            return False
-
-    parts: list[
-        tuple[tuple[int, int], tuple[int, int], str]
-    ] = []  # 3.12+: ((row, byte col) start, end, quote) of each f-string part, innermost last
-
-    def fstring_parts() -> list[tuple[tuple[int, int], tuple[int, int], str]]:
-        """Each f-string part's span and quote (implicitly concatenated parts have their own), from the tokens."""
-        if not parts and sys.version_info >= (3, 12):  # the FSTRING_* tokens are 3.12+
-            lines, stack = src.split("\n"), []
-
-            def at(pos: tuple[int, int]) -> tuple[int, int]:
-                return pos[0], len(lines[pos[0] - 1][: pos[1]].encode())
-
-            try:
-                for t in tokenize.generate_tokens(io.StringIO(src).readline):
-                    if t.type == tokenize.FSTRING_START:
-                        rest = t.string.lstrip("rRfFbBuU")
-                        stack.append((at(t.start), rest if rest in TRIPLE_QUOTES else rest[:1]))
-                    elif t.type == tokenize.FSTRING_END and stack:
-                        begin, quote = stack.pop()
-                        parts.append((begin, at(t.end), quote))
-            except (tokenize.TokenError, SyntaxError):
-                pass
-            parts.append(((0, 0), (0, 0), ""))  # never empty: the source is tokenised once
-        return parts
-
-    def quote_around(v: ast.FormattedValue) -> str | None:
-        """The quote of the f-string part holding the field `v` (the innermost one)."""
-        here, quote, found = (v.lineno, v.col_offset), None, None
-        for begin, end, q in fstring_parts():
-            if begin <= here < end and (found is None or begin > found):
-                found, quote = begin, q
-        return quote
-
-    def call_name(func: ast.expr) -> str:
-        return func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
-
-    future = any(
-        isinstance(n, ast.ImportFrom) and n.module == "__future__" and any(a.name == "annotations" for a in n.names)
-        for n in tree.body
-    )
+def newer_than_39(tree: ast.Module, name: str) -> list[tuple[int, str]]:
+    """(line, why) for each use in `tree` of NEWER_NAMES, NEWER_METHODS and NEWER_KEYWORDS."""
     out = []
     for node in ast.walk(tree):
         line = getattr(node, "lineno", 0)
-        if isinstance(node, ast.JoinedStr) and sys.version_info >= (3, 12):  # exact positions inside f-strings
-            whole = text(node)
-            first = whole[len(re.match(r"[A-Za-z]*", whole).group(0)) :][:3]
-            first = first if first in TRIPLE_QUOTES else first[:1]
-            for v in node.values:
-                if isinstance(v, ast.FormattedValue):
-                    quote = quote_around(v) or first  # the quote of the part holding the field
-                    inner, field = text(v.value), text(v)  # the expression; the whole {…} field
-                    if quote in inner or "\\" in inner or ("#" in field and has_comment(field[1:-1])):
-                        out.append(
-                            (
-                                v.value.lineno,
-                                "an f-string field with its own quote, a backslash or a comment (Python 3.12+)",
-                            )
-                        )
-        elif isinstance(node, ast.Subscript):
-            sl = node.slice
-            if isinstance(sl, ast.Starred) or (
-                isinstance(sl, ast.Tuple) and any(isinstance(e, ast.Starred) for e in sl.elts)
-            ):
-                out.append((line, "a starred subscript a[*b] (Python 3.11+)"))
-            elif isinstance(sl, ast.NamedExpr) and not text(node)[len(text(node.value)) :].lstrip()[
-                1:
-            ].lstrip().startswith("("):
-                out.append((line, "an unparenthesized := in a subscript (Python 3.10+)"))
-        elif not future and isinstance(node, (ast.AnnAssign, ast.arg, ast.FunctionDef, ast.AsyncFunctionDef)):
-            ann = node.returns if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else node.annotation
-            if ann is not None and any(isinstance(n, ast.BinOp) and isinstance(n.op, ast.BitOr) for n in ast.walk(ann)):
-                out.append(
-                    (
-                        line,
-                        "an annotation X | Y evaluated at run time (Python 3.10+): Optional/Union, or "
-                        "`from __future__ import annotations`",
-                    )
-                )
-        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
             if node.attr in (NEWER_NAMES.get(node.value.id) or ()):
                 out.append((line, f"{node.value.id}.{node.attr} is newer than Python 3.9"))
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -318,10 +195,8 @@ def newer_than_39(tree: ast.Module, src: str, name: str) -> list[tuple[int, str]
                     for a in node.names
                     if a.name in (NEWER_NAMES.get(node.module or "") or ())
                 ]
-        elif isinstance(node, ast.Name) and node.id in NEWER_BUILTINS and isinstance(node.ctx, ast.Load):
-            out.append((line, f"{node.id} is newer than Python 3.9"))
         elif isinstance(node, ast.Call):
-            fn = call_name(node.func)
+            fn = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
             if isinstance(node.func, ast.Attribute) and fn in NEWER_METHODS:
                 out.append((line, f".{fn}() is newer than Python 3.9"))
             out += [
