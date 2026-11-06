@@ -1259,7 +1259,9 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
     """The files the code an interpreter runs (RAW_INTERPRETERS: its -c/-e word, its heredoc or here-string) may
     write, as written: for Python that passes pyscript's gate, what it writes (pyscript.writes(): with the literals of
     a target it cannot name); for other code, the quoted literals of the arguments of each call that writes
-    (CODE_WRITES: up to its closing parenthesis, or to the end of the statement without one)."""
+    (CODE_WRITES: up to its closing parenthesis, or to the end of the statement without one); when those arguments
+    hold a name (a call with parentheses, or one without them at a statement's start or after a `.`; not a string's
+    `.replace(a, b)`) or it is a Path's method, every literal of the code, run on as a path's pieces (_pieces)."""
     name = PurePath(str(w[prog].value)).name if prog < len(w) and w[prog].literal else ""
     if not RAW_INTERPRETERS.fullmatch(name):
         return []
