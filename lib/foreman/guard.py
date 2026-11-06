@@ -1144,6 +1144,8 @@ OS_DOT = re.compile(r"\bos\.\Z")
 MAX_PIECES = 8
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 NOT_LITERAL = re.compile(r"[$`*?\[]")  # what is left after expanding: the path is not known, only its text
+TEXT_STOP = re.compile(r"[\s'\"`;|&()<>]")  # where a path written in a text ends
+TILDE = re.compile(r"~(?=/)|(?<![^\s='\"])~(?![^\s'\"])")  # the home in a text: before a `/`, or a word
 SETTINGS_TEXT = re.compile(r"(^|/)\.claude/settings(\.local)?\.json$")
 DECLARERS = ("export", "local", "declare", "typeset", "readonly")
 MAX_VALUES = 8  # the values one word may take from the line's variables, at most
@@ -1336,22 +1338,30 @@ def _targets(lines: Iterable[Line | str]) -> Iterator[_Target]:
                 yield _Target(_expand(path, True, env, True), here[k] | {str(Path.home())}, Write(k, tok), path)
 
 
+def _spelled(text: str) -> str:
+    """A text as the rules find paths in it (_names, _names_top, _holdout_named): $HOME, ${HOME} and `~` (before a
+    `/`, or a word of its own) read as the home, case-folded on macOS."""
+    home = str(Path.home())
+    return _fold(TILDE.sub(lambda _m: home, text.replace("${HOME}", home).replace("$HOME", home)))
+
+
+def _tails(t: str, key: str) -> Iterator[str]:
+    """The path written in a text (_spelled) at each place key appears in it: up to a space, a quote or an operator."""
+    i = t.find(key)
+    while i >= 0:
+        yield TEXT_STOP.split(t[i:], maxsplit=1)[0]
+        i = t.find(key, i + 1)
+
+
 def _names(text: str, entries: Sequence[Reserved]) -> Reserved | None:
     """The reserved entry a text names, as text only (a path that is not known: `$X/.claude/settings.json`,
     `${D:-~/.local/state/foreman}/x`): one of the reserved paths, or something under a reserved folder, appears in
     it; or it ends in .claude/settings.json or settings.local.json."""
-    t = _fold(text.replace("${HOME}", str(Path.home())).replace("$HOME", str(Path.home())))
+    t = _spelled(text)
     for e in entries:
-        i = t.find(e[1])
-        while i >= 0:
-            tail = re.split(r"[\s'\"`;|&()<>]", t[i:], maxsplit=1)[0]
-            if _match(os.path.normpath(tail), [e]) is not None:
-                return e
-            i = t.find(e[1], i + 1)
-    for word in re.split(r"[\s'\"`;|&()<>]", t):
-        if SETTINGS_TEXT.search(word):
-            return ("claude", word, False, "")
-    return None
+        if any(_match(os.path.normpath(tail), [e]) for tail in _tails(t, e[1])):
+            return e
+    return next((("claude", w, False, "") for w in TEXT_STOP.split(t) if SETTINGS_TEXT.search(w)), None)
 
 
 def _path_hit(full: str, entries: Sequence[Reserved], tree: bool) -> Reserved | None:
@@ -1489,7 +1499,6 @@ GIT_REWRITE_TEXT = re.compile(
     r"\bgit(\s+(-[Cc]\s*\S+|--?[\w-]+(=\S+)?))*\s+(" + "|".join(map(re.escape, sorted(GIT_REWRITES))) + r")(?![\w-])"
 )
 INTEGRATE_FREE = ("--help", "-h", "--check")  # what an agent may run of `foreman integrate`
-TEXT_STOP = re.compile(r"[\s'\"`;|&()<>]")
 
 
 class _Args:
@@ -1639,18 +1648,9 @@ def _reaches(t: Tok, folder: str, top: str, live: Sequence[str]) -> bool:
 
 def _names_top(text: str, tops: dict[str, Top]) -> str | None:
     """The folded top a text names (a path written in it whose checkout is that top), or None."""
-    home = str(Path.home())
-    t = text.replace("${HOME}", home).replace("$HOME", home)
-    t = _fold(re.sub(r"(^|[\s='\"])~(?=/|$|[\s'\"])", lambda m: m.group(1) + home, t))
-    for key in tops:
-        i = t.find(key)
-        while i >= 0:
-            tail = os.path.normpath(TEXT_STOP.split(t[i:], maxsplit=1)[0])
-            got = gitdir.checkout_of(tail)
-            if got is not None and _fold(got) == key:
-                return key
-            i = t.find(key, i + 1)
-    return None
+    t = _spelled(text)
+    tails = ((key, gitdir.checkout_of(os.path.normpath(tail))) for key in tops for tail in _tails(t, key))
+    return next((key for key, got in tails if got is not None and _fold(got) == key), None)
 
 
 def _git_hit(sub: str, top: Top, part: str) -> Hit:
@@ -1853,14 +1853,11 @@ def _holdout_hit(d: HoldoutDir, where: str, text: str) -> Hit:
 
 
 def _holdout_named(text: str, dirs: Sequence[HoldoutDir]) -> HoldoutDir | None:
-    """The folder a text names as text (`~`, $HOME and ${HOME} read as the home): its path, or one under it."""
-    home = str(Path.home())
-    t = _fold(text.replace("${HOME}", home).replace("$HOME", home).replace("~/", home + "/"))
-    for d in dirs:
-        for form in dict.fromkeys(d[:2]):
-            if re.search(re.escape(form) + r"(?=$|[/\s'\"`;|&()<>])", t):
-                return d
-    return None
+    """The folder a text names as text (_spelled): its path, or one under it."""
+    t = _spelled(text)
+    return next(
+        (d for d in dirs for form in dict.fromkeys(d[:2]) if any(_under(x, form) for x in _tails(t, form))), None
+    )
 
 
 def _holdout_reach(path: str, dirs: Sequence[HoldoutDir], walk: bool) -> HoldoutDir | None:
