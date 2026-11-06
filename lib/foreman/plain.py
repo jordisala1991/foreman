@@ -430,19 +430,6 @@ def record(project: Project, session_id: str | None, msg: dict[str, str], found:
     return line
 
 
-def parse_since(value: str, now: datetime | None = None) -> datetime:
-    """`7d`, `12h`, `30m` or a date (`2026-10-31`, `2026-10-31 12:00`) → a datetime; ValueError otherwise."""
-    from datetime import datetime, timedelta
-
-    now = now or datetime.now()
-    m = re.fullmatch(r"\s*(\d+)\s*([dhm])\s*", value or "")
-    if m:
-        n, unit = int(m.group(1)), m.group(2)
-        unit = {"d": "days", "h": "hours", "m": "minutes"}[unit]
-        return now - timedelta(**{unit: n})
-    return util.fromiso(value)
-
-
 def stats(project: Project, since: datetime | None = None, session: str | None = None) -> dict[str, Any]:
     """{messages, flagged, share, days: [{day, messages, flagged, share}], kinds: {kind: messages}, what: {rule:
     messages}} from <state>/plain.jsonl, optionally since a datetime and for one session. share is a % (1 decimal)."""
@@ -492,7 +479,7 @@ def run_stats(
         print("foreman plain --stats: needs a project (--project NAME or run it inside one)", file=sys.stderr)
         return 2
     try:
-        start = parse_since(since) if since else None
+        start = util.parse_when(since).astimezone().replace(tzinfo=None) if since else None
     except ValueError:
         print(f"foreman plain --stats: --since {since!r}: use 7d, 12h, 30m or a date (2026-10-31)", file=sys.stderr)
         return 2
