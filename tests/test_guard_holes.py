@@ -151,6 +151,25 @@ class PushHolesTest(PushCase):
         self.global_alias("ship", f"!git -C {self.lib} " + PUSH[4:])
         self.assertEqual(self.verdict("git ship", self.plain), "deny")
 
+    def test_a_change_made_in_another_repo(self):
+        """A removal that surely ran, but in another repo, leaves the push's repo as it was (review round 1, F2)."""
+        own, hidden = self.own, self.hidden
+        cases = (
+            f"git -C {own} config --unset remote.origin.pushurl; {PUSH}",
+            f"cd {own}; git config --unset remote.origin.pushurl; cd {hidden}; {PUSH}",
+            f"git --git-dir={own}/.git config --unset remote.origin.pushurl; {PUSH}",
+            f"GIT_DIR={own}/.git git config --unset remote.origin.pushurl; {PUSH}",
+        )
+        got = {cmd: self.verdict(cmd, hidden) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(got, "deny"))
+        cmd = f"git -C {hidden} config --unset remote.origin.pushurl && {PUSH}"  # in the push's own repo: it ran
+        self.assertEqual(self.verdict(cmd, hidden), "allow")
+
+    def test_a_function_runs_where_it_is_called(self):
+        """A function's body is checked from the folder of each call too (review round 1, F3)."""
+        self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; cd {self.lib} && G {PUSH[4:]}', self.own), "deny")
+        self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; G {PUSH[4:]}', self.own), "allow")
+
 
 class SwitchControlTest(PushCase):
     """§2.2: a switch to an existing branch before a push keeps today's verdict (PRIVATE: main needs the owner)."""
@@ -190,6 +209,11 @@ class FunctionArgsTest(PushCase):
             'G() { shift; git "$@"; }; G x ' + PUSH[4:],
             'G() { git "$@"; }; G "$SUB"',
             'git "$@"',  # no function: the line's own arguments
+            # unquoted, the shell splits the argument; "$*" joins them: words the line computes (round 1, F1)
+            f'G() {{ git $@; }}; G "{PUSH[4:]} origin main"',
+            f'G() {{ git $*; }}; G "{PUSH[4:]} x"',
+            f'G() {{ git $1; }}; G "{PUSH[4:]} x"',
+            f'G() {{ git "$*"; }}; G {PUSH[4:]}',
         )
         for cmd in ok:
             with self.subTest(cmd=cmd):
@@ -204,6 +228,14 @@ class FunctionMainCheckoutTest(MainCheckoutCase):
         self.assertEqual(self.v('G() { git "$@"; }; G grep -n x -- lib/', self.top), "allow")
         self.assertEqual(self.v('G() { git "$@"; }; G merge main', self.top), "orchestrator")
         self.assertEqual(self.v('G() { git "$@"; }; G grep x; eval "G merge main"', self.top), "orchestrator")
+        for body in ("git $1", "git $@"):  # unquoted: the shell splits "merge main" (review round 1, F1)
+            with self.subTest(body=body):
+                self.assertEqual(self.v(f'G() {{ {body}; }}; G "merge main"', self.top), "orchestrator")
+
+    def test_a_function_runs_where_it_is_called(self):
+        """Defined in the worktree, called after a cd to the main checkout (review round 1, F3)."""
+        self.assertEqual(self.v(f'G() {{ git "$@"; }}; cd {self.top} && G merge main', self.wt), "orchestrator")
+        self.assertEqual(self.v(f'G() {{ git "$@"; }}; cd {self.wt} && G merge main', self.wt), "allow")
 
 
 class ProgramHolesTest(BashWriteCase):

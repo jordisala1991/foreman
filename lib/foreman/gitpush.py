@@ -34,24 +34,24 @@ same name; upstream: to branch.<b>.merge; matching: the main branch and the curr
 checkout -b` earlier on the line, in the same folder, surely ran before the push (only && between them, outside any
 group or compound): then it is that one; one that may not have run adds its branch (branches()).
 
-Config changed on the same line (Changes). What git reads is what the hook reads, plus what the line changes
-before the push runs, which the hook cannot read yet: the push's own `git -c KEY=VALUE` and the line's earlier `git
-config KEY VALUE`, `git remote add|set-url NAME URL` (a value is added to what git says: both are tried), `git config
---unset`, `git remote remove` (the key is dropped). A change that may not have run (the reading of a cd in
-folders(), or a `-C` the line cannot name or that does not exist) keeps the config before it too: the push is
-resolved with each config git may read (overlay()). `--git-dir DIR` and a `GIT_DIR=DIR` in front of the push read the
-repo of DIR instead of the folder's. What cannot be read that way makes the push UNKNOWN too, besides its folder: a
-value the line computes, `--config-env`, `GIT_CONFIG*`, `GIT_COMMON_DIR`, `HOME` or `XDG_CONFIG_HOME` in front of the
-push or exported earlier on the line, an `include.*` key, `git config --file|--edit|--rename-section`, `git remote
-rename|set-url --delete`, an upstream set on the line (`git branch -u`, `--track`). `--work-tree` and
+Config changed on the same line (Changes). What git reads is what the hook reads, plus what the line changes before the
+push runs, which the hook cannot read yet: the push's own `git -c KEY=VALUE` and the line's earlier `git config KEY
+VALUE`, `git remote add|set-url NAME URL` (a value is added to what git says: both are tried), `git config --unset`,
+`git remote remove` (the key is dropped). A change that may not have run (the reading of a cd in folders()), or that ran
+in another folder than the push's or in more than one (its -C, a cd, --git-dir), keeps the config before it too: the
+push is resolved with each config git may read (overlay()). `--git-dir DIR` and a `GIT_DIR=DIR` in front of the push
+read the repo of DIR instead of the folder's. What cannot be read that way makes the push UNKNOWN too, besides its
+folder: a value the line computes, `--config-env`, `GIT_CONFIG*`, `GIT_COMMON_DIR`, `HOME` or `XDG_CONFIG_HOME` in front
+of the push or exported earlier on the line, an `include.*` key, `git config --file|--edit|--rename-section`, `git
+remote rename|set-url --delete`, an upstream set on the line (`git branch -u`, `--track`). `--work-tree` and
 `GIT_WORK_TREE` change neither the repo nor its config: they are ignored.
 
-Git aliases. A subcommand that is no git command is looked up in alias.<name> (with the line's changes): an alias
-to `push` (through other aliases too) is resolved as that push; one that starts with `!` is a shell command, compared
-as a command of its own (guard.py, from the same folder; under --git-dir or GIT_DIR, which git hands to it, from an
-unknown folder). A subcommand the line computes (`git $CMD`) counts as a push, except a function's "$@" or $1 when the
-line defines the function and calls it only with a literal first argument (called()). The strings of `ssh HOST` run
-on another machine and are not resolved.
+Git aliases. A subcommand that is no git command is looked up in alias.<name> (with the line's changes): an alias to
+`push` (through other aliases too) is resolved as that push; one that starts with `!` is a shell command, compared as a
+command of its own (guard.py, from the same folder; under --git-dir or GIT_DIR, which git hands to it, from an unknown
+folder). A subcommand the line computes (`git $CMD`) counts as a push, except a function's quoted "$@" or "$1" when the
+line defines the function and calls it only with a literal first argument (called(): from the folders of the body and of
+the call). The strings of `ssh HOST` run on another machine and are not resolved.
 """
 
 from __future__ import annotations
@@ -108,19 +108,22 @@ UNKNOWN_ENV = ("GIT_COMMON_DIR", "HOME", "XDG_CONFIG_HOME")  # and every GIT_CON
 
 
 class Changes(NamedTuple):
-    """What the line changed in git's config before a push: config, [(key, value, sure)] added to what git says
+    """What the line changed in git's config before a push: config, [(key, value, sure, at)] added to what git says
     (value None: the key is dropped; a key ending in ".": its whole section; sure False: it may not have run, so
-    overlay() keeps the config before it too), and unknown, whether a change cannot be read (the push is then also
-    resolved as from an unknown folder)."""
+    overlay() keeps the config before it too; at: the folders it ran in, None for the push's own -c), and unknown,
+    whether a change cannot be read (the push is then also resolved as from an unknown folder)."""
 
-    config: tuple[tuple[str, str | None, bool], ...] = ()
+    config: tuple[tuple[str, str | None, bool, frozenset[str] | None], ...] = ()
     unknown: bool = False
 
     def plus(self, other: Changes) -> Changes:
         return Changes(self.config + other.config, self.unknown or other.unknown)
 
     def maybe(self) -> Changes:
-        return Changes(tuple((k, v, False) for k, v, _ in self.config), self.unknown)
+        return Changes(tuple((k, v, False, at) for k, v, _, at in self.config), self.unknown)
+
+    def ran_in(self, at: frozenset[str]) -> Changes:
+        return Changes(tuple((k, v, s, at) for k, v, s, _ in self.config), self.unknown)
 
 
 NONE = Changes()
@@ -359,17 +362,18 @@ def branches(
     return out
 
 
-POSITIONAL = re.compile(r'^("?)\$(?:\{([@*1])\}|([@*1]))\1$')  # "$@", $1, ${*}…: a function's arguments
+POSITIONAL = re.compile(r'^"\$(?:\{([@1])\}|([@1]))"$')  # "$@", "$1", "${@}": a function's arguments, quoted
 
 
 def called(
     segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], cmd: str
-) -> dict[int, list[list[Tok]]]:
-    """{segment: the arguments of each call} for the segments of the body of a function the line defines as
-    `NAME() { …; }` and calls only as the program of a segment of the same line, with a literal first argument
-    (`G() { git -C x "$@"; }; G grep y`). A function whose name appears anywhere else in the line (a substitution, a
-    string, its own body) or whose body has shift or set is left out: its "$@" stays a word the line computes."""
-    out: dict[int, list[list[Tok]]] = {}
+) -> dict[int, list[tuple[int, list[Tok]]]]:
+    """{segment: [(the segment of a call, its arguments)]} for the segments of the body of a function the line
+    defines as `NAME() { …; }` and calls only as the program of a segment of the same line, with a literal first
+    argument (`G() { git -C x "$@"; }; G grep y`). A function whose name appears anywhere else in the line (a
+    substitution, a string, its own body) or whose body has shift or set is left out: its "$@" stays a word the line
+    computes."""
+    out: dict[int, list[tuple[int, list[Tok]]]] = {}
     for j, seg in enumerate(segs[:-2]):
         w = words_of[j]
         if seg.sep != "(" or len(w) != 1 or not w[0].literal or segs[j + 1].sep != ")" or words_of[j + 1]:
@@ -383,24 +387,28 @@ def called(
         if depth or not body or any(t.literal and t.value in ("shift", "set") for k in body for t in words_of[k]):
             continue
         calls = [
-            words_of[k][info[k].prog + 1 :]
+            (k, list(words_of[k][info[k].prog + 1 :]))
             for k in range(len(segs))
             if k > j + 1 and k not in body and info[k].prog < len(words_of[k]) and words_of[k][info[k].prog].raw == name
         ]
         named = len(re.findall(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", cmd))
-        if calls and named == len(calls) + 1 and all(c and c[0].literal for c in calls):
+        if calls and named == len(calls) + 1 and all(c and c[0].literal for _, c in calls):
             out.update(dict.fromkeys(body, calls))
     return out
 
 
-def variants(w: Sequence[Tok], prog: int, calls: list[list[Tok]] | None) -> list[Sequence[Tok]]:
-    """w once per call (called()) when its git subcommand is the function's "$@" or $1, else [w]."""
+def variants(
+    w: Sequence[Tok], prog: int, calls: list[tuple[int, list[Tok]]] | None
+) -> list[tuple[Sequence[Tok], int | None]]:
+    """[(w once per call, the call's segment)] (called()) when its git subcommand is the function's quoted "$@" or
+    "$1" (an unquoted one splits, "$*" joins: still a word the line computes), else [(w, None)]. The body runs where
+    the call does: the caller adds that segment's folders."""
     c = parse_git(w, prog) if calls else None
     k = c.sub if c is not None else len(w)
     m = POSITIONAL.match(w[k].raw) if k < len(w) else None
     if m is None or not calls:
-        return [w]
-    return [[*w[:k], *(args[:1] if "1" in m.group(0) else args), *w[k + 1 :]] for args in calls]
+        return [(w, None)]
+    return [([*w[:k], *(args[:1] if "1" in m.group(0) else args), *w[k + 1 :]], j) for j, args in calls]
 
 
 # ---------- the push ----------
@@ -444,7 +452,7 @@ def _setting(key: str, value: str) -> Changes:
         return NONE  # git refuses it
     if k.startswith(("include.", "includeif.")):
         return LOST  # a file of config: not read
-    return Changes(((k, value, True),))
+    return Changes(((k, value, True, None),))
 
 
 def parse_git(w: Sequence[Tok], prog: int) -> Call | None:
@@ -555,10 +563,10 @@ def _config_change(args: Sequence[Tok]) -> Changes:
         return LOST  # it may be the repo's own config
     if mode == "remove-section":
         head, _, rest = pos[0].partition(".")
-        return Changes(((f"{head.lower()}.{rest + '.' if rest else ''}", None, True),))
+        return Changes(((f"{head.lower()}.{rest + '.' if rest else ''}", None, True, None),))
     if mode == "unset":
         key = _key(pos[0])
-        return Changes(((key, None, True),)) if key else NONE
+        return Changes(((key, None, True, None),)) if key else NONE
     return _setting(pos[0], pos[1])
 
 
@@ -581,16 +589,16 @@ def _remote_change(args: Sequence[Tok]) -> Changes:
             pos.append(v)
     what = pos[0] if pos else ""
     if what == "add" and len(pos) >= 3:
-        out = Changes(((f"remote.{pos[1]}.url", pos[2], True),))
+        out = Changes(((f"remote.{pos[1]}.url", pos[2], True, None),))
         if "--mirror" in flags or "--mirror=push" in flags:
-            out = out.plus(Changes(((f"remote.{pos[1]}.mirror", "true", True),)))
+            out = out.plus(Changes(((f"remote.{pos[1]}.mirror", "true", True, None),)))
         return out
     if what == "set-url" and len(pos) >= 3:
         if "--delete" in flags:
             return LOST
-        return Changes(((f"remote.{pos[1]}.{'pushurl' if '--push' in flags else 'url'}", pos[2], True),))
+        return Changes(((f"remote.{pos[1]}.{'pushurl' if '--push' in flags else 'url'}", pos[2], True, None),))
     if what in ("remove", "rm") and len(pos) >= 2:
-        return Changes(((f"remote.{pos[1]}.", None, True),))
+        return Changes(((f"remote.{pos[1]}.", None, True, None),))
     if what == "rename":
         return LOST
     return NONE
@@ -629,8 +637,9 @@ def changes(
 ) -> list[Changes]:
     """For each segment, what the line changed in git's config before it (start: before the line). A change counts
     wherever it is on the line (a group, a branch, after ||); one that may not have run keeps the config before it
-    too (Changes.maybe): the folders() reading of a cd that surely ran, and a -C (where: the segments' folders) the
-    line names and that exists. Without segs, every change counts as run."""
+    too (Changes.maybe): the folders() reading of a cd that surely ran. Each keeps the folders it ran in (where: the
+    segments' folders, with its -C; UNKNOWN under --git-dir or GIT_DIR): overlay() counts it as run only for a push
+    from that one folder. Without segs, every change counts as run everywhere."""
     out: list[Changes] = []
     sure, chain = start, None
     lists = _lists(segs, words_of) if segs is not None else ((True, True, True) for _ in words_of)
@@ -639,9 +648,11 @@ def changes(
         cur = chain if (chain is not None and pure) else sure
         out.append(cur)
         ch = changed(w, info[k].prog)
-        c = parse_git(w, info[k].prog) if ch.config else None
-        known = c is None or where is None or all(d != UNKNOWN and os.path.isdir(d) for d in moved(where[k], c.dirs))
-        plain = top and known and sep not in ("|", "|&", "&", "||")
+        c = parse_git(w, info[k].prog) if ch.config and where is not None else None
+        if c is not None and where is not None:
+            other = c.git_dir != "" or env_changes(w[: info[k].prog])[1] != ""  # another repo than the folder's
+            ch = ch.ran_in(frozenset({UNKNOWN}) if other else frozenset(moved(where[k], c.dirs)))
+        plain = top and sep not in ("|", "|&", "&", "||")
         if ch == NONE:
             pass
         elif plain and first:
@@ -659,11 +670,16 @@ def changes(
 STATES = 64  # configs overlay() may give; more is a Failed (check() denies)
 
 
-def overlay(cfg: dict[str, list[str]], extra: Sequence[tuple[str, str | None, bool]]) -> list[dict[str, list[str]]]:
-    """The configs git may read: cfg with the changes of a Changes applied in order, where one that may not have
-    run keeps each config before it too."""
+def overlay(
+    cfg: dict[str, list[str]],
+    extra: Sequence[tuple[str, str | None, bool, frozenset[str] | None]],
+    folder: str | None = None,
+) -> list[dict[str, list[str]]]:
+    """The configs git may read in folder: cfg with the changes of a Changes applied in order, where one that may
+    not have run, or that ran in another folder or more than one, keeps each config before it too."""
     states = [cfg]
-    for key, value, sure in extra:
+    for key, value, ran, at in extra:
+        sure = ran and (at is None or (folder not in (None, UNKNOWN) and at == {folder}))
         section = key if key.endswith(".") else "\0"  # dropped with all of its keys
         new = []
         for st in states:
@@ -963,7 +979,7 @@ class Resolver:
         out: list[tuple[str, str]] = []
 
         def one(r: Repo, folder: str, label: str, main: str) -> None:
-            for cfg in overlay(r.config, mine.config):
+            for cfg in overlay(r.config, mine.config, folder):
                 rc = Repo(r.git_dir, r.branch, cfg)
                 cmd = expand(w[prog:], rc)
                 if isinstance(cmd, str):  # under another git dir, git runs it with GIT_DIR set: any repo

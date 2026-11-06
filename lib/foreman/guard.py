@@ -530,8 +530,9 @@ def _deny(
         if at and prog is not None and prog.literal and PurePath(prog.value).name == "git":
             try:
                 shells: list[tuple[str, frozenset[str], gitpush.Changes]] = []
-                for v in gitpush.variants(w, r.prog, fn.get(k)):
-                    for t, d in at[0].resolve(v, r.prog, here[k], heads[k], before[k], shells):
+                for v, j in gitpush.variants(w, r.prog, fn.get(k)):  # a function's body: also where it is called
+                    dirs = here[k] if j is None else here[k] | here[j]
+                    for t, d in at[0].resolve(v, r.prog, dirs, heads[k], before[k], shells):
                         resolved.setdefault(t, d)
                 nested += [(c, False, False, "", (at[0], dirs, ch)) for c, dirs, ch in shells]  # `!` aliases
             except Exception as e:  # a push it cannot resolve is never let through: check() denies
@@ -1561,8 +1562,9 @@ def _main_checkout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
         def visit(line: str, segs: Any, words_of: Any, info: Any, here: Any, env: dict[str, list[str]]) -> None:
             fn = gitpush.called(segs, words_of, info, line) if any(s.sep == "(" for s in segs) else {}
             for k, w in enumerate(words_of):
-                for v in gitpush.variants(w, info[k].prog, fn.get(k)):
-                    hit = None if found else one(v, info[k].prog, here[k], env, line)
+                for v, j in gitpush.variants(w, info[k].prog, fn.get(k)):  # a body runs where it is called too
+                    dirs = here[k] if j is None else here[k] | here[j]
+                    hit = None if found else one(v, info[k].prog, dirs, env, line)
                     if hit is not None:
                         found.append(hit)
 
