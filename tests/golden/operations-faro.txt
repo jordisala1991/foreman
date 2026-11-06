@@ -138,7 +138,10 @@ launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch 
                                    drops a pending launch). A production launch of an issue or sub-issue that a
                                    pending decision holds (decision add --blocks; a panel answer resolves it)
                                    is exit 2, nothing made: answer it, or --despite DID (each one that holds it)
-                                   --why TEXT, recorded in the launch and the notes, with a line for the owner
+                                   --why TEXT, recorded in the launch and the notes, with a line for the owner.
+                                   Production work of an issue (a production type, --production, or a mechanic)
+                                   without --repo/--branch is exit 2: give it its worktree, or --no-production if
+                                   it changes no code
 integrate REPO BRANCH "ID [Tn]" … (foreman integrate --help)
 holdout seal ID [--no-baseline] | run REPO BRANCH ID [--full] | status [ID]   an issue's hidden acceptance check
                                    (the orchestrator's; foreman holdout --help): seal hashes its folder and runs
@@ -580,6 +583,10 @@ ok   Bucle del orquestador de faro (every 60 min): last <TODAY> <TIME>
 
 ######## faro: launches and agents
 $ foreman --project faro launch ag2 --issue FA-2 --sub T1 --type dev
+[exit 2]
+--- stderr
+foreman launch: a production agent needs --repo REPO --branch BRANCH (its worktree); --no-production if it changes no code
+$ foreman --project faro launch ag2 --issue FA-2 --sub T1 --type planner
 [exit 2]
 --- stderr
 foreman launch: FA-2 has no sub-issue T1 (foreman backlog sub FA-2 T1 --title …) (or --no-backlog)

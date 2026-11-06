@@ -610,7 +610,8 @@ def operations(case, name):
     c("recurring", "done", "review")
     c("recurring")
     case.t.section(f"{name}: launches and agents")
-    c("launch", "ag2", "--issue", f"{P}-2", "--sub", "T1", "--type", "dev")
+    c("launch", "ag2", "--issue", f"{P}-2", "--sub", "T1", "--type", "dev")  # production work without its worktree
+    c("launch", "ag2", "--issue", f"{P}-2", "--sub", "T1", "--type", "planner")  # a sub-issue the issue lacks
     c("launch", "ag2", "--issue", f"{P}-2")
     c("launch", "ag3", "--issue", f"{P}-3", "--sub", "T1", "--no-backlog", "--json")
     c("launch", "ag3", "--cancel")
@@ -799,7 +800,8 @@ def session_life(case, name):
     h("who", {"hook_event_name": "SessionStart", "source": "startup", "session_id": other})
     h("who", {"hook_event_name": "SessionStart", "source": "clear", "session_id": other})
     case.t.section(f"{name}: an agent is launched, works, delivers and stops")
-    launch = c("launch", "ag2", "--issue", f"{P}-2", "--type", "dev")
+    repo = "app" if name == "faro" else "api"
+    launch = c("launch", "ag2", "--issue", f"{P}-2", "--type", "dev", "--repo", repo, "--branch", f"{P.lower()}2/t1")
     line = launch.stdout.strip().splitlines()[-1]
     brief = f"{line}\nIssue {P}-2."
     tr = case.tmp / "tasks/agent-aaa111.output"
@@ -869,6 +871,13 @@ def session_life(case, name):
     )
     c("agents")
     c("loop")
+    wt = case.tmp / "wt" / f"{repo}-ag2"  # its work: a commit in its worktree and its report (the delivery check)
+    (wt / "work.txt").write_text("done\n")
+    for a in (("add", "-A"), ("commit", "-q", "-m", "work")):
+        subprocess.run(["git", "-C", str(wt), *a], env=case.env, check=True, capture_output=True)
+    rep = case.homes[name] / "reviews" / f"{dt.date.today().isoformat()}-ag2.md"
+    rep.parent.mkdir(parents=True, exist_ok=True)
+    rep.write_text(f"# {P}-2 ({P.lower()}2/t1)\n\nDone.\n\nMisled: none\n")
     h(
         "agents",
         {

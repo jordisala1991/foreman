@@ -13,6 +13,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 - «A harness review» (agents/reviewer.md) has a fifth outcome for a rule: replace it with an automatic check (a
   test, a guard row, a `foreman check` item), which ends as a code sub-issue.
+- `foreman launch` refuses production work of an issue without its worktree: a `dev` (or a production type, or
+  `--production`) or a `mechanic` launched with `--issue` and without `--repo/--branch` is exit 2, nothing made.
+  Such a launch recorded no branch, so the delivery check never ran for the agent. A mechanic that changes no code
+  takes `--no-production`; planners, reviewers and `--review` launch as before.
 
 ## [0.60.0] - 2026-11-06
 
