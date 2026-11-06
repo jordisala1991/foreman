@@ -11,16 +11,18 @@ and push.followTags; a deletion as `:dst --delete`), and a second one with the `
 scp URL, so a pattern written for one form matches both.
 
 The folder. A line starts in the hook event's cwd (Ctx.cwd); a `cd`/`pushd` before the segment moves it, and each
-`git -C DIR` applies after. Where a `cd` may or may not have run (inside a group, a branch, after `||`, a pipe) the
-segment may run in either folder and both are resolved: the guard blocks when any of them matches. A folder the line
-cannot name (`cd "$X"`, `cd -`, `popd`, a folder that does not exist, an event without cwd) or one where git does
-not answer in time is UNKNOWN: the push is resolved against every repo of the project (its home and each
-`[repos.*] path`) with that repo's main branch as the current one, so an unknown folder only blocks more.
+`git -C DIR` applies after (moved()). Where a `cd` may or may not have run or arrived (inside a group, a branch,
+after `||`, a pipe, `;` after a folder that does not exist) the segment may run in either folder and both are
+resolved: the guard blocks when any of them matches (folders()). A folder the line cannot name (`cd "$X"`, `git -C
+"$X"`, `cd -`, `popd`, a folder that does not exist, an event without cwd) or one where git does not answer in time is
+UNKNOWN, and the folder before it stays (an empty "$X" is the current folder): the push is resolved against every repo
+of the project (its home and each `[repos.*] path`) with that repo's main branch as the current one, so an unknown
+folder only blocks more.
 
 What git says. For each folder, once per check (the Resolver's cache): `rev-parse --absolute-git-dir`,
 `symbolic-ref -q HEAD` and `config --list -z`, with no pager, no prompt, no optional locks, no fsmonitor, and
 TIMEOUT seconds each. None of them runs a hook or a filter. A folder that is not a repo has no remote: the text keeps
-the remote as written (git would fail anyway).
+the remote as written (git would fail anyway); its config is the global and system one (their aliases).
 
 The remote: the first argument (or --repo), else branch.<b>.pushRemote, remote.pushDefault, branch.<b>.remote and
 origin; its pushurls (insteadOf applied) or else its urls (pushInsteadOf, else insteadOf); a name that is no
@@ -32,20 +34,24 @@ same name; upstream: to branch.<b>.merge; matching: the main branch and the curr
 checkout -b` earlier on the line, in the same folder, surely ran before the push (only && between them, outside any
 group or compound): then it is that one; one that may not have run adds its branch (branches()).
 
-Config changed on the same line (Changes). What git reads is what the hook reads, plus what the line changes
-before the push runs, which the hook cannot read yet: the push's own `git -c KEY=VALUE` and the line's earlier `git
-config KEY VALUE`, `git remote add|set-url NAME URL` (a value is added to what git says: both are tried), `git config
---unset`, `git remote remove` (the key is dropped). `--git-dir DIR` and a `GIT_DIR=DIR` in front of the push read the
-repo of DIR instead of the folder's. What cannot be read that way makes the push UNKNOWN too, besides its folder: a
-value the line computes, `--config-env`, `GIT_CONFIG*`, `GIT_COMMON_DIR`, `HOME` or `XDG_CONFIG_HOME` in front of the
-push or exported earlier on the line, an `include.*` key, `git config --file|--edit|--rename-section`, `git remote
-rename|set-url --delete`, an upstream set on the line (`git branch -u`, `--track`). `--work-tree` and
+Config changed on the same line (Changes). What git reads is what the hook reads, plus what the line changes before the
+push runs, which the hook cannot read yet: the push's own `git -c KEY=VALUE` and the line's earlier `git config KEY
+VALUE`, `git remote add|set-url NAME URL` (a value is added to what git says: both are tried), `git config --unset`,
+`git remote remove` (the key is dropped). A change that may not have run (the reading of a cd in folders()), or that ran
+in another folder than the push's or in more than one (its -C, a cd, --git-dir), keeps the config before it too: the
+push is resolved with each config git may read (overlay()). `--git-dir DIR` and a `GIT_DIR=DIR` in front of the push
+read the repo of DIR instead of the folder's. What cannot be read that way makes the push UNKNOWN too, besides its
+folder: a value the line computes, `--config-env`, `GIT_CONFIG*`, `GIT_COMMON_DIR`, `HOME` or `XDG_CONFIG_HOME` in front
+of the push or exported earlier on the line, an `include.*` key, `git config --file|--edit|--rename-section`, `git
+remote rename|set-url --delete`, an upstream set on the line (`git branch -u`, `--track`). `--work-tree` and
 `GIT_WORK_TREE` change neither the repo nor its config: they are ignored.
 
-Git aliases. A subcommand that is no git command is looked up in alias.<name> (with the line's changes): an alias
-to `push` (through other aliases too) is resolved as that push; one that starts with `!` is a shell command, compared
-as a command of its own (guard.py, from the same folder). A subcommand the line computes (`git $CMD`) counts as a
-push. The strings of `ssh HOST` run on another machine and are not resolved.
+Git aliases. A subcommand that is no git command is looked up in alias.<name> (with the line's changes): an alias to
+`push` (through other aliases too) is resolved as that push; one that starts with `!` is a shell command, compared as a
+command of its own (guard.py, from the same folder; under --git-dir or GIT_DIR, which git hands to it, from an unknown
+folder). A subcommand the line computes (`git $CMD`) counts as a push, except a function's quoted "$@" or "$1" when the
+line defines the function and calls it only with a literal first argument (called(): from the folders of the body and of
+the call). The strings of `ssh HOST` run on another machine and are not resolved.
 """
 
 from __future__ import annotations
@@ -61,7 +67,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from .shell import ASSIGN, Tok
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Iterator, Sequence
 
     from .config import Project
     from .shell import Runs, Seg
@@ -91,9 +97,9 @@ BUILTINS = frozenset("""
     difftool fast-export fast-import fetch fetch-pack filter-branch fmt-merge-msg for-each-ref for-each-repo
     format-patch fsck gc get-tar-commit-id grep gui hash-object help hook index-pack init instaweb
     interpret-trailers lfs log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file
-    merge-tree mergetool mktag mktree multi-pack-index mv name-rev notes pack-objects pack-refs prune pull range-diff
-    read-tree rebase reflog refs remote repack replace replay rerere reset restore rev-list rev-parse revert rm
-    send-email shortlog show show-branch show-ref sparse-checkout stash status stripspace submodule switch
+    merge-tree mergetool mktag mktree multi-pack-index mv name-rev notes pack-objects pack-refs prune pull push
+    range-diff read-tree rebase reflog refs remote repack replace replay rerere reset restore rev-list rev-parse revert
+    rm send-email shortlog show show-branch show-ref sparse-checkout stash status stripspace submodule switch
     symbolic-ref tag update-index update-ref var verify-commit verify-pack verify-tag version whatchanged worktree
     write-tree
     """.split())  # fmt: skip
@@ -102,15 +108,22 @@ UNKNOWN_ENV = ("GIT_COMMON_DIR", "HOME", "XDG_CONFIG_HOME")  # and every GIT_CON
 
 
 class Changes(NamedTuple):
-    """What the line changed in git's config before a push: config, [(key, value)] added to what git says (value
-    None: the key is dropped; a key ending in ".": its whole section), and unknown, whether a change cannot be
-    read (the push is then also resolved as from an unknown folder)."""
+    """What the line changed in git's config before a push: config, [(key, value, sure, at)] added to what git says
+    (value None: the key is dropped; a key ending in ".": its whole section; sure False: it may not have run, so
+    overlay() keeps the config before it too; at: the folders it ran in, None for the push's own -c), and unknown,
+    whether a change cannot be read (the push is then also resolved as from an unknown folder)."""
 
-    config: tuple[tuple[str, str | None], ...] = ()
+    config: tuple[tuple[str, str | None, bool, frozenset[str] | None], ...] = ()
     unknown: bool = False
 
     def plus(self, other: Changes) -> Changes:
         return Changes(self.config + other.config, self.unknown or other.unknown)
+
+    def maybe(self) -> Changes:
+        return Changes(tuple((k, v, False, at) for k, v, _, at in self.config), self.unknown)
+
+    def ran_in(self, at: frozenset[str]) -> Changes:
+        return Changes(tuple((k, v, s, at) for k, v, s, _ in self.config), self.unknown)
 
 
 NONE = Changes()
@@ -156,26 +169,29 @@ def _git(folder: str, *args: str, git_dir: str | None = None) -> subprocess.Comp
 
 def read_repo(folder: str, git_dir: str | None = None) -> Repo | None:
     """What git says of the folder (of the repo at git_dir, run from the folder, when given), or None when it cannot
-    be known (no such folder, git missing, slow or failing for another reason than "not a repo")."""
+    be known (no such folder, git missing, slow or failing for another reason than "not a repo"). Outside a repo
+    the config is the global and system one (their aliases still run)."""
     if not os.path.isdir(folder):
         return None
     try:
         r = _git(folder, "rev-parse", "--absolute-git-dir", git_dir=git_dir)
-        if r.returncode:
-            return Repo(None, None, {}) if "not a git repository" in r.stderr else None
-        head = _git(folder, "symbolic-ref", "-q", "HEAD", git_dir=git_dir)
+        repo = not r.returncode
+        if not repo and "not a git repository" not in r.stderr:
+            return None
+        head = _git(folder, "symbolic-ref", "-q", "HEAD", git_dir=git_dir) if repo else r
         conf = _git(folder, "config", "--list", "-z", git_dir=git_dir)
     except (OSError, subprocess.SubprocessError):
         return None
-    if conf.returncode:
+    if conf.returncode and repo:
         return None
     cfg: dict[str, list[str]] = {}
-    for entry in conf.stdout.split("\0"):
+    for entry in conf.stdout.split("\0") if not conf.returncode else ():
         if entry:
             key, _, value = entry.partition("\n")
             cfg.setdefault(key, []).append(value if "\n" in entry else "true")
-    ref = head.stdout.strip() if head.returncode == 0 else ""
-    return Repo(r.stdout.strip(), ref[len("refs/heads/") :] if ref.startswith("refs/heads/") else None, cfg)
+    ref = head.stdout.strip() if repo and head.returncode == 0 else ""
+    branch = ref[len("refs/heads/") :] if ref.startswith("refs/heads/") else None
+    return Repo(r.stdout.strip() if repo else None, branch, cfg)
 
 
 def _expand(path: str) -> str:
@@ -218,58 +234,63 @@ def _moves(w: Sequence[Tok], r: Runs) -> str | None:
     return "cd" if w[p].value in ("cd", "pushd", "popd") else None
 
 
+def _lists(segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]]) -> Iterator[tuple[bool, bool, bool]]:
+    """For each segment: (first: it starts a list (after ; newline & or the start), pure: its list is all && before
+    it, top: it is outside any group or compound)."""
+    first = pure = True
+    parens = kws = 0
+    for seg, w in zip(segs, words_of):
+        lead = w[0].value if w and w[0].literal else ""
+        kws = kws + 1 if lead in OPENERS else max(0, kws - 1) if lead in CLOSERS else kws
+        yield first, pure, parens == 0 and kws == 0
+        parens = parens + 1 if seg.sep == "(" else max(0, parens - 1) if seg.sep == ")" else parens
+        if seg.sep in LIST_SEPS:
+            first = pure = True
+        elif not (seg.sep == "(" and not w):  # an opening parenthesis: the list goes on
+            first, pure = False, pure and seg.sep == "&&"
+
+
+def moved(here: Iterable[str], dirs: Sequence[str | None], exists: bool = True) -> set[str]:
+    """The folders a git runs in from here after its -C options in order: each joins the folders before it (_join);
+    one the line cannot name (None) keeps them and adds UNKNOWN (an empty "$X" is the current folder)."""
+    out = set(here)
+    for d in dirs:
+        out = out | {UNKNOWN} if d is None else {_join(x, d, exists) for x in out}
+    return out
+
+
 def folders(segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], start: frozenset[str],
-            exists: bool = True, unknown_chain: bool = False) -> list[frozenset[str]]:  # fmt: skip
+            exists: bool = True) -> list[frozenset[str]]:  # fmt: skip
     """The folders each segment may run in, from start (the module doc). A `cd` replaces the set only when it
-    surely ran before the segment: outside any group or compound, and either first in its list (after ; newline &
-    or the start) or followed by nothing but && up to the segment; elsewhere its folder is added to the set.
-    exists=False: a folder that does not exist (yet) is still named (the guard's reserved files: `mkdir d && cd d`;
-    a cd that fails stops its && list). unknown_chain: a cd to a folder the line cannot name, followed by nothing but
-    &&, leaves only that unknown folder for the rest of the list (if the cd fails, nothing after it runs: the guard's
-    main checkout rule, `cd "$X" && git merge main`), and a cd followed by || leaves the folder before it too (what
-    follows runs when the cd failed); a push keeps the folder before the first and reads the second as git does."""
+    surely ran and surely got there: outside any group or compound, not followed by |, & or ||, and either followed
+    by nothing but && up to the segment (if it fails, nothing after it runs) or first in its list (after ; newline &
+    or the start) with a folder that exists; elsewhere its folder is added to the set. A folder the line cannot name
+    (`cd "$X"`, `cd -`, popd; with exists, one that does not exist) is UNKNOWN, besides the folders before it.
+    exists=False: a folder that does not exist (yet) is still named (the guard's reserved files: `mkdir d && cd d`)."""
     out: list[frozenset[str]] = []
     sure = set(start)  # where the next list starts
     chain: set[str] | None = None  # where the rest of an all-&& list runs, after a cd inside it
-    pure = True  # the current list is all && so far
-    first = True  # the next segment starts a list
-    parens = kws = 0
-    for k, seg in enumerate(segs):
-        w = words_of[k]
-        lead = w[0].value if w and w[0].literal else ""
+    for k, (first, pure, top) in enumerate(_lists(segs, words_of)):
+        seg, w = segs[k], words_of[k]
         here = chain if (chain is not None and pure) else sure
         out.append(frozenset(here))
-        if lead in OPENERS:
-            kws += 1
-        if lead in CLOSERS:
-            kws = max(0, kws - 1)
         if _moves(w, info[k]):
             p = info[k].prog
             target = _cd_target(w[p:]) if w[p].value != "popd" else None
             new = {UNKNOWN} if target is None else {_join(d, target, exists) for d in here}
-            plain = parens == 0 and kws == 0 and p == 0 and seg.sep not in ("|", "|&", "&")
-            plain = plain and not (unknown_chain and seg.sep == "||")  # `cd X || git …`: it runs where the cd failed
-            if plain and first and UNKNOWN not in new:
+            new |= here if UNKNOWN in new else set()
+            plain = top and p == 0 and seg.sep not in ("|", "|&", "&", "||")
+            if plain and first and all(d != UNKNOWN and os.path.isdir(d) for d in new):
                 sure, chain = set(new), None
-            elif plain and pure and seg.sep == "&&" and (unknown_chain or UNKNOWN not in new):
+            elif plain and pure and seg.sep == "&&":
                 chain = new
                 sure |= new
             else:
                 sure |= new
                 if chain is not None:
                     chain |= new
-        if seg.sep == "(":
-            parens += 1
-        elif seg.sep == ")":
-            parens = max(0, parens - 1)
         if seg.sep in LIST_SEPS:
-            first, pure, chain = True, True, None
-        elif seg.sep == "(" and not w:
-            pass  # an opening parenthesis: the list goes on
-        else:
-            first = False
-            if seg.sep != "&&":
-                pure = False
+            chain = None
     return out
 
 
@@ -319,25 +340,15 @@ def branches(
     out: list[dict[str, frozenset[str]]] = []
     sure: dict[str, set[str]] = {}
     chain: dict[str, set[str]] | None = None
-    pure, parens, kws = True, 0, 0
-    for k, seg in enumerate(segs):
-        w = words_of[k]
-        lead = w[0].value if w and w[0].literal else ""
+    for k, (_, pure, top) in enumerate(_lists(segs, words_of)):
         state = chain if (chain is not None and pure) else sure
         out.append({d: frozenset(b) for d, b in state.items()})
-        if lead in OPENERS:
-            kws += 1
-        if lead in CLOSERS:
-            kws = max(0, kws - 1)
-        got = switched(w, info[k].prog)
+        got = switched(words_of[k], info[k].prog)
         if got is not None:
             dirs, name, certain = got
-            here = set(where[k])
-            for d in dirs:
-                here = {UNKNOWN if d is None else _join(x, d) for x in here}
-            plain = certain and parens == 0 and kws == 0 and seg.sep == "&&" and len(here) == 1
-            new = dict(chain if (chain is not None and pure) else sure)
-            new = {d: set(b) for d, b in new.items()}
+            here = moved(where[k], dirs)
+            plain = certain and top and segs[k].sep == "&&" and len(here) == 1
+            new = {d: set(b) for d, b in state.items()}
             for d in here:
                 if plain and pure:
                     new[d] = {name}
@@ -346,15 +357,58 @@ def branches(
             for d in here:
                 sure[d] = sure.get(d, {CURRENT}) | {name}
             chain = new if plain and pure else (None if chain is None else new)
-        if seg.sep == "(":
-            parens += 1
-        elif seg.sep == ")":
-            parens = max(0, parens - 1)
-        if seg.sep in LIST_SEPS:
-            pure, chain = True, None
-        elif not (seg.sep == "(" and not w) and seg.sep != "&&":
-            pure = False
+        if segs[k].sep in LIST_SEPS:
+            chain = None
     return out
+
+
+POSITIONAL = re.compile(r'^"\$(?:\{([@1])\}|([@1]))"$')  # "$@", "$1", "${@}": a function's arguments, quoted
+
+
+def called(
+    segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], cmd: str
+) -> dict[int, list[tuple[int, list[Tok]]]]:
+    """{segment: [(the segment of a call, its arguments)]} for the segments of the body of a function the line
+    defines as `NAME() { …; }` and calls only as the program of a segment of the same line, with a literal first
+    argument (`G() { git -C x "$@"; }; G grep y`). A function whose name appears anywhere else in the line (a
+    substitution, a string, its own body) or whose body has shift or set is left out: its "$@" stays a word the line
+    computes."""
+    out: dict[int, list[tuple[int, list[Tok]]]] = {}
+    for j, seg in enumerate(segs[:-2]):
+        w = words_of[j]
+        if seg.sep != "(" or len(w) != 1 or not w[0].literal or segs[j + 1].sep != ")" or words_of[j + 1]:
+            continue
+        name, depth, body = w[0].value, 0, []
+        for k in range(j + 2, len(segs)):
+            body.append(k)
+            depth += sum(t.raw == "{" for t in words_of[k]) - sum(t.raw == "}" for t in words_of[k][:1])
+            if depth <= 0:
+                break
+        if depth or not body or any(t.literal and t.value in ("shift", "set") for k in body for t in words_of[k]):
+            continue
+        calls = [
+            (k, list(words_of[k][info[k].prog + 1 :]))
+            for k in range(len(segs))
+            if k > j + 1 and k not in body and info[k].prog < len(words_of[k]) and words_of[k][info[k].prog].raw == name
+        ]
+        named = len(re.findall(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", cmd))
+        if calls and named == len(calls) + 1 and all(c and c[0].literal for _, c in calls):
+            out.update(dict.fromkeys(body, calls))
+    return out
+
+
+def variants(
+    w: Sequence[Tok], prog: int, calls: list[tuple[int, list[Tok]]] | None
+) -> list[tuple[Sequence[Tok], int | None]]:
+    """[(w once per call, the call's segment)] (called()) when its git subcommand is the function's quoted "$@" or
+    "$1" (an unquoted one splits, "$*" joins: still a word the line computes), else [(w, None)]. The body runs where
+    the call does: the caller adds that segment's folders."""
+    c = parse_git(w, prog) if calls else None
+    k = c.sub if c is not None else len(w)
+    m = POSITIONAL.match(w[k].raw) if k < len(w) else None
+    if m is None or not calls:
+        return [(w, None)]
+    return [([*w[:k], *(args[:1] if "1" in m.group(0) else args), *w[k + 1 :]], j) for j, args in calls]
 
 
 # ---------- the push ----------
@@ -398,7 +452,7 @@ def _setting(key: str, value: str) -> Changes:
         return NONE  # git refuses it
     if k.startswith(("include.", "includeif.")):
         return LOST  # a file of config: not read
-    return Changes(((k, value),))
+    return Changes(((k, value, True, None),))
 
 
 def parse_git(w: Sequence[Tok], prog: int) -> Call | None:
@@ -509,10 +563,10 @@ def _config_change(args: Sequence[Tok]) -> Changes:
         return LOST  # it may be the repo's own config
     if mode == "remove-section":
         head, _, rest = pos[0].partition(".")
-        return Changes(((f"{head.lower()}.{rest + '.' if rest else ''}", None),))
+        return Changes(((f"{head.lower()}.{rest + '.' if rest else ''}", None, True, None),))
     if mode == "unset":
         key = _key(pos[0])
-        return Changes(((key, None),)) if key else NONE
+        return Changes(((key, None, True, None),)) if key else NONE
     return _setting(pos[0], pos[1])
 
 
@@ -535,16 +589,16 @@ def _remote_change(args: Sequence[Tok]) -> Changes:
             pos.append(v)
     what = pos[0] if pos else ""
     if what == "add" and len(pos) >= 3:
-        out = Changes(((f"remote.{pos[1]}.url", pos[2]),))
+        out = Changes(((f"remote.{pos[1]}.url", pos[2], True, None),))
         if "--mirror" in flags or "--mirror=push" in flags:
-            out = out.plus(Changes(((f"remote.{pos[1]}.mirror", "true"),)))
+            out = out.plus(Changes(((f"remote.{pos[1]}.mirror", "true", True, None),)))
         return out
     if what == "set-url" and len(pos) >= 3:
         if "--delete" in flags:
             return LOST
-        return Changes(((f"remote.{pos[1]}.{'pushurl' if '--push' in flags else 'url'}", pos[2]),))
+        return Changes(((f"remote.{pos[1]}.{'pushurl' if '--push' in flags else 'url'}", pos[2], True, None),))
     if what in ("remove", "rm") and len(pos) >= 2:
-        return Changes(((f"remote.{pos[1]}.", None),))
+        return Changes(((f"remote.{pos[1]}.", None, True, None),))
     if what == "rename":
         return LOST
     return NONE
@@ -574,29 +628,69 @@ def changed(w: Sequence[Tok], prog: int) -> Changes:
     return NONE
 
 
-def changes(words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], start: Changes = NONE) -> list[Changes]:
-    """For each segment, what the line changed in git's config before it (start: before the line). A change
-    counts wherever it is on the line (a group, a branch, after ||): it may have run."""
+def changes(
+    words_of: Sequence[Sequence[Tok]],
+    info: Sequence[Runs],
+    start: Changes = NONE,
+    segs: Sequence[Seg] | None = None,
+    where: Sequence[frozenset[str]] | None = None,
+) -> list[Changes]:
+    """For each segment, what the line changed in git's config before it (start: before the line). A change counts
+    wherever it is on the line (a group, a branch, after ||); one that may not have run keeps the config before it
+    too (Changes.maybe): the folders() reading of a cd that surely ran. Each keeps the folders it ran in (where: the
+    segments' folders, with its -C; UNKNOWN under --git-dir or GIT_DIR): overlay() counts it as run only for a push
+    from that one folder. Without segs, every change counts as run everywhere."""
     out: list[Changes] = []
-    cur = start
-    for k, w in enumerate(words_of):
+    sure, chain = start, None
+    lists = _lists(segs, words_of) if segs is not None else ((True, True, True) for _ in words_of)
+    for k, (first, pure, top) in enumerate(lists):
+        w, sep = words_of[k], segs[k].sep if segs is not None else ";"
+        cur = chain if (chain is not None and pure) else sure
         out.append(cur)
-        cur = cur.plus(changed(w, info[k].prog))
-    return out
-
-
-def overlay(cfg: dict[str, list[str]], extra: Sequence[tuple[str, str | None]]) -> dict[str, list[str]]:
-    """cfg with the changes of a Changes applied."""
-    if not extra:
-        return cfg
-    out = {k: list(v) for k, v in cfg.items()}
-    for key, value in extra:
-        if value is None:
-            for k in [k for k in out if k == key or (key.endswith(".") and k.startswith(key))]:
-                del out[k]
+        ch = changed(w, info[k].prog)
+        c = parse_git(w, info[k].prog) if ch.config and where is not None else None
+        if c is not None and where is not None:
+            other = c.git_dir != "" or env_changes(w[: info[k].prog])[1] != ""  # another repo than the folder's
+            ch = ch.ran_in(frozenset({UNKNOWN}) if other else frozenset(moved(where[k], c.dirs)))
+        plain = top and sep not in ("|", "|&", "&", "||")
+        if ch == NONE:
+            pass
+        elif plain and first:
+            sure = sure.plus(ch)
+        elif plain and pure and sep == "&&":
+            chain, sure = cur.plus(ch), sure.plus(ch.maybe())
         else:
-            out.setdefault(key, []).append(value)
+            sure = sure.plus(ch.maybe())
+            chain = None if chain is None else chain.plus(ch.maybe())
+        if sep in LIST_SEPS:
+            chain = None
     return out
+
+
+STATES = 64  # configs overlay() may give; more is a Failed (check() denies)
+
+
+def overlay(
+    cfg: dict[str, list[str]],
+    extra: Sequence[tuple[str, str | None, bool, frozenset[str] | None]],
+    folder: str | None = None,
+) -> list[dict[str, list[str]]]:
+    """The configs git may read in folder: cfg with the changes of a Changes applied in order, where one that may
+    not have run, or that ran in another folder or more than one, keeps each config before it too."""
+    states = [cfg]
+    for key, value, ran, at in extra:
+        sure = ran and (at is None or (folder not in (None, UNKNOWN) and at == {folder}))
+        section = key if key.endswith(".") else "\0"  # dropped with all of its keys
+        new = []
+        for st in states:
+            out = {k: list(v) for k, v in st.items() if value is not None or not (k == key or k.startswith(section))}
+            if value is not None:
+                out.setdefault(key, []).append(value)
+            new.append(out)
+        states = new if sure else states + [x for x in new if x not in states]
+        if len(states) > STATES:
+            raise Failed("too many configs")
+    return states
 
 
 def _tok(value: str) -> Tok:
@@ -605,9 +699,10 @@ def _tok(value: str) -> Tok:
     return t
 
 
-def expand(w: Sequence[Tok], cfg: Repo) -> list[Tok] | str | None:
-    """w (`git …` from its program) as the push it runs, with git's aliases expanded (cfg: the config they come
-    from); a shell command for an alias that starts with `!`; None when it runs no push."""
+def aliased(w: Sequence[Tok], cfg: Repo) -> list[Tok] | str | None:
+    """w (`git …` from its program) with git's aliases expanded (cfg: the config they come from) up to a git command
+    or a subcommand the line computes; a shell command for an alias that starts with `!`; None when git would refuse
+    it (no such command, a loop)."""
     words = list(w)
     seen: set[str] = set()
     while True:
@@ -615,17 +710,13 @@ def expand(w: Sequence[Tok], cfg: Repo) -> list[Tok] | str | None:
         if c is None or c.sub >= len(words):
             return None
         t = words[c.sub]
-        if not t.literal:  # a subcommand the line computes: it may be push
-            return [*words[: c.sub], _tok("push"), *words[c.sub + 1 :]]
-        name = t.value.lower()
-        if t.value == "push":
+        if not t.literal or t.value in BUILTINS:
             return words
-        if t.value in BUILTINS or name in seen:
-            return None
-        seen.add(name)
-        value = cfg.get(f"alias.{name}")
+        name = t.value.lower()
+        value = None if name in seen else cfg.get(f"alias.{name}")
         if value is None:
             return None
+        seen.add(name)
         if value.startswith("!"):
             return " ".join([value[1:], *(x.raw for x in words[c.sub + 1 :])])
         try:
@@ -633,6 +724,18 @@ def expand(w: Sequence[Tok], cfg: Repo) -> list[Tok] | str | None:
         except ValueError:
             return None  # git cannot split it either
         words = [*words[: c.sub], *map(_tok, parts), *words[c.sub + 1 :]]
+
+
+def expand(w: Sequence[Tok], cfg: Repo) -> list[Tok] | str | None:
+    """w as the push it runs (aliased(); a subcommand the line computes may be push), the shell command of a `!`
+    alias, or None when it runs no push."""
+    words = aliased(w, cfg)
+    if not isinstance(words, list):
+        return words
+    k = parse_git(words, 0).sub  # type: ignore[union-attr]
+    if not words[k].literal:
+        return [*words[:k], _tok("push"), *words[k + 1 :]]
+    return words if words[k].value == "push" else None
 
 
 def push_args(w: Sequence[Tok], prog: int) -> tuple[list[str | None], Push] | None:
@@ -870,22 +973,23 @@ class Resolver:
         mine = before.plus(env).plus(call.changes)
         git_dir = call.git_dir if call.git_dir != "" else env_dir
         prefix = "".join(t.raw + " " for t in w[:prog])  # assignments and wrappers (a mark, foreman time-limit)
-        here = set(where)
-        for d in call.dirs:
-            here = {UNKNOWN if d is None else _join(x, d) for x in here}
+        here = moved(where, call.dirs)
         if mine.unknown or git_dir is None:
             here.add(UNKNOWN)
         out: list[tuple[str, str]] = []
 
         def one(r: Repo, folder: str, label: str, main: str) -> None:
-            cmd = expand(w[prog:], r)
-            if isinstance(cmd, str):
-                if shells is not None:
-                    shells.append((cmd, frozenset({folder}), mine))
-                return
-            got = push_args(cmd, 0) if cmd is not None else None
-            if got is not None:
-                out.extend([(t, label) for t in texts(prefix, got[1], r, main) if (t, label) not in out])
+            for cfg in overlay(r.config, mine.config, folder):
+                rc = Repo(r.git_dir, r.branch, cfg)
+                cmd = expand(w[prog:], rc)
+                if isinstance(cmd, str):  # under another git dir, git runs it with GIT_DIR set: any repo
+                    shell = (cmd, frozenset({UNKNOWN if git_dir else folder}), mine)
+                    if shells is not None and shell not in shells:
+                        shells.append(shell)
+                    continue
+                got = push_args(cmd, 0) if cmd is not None else None
+                if got is not None:
+                    out.extend([(t, label) for t in texts(prefix, got[1], rc, main) if (t, label) not in out])
 
         for folder in sorted(here):
             repo = None
@@ -896,14 +1000,13 @@ class Resolver:
                 repo = None if gd == UNKNOWN else self.repo(folder, gd)
             if repo is not None:
                 main = self.main_of(folder)
-                cfg = overlay(repo.config, mine.config)
                 for b in sorted((heads or {}).get(folder, {CURRENT})):
                     head = repo.branch if b == CURRENT else None if b == DETACHED else b
-                    one(Repo(repo.git_dir, head, cfg), folder, folder, main)
+                    one(Repo(repo.git_dir, head, repo.config), folder, folder, main)
                 continue
             for root, main in self.roots():
                 r = self.repo(root) or Repo(None, None, {})
-                one(Repo(r.git_dir, main, overlay(r.config, mine.config)), UNKNOWN, "?" + root, main)
+                one(Repo(r.git_dir, main, r.config), UNKNOWN, "?" + root, main)
         return out
 
     def blind(self) -> list[tuple[str, str]]:

@@ -9,6 +9,19 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Fixed
+
+- The guard no longer lets six git forms past it. A git that rewrites a main checkout after `cd MISSING;`, or in a
+  folder the line names with a variable (`git -C "$X" merge main`, `cd "$X" && git merge main`: an empty `$X` is the
+  current folder) is refused from the main checkout; from a worktree it still passes. A `git push` is resolved
+  with the config from before a change that may not have run (`false && git remote remove origin; git push`,
+  `git config push.default nothing` behind `false &&`, a `-C` that does not exist) as well as with the config after
+  it. A `!` alias under `--git-dir` or `GIT_DIR` is read as a push from any repo, and a global alias is read
+  outside a repo too. The folder rule (`cd`, `-C`) and the alias expander are now one each, shared by the push and
+  main-checkout rules.
+- A shell function that wraps git with `"$@"` and is called only with literal subcommands
+  (`G() { git --git-dir D "$@"; }; G grep x`) is read as those subcommands, not as a push.
+
 ### Changed
 
 - A question's page is written for that question: docs/owner.md has a «Question page» template (what is happening,

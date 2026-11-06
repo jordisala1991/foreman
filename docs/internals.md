@@ -276,9 +276,11 @@ the product pass, in every product:
 
 The folder of each git is the session's, moved by the line's `cd` and `pushd` and its `-C`, plus a `--work-tree` or
 `GIT_WORK_TREE` it is given; also inside `sh -c`, `$(…)` and the other nested commands. A `cd` that may not have run
-(after `;`, `||`, in a subshell) keeps the folder before it too, but `cd DIR && git …` runs only in DIR, also when the
-line cannot name it (`cd "$X" && git merge main` passes; `cd "$X"; git merge main` from the main checkout does not). A
-folder the line cannot name passes unless the line names a main checkout as text. A git alias is read as the command
+or arrived (after `||`, in a subshell, `;` after a folder that does not exist) keeps the folder before it too; `cd DIR
+&& git …` runs only in DIR. A folder the line cannot name (`cd "$X"`, `git -C "$X"`) also keeps the one before, since
+an empty `$X` is the current folder: from the main checkout `git -C "$X" merge main` is refused, from a worktree it
+passes. Write the folder literally. The unknown folder itself counts only when the line names a main checkout as
+text. A git alias is read as the command
 it stands for. Not seen: a git command that writes the `.git` its worktree shares with the main checkout (its writes
 by name are the `git` class, «The reserved files»), a
 branch moved without touching files (`update-ref`, `branch -f`: the copy is then dirty and `foreman integrate` stops),
@@ -418,13 +420,15 @@ text, so a pattern with a negative lookahead for the mark works the same. `patte
 see it alike.
 
 - **The folder**: the hook event's `cwd`; each `cd DIR` or `pushd DIR` earlier on the line (relative to the folders
-  before it), then each `git -C DIR`. A `cd` that surely ran (outside any group, branch or loop; first in its list,
-  or followed only by `&&` up to the push) replaces the folder; one that may not have run (`(cd X)`, `a || cd X`,
-  inside `if`) adds its folder, and the push is checked from each. A string run by `sh -c`, `xargs` or a
+  before it), then each `git -C DIR`. A `cd` that surely ran and arrived (outside any group, branch or loop, not
+  followed by `||`; first in its list with a folder that exists, or followed only by `&&` up to the push) replaces
+  the folder; one that may not have (`(cd X)`, `a || cd X`, `cd X || …`, inside `if`, `cd MISSING;`) adds its
+  folder, and the push is checked from each. A string run by `sh -c`, `xargs` or a
   substitution starts in its command's folders; one run by `ssh HOST` is not resolved.
-- **An unknown folder blocks**: when the line does not name the folder literally (`cd "$X"`, `cd -`, `popd`), the
-  folder does not exist, the event has no cwd, or git does not answer within 2 s, the push is checked against every
-  repo of the project (its home and each `[repos.*] path`, with that repo's `main` as the current branch). The
+- **An unknown folder blocks**: when the line does not name the folder literally (`cd "$X"`, `git -C "$X"`, `cd -`,
+  `popd`; the folder before it is checked too, since an empty `$X` is the current folder), the folder does not
+  exist, the event has no cwd, or git does not answer within 2 s, the push is checked against every repo of the
+  project (its home and each `[repos.*] path`, with that repo's `main` as the current branch). The
   refusal says so, and how to avoid it: write the folder literally.
 - **What git says**: `rev-parse`, `symbolic-ref HEAD` and `config --list` in that folder (no hooks, no pager, no
   optional locks, no fsmonitor), once per folder and check. The remote is the one written (or `--repo`), else
@@ -432,7 +436,8 @@ see it alike.
   `insteadOf` and `pushInsteadOf` applied (a worktree shares its repo's config). The refs are the refspecs written
   (`HEAD` and `@` are the current branch), else `remote.<name>.push`, else `push.default` (`simple`, `current`,
   `upstream`, `matching`, `nothing`). A detached HEAD and a ref the line computes (`$B`) count as the main branch;
-  `--all`, `--mirror` and a glob refspec add it. A folder that is not a repo keeps the remote as written.
+  `--all`, `--mirror` and a glob refspec add it. A folder that is not a repo keeps the remote as written; its
+  config is the global and system one (their aliases count).
 - **A branch switched on the same line**: `git switch [-c] NAME` or `git checkout -b NAME` in the same folder
   earlier on the line is the current branch for the push when nothing but `&&` separates them (outside any group or
   branch): `git switch -c fix/x && git commit -qam … && git push -u origin HEAD` pushes `fix/x`. Otherwise (a `;`
@@ -441,7 +446,10 @@ see it alike.
   `git config set`, `git remote add NAME URL` or `git remote set-url [--push] NAME URL` anywhere before it on the line
   (it may have run), add their value to what git says: both the old and the new value are checked.
   `git config --unset|unset` and `git remote remove` drop the key (so a `pushurl` dropped on the line leaves the
-  `url`). `--git-dir DIR` or `GIT_DIR=DIR` in front of the push reads the repo at DIR (relative to the folder).
+  `url`), and a single-valued key set on the line replaces the old value, but only when the change surely ran in
+  the push's own folder (first in its list, or joined to the push by `&&` alone, in the same folder, without
+  `--git-dir`): one that may not have run, or that ran in another folder (`git -C OTHER config --unset …`, `cd
+  OTHER; git config …; cd -`), keeps the config before it too, and the push is checked with each. `--git-dir DIR` or `GIT_DIR=DIR` in front of the push reads the repo at DIR (relative to the folder).
   `git remote add --mirror=push` (`remote.<name>.mirror`) makes a plain push to that remote a `--mirror`.
   `--work-tree` and `GIT_WORK_TREE` change neither the repo nor its config and are ignored.
 - **What cannot be read blocks**: the push is also checked as from an unknown folder (above) when its config comes
@@ -453,7 +461,11 @@ see it alike.
 - **Git aliases**: a subcommand that is not one of git's own is looked up in `alias.<name>` (the repo's, the global
   one and the line's `-c alias.*`). An alias that expands to `push` (through other aliases too) is checked as that
   push with the arguments typed after it; one that starts with `!` is a shell command, checked as a command of its
-  own from the same folder (patterns and resolved pushes alike). A subcommand the line computes (`git $CMD …`) counts
+  own from the same folder (patterns and resolved pushes alike; under `--git-dir` or `GIT_DIR`, which git passes to
+  it, from an unknown folder). A subcommand the line computes (`git $CMD …`) counts as a push, except a function's
+  quoted `"$@"` or `"$1"` when the line defines the function (`G() { git … "$@"; }`) and calls it only as a command
+  of its own with a literal first argument: then it is each call's arguments, checked from the folders of the
+  body and of the call (`G() { git -C x "$@"; }; G grep y` reads). An unquoted `$@`, `$1` or a `"$*"` still counts
   as a push. Git's own commands are never looked up, so `git status` runs no git in the hook.
 - **A line the lexer cannot read** (an unclosed quote) that has `git … push` and matches nothing as text is checked
   as a push of every branch and tag (`--all --follow-tags`) from the event's folder and from every repo of the

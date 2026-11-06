@@ -8,9 +8,7 @@ there). Every hole has a control next to it, a plain test that passes today: it 
 fixture.
 
 - H1-H2 (main checkout): a `cd` to a folder that does not exist followed by `;`, and a folder the line cannot name
-  (`"$WT"` may be empty: the current folder). H2 contradicts FoldersTest.test_cd_and_lists in
-  test_guard_main_checkout.py (`cd "$X" && git merge main` and `git -C "$X" merge main` pass there): the change that
-  closes H2 flips those two rows too.
+  (`"$WT"` may be empty: the current folder; FoldersTest.test_cd_and_lists in test_guard_main_checkout.py agrees).
 - H3-H6 (where a push goes): config changed earlier on the line by a command that may not have run (a removal, a
   single-valued key), a `!` alias under --git-dir/GIT_DIR, a global alias outside a repo.
 - H7-H11 (programs): a way to builtins through a module's attribute and a full-width `＿`, a module the program writes
@@ -26,7 +24,7 @@ from helpers import git, make_repo
 from test_guard_bash_writes import BashWriteCase
 from test_guard_files import TABLE
 from test_guard_main_checkout import MainCheckoutCase
-from test_guard_push import PRIVATE, PUSH, PushCase, remote
+from test_guard_push import NOWHERE, PRIVATE, PUSH, PushCase, remote
 
 from foreman import guard
 
@@ -64,14 +62,12 @@ class MainCheckoutHolesTest(MainCheckoutCase):
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.v(cmd, wt), "allow")
 
-    @hole
     def test_h1_cd_to_a_missing_folder_then_a_semicolon(self):
         """A `cd` that fails leaves the shell where it was: the merge runs in the main checkout."""
         gone = self.tmp / "wt/ours-gone"
         self.assertFalse(gone.exists())
         self.assertEqual(self.v(f"cd {gone}; git merge main", self.top), "orchestrator")
 
-    @hole
     def test_h2_a_folder_the_line_cannot_name(self):
         """An empty "$WT" is the current folder, the main checkout (the hole wins over two rows that pass it today)."""
         cases = ('git -C "$WT" merge main', 'cd "$WT" && git merge main', "git -C $WT merge main")
@@ -116,7 +112,12 @@ class PushHolesTest(PushCase):
         self.global_alias("ship", f"!git -C {self.lib} " + PUSH[4:])
         self.assertEqual(self.verdict("git ship", self.own), "deny")
 
-    @hole
+    def test_too_many_configs(self):
+        """Each change that may not have run doubles the configs to try: past gitpush.STATES the push is refused."""
+        maybe = "".join(f"false && git config a.k{i} x; " for i in range(6))
+        self.assertEqual(self.verdict(maybe + PUSH, self.own), "allow")  # 64 configs, all of them safe
+        self.assertEqual(self.verdict("false && git config a.k9 x; " + maybe + PUSH, self.own), "deny")
+
     def test_h3_a_removal_that_may_not_have_run(self):
         got = {
             (f"false && git remote remove origin; {PUSH}", "lib"): self.verdict(
@@ -131,7 +132,6 @@ class PushHolesTest(PushCase):
         }
         self.assertEqual(got, dict.fromkeys(got, "deny"))
 
-    @hole
     def test_h4_a_single_valued_key_that_may_not_have_changed(self):
         cases = (
             (f"false && git config remote.pushDefault safe; {PUSH}", self.lib),
@@ -141,17 +141,34 @@ class PushHolesTest(PushCase):
         got = {(cmd, cwd.name): self.verdict(cmd, cwd) for cmd, cwd in cases}
         self.assertEqual(got, dict.fromkeys(got, "deny"))
 
-    @hole
     def test_h5_a_shell_alias_under_another_git_dir(self):
         self.global_alias("pu", "!git " + PUSH[4:])
         cases = (f"git --git-dir={self.lib}/.git pu", f"GIT_DIR={self.lib}/.git git pu")
         got = {cmd: self.verdict(cmd, self.own) for cmd in cases}
         self.assertEqual(got, dict.fromkeys(got, "deny"))
 
-    @hole
     def test_h6_a_global_alias_outside_a_repo(self):
         self.global_alias("ship", f"!git -C {self.lib} " + PUSH[4:])
         self.assertEqual(self.verdict("git ship", self.plain), "deny")
+
+    def test_a_change_made_in_another_repo(self):
+        """A removal that surely ran, but in another repo, leaves the push's repo as it was (review round 1, F2)."""
+        own, hidden = self.own, self.hidden
+        cases = (
+            f"git -C {own} config --unset remote.origin.pushurl; {PUSH}",
+            f"cd {own}; git config --unset remote.origin.pushurl; cd {hidden}; {PUSH}",
+            f"git --git-dir={own}/.git config --unset remote.origin.pushurl; {PUSH}",
+            f"GIT_DIR={own}/.git git config --unset remote.origin.pushurl; {PUSH}",
+        )
+        got = {cmd: self.verdict(cmd, hidden) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(got, "deny"))
+        cmd = f"git -C {hidden} config --unset remote.origin.pushurl && {PUSH}"  # in the push's own repo: it ran
+        self.assertEqual(self.verdict(cmd, hidden), "allow")
+
+    def test_a_function_runs_where_it_is_called(self):
+        """A function's body is checked from the folder of each call too (review round 1, F3)."""
+        self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; cd {self.lib} && G {PUSH[4:]}', self.own), "deny")
+        self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; G {PUSH[4:]}', self.own), "allow")
 
 
 class SwitchControlTest(PushCase):
@@ -170,6 +187,55 @@ class SwitchControlTest(PushCase):
         self.assertEqual(self.verdict(f"git switch feat && {PUSH}", self.wt), "allow")
         self.assertEqual(self.verdict(f"git switch feat && {PUSH} origin HEAD", self.wt), "allow")
         self.assertEqual(self.verdict(f"git switch feat; {PUSH} origin HEAD", self.wt), "deny")  # it may not have
+
+
+class FunctionArgsTest(PushCase):
+    """Over-refusal: a shell function that wraps git with "$@" and is called with a reading subcommand passes (it was
+    read as a push: a subcommand the line computes); a call that may push, or one the line hides, stays refused."""
+
+    toml = NOWHERE
+
+    def test_a_function_that_reads(self):
+        wrap = f'G() {{ git --git-dir {self.own}/.git "$@"; }}; '
+        ok = (
+            wrap + 'G grep -n "version_texts\\|def pending" 8e4b546 -- lib/ | head -60',
+            wrap + "G log -1; G status --short",
+            'L() { git -C x "$1"; }; L status',
+        )
+        refused = (
+            wrap + "G " + PUSH[4:],
+            wrap + "G grep x; G " + PUSH[4:] + " origin main",
+            wrap + "G grep x; echo $(G " + PUSH[4:] + ")",  # a call the line hides in a substitution
+            'G() { shift; git "$@"; }; G x ' + PUSH[4:],
+            'G() { git "$@"; }; G "$SUB"',
+            'git "$@"',  # no function: the line's own arguments
+            # unquoted, the shell splits the argument; "$*" joins them: words the line computes (round 1, F1)
+            f'G() {{ git $@; }}; G "{PUSH[4:]} origin main"',
+            f'G() {{ git $*; }}; G "{PUSH[4:]} x"',
+            f'G() {{ git $1; }}; G "{PUSH[4:]} x"',
+            f'G() {{ git "$*"; }}; G {PUSH[4:]}',
+        )
+        for cmd in ok:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.verdict(cmd, self.own), "allow")
+        for cmd in refused:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.verdict(cmd, self.own), "deny")
+
+
+class FunctionMainCheckoutTest(MainCheckoutCase):
+    def test_a_function_in_the_main_checkout(self):
+        self.assertEqual(self.v('G() { git "$@"; }; G grep -n x -- lib/', self.top), "allow")
+        self.assertEqual(self.v('G() { git "$@"; }; G merge main', self.top), "orchestrator")
+        self.assertEqual(self.v('G() { git "$@"; }; G grep x; eval "G merge main"', self.top), "orchestrator")
+        for body in ("git $1", "git $@"):  # unquoted: the shell splits "merge main" (review round 1, F1)
+            with self.subTest(body=body):
+                self.assertEqual(self.v(f'G() {{ {body}; }}; G "merge main"', self.top), "orchestrator")
+
+    def test_a_function_runs_where_it_is_called(self):
+        """Defined in the worktree, called after a cd to the main checkout (review round 1, F3)."""
+        self.assertEqual(self.v(f'G() {{ git "$@"; }}; cd {self.top} && G merge main', self.wt), "orchestrator")
+        self.assertEqual(self.v(f'G() {{ git "$@"; }}; cd {self.wt} && G merge main', self.wt), "allow")
 
 
 class ProgramHolesTest(BashWriteCase):
