@@ -34,7 +34,9 @@ sees (the 3.10 names, methods and keywords it lists, tomllib, and `lib/main.py` 
 changed under the same name (`datetime.fromisoformat`, argparse's texts, docstrings) only the suite on 3.9 shows. TOML is read through `foreman.toml_reader` (tomllib, or on 3.9 and 3.10 the vendored copy of tomli in
 `lib/foreman/_tomli/`, MIT, unmodified below its provenance header), never with `import tomllib`.
 
-The test classes run in parallel worker processes, the classes with more tests first. Without `-j N` a run takes
+The test classes run in parallel worker processes, longest first: those never timed on this machine (the classes
+with more tests first), then the others by the seconds they took the last time (`times.json` in the folder of the
+slots below). Without `-j N` a run takes
 its share of the machine: the cores divided by the selftest runs alive on it (each holds a locked file in
 `$TMPDIR/foreman-selftest-runs/`, or `$FOREMAN_SELFTEST_SLOTS`), at least 2, counted again while it runs (a worker
 over the share stops after its class, one is added under it); its first line says how many workers it starts with
