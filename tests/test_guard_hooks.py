@@ -802,84 +802,6 @@ class GuardNestedTest(ProjectCase):
         self.assertIsNotNone(pyscript.gate("x = '" + "a" * (pyscript.MAX_BODY - 10) + "'"))
         self.assertIsNone(pyscript.gate("x = '" + "a" * pyscript.MAX_BODY + "'"))
 
-    def test_never_raises(self):
-        big = [
-            'foreman note t "' + "x " * 25000 + '"',
-            "a;" * 25000,
-            "'" * 50000,
-            "\\" * 50000,
-            "`" * 50000,
-            "<<EOF\n" * 1000,
-            "$(" * 25000,
-            "x | " * 12500,
-            '"$(echo "' * 5000,
-            "(" * 50000,
-            "\x00" * 50000,
-        ]
-        for cmd in big + [None, 42, b"make deploy", "", "\n\n", "&&", "|"]:
-            v, cpu = guard_cpu(self.project, cmd)  # the check's own CPU: a loaded machine does not count
-            self.assertTrue(v is None or v[0] in ("deny", "lock"), repr(cmd)[:40])
-            self.assertLess(cpu, GUARD_CPU_MAX, repr(cmd)[:40])
-        self.assertEqual(guard.check(self.project, None)[0], "deny")
-        bad = type("P", (), {"resources": {}, "section": lambda self, n: {"patterns": ["(unclosed"]}})()
-        self.assertEqual(guard.check(bad, "ls")[0], "deny")
-
-    def test_nested_runs(self):
-        """T2: strings, heredocs and pipes that run are commands of their own, to a depth of 4; deeper, or unreadable
-        inside, the whole text is compared."""
-
-        def nest(cmd, n):
-            for _ in range(n):
-                cmd = "sh -c " + shell.shlex.quote(cmd)
-            return cmd
-
-        for n in range(1, 8):
-            self.assertEqual(guard.check(self.project, nest("kamal app logs", n)), ("deny", "(^|\\s)kamal "), n)
-            self.assertIsNone(guard.check(self.project, nest("ls -la", n)), n)
-        for cmd in (
-            'bash -c "kamal app logs \'x"',
-            "eval \"\\$'x' kamal app logs\"",
-            "bash <<'EOF'\n$'x' kamal app logs\nEOF",
-        ):
-            self.assertEqual(guard.check(self.project, cmd), ("deny", "(^|\\s)kamal "), cmd)
-        r = shell.runs(list(shell.lex("env -i FOO=1 nice -n 5 timeout -s KILL 60 bash -xc 'a b' n")[0][0].toks))
-        self.assertEqual(([(s[1], s[2]) for s in r.strings], r.stdin), ([("a b", True)], "shell"))
-        self.assertEqual(shell.runs(shell.lex("python3.12 -")[0][0].toks).stdin, "raw")
-        self.assertIsNone(shell.runs(shell.lex("cat -")[0][0].toks).stdin)
-        for cmd in (
-            "eval " * 10000 + "x",
-            "xargs " * 10000 + "x",
-            "sh -c " * 10000 + "x",
-            "find -exec " * 5000,
-            'bash -c "ls";' * 5000,
-            "bash <<EOF\n" + "x\n" * 20000 + "EOF",
-            "echo a | " * 5000 + "sh",
-            "ssh h " * 8000,
-            "env -S " * 8000,
-            "(" * 3000 + "cat <<EOF" + ")" * 3000 + " | sh\nx\nEOF",
-            "{ echo a; } | " * 5000 + "sh",
-            "x=$y; $x; " * 5000,
-            "if true; then echo a; fi | " * 3000 + "while read l; do $l; done",
-            "".join(f"echo a > f{i}; " for i in range(5000)),
-            "echo a " + "".join(f"> f{i} " for i in range(10000)),
-            "echo a | tee " + " ".join(f"f{i}" for i in range(12000)),
-            "echo a | " + "tee f | " * 5000 + "cat",
-            "grep " + "-e a " * 8000 + "f",
-            "gh pr create " + "--body a " * 8000,
-            "echo a > f; " * 3000 + "sh $x",
-            "cat > f <<< a; " + "".join(f"$v{i}; " for i in range(5000)),
-            "cat > f0 <<< a; " + "".join(f"cp f{i} f{i + 1}; " for i in range(5000)),
-            "cat > f <<< a; " + "sh g; " * 5000,
-            "".join(f"cat > f{i} <<< a; " for i in range(3000)) + "sh x",
-            "python3 - <<'EOF'\n" + 'x = f"a {y} b"\n' * 4300 + "EOF",  # 64 KB read by the python gate
-            "python3 - <<'EOF'\n" + 'x = "a b"\n' * 6700 + "EOF",  # 65 KB: raw
-            "".join("python3 - <<'EOF'\n" + 'x = "a.sh"\n' * 300 + "EOF\n" for _ in range(80)) + "sh a.sh",
-            "python3 - <<'EOF'\n" + 'x = "a b"\n' * 6000 + "EOF\n" + "ls; " * 5000,
-        ):
-            v, cpu = guard_cpu(self.project, cmd)
-            self.assertTrue(v is None or v[0] in ("deny", "lock"), cmd[:30])
-            self.assertLess(cpu, GUARD_CPU_MAX, cmd[:30])
-
     def test_text_args(self):
         def is_text_segment(seg):  # a single segment whose arguments are data (data_tokens), as the guard reads it
             try:
@@ -943,6 +865,96 @@ class GuardNestedTest(ProjectCase):
             shell.foreman_call(shell.words("FOREMAN_WHO=a bin/foreman --project p integrate a b")),
             ("p", "integrate", ["a", "b"]),
         )
+
+
+class GuardNeverRaisesTest(ProjectCase):
+    """Huge or malformed commands: the guard never raises, and judges each within its CPU budget."""
+
+    toml = TOML
+
+    def test_never_raises(self):
+        big = [
+            'foreman note t "' + "x " * 25000 + '"',
+            "a;" * 25000,
+            "'" * 50000,
+            "\\" * 50000,
+            "`" * 50000,
+            "<<EOF\n" * 1000,
+            "$(" * 25000,
+            "x | " * 12500,
+            '"$(echo "' * 5000,
+            "(" * 50000,
+            "\x00" * 50000,
+        ]
+        for cmd in big + [None, 42, b"make deploy", "", "\n\n", "&&", "|"]:
+            v, cpu = guard_cpu(self.project, cmd)  # the check's own CPU: a loaded machine does not count
+            self.assertTrue(v is None or v[0] in ("deny", "lock"), repr(cmd)[:40])
+            self.assertLess(cpu, GUARD_CPU_MAX, repr(cmd)[:40])
+        self.assertEqual(guard.check(self.project, None)[0], "deny")
+        bad = type("P", (), {"resources": {}, "section": lambda self, n: {"patterns": ["(unclosed"]}})()
+        self.assertEqual(guard.check(bad, "ls")[0], "deny")
+
+
+class GuardDepthTest(ProjectCase):
+    """Runs nested to any depth: read to a depth of 4, compared whole beyond, within the CPU budget."""
+
+    toml = TOML
+
+    def test_nested_runs(self):
+        """T2: strings, heredocs and pipes that run are commands of their own, to a depth of 4; deeper, or unreadable
+        inside, the whole text is compared."""
+
+        def nest(cmd, n):
+            for _ in range(n):
+                cmd = "sh -c " + shell.shlex.quote(cmd)
+            return cmd
+
+        for n in range(1, 8):
+            self.assertEqual(guard.check(self.project, nest("kamal app logs", n)), ("deny", "(^|\\s)kamal "), n)
+            self.assertIsNone(guard.check(self.project, nest("ls -la", n)), n)
+        for cmd in (
+            'bash -c "kamal app logs \'x"',
+            "eval \"\\$'x' kamal app logs\"",
+            "bash <<'EOF'\n$'x' kamal app logs\nEOF",
+        ):
+            self.assertEqual(guard.check(self.project, cmd), ("deny", "(^|\\s)kamal "), cmd)
+        r = shell.runs(list(shell.lex("env -i FOO=1 nice -n 5 timeout -s KILL 60 bash -xc 'a b' n")[0][0].toks))
+        self.assertEqual(([(s[1], s[2]) for s in r.strings], r.stdin), ([("a b", True)], "shell"))
+        self.assertEqual(shell.runs(shell.lex("python3.12 -")[0][0].toks).stdin, "raw")
+        self.assertIsNone(shell.runs(shell.lex("cat -")[0][0].toks).stdin)
+        for cmd in (
+            "eval " * 10000 + "x",
+            "xargs " * 10000 + "x",
+            "sh -c " * 10000 + "x",
+            "find -exec " * 5000,
+            'bash -c "ls";' * 5000,
+            "bash <<EOF\n" + "x\n" * 20000 + "EOF",
+            "echo a | " * 5000 + "sh",
+            "ssh h " * 8000,
+            "env -S " * 8000,
+            "(" * 3000 + "cat <<EOF" + ")" * 3000 + " | sh\nx\nEOF",
+            "{ echo a; } | " * 5000 + "sh",
+            "x=$y; $x; " * 5000,
+            "if true; then echo a; fi | " * 3000 + "while read l; do $l; done",
+            "".join(f"echo a > f{i}; " for i in range(5000)),
+            "echo a " + "".join(f"> f{i} " for i in range(10000)),
+            "echo a | tee " + " ".join(f"f{i}" for i in range(12000)),
+            "echo a | " + "tee f | " * 5000 + "cat",
+            "grep " + "-e a " * 8000 + "f",
+            "gh pr create " + "--body a " * 8000,
+            "echo a > f; " * 3000 + "sh $x",
+            "cat > f <<< a; " + "".join(f"$v{i}; " for i in range(5000)),
+            "cat > f0 <<< a; " + "".join(f"cp f{i} f{i + 1}; " for i in range(5000)),
+            "cat > f <<< a; " + "sh g; " * 5000,
+            "".join(f"cat > f{i} <<< a; " for i in range(3000)) + "sh x",
+            "python3 - <<'EOF'\n" + 'x = f"a {y} b"\n' * 4300 + "EOF",  # 64 KB read by the python gate
+            "python3 - <<'EOF'\n" + 'x = "a b"\n' * 6700 + "EOF",  # 65 KB: raw
+            "".join("python3 - <<'EOF'\n" + 'x = "a.sh"\n' * 300 + "EOF\n" for _ in range(80)) + "sh a.sh",
+            "python3 - <<'EOF'\n" + 'x = "a b"\n' * 6000 + "EOF\n" + "ls; " * 5000,
+        ):
+            v, cpu = guard_cpu(self.project, cmd)
+            self.assertTrue(v is None or v[0] in ("deny", "lock"), cmd[:30])
+            self.assertLess(cpu, GUARD_CPU_MAX, cmd[:30])
 
 
 class HooksTest(ProjectCase):
