@@ -72,19 +72,8 @@ def naive(t: datetime | None) -> datetime | None:
 
 
 def when(s: object) -> datetime | None:
-    """A state file's time (`2026-10-31T09:30:00`, `2026-10-31 09:30`) as a naive local datetime, or None."""
-    if not isinstance(s, str) or not s.strip():
-        return None
-    try:
-        return naive(util.fromiso(s.strip().replace(" ", "T", 1)))
-    except (ValueError, TypeError):
-        t = transcripts.parse_ts(s)
-        return naive(t) if t else None
-
-
-def short(text: object, n: int = TEXT_CHARS) -> str:
-    t = " ".join(str(text or "").split())
-    return t if len(t) <= n else t[: n - 1] + "…"
+    """util.when, and an offset without a colon (`+0100`), which Python 3.9's fromisoformat does not read."""
+    return util.when(s) or naive(transcripts.parse_ts(s))
 
 
 def where(path: object, line: int | None = None) -> str:
@@ -293,7 +282,7 @@ def from_progress(w: World, since: datetime, until: datetime) -> list[Event]:
         issue = w.issue_of(w.info(aid)) if aid else ""
         issue = issue or w.issue_of_name(name)
         done = d.get("done") is True
-        text = (f"{d.get('outcome') or 'ok'}: " if done else "") + short(d.get("text"))
+        text = (f"{d.get('outcome') or 'ok'}: " if done else "") + util.clip(d.get("text"), TEXT_CHARS, squash=True)
         ref = w.ref(aid, f) if aid and w.transcript(aid) else where(f, n)
         out.append(
             event(
@@ -341,7 +330,7 @@ def from_notes(w: World, since: datetime, until: datetime, handovers: dict[str, 
             if not since <= t < until:
                 continue
             title = m.group(3).strip()
-            im = w.issue_re.search(title)
+            shown, im = util.clip(title, TEXT_CHARS, squash=True), w.issue_re.search(title)
             b = INTEGRATED.match(title)
             if b:
                 rec = w.by_branch.get(b.group(2)) or {}
@@ -349,7 +338,7 @@ def from_notes(w: World, since: datetime, until: datetime, handovers: dict[str, 
                     event(
                         t,
                         "integrate" if b.group(1) == "Integrated" else "measure",
-                        short(title),
+                        shown,
                         where(f, n),
                         who=rec.get("name"),
                         issue=w.issue_of_branch(b.group(2)) or (im.group(1) if im else ""),
@@ -357,7 +346,7 @@ def from_notes(w: World, since: datetime, until: datetime, handovers: dict[str, 
                     )
                 )
             else:
-                out.append(event(t, "note", short(title), where(f, n), issue=im.group(1) if im else ""))
+                out.append(event(t, "note", shown, where(f, n), issue=im.group(1) if im else ""))
     return out
 
 
@@ -408,7 +397,7 @@ def ci_event(
     if "rc" not in run:
         result = "no result in the log (running or cut)"
     elif run.get("error"):
-        result = "could not start: " + short(run["error"], 60)
+        result = "could not start: " + util.clip(run["error"], 60, squash=True)
     elif run["rc"] == 0:
         result = f"passed in {run['secs']} s"
     else:
@@ -417,7 +406,7 @@ def ci_event(
     return event(
         t,
         "ci",
-        f"{branch} on {place}: {result}; {short(run['cmd'], 70)}",
+        f"{branch} on {place}: {result}; {util.clip(run['cmd'], 70, squash=True)}",
         where(f, run["line"]),
         who=rec.get("name"),
         issue=w.issue_of_branch(branch),
@@ -471,12 +460,15 @@ def from_inbox(w: World, since: datetime, until: datetime) -> list[Event]:
         if not t or not since <= t < until:
             continue
         if m.get("decision"):
-            kind, text = "decision", f"{short(m['decision'], 90)} → {short(m.get('text'), 90)}"
+            kind, text = (
+                "decision",
+                f"{util.clip(m['decision'], 90, squash=True)} → {util.clip(m.get('text'), 90, squash=True)}",
+            )
         else:
-            kind, text = "inbox", short(m.get("text"))
+            kind, text = "inbox", util.clip(m.get("text"), TEXT_CHARS, squash=True)
             for k in ("move", "approve"):
                 if m.get(k):
-                    text = f"{k} {short(m[k], 60)}: {text}"
+                    text = f"{k} {util.clip(m[k], 60, squash=True)}: {text}"
         im = w.issue_re.search(f"{m.get('decision') or ''} {m.get('text') or ''}")
         out.append(
             event(t, kind, text, f"{where(f)}#{m.get('id')}", who=m.get("from") or "?", issue=im.group(1) if im else "")

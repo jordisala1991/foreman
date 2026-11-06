@@ -947,16 +947,12 @@ def in_main(path: PathLike, main: str, br: str) -> bool:
 def tip_line(path: PathLike, br: str, n: int) -> str:
     """`N commits not in main, D days, "subject"` of a branch's tip."""
     when, _, subject = util.git(path, "log", "-1", "--format=%ct%x00%s", br, check=False).partition("\0")
-    parts = [plural(n, "commit") + " not in main"]
+    parts = [util.plural(n, "commit") + " not in main"]
     if when.isdigit():
-        parts.append(plural(int((time.time() - int(when)) // 86400), "day"))
+        parts.append(util.plural(int((time.time() - int(when)) // 86400), "day"))
     if subject:
-        parts.append('"' + (subject if len(subject) <= 60 else subject[:59] + "…") + '"')
+        parts.append('"' + util.clip(subject, 60) + '"')
     return ", ".join(parts)
-
-
-def plural(n: int, word: str) -> str:
-    return f"{n} {word}" + ("" if n == 1 else "s")
 
 
 def report_part(s: Snapshot, repo: str, br: str, path: str | None) -> str:
@@ -1003,7 +999,7 @@ def no_worktree_line(s: Snapshot, repo: str, br: str, subs: Sequence[tuple[str, 
     part = report_part(s, repo, br, None)
     if part:
         parts.append(part)
-    parts.append(plural(commits_ahead(s.project, repo, br), "commit") + " not in main")
+    parts.append(util.plural(commits_ahead(s.project, repo, br), "commit") + " not in main")
     return f"{repo}:{br} ({'; '.join(parts)})"
 
 
@@ -1473,7 +1469,7 @@ def idle_line(project: Project, ns: Iterable[Notice]) -> str:
     """The one line an idle pass leaves on screen (the module's $.ui.log; the model never reads it): the time and,
     if any, the short text of each notice."""
     s = i18n.for_project(project)
-    short = [n["text"] if len(n["text"]) <= 140 else n["text"][:139] + "…" for n in ns]
+    short = [util.clip(n["text"], 140) for n in ns]
     return s["loop_idle"].format(time=time.strftime("%H:%M")) + (
         " " + s["loop_idle_info"].format(items="; ".join(short)) if short else ""
     )

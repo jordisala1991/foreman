@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_text, i18n, identity, lock, loop, notes, orchestrator, pause, transcripts
+from . import backlog_text, i18n, identity, lock, loop, notes, orchestrator, pause, transcripts, util
 from .backlog import Backlog, BacklogError
 
 if TYPE_CHECKING:
@@ -264,11 +264,6 @@ def collect(
     }
 
 
-def short(text: object, n: int) -> str:
-    text = " ".join(str(text or "").split())
-    return text if len(text) <= n else text[: n - 1] + "…"
-
-
 def render(project: Project, d: Summary, renewal: bool = False) -> str:
     """The plain text of the summary (collect's fields). `renewal`: for the pack of a session that renewed its
     memory in place (renew.pack): no steps to mark it, which are not its case."""
@@ -342,9 +337,9 @@ def render(project: Project, d: Summary, renewal: bool = False) -> str:
     out += ["", f"## {s['backlog'].format(n=len(bl['issues']))}"]
     for i in bl["issues"]:
         sc = f"{i['subs_done']}/{i['subs_total']}" if i["subs_total"] else ""
-        line = f"- {i['id']} {i['status']}" + (f" {sc}" if sc else "") + f": {short(i['title'], 90)}"
+        line = f"- {i['id']} {i['status']}" + (f" {sc}" if sc else "") + f": {util.clip(i['title'], 90, squash=True)}"
         if i["blocked"]:
-            line += f" [{s['blocked']}: {short(i['blocked'], 60)}]"
+            line += f" [{s['blocked']}: {util.clip(i['blocked'], 60, squash=True)}]"
         out.append(line)
         if i["status"] in STARTED:
             for sub in i["open_subs"][:SUBS_SHOWN]:
@@ -352,7 +347,7 @@ def render(project: Project, d: Summary, renewal: bool = False) -> str:
                 out.append(
                     f"    {sub['id']} {sub.get('status', 'todo')}"
                     + (f" ({who})" if who else "")
-                    + (f": {short(sub.get('title'), 70)}" if sub.get("title") else "")
+                    + (f": {util.clip(sub.get('title'), 70, squash=True)}" if sub.get("title") else "")
                 )
             if len(i["open_subs"]) > SUBS_SHOWN:
                 out.append(f"    … +{len(i['open_subs']) - SUBS_SHOWN}")
@@ -366,17 +361,17 @@ def render(project: Project, d: Summary, renewal: bool = False) -> str:
     at["owner"] = len(out)
     out += ["", f"## {s['owner'].format(owner=owner)}"]
     waits = [
-        f"- {s['decision']} {x['id']} ({x['date']}): {short(x['title'], 100)}"
+        f"- {s['decision']} {x['id']} ({x['date']}): {util.clip(x['title'], 100, squash=True)}"
         + (f" [{s['holds']}: {', '.join(x['blocks'])}]" if x.get("blocks") else "")
         for x in bl["decisions"]
     ]
-    waits += [f"- {s['inbox']} {m['id']} ({m['time']}): {short(m['text'], 100)}" for m in d["inbox"]]
+    waits += [f"- {s['inbox']} {m['id']} ({m['time']}): {util.clip(m['text'], 100, squash=True)}" for m in d["inbox"]]
     out += waits or [s["owner_none"]]
 
     at["resources"] = len(out)
     out += ["", f"## {s['resources']}"]
     for r in d["resources"]:
-        holders = ", ".join(f"{h['who']}: {short(h['what'], 50)}" for h in r["holders"]) or s["free"]
+        holders = ", ".join(f"{h['who']}: {util.clip(h['what'], 50, squash=True)}" for h in r["holders"]) or s["free"]
         out.append(f"- {r['name']}: {holders}" + (f"; {s['queue']}: {', '.join(r['queue'])}" if r["queue"] else ""))
     if not d["resources"]:
         out.append(s["resources_none"])

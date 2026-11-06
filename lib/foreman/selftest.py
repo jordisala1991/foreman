@@ -46,7 +46,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import mods as mods_checks
 from . import quality as quality_checks
-from . import release
+from . import release, util
 
 if TYPE_CHECKING:
     from .util import PathLike
@@ -448,7 +448,7 @@ class RunSlot:
             self.live = 1 + sum(1 for f in d.glob("run-*") if f != self.path and held(f))
         except (ImportError, OSError):
             self.live = 1
-        self.why = f"{self.cores} cores, {self.live} selftest run{'s' if self.live != 1 else ''} on this machine"
+        self.why = f"{self.cores} cores, {util.plural(self.live, 'selftest run')} on this machine"
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -623,7 +623,7 @@ def update_golden_files(verbose: bool, pattern: str | None, jobs: int | None) ->
             changed += 1
         else:
             print(f"golden: {k} was not written (a test failed): left as it is")
-    print(f"golden: {changed} file{'s' if changed != 1 else ''} changed" if changed else "golden: no change")
+    print(f"golden: {util.plural(changed, 'file')} changed" if changed else "golden: no change")
     return rc
 
 
@@ -914,7 +914,7 @@ def report(
     for desc in unexpected:
         out.write(f"{unittest.TextTestResult.separator1}\nUNEXPECTED SUCCESS: {desc}\n")
     elapsed = time.monotonic() - t0
-    out.write(f"{unittest.TextTestResult.separator2}\nRan {ran} test{'s' if ran != 1 else ''} in {elapsed:.3f}s\n\n")
+    out.write(f"{unittest.TextTestResult.separator2}\nRan {util.plural(ran, 'test')} in {elapsed:.3f}s\n\n")
     ok_tests = not errors and not failures and not unexpected
     infos = [
         f"{k}={v}"
