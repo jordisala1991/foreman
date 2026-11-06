@@ -201,6 +201,7 @@ scripts behind `lock`, `time-limit` and `hung-shells`). `tests/test_docs_tied.py
 | `lock.py`, `waits.py` | resource locks (with `sh/lock.sh`); `foreman wait` |
 | `worktree.py`, `integrate.py`, `review.py`, `holdout.py` | a worktree per agent; a finished branch into main (PR or fast-forward); when a branch needs a review by another agent and whether its review lets it in (integrate's review gate); an issue's hidden acceptance check, sealed and run on a copy of the branch (integrate's hidden gate) |
 | `timeline.py`, `transcripts.py` | the product's history (events in time order, what `foreman catchup` reads); the one reader of Claude Code's transcripts |
+| `costs.py` | what each agent run cost (list prices, from its transcript), kept beside the backlog; `foreman agents --cost` |
 | `start.py`, `plain.py`, `catchup.py`, `permissions.py` | the new orchestrator's start summary; the check of texts for the owner; `foreman catchup`, what the owner missed in four parts; `foreman permissions`, the permissions in bands and a candidate `foreman.toml` tested against the guard table and the orchestrator's lifeline, and `apply`, which puts it in place |
 | `init.py` | `foreman init`: a new project's home (minimal `foreman.toml`, starting rules, backlog) and its registry entry, appended |
 | `panel.py`, `panel_cache.py`, `panel_cards.py`, `panel_locks.py`, `panel_registry.py`, `panel_wiki.py` | the web panel: server and routes, cache, backlog cards, locks, registry, wiki |

@@ -217,6 +217,7 @@
   "archived_lc": "archived",
   "agent": "Agent",
   "no_agent_nor_branch": "no agent nor branch",
+  "cost": "Cost",
   "branch": "Branch",
   "blocked_by": "Blocked by",
   "blocks": "Blocks",

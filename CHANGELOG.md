@@ -9,6 +9,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- `foreman agents --cost`: what each agent run cost at API list prices (tokens by model, minutes, outcome), recorded from the transcript at `progress --done` or when the pass sees the agent stopped, kept in `costs.jsonl` beside the backlog; by issue, sub-issue, type, model, week or day, with the share of tokens on Sonnet or Haiku, as text or JSON; `--backfill DAY` records older runs. The panel's issue page shows the issue's cost.
+
 ## [0.62.0] - 2026-11-06
 
 ### Fixed
