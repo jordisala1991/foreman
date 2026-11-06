@@ -253,7 +253,7 @@ class GraceTest(VersionPassCase):
             for behind in (False, True):
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out):
-                    self.assertEqual(cli.sessions_command(behind), 0)
+                    self.assertEqual(versions.sessions_command(behind), 0)
                 lines = out.getvalue().splitlines()
                 self.assertEqual(lines[0], f"installed foreman 0.2.0 ({self.new})", behind)
                 self.assertEqual(lines[1].split()[:4], ["fake", "fake-1", "0.1.0", "settling"], behind)
@@ -263,8 +263,8 @@ class GraceTest(VersionPassCase):
 
     def test_orphan_line(self):
         (self.old / ".orphaned_at").write_text("1")  # replaced just now
-        self.assertIsNone(cli.orphan_line(["progress", "x"], root=self.old))
-        self.assertIn("/reload-plugins", cli.orphan_line(["progress", "x"], root=self.old, now=time.time() + 600))
+        self.assertIsNone(versions.orphan_line(root=self.old))
+        self.assertIn("/reload-plugins", versions.orphan_line(root=self.old, now=time.time() + 600))
 
 
 class CliTest(VersionPassCase):
@@ -327,16 +327,14 @@ class CliTest(VersionPassCase):
             self.assertEqual(cli.acts(argv), want, argv)
 
     def test_orphan_line(self):
-        self.assertIsNone(cli.orphan_line(["progress", "x"], root=self.old))  # not orphaned: one stat, nothing
+        self.assertIsNone(versions.orphan_line(root=self.old))  # not orphaned: one stat, nothing
         (self.old / ".orphaned_at").write_text("1")
-        line = cli.orphan_line(["progress", "x"], root=self.old)
+        line = versions.orphan_line(root=self.old)
         self.assertIn("foreman 0.1.0", line)
         self.assertIn("replaced by 0.2.0", line)  # the sibling: the trace does not know it yet
         self.assertIn("/reload-plugins", line)
-        self.assertIsNone(cli.orphan_line(["loop", "--json"], root=self.old))
-        self.assertIsNone(cli.orphan_line(["backlog", "show"], root=self.old))
         repo = fake_root(self.tmp / "repo", "0.0.1", git="dir", orphaned=True)
-        self.assertIsNone(cli.orphan_line(["progress", "x"], root=repo))  # a working copy runs live code
+        self.assertIsNone(versions.orphan_line(root=repo))  # a working copy runs live code
         saved = install.ROOT
         install.ROOT = self.old
         try:
@@ -362,17 +360,17 @@ class CliTest(VersionPassCase):
                 for i in range(9):
                     cli.main(["--project", "fake", "progress", f"step {i}"])
             self.assertEqual(err.getvalue().count("/reload-plugins"), 1, err.getvalue())
-            told = util.read_json(cli.orphan_told_file(), {})
+            told = util.read_json(versions.orphan_told_file(), {})
             self.assertEqual(told[str(self.old)]["version"], "0.1.0")
-            argv, root = ["progress", "x"], self.old
-            later = time.time() + cli.ORPHAN_TOLD_SECONDS + 1
-            self.assertIsNotNone(cli.orphan_line(argv, root, once=True, env={}, now=later))  # 10 min later: again
-            self.assertIsNone(cli.orphan_line(argv, root, once=True, env={}, now=later + 1))
+            root = self.old
+            later = time.time() + versions.ORPHAN_TOLD_SECONDS + 1
+            self.assertIsNotNone(versions.orphan_line(root, once=True, env={}, now=later))  # 10 min later: again
+            self.assertIsNone(versions.orphan_line(root, once=True, env={}, now=later + 1))
             a, b = {"CLAUDE_CODE_SESSION_ID": "SA"}, {"CLAUDE_CODE_SESSION_ID": "SB"}
-            self.assertIsNotNone(cli.orphan_line(argv, root, once=True, env=a, now=later + 2))  # each session once
-            self.assertIsNotNone(cli.orphan_line(argv, root, once=True, env=b, now=later + 3))
-            self.assertIsNone(cli.orphan_line(argv, root, once=True, env=a, now=later + 9999))  # same session: never
-            self.assertIsNotNone(cli.orphan_line(argv, root))  # without `once`, always
+            self.assertIsNotNone(versions.orphan_line(root, once=True, env=a, now=later + 2))  # each session once
+            self.assertIsNotNone(versions.orphan_line(root, once=True, env=b, now=later + 3))
+            self.assertIsNone(versions.orphan_line(root, once=True, env=a, now=later + 9999))  # same session: never
+            self.assertIsNotNone(versions.orphan_line(root))  # without `once`, always
         finally:
             install.ROOT = saved
             if saved_sid is not None:
