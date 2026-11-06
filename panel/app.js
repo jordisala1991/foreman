@@ -721,7 +721,7 @@ function decideOpt(b){
 function closeSheet(){ const s = $('csheet'); if(s) s.remove(); }
 document.addEventListener('keydown', e => { if(e.key==='Escape' && $('csheet')){ e.stopImmediatePropagation(); closeSheet(); } }, true);
 const answerOpt = b => { if(b.dataset.ch) CHANGE_OPEN.delete(b.dataset.fk);
-  return post(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&d=${encodeURIComponent(b.dataset.d)}&op=${encodeURIComponent(b.dataset.op)}${b.dataset.ch ? '&change=1' : ''}`, b.dataset.p); };
+  return post(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&op=${encodeURIComponent(b.dataset.op)}${b.dataset.ch ? '&change=1' : ''}`, b.dataset.p); };
 // the «other answer» boxes open and what is typed in them, by product and decision: kept across repaints
 const FREE_OPEN = new Set(), FREE_DRAFT = new Map();
 const freeKey = x => `${x.p}|${x.id || x.title}`;
@@ -951,14 +951,14 @@ function laneGroups(cards, scope){
 function renderBacklog(d){
   BL = d.backlog;
   document.querySelectorAll('#blseg button').forEach(b => b.classList.toggle('on', b.dataset.v===blView));
-  const epics = epicList(), et = epics.find(([e]) => e===epic.split('|')[0]);
+  const epics = epicList(), et = epics.find(([e]) => e===epic);
   if(blView==='projects'){
     $('filter').innerHTML = '';
     $('board').innerHTML = list(epics.map(([e, ti]) => epicRow(e, ti, canWrite(epicOf(e).p) && !d.joint)).join('') || empty(t('no_backlog')), ' id="elist"')
       + (d.ps.some(p => p.writable) && !d.joint ? `<div class="hint">${t('hint_projects')}</div>` : '');
   } else {
-    // the filter: a project, or «no project» (an older filter kept as «E1|M1» names its project)
-    const fe = epic.split('|')[0], loose = fe==='-';
+    // the filter: a project, or «no project»
+    const fe = epic, loose = fe==='-';
     const chipTxt = loose ? esc(t('no_project')) : et ? `${esc(ekey(fe))} · ${esc(et[1].split(/[ (]/).slice(0,3).join(' '))}` : '';
     $('filter').innerHTML = `<button class="sec sm" onclick="openSheet()">${t('project_filter', {name: chipTxt ? '' : t('all')})} ▾</button>${chipTxt ? `<span class="el wide" onclick="showEpic('')"><i style="background:${loose ? 'var(--muted)' : ecol(fe)}"></i>${chipTxt} ✕</span>` : ''}`;
     const keep = c => !epic || (loose ? !c.eid : c.epic===fe);
@@ -1575,7 +1575,7 @@ async function load(){
 }
 async function decide(b){
   if(!confirm(t('confirm_answer', {op: b.dataset.op}))) return;
-  post(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&d=${encodeURIComponent(b.dataset.d)}&op=${encodeURIComponent(b.dataset.op)}`, b.dataset.p);
+  post(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&op=${encodeURIComponent(b.dataset.op)}`, b.dataset.p);
 }
 // his own words as the answer: they resolve the decision, marked free for the orchestrator to interpret
 async function decideFree(b){
@@ -1583,7 +1583,7 @@ async function decideFree(b){
   if(!v || !confirm(t('confirm_free', {text: v.length > 80 ? v.slice(0, 80) + '…' : v}))) return;
   let err = '';
   try{
-    const r = await fetch(api(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&d=${encodeURIComponent(b.dataset.d)}&free=1${b.dataset.ch ? '&change=1' : ''}&p=${encodeURIComponent(b.dataset.p)}`), {method:'POST', body: v});
+    const r = await fetch(api(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&free=1${b.dataset.ch ? '&change=1' : ''}&p=${encodeURIComponent(b.dataset.p)}`), {method:'POST', body: v});
     if(!r.ok) err = (await r.json().catch(() => ({}))).error || `${r.status}`;
   }catch(e){ err = t('no_connection'); }
   if(!err){ FREE_OPEN.delete(k); FREE_DRAFT.delete(k); CHANGE_OPEN.delete(k); }

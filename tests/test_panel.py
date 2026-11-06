@@ -1224,7 +1224,7 @@ console.log(JSON.stringify(out));
 
     def test_active_writes(self):
         self.assertEqual(self.req("/api/message?p=fake", "POST", b"a word")[0], 200)
-        self.assertEqual(self.req("/api/decide?p=fake&d=Area%20J1%2C%20Ship%20it%3F&op=a%3A%20yes", "POST")[0], 200)
+        self.assertEqual(self.req("/api/decide?p=fake&id=Area%20J1&op=a%3A%20yes", "POST")[0], 200)
         self.assertEqual(self.req("/api/approve?p=fake&repo=nope&branch=b", "POST")[0], 400)
         code, d = self.req("/api/move?p=fake&id=PF-2&a=up", "POST")
         self.assertEqual(code, 200, d)

@@ -2117,7 +2117,7 @@ $ POST /api/message?p=faro <
 {
   "error": "empty message"
 }
-$ POST /api/decide?p=harbor&d=DEC%20J1%2C%20Close%20it%3F&op=a
+$ POST /api/decide?p=harbor&id=DEC%20J1&op=a
 [200]
 {
   "freed": [],

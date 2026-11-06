@@ -54,16 +54,30 @@ class BacklogTest(ProjectCase):
             self.assertEqual(r.returncode, 2, args)
             self.assertIn("invalid choice", r.stderr)
 
-    def test_old_pages_block_is_kept(self):
-        """A backlog.json with the old `pages` block keeps it as it is through a write (foreman 0.59 reads it)."""
+    def test_old_pages_block_is_dropped_on_write(self):
+        """A schema 5 file with a `pages` block still loads; the next write drops the key."""
         raw = json.loads(self.b.data_path.read_text())
-        raw["pages"] = {"backlog": {"front_matter": [], "heading": "Backlog", "intro": ["kept"]}}
+        raw["pages"] = {"backlog": {"intro": ["x"]}}
         self.b.data_path.write_text(json.dumps(raw))
+        self.assertIn("pages", self.b.load())
         with self.b.mutate() as d:
             self.b.add_issue(d, "E1", "AB-1", "one", status="ready")
-        out = json.loads(self.b.data_path.read_text())
-        self.assertEqual(out["pages"], raw["pages"])
-        self.assertEqual(list(out)[:3], ["schema_version", "updated", "pages"])
+        self.assertNotIn("pages", json.loads(self.b.data_path.read_text()))
+
+    def test_other_schema_is_refused_generically(self):
+        """A schema 4 file is refused with the generic text, no per-version hint."""
+        raw = json.loads(self.b.data_path.read_text())
+        raw["schema_version"] = 4
+        self.b.data_path.write_text(json.dumps(raw))
+        with self.assertRaises(BacklogError) as c:
+            self.b.load()
+        self.assertIn("is schema 4: this foreman reads schema 5", str(c.exception))
+        self.assertNotIn("migrate", str(c.exception))
+
+    def test_idea_is_no_status(self):
+        """`idea` is not an alias of triage any more."""
+        with self.assertRaises(BacklogError):
+            self.b.norm_status("idea")
 
     def test_issue_lifecycle(self):
         b = self.b
@@ -179,7 +193,7 @@ class BacklogTest(ProjectCase):
             with b.mutate() as d:
                 b.add_issue(d, "E1", "PF-1", "Faster", status="ready")
         with b.mutate() as d:
-            b.add_issue(d, "E1", "PF-1", "Faster", status="idea")
+            b.add_issue(d, "E1", "PF-1", "Faster", status="triage")
         with self.assertRaises(BacklogError):
             with b.mutate() as d:
                 b.set_status(d, "PF-1", "ready")
@@ -224,7 +238,7 @@ class BacklogTest(ProjectCase):
         i = b.issue(b.load(), "PF-7")
         self.assertEqual(i["short"], "Export")
         self.assertEqual((i["acceptance"]["claim"], i["acceptance"]["criterion"]), ("2x faster", "p50 < 100 ms"))
-        r = self.cli("backlog", "add", "E1", "--title", "Go on", "--short", "Go on with T5", "--status", "idea")
+        r = self.cli("backlog", "add", "E1", "--title", "Go on", "--short", "Go on with T5", "--status", "triage")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("short name", r.stderr)
         # --dry-run: the show block with the id it would get, and the same bytes afterwards
@@ -486,8 +500,6 @@ class BacklogTest(ProjectCase):
                     b.answer_decision(d, did, opt, "Owner, now (panel)")
                 self.assertIn(said, str(e.exception))
             self.assertEqual(b.answer_decision(d, "AB-1 J3", "b", "Owner, now (panel)"), [])
-            self.assertEqual(b.decision_ref(d, "AB-1 J3, t"), "AB-1 J3")
-            self.assertEqual(b.decision_ref(d, "nothing"), "nothing")
         self.assertEqual(b.resolved_decision(b.load(), "AB-1 J3")["by"], "Owner, now (panel)")
         raw = json.loads(b.data_path.read_text())
         raw["decisions_resolved"][0]["by"] = 3
@@ -746,20 +758,19 @@ class LinearModelTest(ProjectCase):
         for call in (self.b.load, lambda: self.b.mutate().__enter__()):
             with self.assertRaises(BacklogError) as e:
                 call()
-            self.assertIn("schema 3, which this foreman no longer reads", str(e.exception))
-            self.assertIn("foreman 0.25 or older moves it to schema 4", str(e.exception))
+            self.assertIn("is schema 3: this foreman reads schema 5", str(e.exception))
         for args in (("show",), ("list",), ("status", "AB-2", "triage")):
             r = self.cli("backlog", *args)
             self.assertNotEqual(r.returncode, 0, args)
         for args in (("show",), ("list",), ("status", "AB-2", "triage")):
-            self.assertIn("foreman 0.25 or older", self.cli("backlog", *args).stderr, args)
+            self.assertIn("reads schema 5", self.cli("backlog", *args).stderr, args)
         r = self.cli("check")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("foreman 0.25 or older", r.stdout)
+        self.assertIn("reads schema 5", r.stdout)
         self.assertEqual(self.b.data_path.read_bytes(), before)
         self.b.data_path.write_text(json.dumps({**raw, "schema_version": 5, "issues": []}))
-        with self.b.mutate() as d:  # idea is still accepted, as triage
-            self.b.set_status(d, "AB-2", "idea")
+        with self.b.mutate() as d:
+            self.b.set_status(d, "AB-2", "triage")
         self.assertEqual(self.b.issue(self.b.load(), "AB-2")["status"], "triage")
 
     def test_schema4_is_refused(self):
@@ -772,13 +783,13 @@ class LinearModelTest(ProjectCase):
         before = self.b.data_path.read_bytes()
         with self.assertRaises(BacklogError) as e:
             self.b.load()
-        self.assertIn("is schema 4, which this foreman no longer reads: foreman 0.54 moves it", str(e.exception))
+        self.assertIn("is schema 4: this foreman reads schema 5", str(e.exception))
         r = self.cli("backlog", "show")
         self.assertEqual(r.returncode, 2, r.stderr)
-        self.assertIn("foreman 0.54", r.stderr)
+        self.assertIn("reads schema 5", r.stderr)
         r = self.cli("check")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("is schema 4, which this foreman no longer reads", r.stdout)
+        self.assertIn("is schema 4: this foreman reads schema 5", r.stdout)
         self.assertNotIn("Traceback", r.stdout + r.stderr)
         self.assertEqual(self.b.data_path.read_bytes(), before)
         for args in (("migrate",), ("migrate", "--write"), ("schema",), ("blocked-by", "AB-1")):
@@ -960,17 +971,16 @@ class LinearModelTest(ProjectCase):
         for call in (self.b.load, lambda: self.b.mutate().__enter__()):
             with self.assertRaises(BacklogError) as e:
                 call()
-            self.assertIn("schema 2, which this foreman no longer reads", str(e.exception))
-            self.assertIn("foreman 0.25 or older", str(e.exception))
+            self.assertIn("is schema 2: this foreman reads schema 5", str(e.exception))
+            self.assertIn("reads schema 5", str(e.exception))
         for args in (("show",), ("status", "AB-2", "triage")):
             r = self.cli("backlog", *args)
             self.assertNotEqual(r.returncode, 0, args)
-            self.assertIn("foreman 0.25 or older", r.stderr, args)
+            self.assertIn("reads schema 5", r.stderr, args)
         r = self.cli("check")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("foreman 0.25 or older", r.stdout)
+        self.assertIn("reads schema 5", r.stdout)
         self.assertEqual(self.b.data_path.read_bytes(), before)
-        self.assertEqual(self.b.norm_status("idea"), "triage")  # the old name still means triage
 
 
 def issue2(iid, status, **kw):

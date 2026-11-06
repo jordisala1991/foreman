@@ -1,6 +1,6 @@
 """The owner's answer with a button in the panel resolves the backlog decision at once (/api/decide, panel.decide,
 Backlog.answer_decision): under the backlog's lock, with who and when (`by`), and an inbox message for the orchestrator
-with did, resolved and freed; the older page's `d="ID, title"`; the 400s; the fallback to the inbox alone (202) when
+with did, resolved and freed; the 400s; the fallback to the inbox alone (202) when
 the backlog cannot be saved; `decision resolve` on a decision the panel resolved; a panel answer and a CLI write at
 the same time; an answer in the owner's own words (free); what the state shows after answering (answered until the
 orchestrator reads it). On the active fake product of tests/test_panel.py."""
@@ -97,15 +97,12 @@ class PanelDecideTest(PanelCase):
         self.assertRegex(d["error"], r"already answered: \d{4}-\d{2}-\d{2} \(by Owner, .* \(panel\)\): «a»")
         self.assertEqual((len(notes.inbox(self.project)), self.b.data_path.read_bytes()), before)
 
-    def test_the_older_page_sends_the_card_title(self):
-        """Criterion 3: d="ID, title" (a page loaded before the change) still answers, and resolves too."""
-        code, d = self.req("/api/decide?p=fake&d=PF%20J1%2C%20Which%20way%3F&op=b", "POST")
-        self.assertEqual((code, d["resolved"]), (200, "PF J1"), d)
-        self.assertEqual(self.resolved("PF J1")["answer"], "b")
-        # an empty id (the new page on a card without one) goes by d as well
-        code, d = self.req("/api/decide?p=fake&id=&d=PF%20J2%2C%20Paint%20it%3F&op=yes", "POST")
-        self.assertEqual((code, d["resolved"]), (200, "PF J2"), d)
-        self.assertEqual([m["did"] for m in self.owner_msgs()], ["PF J1", "PF J2"])
+    def test_a_card_title_is_not_a_reference(self):
+        """The id is the only reference: the card title, «ID, title» or `d=` no longer name a decision."""
+        for q in ("id=Which%20way%3F", "id=PF%20J1%2C%20Which%20way%3F", "d=PF%20J1%2C%20Which%20way%3F"):
+            code, d = self.req(f"/api/decide?p=fake&{q}&op=b", "POST")
+            self.assertEqual(code, 400, (q, d))
+        self.assertEqual(self.owner_msgs(), [])
 
     def test_cli_resolve_of_a_panel_answer_changes_nothing(self):
         """Criterion 4: exit 0, «already resolved … (panel)», backlog.json untouched; an unknown id is still 2."""
