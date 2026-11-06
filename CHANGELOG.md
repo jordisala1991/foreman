@@ -26,6 +26,18 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   worktree's line is judged there; a check whose own folder is gone no longer refuses the whole command, each rule
   compares its text only.
 
+### Fixed
+
+- The guard sees three more ways interpreter code writes a reserved file, and stops refusing one way it only reads.
+  A call without parentheses whose target is a variable (`File.write p, "x"` in Ruby, `open my $f, ">", $p` and
+  `unlink $p` in Perl) is read like one with them. A path built in pieces over several statements (`base =
+  Path.home() / "Projects" / "x"`, then `(base / "foreman.toml").write_text(s)`) is put together when the code
+  writes a target it cannot name. A string's `.replace(a, b)` with a variable or a regex (`s.replace(old, "b")`,
+  `.replace(/\t/g, " ")`) is no longer taken for a write, so reading a reserved file with it passes; `os.replace`
+  and a Path's `replace` still write. A line the guard cannot read that writes to `~/…` now reads `~` as the home,
+  as it already read `$HOME`: such a write to a reserved file is refused. The three rules that find a path written
+  as text (reserved files, main checkouts, hidden checks) now read the text one way.
+
 ## [0.62.0] - 2026-11-06
 
 ### Fixed
