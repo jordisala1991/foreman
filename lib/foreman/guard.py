@@ -36,10 +36,11 @@ last argument of each command; their substitutions run. Data values keep their e
 variable only through `$_` or `| read`, both compared). A heredoc to an interpreter that is not a shell (python,
 perl, node…) is compared raw, except a python program read from one heredoc that cannot start a process (pyscript:
 an allow-list gate of imports and names), compared with its comments and its prose literals blanked, one-word
-literals kept; raw again when its output runs, the line writes to something else than a plain file or a module it
-would import, or may run a file it may write (_python()). Any other heredoc body is text (only its substitutions run
-when the delimiter is unquoted), except a heredoc to cat or tee writing a file the line may run (runs_written()):
-then it is compared as a command, or raw when only an interpreter that is not a shell runs it. If the lexer cannot
+literals kept; raw again when its output runs, the line writes to something else than a plain file, the program
+writes a file it cannot name or a module it would import, or the line may run a file it writes (_python()). Any
+other heredoc body is text (only its substitutions run when the delimiter is unquoted), except a heredoc to cat or
+tee writing a file the line may run (runs_written()): then it is compared as a command, or raw when only an
+interpreter that is not a shell runs it. If the lexer cannot
 read the command or a string inside it (an unclosed quote, $'…', $((…)), nesting deeper than 4, a control character)
 the whole text is compared with no exemption, raw and with quotes and parentheses turned into spaces, so a failure
 only blocks more. check() never raises: a hook that raised would let the command through.
@@ -192,16 +193,19 @@ and PERMISSIONS_APPLY, before [deny] patterns), with hit.bash set and hit.part t
 shell.writes() reads in the line (redirections, tee, the destination of cp/mv/ln/install/rsync/ditto/scp and the
 sources of mv, sed -i, gsed -i, perl -i, rm, rmdir, unlink, truncate, touch, shred, chmod, chown, chgrp, chflags, dd
 of=, curl -o, wget -O, a find that deletes), behind the wrappers runs() skips, and in what the line runs nested (sh -c,
-eval, $(…), xargs, find -exec, a heredoc or a printer piped into a shell; not ssh's). A target is expanded (`~` when
+eval, $(…), xargs, find -exec, a heredoc or a printer piped into a shell; not ssh's), and the files the code of an
+interpreter (python -c, node -e, a heredoc to perl…) may write (_code_writes: Python that passes pyscript's gate by
+what it writes, other code by its quoted literals when it has a word that writes). A target is expanded (`~` when
 unquoted, $HOME and the line's own literal assignments) and joined to each folder the segment may run in
 (gitpush.folders: the ctx's cwd, else the process's, and the line's cd and pushd), then compared as check_file does,
 also as the link itself (rm, mv, ln -sf change a link); a copy into a folder also as each source's name in it; a
 recursive one (rm -r, chmod -R, cp -R, rsync -a, ditto, the source of mv) also when a reserved file or folder lies
 under it. A target still not known (an expansion, a glob, a folder the line cannot name) is reserved only when its
 text names a reserved path (_names); a text the lexer cannot read, only when it also looks like a write (WRITE_WORDS).
-A failure of the rule denies only such a text. Not seen: a program that writes the file itself (python -c, a script),
-git checkout or restore in the main checkout (an agent's: MAIN_CHECKOUT above), an archive unpacked over it, `find …
--exec rm {}` below a folder that is not itself reserved, a variable from outside the line or set by a loop.
+A failure of the rule denies only such a text. Not seen: a script file that writes it (python x.py), code piped into
+an interpreter (`echo … | python3`), git checkout or restore in the main checkout (an agent's: MAIN_CHECKOUT
+above), an archive unpacked over it, `find … -exec rm {}` below a folder that is not itself reserved, a variable
+from outside the line or set by a loop.
 The owner's one-off yes: a call of the main thread (no agent_id) of any session of the product that writes
 a file of ONCE_KINDS (claude, registry) passes when grants.json holds the owner's one-use yes for that very call
 (grants.take_once: the ctx's session and tool_use_id, and the same real path, or the same command for Bash), which it
@@ -224,6 +228,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 from . import gitdir, gitpush, pyscript
 from .shell import (
     ASSIGN,
+    CODE_OPTS,
     RAW_INTERPRETERS,
     Tok,
     Unparsed,
@@ -393,9 +398,9 @@ def _where(w: Sequence[Tok], prog: int) -> str:
 def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequence[Tok]], k: int) -> str | None:
     """What is compared of segs[k] when it is python reading its program from one heredoc that passes pyscript's
     gate: the program with its prose blanked. None (compared raw) when the delimiter is not quoted and the body holds
-    an expansion or an escape, the line writes somewhere that is not a plain file (written()), it writes a module an
-    allowed import would load instead (re.py), or another segment may run a file the program may write (one of its
-    one-word literals, or a file the line writes: may_run())."""
+    an expansion or an escape, the line writes somewhere that is not a plain file (written()), the program writes a
+    file it cannot name (pyscript.writes()) or one an allowed import may load instead (re.py, a folder difflib/), or
+    another segment may run a file the program or the line writes (may_run())."""
     seg, r = segs[k], info[k]
     if r.strings or r.cmds or not pyscript.program(words_of[k], r.prog):
         return None
@@ -409,12 +414,12 @@ def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequen
         return None
     got = pyscript.read(body)
     files = written(segs, info) if got else None
-    if got is None or files is None:
+    if got is None or got.writes is None or files is None:
         return None
-    text, lits = got
-    names = {PurePath(x).name or x for x in lits} | {PurePath(t.value).name or t.value for t in files}
-    if any(n.endswith(".py") and n[:-3] in pyscript.ALLOWED_MODULES for n in names):
+    paths = [*got.writes, *(str(t.value) for t in files)]
+    if any(p.removesuffix(".py") in pyscript.ALLOWED_MODULES for x in paths for p in PurePath(x).parts):
         return None
+    names = {PurePath(x).name or x for x in paths}
     if len(segs) > 1:
         rest = "\n".join(
             f"{t.raw}\n{t.value if isinstance(t.value, str) else ''}\n{t.body or ''}"
@@ -424,7 +429,7 @@ def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequen
         )
         if may_run(segs, info, {n for n in names if n in rest}, k):
             return None
-    return text
+    return got.text
 
 
 At = tuple[gitpush.Resolver, frozenset[str], gitpush.Changes]  # the resolver of a check, the folders a command
@@ -1031,6 +1036,14 @@ WRITE_WORDS = re.compile(
     r">|(^|[\s/;&|(`'\"])(cp|mv|ln|install|rsync|ditto|scp|sed|gsed|perl|rm|rmdir|unlink|truncate|touch|shred|"
     r"chmod|chown|chgrp|chflags|dd|tee|curl|wget|find)(\s|$)"
 )
+# Code of an interpreter that is not Python passing pyscript's gate (_code_writes): a call that writes, renames,
+# copies or removes a file, or an open() for writing; then each of its quoted literals may be what it writes
+CODE_WRITES = re.compile(
+    r"(?i)(write|append|rename|unlink|remove|rm|rmdir|copy|move|mkdir|truncate|symlink|link|chmod|chown|touch|"
+    r"replace|dump|save|put)\w*\s*\(|\bopen\w*\s*\([^)]*?['\"](\+?>{1,2}|[wax]\+?b?|r\+b?)['\"]"
+)
+CODE_LITERAL = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"|`([^`\n]*)`")
+MAX_LITERAL = 4096  # a longer quoted literal is not a file name
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 NOT_LITERAL = re.compile(r"[$`*?\[]")  # what is left after expanding: the path is not known, only its text
 SETTINGS_TEXT = re.compile(r"(^|/)\.claude/settings(\.local)?\.json$")
@@ -1149,6 +1162,27 @@ def _walk(
             unparsed(text)
 
 
+def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
+    """The files the code an interpreter runs (RAW_INTERPRETERS: its -c/-e word, its heredoc or here-string) may
+    write, as written: for Python that passes pyscript's gate, what it writes (pyscript.writes(); one it cannot name:
+    each of its one-word literals); for other code, each quoted literal in it when it has a word that writes
+    (CODE_WRITES)."""
+    name = PurePath(str(w[prog].value)).name if prog < len(w) and w[prog].literal else ""
+    if not RAW_INTERPRETERS.fullmatch(name):
+        return []
+    opts = (*CODE_OPTS, "-r") if name.startswith("php") else CODE_OPTS
+    codes = inputs(seg) + [str(b.value) for a, b in zip(w[prog + 1 :], w[prog + 2 :]) if a.literal and a.value in opts]
+    out: list[str] = []
+    for text in codes:
+        tree = pyscript.gate(text) if pyscript.PYTHON.fullmatch(name) else None
+        if tree is not None:
+            got = pyscript.writes(tree)
+            out += got if got is not None else pyscript.words(tree)
+        elif CODE_WRITES.search(text):
+            out += [x for m in CODE_LITERAL.finditer(text) for x in m.groups() if x and len(x) <= MAX_LITERAL]
+    return out
+
+
 def _targets(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int, out: list[_Target]) -> None:
     """Adds to out every file the line writes (shell.writes) and what the commands nested in it write (_walk), from
     the folders each may run in. Raises Unparsed for a text the lexer cannot read."""
@@ -1158,6 +1192,11 @@ def _targets(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: 
             t = wr.tok
             texts = _expand(str(t.value), t.literal, env, t.raw.startswith("~"))
             out.append(_Target(texts, here[wr.seg], wr, t.raw))
+        for k, (seg, w) in enumerate(zip(segs, words_of)):
+            for path in _code_writes(seg, w, info[k].prog):
+                tok = Tok("word", 0)
+                tok.value, tok.raw = path, path
+                out.append(_Target([path], here[k], Write(k, tok), path))
 
     def unparsed(text: str) -> None:  # read as text only
         out.append(_Target([text], frozenset(), Write(-1, Tok("word", 0)), text))

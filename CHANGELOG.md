@@ -20,7 +20,14 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   outside a repo too. The folder rule (`cd`, `-C`) and the alias expander are now one each, shared by the push and
   main-checkout rules.
 - A shell function that wraps git with `"$@"` and is called only with literal subcommands
-  (`G() { git --git-dir D "$@"; }; G grep x`) is read as those subcommands, not as a push.
+  (`G() { git --git-dir D "$@"; }; G grep x`) is read as those subcommands, not as a push. Its body is resolved with
+  the branch and git config the line leaves before each call, and what the body changes counts after it.
+- The guard no longer lets five program forms past it. A Python heredoc that reaches builtins through a module's
+  attribute (`re.enum.bltns.eval`) or a full-width `＿`, that writes a file it cannot name (`Path("difflib")
+  .with_suffix(".py")`, `Path("hs.x"[::-1])`) and then imports or runs it, or that names a path with a space in a
+  literal (`"/opt/My App/.env"`) is compared as written. Code an interpreter runs on the line (`python3 -c`,
+  `node -e`, a heredoc to `python3` or `perl`) that writes a reserved file (`foreman.toml`, the guard table) is
+  refused, for every role; reading one stays free.
 
 ### Changed
 

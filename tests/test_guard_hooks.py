@@ -797,7 +797,8 @@ class GuardNestedTest(ProjectCase):
         self.assertIsNone(pyscript.blank('a = """open\n'))
         self.assertIsNone(pyscript.read("import os\n"))
         self.assertEqual(
-            pyscript.read('import re\np = "x.sh"\nq = "a b"\n'), ('import re\np = "x.sh"\nq = ""\n', {"x.sh"})
+            pyscript.read('import re\np = "x.sh"\nq = "a b"\n'),
+            pyscript.Program('import re\np = "x.sh"\nq = ""\n', frozenset(), frozenset({"x.sh"})),
         )
         self.assertIsNotNone(pyscript.gate("x = '" + "a" * (pyscript.MAX_BODY - 10) + "'"))
         self.assertIsNone(pyscript.gate("x = '" + "a" * pyscript.MAX_BODY + "'"))
