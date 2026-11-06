@@ -330,7 +330,7 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     a.set_defaults(details=[])
     a.add_argument("--id", dest="did")
     a.add_argument("--issue")
-    a.add_argument("--title", required=True)
+    a.add_argument("--title")  # needed, but checked in run: argparse 3.9 and 3.13+ wrap a required one apart
     a.add_argument("--text", default="")
     a.add_argument("--option", action=OptionAction, default=[], help="an option (repeat it)")
     a.add_argument("--effect", action=DetailAction, help="what the --option before it changes")
@@ -577,6 +577,8 @@ def run(project: Project, args: argparse.Namespace) -> int:
         if d == "list":
             print(show_review(b, b.load(), args.json))
             return 0
+        if d == "add" and not args.title:
+            raise BacklogError("decision add needs --title")
         if d == "add" and not args.as_is:
             bad = b.decision_findings(
                 args.title, args.text, args.option, args.recommend, args.details, args.if_no_answer

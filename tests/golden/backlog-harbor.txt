@@ -709,7 +709,7 @@ $ foreman --project harbor backlog decision add --title "Do we open the north be
 [exit 2]
 --- stderr
 usage: foreman backlog decision add [-h] [--id DID] [--issue ISSUE]
-                                    --title TITLE [--text TEXT]
+                                    [--title TITLE] [--text TEXT]
                                     [--option OPTION] [--effect EFFECT]
                                     [--cost COST] [--undo {yes,hard,no}]
                                     [--if-no-answer IF_NO_ANSWER]
