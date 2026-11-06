@@ -253,11 +253,10 @@ def pending(project: Project) -> dict[str, dict[str, Any]]:
 
 
 def _same_mark(r: dict[str, Any], mark: dict[str, Any]) -> bool:
-    """Whether a request was made in the mark's session and process (a request with no process recorded, by an older
-    foreman, counts for the session alone)."""
+    """Whether a request was made in the mark's session and process (a request with no process recorded is not)."""
     if not mark.get("session") or r.get("session") != mark["session"]:
         return False
-    return "pid" not in r or (r.get("pid"), r.get("pid_start")) == (mark.get("pid"), mark.get("pid_start"))
+    return (r.get("pid"), r.get("pid_start")) == (mark.get("pid"), mark.get("pid_start"))
 
 
 class NotApproved(Exception):
