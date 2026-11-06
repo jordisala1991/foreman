@@ -18,6 +18,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
+from unittest import mock
 
 from helpers import ENTRY, ProjectCase, git, make_repo
 
@@ -661,19 +662,19 @@ class LoopNoticesTest(NoticesCase):
         self.assertNotIn("recurring_late", self.kinds())  # the loop's own task never counts
 
     def test_recurring_at_is_actionable_in_the_pass(self):
-        """A daily task at a fixed time, with a fixed clock (notes.now)."""
+        """A daily task at a fixed time, with a fixed clock (FOREMAN_NOW)."""
         self.config(extra='\n[[recurring]]\nname = "watch"\nsources = [{ heartbeat = "watch", at = "09:30" }]')
         util.write_json(self.project.state / "heartbeats.json", {"watch": "2026-10-30T09:40:00"})
-        saved = notes.now
-        try:
-            notes.now = lambda: datetime(2026, 10, 31, 9, 29)
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2026-10-31T09:29:00"}):
             self.assertNotIn("recurring_late", self.kinds())
-            notes.now = lambda: datetime(2026, 10, 31, 9, 31)
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2026-10-31T09:31:00"}):
             self.assertEqual(self.kinds()["recurring_late"], [True])
             util.write_json(self.project.state / "heartbeats.json", {"watch": "2026-10-31T09:35:00"})
             self.assertNotIn("recurring_late", self.kinds())
-        finally:
-            notes.now = saved
+
+    def test_beat_writes_the_clock_of_foreman_now(self):
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2020-05-06T07:08:09"}):
+            self.assertEqual(notes.beat(self.project, "x"), "2020-05-06T07:08:09")
 
     def test_inbox(self):
         self.assertNotIn("inbox", self.kinds())
