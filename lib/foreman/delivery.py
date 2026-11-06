@@ -257,7 +257,7 @@ def branch_kind(project: Project, branch: str, data: Data | None = None, agents:
 
     if data is None:
         data = load_backlog(project)
-    subs = [s for _, i, _ in Backlog.iter_issues(data) for s in i["subs"] if s.get("branch") == branch] if data else []
+    subs = [s for _, s in Backlog.subs_of_branch(data, branch)] if data else []
     if not subs:
         return "measure" if kind_of(project, branch=branch, agents=agents) == "measure" else "code"
     open_ = [s for s in subs if s.get("status") not in SUB_CLOSED]
@@ -275,12 +275,12 @@ def measures(project: Project, aid: str | None, h: Agent, branch: str) -> bool:
         return True
     data = load_backlog(project)
     if data is not None:
-        from .backlog import Backlog
+        from .backlog import Backlog, on_branch
 
         for _, i, _ in Backlog.iter_issues(data):
             for s in i["subs"]:
                 by_launch = h.get("issue") and h.get("sub") and (i["id"], s["id"]) == (h["issue"], h["sub"])
-                by_name = h.get("name") and s.get("agent") == h["name"] and s.get("branch") == branch
+                by_name = h.get("name") and s.get("agent") == h["name"] and on_branch(s, branch)
                 if (by_launch or by_name) and s.get("kind") == "measure":
                     return True
     return branch_kind(project, branch, data) == "measure"
@@ -437,13 +437,10 @@ def sub_reports(project: Project, branch: str, data: Data | None) -> tuple[list[
             return [], []
     reports: list[str] = []
     keys: list[str] = []
-    for _, i, _ in b.iter_issues(data, archived=False):
-        for s in i.get("subs") or []:
-            if s.get("branch") != branch:
-                continue
-            keys += [k for k in (i.get("id"), s.get("agent")) if k]
-            if s.get("report") and s["report"] not in reports:
-                reports.append(s["report"])
+    for i, s in b.subs_of_branch(data, branch, archived=False):
+        keys += [k for k in (i.get("id"), s.get("agent")) if k]
+        if s.get("report") and s["report"] not in reports:
+            reports.append(s["report"])
     return reports, keys
 
 

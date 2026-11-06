@@ -243,7 +243,7 @@ class DecisionFieldsTest(ProjectCase):
             self.assert_refused(self.add("--option", "a", "--page", page), "--page ")
         self.assert_refused(
             self.cli("backlog", "decision", "resolve", "AB-1 J1", "--option", "a", "--effect", "x"),
-            "--effect go with decision add",
+            "unrecognized arguments: --effect x",
         )
 
     def test_plain_checks_the_new_texts(self):

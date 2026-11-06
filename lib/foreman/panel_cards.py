@@ -217,7 +217,7 @@ def backlog_cards(project: Project) -> Cards:
                     for k, v in (
                         ("claim", h.get("claim")),
                         ("criterion", h.get("criterion")),
-                        ("verdict", b.verdict_label(data, i)),
+                        ("verdict", b.verdict_label(i)),
                         ("aliases", h.get("aliases")),
                     )
                     if v

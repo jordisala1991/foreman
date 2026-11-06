@@ -407,7 +407,7 @@ class GateTest(IntegrateCase):
 
     def test_bad_verdict_merges_nothing(self):
         with self.b.mutate() as d:
-            self.b.set_outcome(d, self.b.issue(d, "AB-1"), criterion="the feature works")
+            self.b.set_outcome(self.b.issue(d, "AB-1"), criterion="the feature works")
         wt = self.worktree()
         r = self.integrate(
             "app", "ab1", "AB-1", "--title", "t", "--body", "b", "--result", "ok", "--verdict", "met: it works"
@@ -941,7 +941,7 @@ class LocalIntegrateTest(LocalIntegrateCase):
 
     def test_bad_verdict_merges_nothing(self):
         with self.b.mutate() as d:
-            self.b.set_outcome(d, self.b.issue(d, "AB-1"), criterion="the feature works")
+            self.b.set_outcome(self.b.issue(d, "AB-1"), criterion="the feature works")
         wt = self.worktree()
         before = self.head()
         backlog = (self.home / "backlog.json").read_text()

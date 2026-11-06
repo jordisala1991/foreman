@@ -708,19 +708,17 @@ decision DEC J3
 $ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --effect "boats can moor after dusk" --option yes
 [exit 2]
 --- stderr
-usage: foreman backlog decision [-h] [--id DID] [--issue ISSUE]
-                                [--title TITLE] [--text TEXT]
-                                [--option OPTION] [--effect EFFECT]
-                                [--cost COST] [--undo {yes,hard,no}]
-                                [--if-no-answer IF_NO_ANSWER]
-                                [--answer-by ANSWER_BY] [--page PAGE]
-                                [--recommend RECOMMEND]
-                                [--recommend-option RECOMMEND_OPTION]
-                                [--date DATE] [--answer ANSWER] [--by BY]
-                                [--as-is] [--free] [--json]
-                                [--blocks REF [REF ...]] [--none]
-                                {add,resolve,blocks,list} [id] [refs ...]
-foreman backlog decision: error: --effect goes after the --option it describes
+usage: foreman backlog decision add [-h] [--id DID] [--issue ISSUE]
+                                    --title TITLE [--text TEXT]
+                                    [--option OPTION] [--effect EFFECT]
+                                    [--cost COST] [--undo {yes,hard,no}]
+                                    [--if-no-answer IF_NO_ANSWER]
+                                    [--answer-by ANSWER_BY] [--page PAGE]
+                                    [--recommend RECOMMEND]
+                                    [--recommend-option RECOMMEND_OPTION]
+                                    [--date DATE] [--as-is]
+                                    [--blocks REF [REF ...]]
+foreman backlog decision add: error: --effect goes after the --option it describes
 $ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --page ../x.md
 [exit 2]
 --- stderr

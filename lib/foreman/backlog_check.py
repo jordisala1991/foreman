@@ -13,6 +13,7 @@ from .backlog import (
     EXTRA_ISSUE_KEYS,
     ISSUE_KEYS,
     ISSUE_STATUSES,
+    OUTCOME,
     OUTCOME_KEYS,
     PRIORITIES,
     PROJECT_KEYS,
@@ -76,7 +77,7 @@ def validate(b: Backlog, data: Data, files: bool = True) -> list[str]:
                 f"{where}: bad status {i.get('status')!r} ({', '.join(ISSUE_STATUSES)}): "
                 f"foreman backlog status {i.get('id')} STATUS sets one"
             )
-        err += unknown_keys(where, i, ISSUE_KEYS + EXTRA_ISSUE_KEYS + ("acceptance",))
+        err += unknown_keys(where, i, ISSUE_KEYS + EXTRA_ISSUE_KEYS + (OUTCOME,))
         if arch and i.get("status") not in CLOSED:
             err.append(f"{where}: archived but {i.get('status')}")
         if not i.get("title", "").strip():
@@ -263,19 +264,18 @@ def validate_issue_fields(b: Backlog, ids: set[str], pid: str, i: Issue, where: 
 def validate_outcome(b: Backlog, data: Data, i: Issue, where: str, archived: bool) -> list[str]:
     """The outcome block, the result and the closing date of one issue."""
     err = []
-    ok = "acceptance"
     if b.is_legacy(i["id"]) and not archived:
         err.append(f"{where}: a legacy id is only valid in the archive")
-    h = i.get(ok)
+    h = i.get(OUTCOME)
     if h is not None:
         if not isinstance(h, dict) or set(h) - set(OUTCOME_KEYS):
-            err.append(f"{where}: bad {ok} block (keys: {', '.join(OUTCOME_KEYS)})")
+            err.append(f"{where}: bad {OUTCOME} block (keys: {', '.join(OUTCOME_KEYS)})")
             return err
         if not h.get("criterion", "").strip():
-            err.append(f"{where}: {ok} without criterion")
+            err.append(f"{where}: {OUTCOME} without criterion")
         for field in ("claim", "criterion"):
             if "\n" in h.get(field, ""):
-                err.append(f"{where}: line break in {ok} {field}")
+                err.append(f"{where}: line break in {OUTCOME} {field}")
         if h.get("verdict") and h["verdict"] not in b.verdicts:
             err.append(f"{where}: bad verdict {h['verdict']!r} ({', '.join(b.verdicts)})")
         for a in h.get("aliases", []):
@@ -304,7 +304,7 @@ def validate_aliases(b: Backlog, data: Data) -> list[str]:
     seen, err = {}, []
     for _, i, _ in b.iter_issues(data):
         names = [i["id"]] if b.is_legacy(i["id"]) else []
-        for a in names + list((i.get("acceptance") or {}).get("aliases", [])):
+        for a in names + list((i.get(OUTCOME) or {}).get("aliases", [])):
             if a in seen:
                 err.append(f"alias {a} in {seen[a]} and {i['id']}")
             seen[a] = i["id"]

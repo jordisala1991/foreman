@@ -639,19 +639,17 @@ decision DEC J3
 $ foreman --project faro backlog decision add --title "¿Encendemos el faro norte de noche?" --effect "los barcos lo ven de noche" --option sí
 [exit 2]
 --- stderr
-usage: foreman backlog decision [-h] [--id DID] [--issue ISSUE]
-                                [--title TITLE] [--text TEXT]
-                                [--option OPTION] [--effect EFFECT]
-                                [--cost COST] [--undo {yes,hard,no}]
-                                [--if-no-answer IF_NO_ANSWER]
-                                [--answer-by ANSWER_BY] [--page PAGE]
-                                [--recommend RECOMMEND]
-                                [--recommend-option RECOMMEND_OPTION]
-                                [--date DATE] [--answer ANSWER] [--by BY]
-                                [--as-is] [--free] [--json]
-                                [--blocks REF [REF ...]] [--none]
-                                {add,resolve,blocks,list} [id] [refs ...]
-foreman backlog decision: error: --effect goes after the --option it describes
+usage: foreman backlog decision add [-h] [--id DID] [--issue ISSUE]
+                                    --title TITLE [--text TEXT]
+                                    [--option OPTION] [--effect EFFECT]
+                                    [--cost COST] [--undo {yes,hard,no}]
+                                    [--if-no-answer IF_NO_ANSWER]
+                                    [--answer-by ANSWER_BY] [--page PAGE]
+                                    [--recommend RECOMMEND]
+                                    [--recommend-option RECOMMEND_OPTION]
+                                    [--date DATE] [--as-is]
+                                    [--blocks REF [REF ...]]
+foreman backlog decision add: error: --effect goes after the --option it describes
 $ foreman --project faro backlog decision add --title "¿Encendemos el faro norte de noche?" --option sí --page ../x.md
 [exit 2]
 --- stderr

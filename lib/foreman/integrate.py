@@ -111,7 +111,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from . import backlog_text, commands, config, delivery, guard, holdout, i18n, notes, permissions, plain, review, util
-from .backlog import Backlog, BacklogError
+from .backlog import Backlog, BacklogError, on_branch
 from .worktree import worktrees
 
 if TYPE_CHECKING:
@@ -240,7 +240,7 @@ class Integration:
         except (BacklogError, OSError, ValueError):
             data, subs = None, []
         reports, _ = delivery.sub_reports(self.p, self.branch, data)
-        mine = [s for s in subs if s.get("branch", "").strip("`") == self.branch]
+        mine = [s for s in subs if on_branch(s, self.branch)]
         if not (self.sub or mine):  # no sub-issue to close: the backlog close would refuse a report
             return None
         agent = next((s.get("agent") for s in mine), None)
@@ -450,7 +450,7 @@ class Integration:
         if issue["subs"]:
             self.out(f"== sub-issues of {self.issue}: {backlog_text.render_subs(self.backlog, issue['subs'])}")
         self.show_hidden()
-        agent = next((x.get("agent") for x in issue["subs"] if x.get("branch") == self.branch), None)
+        agent = next((x.get("agent") for x in issue["subs"] if on_branch(x, self.branch)), None)
         outcome = self.outcome = delivery.outcome_of(self.p, branch=self.branch, name=agent)
         if outcome:
             note = {
@@ -1218,7 +1218,7 @@ class Integration:
         sids = [x for x in (self.sub or "").split(",") if x]
         if sids:
             return [s for s in subs if s["id"] in sids]
-        return [s for s in subs if s.get("branch", "").strip("`") == self.branch]
+        return [s for s in subs if on_branch(s, self.branch)]
 
     def refuse_measure_as_code(self) -> None:
         """Case h: a merge of sub-issues that are all `kind = "measure"` stops (exit 2), so a measurement branch's lab
