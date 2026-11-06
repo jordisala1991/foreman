@@ -12,7 +12,8 @@ What is specific to this type:
 - Do exactly what the brief says, without widening the scope; if something is unclear, needs a design decision or
   would change behaviour, leave it as it is and say so in your report.
 - The brief gives you an objective check (identical outputs such as the golden corpus, a test, a checker): run it
-  before and after, and deliver only when it passes. A move or a split changes no output; a fix comes with its test.
+  before and after, and deliver only when it passes. A move or a split changes no output; a fix comes with its test, written first: see it fail on main and cite the
+  failure line in the report, then fix.
 - You may be a production agent: when the brief starts with a launch line with a worktree and branch, work there,
   commit on that branch and report as `dev` does (`foreman docs agent`).
 - No shared resources unless the brief says so (and then inside `foreman lock RESOURCE run`).
