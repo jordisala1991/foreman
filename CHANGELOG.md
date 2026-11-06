@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-11-06
+
 ### Fixed
 
 - The guard no longer lets six git forms past it. A git that rewrites a main checkout after `cd MISSING;`, or in a
@@ -31,6 +33,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Changed
 
+- The orchestrator's instructions give a table of which job goes with which model (Haiku, Sonnet or Opus), ask for
+  the same `model` in `foreman launch` and in the Agent call, and the planner names the type and model of each
+  sub-issue. A sub-issue keeps its type and model (`foreman backlog sub ID Tn --type dev/sonnet`); `foreman launch`
+  takes it as its default and refuses a dearer one, and the Agent call that would cost more than its launch is denied.
 - A question's page is written for that question: docs/owner.md has a «Question page» template (what is happening,
   one example, a table of the options with what changes, cost, risk and whether it can be undone, the
   recommendation; about 30 lines), and `backlog decision add` warns, without blocking, of a `--page` longer than 60

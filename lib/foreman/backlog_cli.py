@@ -155,7 +155,8 @@ USAGE = """\
                                      duplicate; idea = triage, todo = ready) or
                                      sub-issue status (todo "in progress" done canceled moved unknown, or ▶ ✓ ✗ → ?)
   sub ID Tn [--title T] [--text T] [--status S] [--commit C] [--agent A] [--branch B] [--moved-to ID]
-            [--report PATH] [--kind measure|code] [--before Tm] [--remove]
+            [--report PATH] [--type T[/M]] [--kind measure|code] [--before Tm] [--remove]
+                                     --type: the agent type and model it is for (dev/sonnet): launch uses it
                                      --kind measure: a part that only measures (no code for main); code clears it
   edit ID [--title T] [--detail T] [--append T] [--prepend T] [--plan [LABEL=]PATH ...] [--claim T]
           [--criterion T] [--verdict V] [--result R] [--github owner/repo#n] [--short T]
@@ -237,7 +238,7 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     a = bp.add_parser("sub")
     a.add_argument("id")
     a.add_argument("sid")
-    for f in ("title", "text", "status", "commit", "agent", "branch", "moved-to", "report", "before"):
+    for f in ("title", "text", "status", "commit", "agent", "branch", "moved-to", "report", "before", "type"):
         a.add_argument(f"--{f}")
     a.add_argument("--kind", choices=("measure", "code"))
     a.add_argument("--remove", action="store_true")

@@ -201,6 +201,7 @@
   "pause_line": "PAUSED from the panel (since {since}): do not launch production agents or integrate (foreman worktree and foreman integrate are blocked) until {owner} resumes it there; answer the inbox, keep notes and let live agents finish.",
   "pause_guard": "Blocked by the foreman guard: {project} is paused from the panel (since {since}); `foreman {what}` waits until {owner} resumes it there.",
   "pause_agents": "Blocked by foreman: {project} is paused from the panel (since {since}); no production agent ({type}) is launched until {owner} resumes it there. Other agent types (planning, exploration) may run.",
+  "launch_dearer": "Blocked by foreman: the plan of this sub-issue says {plan}, and this call would cost more. Call the agent again as subagent_type \"{type}\" with model \"{model}\", or change the plan first (foreman backlog sub ID Tn --type TYPE/MODEL) and say why in a note.",
   "loop_idle": "Loop pass {time}: nothing to do (skipped without calling the model).",
   "loop_idle_info": "For information: {items}",
   "band_late": "pass late since {time}",

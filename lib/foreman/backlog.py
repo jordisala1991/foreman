@@ -82,7 +82,8 @@ SUB_ID = re.compile(r"^[A-Z]\d+[a-z0-9]*(?:[+–-][A-Z]?\d+[a-z0-9]*)*$")
 ISSUE_KEYS = ("id", "title", "status", "blocked", "plan", "subs", "detail")
 OUTCOME = "acceptance"  # the key of an issue's outcome block (OUTCOME_KEYS)
 OUTCOME_KEYS = ("claim", "criterion", "verdict", "aliases")
-SUB_KEYS = ("id", "title", "status", "commit", "agent", "branch", "moved_to", "text", "report", "kind")
+SUB_KEYS = ("id", "title", "status", "commit", "agent", "branch", "moved_to", "text", "report", "kind", "type")
+SUB_TYPE = re.compile(r"^[\w:.-]+(?:/(?:haiku|sonnet|opus|fable))?$")  # TYPE[/MODEL]: the agent a sub-issue is for
 SUB_KINDS = ("measure",)  # the kinds a sub-issue stores; none is code (`--kind code` clears it)
 DECISION_KEYS = (
     "id",
@@ -148,7 +149,8 @@ SCHEMA = """
                  "short"?: "two to four words for the orchestrator's band (else the title, trimmed)",
                  "plan": [{"label": "plan", "path": "reviews/...md", "note": ""}],
                  "subs": [{"id": "T0", "title"?, "status": SUB_STATUSES, "commit"?, "agent"?, "branch"?,
-                           "moved_to"?, "text"?, "report"?, "kind"?: "measure" (no code for main; absent = code)}],
+                           "moved_to"?, "text"?, "report"?, "type"?: "TYPE[/MODEL]" (agent type and model it is for),
+                           "kind"?: "measure" (no code for main; absent = code)}],
                  "detail": "markdown",
                  "acceptance"?: {"claim"?, "criterion", "verdict"?, "aliases"?},
                  "result"?: "one line", "closed"?: "YYYY-MM-DD", "github"?: "owner/repo#n",
@@ -872,6 +874,8 @@ class Backlog:
                 continue
             if key == "status":
                 s["status"] = norm_sub_status(v)
+            elif key == "type" and v and not SUB_TYPE.match(v):
+                raise BacklogError(f"bad sub-issue type {v!r} (TYPE or TYPE/haiku|sonnet|opus|fable)")
             elif key == "kind":
                 if v in ("", "code"):
                     s.pop("kind", None)

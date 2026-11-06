@@ -284,27 +284,29 @@ def launch_backlog(
     branch: str | None,
     check_only: bool = False,
     kind: str | None = None,
-) -> None:
+) -> str | None:
     """`launch --issue/--sub`: the sub-issue ▶ with agent and branch (and `kind`, from --kind), the issue in
-    progress. check_only: only that the issue and the sub-issue exist (before anything is made). Raises
-    backlog.BacklogError."""
+    progress. check_only: only that the issue and the sub-issue exist (before anything is made); returns the
+    sub-issue's `type` (TYPE[/MODEL]) if it has one. Raises backlog.BacklogError."""
     from . import backlog
 
     b = backlog.Backlog(p)
     if check_only:
         data = b.load()
         i = b.issue(data, b.resolve(data, issue))
-        if sub and backlog.find_sub(i, sub) is None:
+        k = backlog.find_sub(i, sub) if sub else None
+        if sub and k is None:
             raise backlog.BacklogError(
                 f"{i['id']} has no sub-issue {sub} (foreman backlog sub {i['id']} {sub} --title …)"
             )
-        return
+        return i["subs"][k].get("type") if k is not None else None
     with b.mutate() as data:
         iid = b.resolve(data, issue)
         if sub:
             b.set_sub(data, iid, sub, status="▶", agent=name, branch=branch, kind=kind)
         if b.issue(data, iid).get("status") not in ("in progress", *backlog.CLOSED):
             b.set_status(data, iid, "in progress")
+    return None
 
 
 def launch_holds(p: Project, issue: str, sub: str | None) -> tuple[list[dict[str, Any]], str]:
@@ -388,11 +390,23 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
     if taken:
         return fail(f"{taken}: choose another name")
     update = bool(args.issue) and not args.no_backlog and backlog.Backlog(p).exists()
+    planned = None
     if update:
         try:
-            launch_backlog(p, args.issue, args.sub, args.name, args.branch, check_only=True)
+            planned = launch_backlog(p, args.issue, args.sub, args.name, args.branch, check_only=True)
         except backlog.BacklogError as e:
             return fail(f"{e} (or --no-backlog)")
+    if planned:  # the sub-issue's type and model are the defaults; a dearer one is refused
+        ptype, pmodel = identity.split_type(planned)
+        args.agent_type = args.agent_type or ptype
+        args.model = args.model or (pmodel if args.agent_type == ptype else None)
+        if identity.price_rank(args.agent_type, args.model) > identity.price_rank(ptype, pmodel):
+            return fail(
+                f"{args.agent_type}/{args.model or 'inherit'} costs more than the plan's {planned} for "
+                f"{args.issue} {args.sub}: launch it as planned, or change the plan first "
+                f"(foreman backlog sub {args.issue} {args.sub} --type {args.agent_type}/{args.model or 'opus'}) "
+                "and say why in a note"
+            )
     despite = [" ".join(x.split()) for x in args.despite or []]
     why = " ".join((args.why or "").split())
     if args.why is not None and not despite:
@@ -433,6 +447,7 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         model=args.model,
         despite=[{"decision": d["id"], "why": why} for d in held],
         review=args.review is not None,
+        planned=planned,
     )
     if update:
         try:
