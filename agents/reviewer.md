@@ -105,9 +105,10 @@ then this review is yours. The brief gives the models and the day of the previou
    (`foreman permissions --refused --since D`). Then the texts the agents read: agents/*.md, docs/agent.md,
    docs/orchestrator.md, skills/*, the project's rules file and the briefs the evidence cites.
 2. **Each piece** (a rule, a step, a message of foreman) the evidence touches, or that you suspect a newer model no
-   longer needs: **keep, rewrite, remove or measure**, with its evidence (the `Misled:` lines that cite it, 0 cases
-   seen, a refusal). A removal says how it will be measured: the next N deliveries, by their `Misled:` lines and
-   refusals.
+   longer needs: **keep, rewrite, remove, measure or replace with an automatic check** (a test, a guard row, a
+   `foreman check` item: «Tool before rule», docs/orchestrator.md), with its evidence (the `Misled:` lines that cite
+   it, 0 cases seen, a refusal). A removal says how it will be measured: the next N deliveries, by their `Misled:`
+   lines and refusals; a replacement ends as a code sub-issue, and the rule goes when the check lands.
 3. **Who decides:** the project's rules are the owner's: their changes go in one list, written for one question to
    him. foreman's own texts (agents/, docs/, skills/, its messages) are the orchestrator's: fix sub-issues as in any
    review; from a project that is not foreman's own repository, list them apart as proposals for it.
