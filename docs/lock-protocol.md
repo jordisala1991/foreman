@@ -10,7 +10,7 @@ script.
 | File | Meaning |
 |---|---|
 | `held/` (or `held-<slot>/` per slot) | the lock: `mkdir` is the atomic take. `owner` = `who: what (YYYY-MM-DD HH:MM:SS, pid N)`; `meta` = `requested|taken|waits|what`; `slot` with slots |
-| `queue/<epoch>.<micro>-<7-digit pid>` | one ticket per waiter, `who|time|pid|what|short`; sorted by name = arrival order (to the microsecond; an older script named it `<epoch>-<pid>`, which sorts first within its second); tickets of dead pids are deleted when looked at |
+| `queue/<epoch>.<micro>-<7-digit pid>` | one ticket per waiter, `who|time|pid|what|short`; sorted by name = arrival order (to the microsecond); tickets of dead pids are deleted when looked at |
 | `next` | explicit turn: if it exists and does not contain your name you wait without losing your place; deleted when its owner takes the lock |
 | `jumped` | a short job just jumped the queue: the next short one waits for a normal job |
 | `uses.jsonl` | one JSON line per use: `requested, event (use, timeout, short-long), who, what, taken, released, rc, waits[, slot]`; rotated at 14 days |
@@ -20,8 +20,8 @@ folder (`.owner.<pid>`, `.<ticket>.<pid>`) renamed over it, so a reader sees no 
 take are, in order: `mkdir`, `slot`, `owner`, the ticket removed, the wait for `busy`, `meta`. So a reader may see,
 for an instant, a lock taken without `owner` (lock.status: holder `?`, `taking` "writing"; "stuck" if the folder is
 older than 60 s: the taker died there) or the holder with its ticket still in the queue (left out of the queue: same
-pid). An older script wrote `owner` and the ticket in two steps (empty first): an empty `owner` reads as being taken,
-an empty ticket is left out until it has its line.
+pid). An empty `owner` (between `mkdir` and its write) reads as being taken, and an empty ticket is left out until it
+has its line.
 
 The keys that define a lock (paths, `busy`, `busy_wait`, `short_max`, `slots`) come from the registry when the
 resource is a machine resource (`[resources.NAME]` in `~/.config/foreman/projects.toml`, docs/config.md), so every
