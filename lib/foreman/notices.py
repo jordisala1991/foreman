@@ -178,28 +178,15 @@ def run_checks(project: Project) -> list[Notice]:
     says its kind and whether it is actionable; a plain line is an actionable `check`). A check that times out or
     ends with a code other than 0 or 1 is `check_failed`, actionable."""
     out: list[Notice] = []
-    for cmd in project.section("loop").get("checks", []):
-        r = commands.run("loop.checks", cmd, project=project, cwd=project.home)
-        if r.timed_out:
-            out.append(
-                notice(
-                    "check_failed",
-                    True,
-                    f"check `{cmd}` timed out ({commands.POINTS['loop.checks'].timeout:g} s)",
-                    f"check_failed:{cmd}",
-                )
-            )
-            continue
-        out += [check_notice(cmd, ln) for ln in r.stdout.splitlines() if ln.strip()]
-        if r.rc not in (0, 1):
-            out.append(
-                notice(
-                    "check_failed",
-                    True,
-                    f"check `{cmd}` failed (rc {r.rc}): {r.stderr.strip()[:200]}",
-                    f"check_failed:{cmd}",
-                )
-            )
+    for run in try_checks(project):
+        out += [n for n, _ in run["lines"]]
+        if run["failed"]:
+            why = "timed out" if run["rc"] is None else f"failed (rc {run['rc']})"
+            if run["rc"] is None:
+                why += f" ({commands.POINTS['loop.checks'].timeout:g} s)"
+            else:
+                why += f": {run['stderr'].strip()[:200]}"
+            out.append(notice("check_failed", True, f"check `{run['cmd']}` {why}", f"check_failed:{run['cmd']}"))
     return out
 
 
