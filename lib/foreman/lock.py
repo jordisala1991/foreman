@@ -159,8 +159,8 @@ def status(name: str, res: Table | None = None) -> Status:
     `run`; False for a dead `run` or any `acquire`; None if the owner line gives no pid (one written by hand or by
     an older script).
 
-    A lock directory whose owner line is not there (being taken, or being released; or empty: an older lock.sh wrote
-    it in two steps) is a holder `?` with `taking` "writing" while the directory is younger than WRITING_S, "stuck"
+    A lock directory whose owner line is not there (being taken, or being released; or empty, between `mkdir` and
+    the write) is a holder `?` with `taking` "writing" while the directory is younger than WRITING_S, "stuck"
     after that; every complete
     holder has `taking` None. A ticket of a holder's own pid is not in the queue (the taker removes it right after
     writing `owner`), nor is an empty one (still being written) or a dot-file (lock.sh's temporary)."""
