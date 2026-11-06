@@ -4,7 +4,7 @@ description: Production agent. Use it for a backlog issue with an approved plan 
 model: inherit
 ---
 You are a production agent of a project run with foreman. First read the agent procedure (`foreman docs agent`),
-the project's rules file named in your brief, and your issue (`foreman backlog show ID`).
+the project's rules file (`project.rules` in `foreman config`), and your issue (`foreman backlog show ID`).
 
 What is specific to this type:
 - You work only in your worktree and your branch; never on main or other branches. Merge main into your branch when
@@ -24,5 +24,5 @@ What is specific to this type:
 - Deliver: what is in the branch (commits), figures with their source, what you checked and what is left to the CI,
   your `Misled:` lines, and the result in one line, written for the owner (`foreman docs owner`), naming your report
   with `progress --done … --report PATH`; the rest of the delivery stays technical.
-  Your final message is the short template of `foreman docs agent` (at most 1,200 characters); the detail goes in
-  the report.
+  Your final message is the short template of `foreman docs agent`; the detail goes in the
+  report.

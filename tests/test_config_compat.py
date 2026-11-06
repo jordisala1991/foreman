@@ -230,7 +230,13 @@ class ConfigCompatTest(ProjectCase):
         added without bumping the schema (or a schema without its list) fails here."""
         rec = json.loads((ROOT / "tests/config_schema.json").read_text())
         schemas = sorted(int(k) for k in rec if k.isdigit())
-        self.assertEqual(schemas[-1], config.CONFIG_SCHEMA, "bump CONFIG_SCHEMA and record its keys together")
+        self.assertEqual(
+            schemas[-1],
+            config.CONFIG_SCHEMA,
+            "CONFIG_SCHEMA and the newest list of tests/config_schema.json must agree: "
+            "if the newest schema is not released yet (CHANGELOG Unreleased), add your keys to its list; "
+            "else bump CONFIG_SCHEMA and add a new list",
+        )
         keys = sorted(
             [f"{s}.{k}" for s, d in config.DEFAULTS.items() for k in d]
             + ["project.name"]
@@ -242,8 +248,9 @@ class ConfigCompatTest(ProjectCase):
         self.assertEqual(
             keys,
             rec[str(config.CONFIG_SCHEMA)],
-            "the keys of foreman.toml changed: bump config.CONFIG_SCHEMA and add the new list to "
-            "tests/config_schema.json (and a line in docs/config.md)",
+            "the keys of foreman.toml changed: "
+            "if the newest schema is not released yet (CHANGELOG Unreleased), add your keys to its list; "
+            "else bump CONFIG_SCHEMA and add a new list (in tests/config_schema.json, and a line in docs/config.md)",
         )
         for a, b in zip(schemas, schemas[1:]):
             self.assertEqual(b, a + 1)

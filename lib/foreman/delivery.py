@@ -745,18 +745,35 @@ def outcome_of(project: Project, branch: str | None = None, name: str | None = N
 
 # ---------- the fixed lines of a report ----------
 
-LINE_RE = r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?({keys})(?:\*\*)?:(?:\*\*)?[ \t]*(\S.*?)[ \t]*$"
+LINE_RE = r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?({keys})(?:\*\*)?:(?:\*\*)?[ \t]*(\S.*?)?[ \t]*$"
 
 
 def report_lines(text: str, keys: Iterable[str] = REPORT_LINES) -> dict[str, list[str]]:
     """{key: [the text of each `Key: text` line]} of a report, for every key (REPORT_LINES by default): a line that
     starts with the key and a colon (a list dash and bold around the key are let through) and has text after it.
+    The lines that follow it (reports are wrapped at 120 columns) are joined to it with a space, up to a blank line,
+    a line of a key or one that starts with `#`, `-`, `*` or `|`.
     The one reading of every fixed line of a report: the delivery check and `foreman agents --misled`."""
     keys = list(keys)
     out: dict[str, list[str]] = {k: [] for k in keys}
-    if keys:
-        for m in re.finditer(LINE_RE.format(keys="|".join(map(re.escape, keys))), text, re.M):
-            out[m.group(1)].append(m.group(2))
+    if not keys:
+        return out
+    key_line = re.compile(LINE_RE.format(keys="|".join(map(re.escape, keys))))
+    open_: list[str] | None = None  # the pieces of the line being read
+    slot: list[str] = []  # where it goes
+    for line in text.splitlines():
+        m = key_line.match(line)
+        if m:
+            open_ = None
+            if m.group(2):
+                open_ = [m.group(2)]
+                out[m.group(1)].append(m.group(2))
+                slot = out[m.group(1)]
+        elif open_ is not None and line.strip() and line.lstrip()[0] not in "#-*|":
+            open_.append(line.strip())
+            slot[-1] = " ".join(open_)
+        else:
+            open_ = None
     return out
 
 
