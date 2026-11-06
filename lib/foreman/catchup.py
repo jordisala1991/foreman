@@ -151,16 +151,8 @@ class Issues:
 def progress_lines(project: Project) -> list[tuple[int, dict[str, Any], datetime]]:
     """(line number, record, time) of every readable line of progress.jsonl."""
     out = []
-    try:
-        lines = (project.state / "progress.jsonl").read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return out
-    for n, ln in enumerate(lines, 1):
-        try:
-            d = json.loads(ln)
-        except ValueError:
-            continue
-        t = timeline.when(d.get("time")) if isinstance(d, dict) else None
+    for n, d in util.read_jsonl(project.state / "progress.jsonl", numbered=True):
+        t = timeline.when(d.get("time"))
         if t:
             out.append((n, d, t))
     return out
