@@ -63,7 +63,7 @@ from . import (
 )
 from . import backlog as backlog_mod
 from .backlog import Backlog, BacklogError, Data, Holds, Issue, Record
-from .notices import Notice, changed_mark, notice, render, run_checks
+from .notices import Notice, changed_mark, notice, read_keys, render, run_checks, write_keys
 from .notices import idle as nothing_actionable
 
 if TYPE_CHECKING:
@@ -257,11 +257,7 @@ def lock_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     known = {"orchestrator", project.owner.lower(), "owner"} | {
         h["name"] for h in s.agents.values() if h.get("name") and now - (util.iso_epoch(h.get("start")) or 0) < 86400
     }
-    f = project.state / "lock-notified"
-    try:
-        seen = set(f.read_text().split("\n"))
-    except OSError:
-        seen = set()
+    seen = read_keys(project, "lock-notified")
     out: list[Notice] = []
     keys: list[str] = []
     hint = ": check it is used well (`foreman lock RESOURCE check`)."
@@ -297,8 +293,7 @@ def lock_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
                         )
                     )
     if out and mark:
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("\n".join(sorted(seen | set(keys)))[-4000:])
+        write_keys(project, "lock-notified", [k for k in seen if k not in keys] + keys, 4000)
     return out
 
 
@@ -449,6 +444,29 @@ def new_inbox(project: Project) -> list[notes.Message]:
         mark.parent.mkdir(parents=True, exist_ok=True)
         mark.write_text(str(max(m["id"] for m in new)))
     return new
+
+
+def inbox_notice(project: Project, msgs: list[notes.Message], between: bool = False) -> Notice:
+    """The `inbox` notice of unread owner messages: the pass lists their ids, between passes it keys on the newest."""
+    head = f"Inbox: {len(msgs)} unread from {project.owner}{notes.inbox_counts(msgs)}"
+    if between:
+        text = head + ": `foreman inbox new`, attend to them and mark them read."
+        return notice("inbox", True, text, f"inbox_new:{max(m['id'] for m in msgs)}")
+    ids = ", ".join(str(m["id"]) for m in msgs[-8:])
+    text = head + f" (ids {ids}): `foreman inbox new`, answer and mark them read."
+    return notice("inbox", True, text, "inbox:" + ",".join(str(m["id"]) for m in msgs))
+
+
+def stalled_notice(idle: list[str]) -> Notice:
+    """The `stalled_agents` notice (the pass and between passes say the same): `idle` is stalled()'s list."""
+    return notice(
+        "stalled_agents",
+        True,
+        "Agents idle without a lock: "
+        + ", ".join(idle)
+        + ": see whether they wait for something that already ended; wake them (SendMessage) or stop them.",
+        "stalled_agents:" + ",".join(x.split(" (")[0] for x in idle),
+    )
 
 
 def hung_shells() -> list[str]:
@@ -798,14 +816,7 @@ def agent_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
         out.append(nameless)
     idle = stalled(s)
     if idle:
-        out.append(
-            notice(
-                "stalled_agents",
-                True,
-                "Agents idle without a lock: " + ", ".join(idle) + ": wake them (SendMessage) or stop them.",
-                "stalled_agents:" + ",".join(x.split(" (")[0] for x in idle),
-            )
-        )
+        out.append(stalled_notice(idle))
     return out
 
 
@@ -1363,16 +1374,7 @@ def machine_notices(project: Project, mark: bool = True) -> list[Notice]:
         )
     unread = notes.inbox_new(project)
     if unread:
-        out.append(
-            notice(
-                "inbox",
-                True,
-                f"Inbox: {len(unread)} unread from {project.owner}{notes.inbox_counts(unread)} (ids "
-                f"{', '.join(str(m['id']) for m in unread[-8:])}): `foreman inbox new`, answer and mark them "
-                "read.",
-                "inbox:" + ",".join(str(m["id"]) for m in unread),
-            )
-        )
+        out.append(inbox_notice(project, unread))
         if mark:
             new_inbox(project)
     free_gb = shutil.disk_usage(Path.home()).free / 2**30
@@ -1393,11 +1395,7 @@ def decision_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     if s.data is None:
         return []  # backlog_unreadable says it
     due = backlog_mod.due_decisions(s.data)
-    f = project.state / "decision-due-notified"
-    try:
-        seen = set(f.read_text().split("\n"))
-    except OSError:
-        seen = set()
+    seen = read_keys(project, "decision-due-notified")
     out: list[Notice] = []
     for d in due:
         case = f"{d['id']}|{d['by']}"
@@ -1412,10 +1410,9 @@ def decision_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
                 "decision_due:" + case,
             )
         )
-        seen.add(case)
+        seen.append(case)
     if out and mark:
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("\n".join(sorted(seen))[-4000:])
+        write_keys(project, "decision-due-notified", seen, 4000)
     return out
 
 
@@ -1559,15 +1556,7 @@ def notices(project: Project, session: str | None = None, snap: Snapshot | None 
     cand: list[Notice] = []
     new = new_inbox(project)
     if new:
-        cand.append(
-            notice(
-                "inbox",
-                True,
-                f"Inbox: {len(new)} unread from {project.owner}{notes.inbox_counts(new)}"
-                + ": `foreman inbox new`, attend to them and mark them read.",
-                f"inbox_new:{max(m['id'] for m in new)}",
-            )
-        )
+        cand.append(inbox_notice(project, new, between=True))
     locks = [n for n in lock_notices(s, mark=False) if n["actionable"]]
     cand += locks
     ctx = context_notice(project, session)
@@ -1583,26 +1572,12 @@ def notices(project: Project, session: str | None = None, snap: Snapshot | None 
         cand.append(incomplete)
     quiet = stalled(s)
     if quiet:
-        cand.append(
-            notice(
-                "stalled_agents",
-                True,
-                "Agents idle without a lock: "
-                + ", ".join(quiet)
-                + ": see whether they wait for something that already ended and wake them with SendMessage.",
-                "stalled_agents:" + ",".join(x.split(" (")[0] for x in quiet),
-            )
-        )
+        cand.append(stalled_notice(quiet))
     cand = [n for n in cand if n["actionable"]]
-    f = project.state / "notices-last"
-    try:
-        last = set(f.read_text().split("\n"))
-    except OSError:
-        last = set()
-    keys = sorted({between_key(n) for n in cand})
-    if set(keys) != last - {""}:
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("\n".join(keys))
+    last = set(read_keys(project, "notices-last"))
+    keys = {between_key(n) for n in cand}
+    if keys != last:
+        write_keys(project, "notices-last", sorted(keys))
     out = merge_wip([n for n in cand if between_key(n) not in last])
     if locks:
         mark_locks(project, [n["key"] for n in out if n in locks])
@@ -1628,22 +1603,14 @@ def merge_wip(ns: list[Notice]) -> list[Notice]:
 def remember(project: Project, ns: Iterable[Notice]) -> None:
     """After a pass: its actionable keys become <state>/notices-last, so the notices between passes do not repeat
     what the pass just said (the next notices() call replaces the file with what it sees)."""
-    f = project.state / "notices-last"
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("\n".join(sorted({between_key(n) for n in ns if n["actionable"]})))
+    write_keys(project, "notices-last", sorted({between_key(n) for n in ns if n["actionable"]}))
 
 
 def mark_locks(project: Project, keys: Collection[str]) -> None:
     """Add lock cases to <state>/lock-notified (lock_notices), so that what was said between passes is not repeated."""
     if not keys:
         return
-    f = project.state / "lock-notified"
-    try:
-        seen = set(f.read_text().split("\n"))
-    except OSError:
-        seen = set()
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("\n".join(sorted(seen | set(keys)))[-4000:])
+    write_keys(project, "lock-notified", [*read_keys(project, "lock-notified"), *keys], 4000)
 
 
 def stop_agent(project: Project, aid: str) -> list[str]:
