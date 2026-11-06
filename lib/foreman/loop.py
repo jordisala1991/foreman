@@ -780,15 +780,16 @@ def ready_branches(
         if s.get("branch")
     }
     out: list[tuple[str, str, str]] = []
+    ags = agents(b.project)  # once for every branch
     for repo, br, path in wts:
         if br not in named_branches or br in live_branches or agent_of.get(br) in live_names:
             continue
         if any(identity.cites_path(heads[h["id"]], path) for h in guessed):
             continue  # a live agent with no recorded identity names its worktree
-        if delivery.branch_kind(b.project, br, data) != kind:
+        if delivery.branch_kind(b.project, br, data, ags) != kind:
             continue
         if kind == "code":
-            st = review_state(b.project, repo, br, agent_of.get(br))
+            st = review_state(b.project, repo, br, agent_of.get(br), ags)
             if st is not None and not st.passes:
                 if held is not None:
                     held.append((repo, br, path, st))
@@ -797,14 +798,16 @@ def ready_branches(
     return out
 
 
-def review_state(project: Project, repo: str, br: str, agent: str | None) -> review.State | None:
-    """review.state of a delivered branch (its outcome from its delivery); None when the repo's review is off or
-    git cannot tell (then `integrate` says it)."""
+def review_state(
+    project: Project, repo: str, br: str, agent: str | None, ags: Mapping[str, Agent] | None = None
+) -> review.State | None:
+    """review.state of a delivered branch (its outcome from its delivery; AGS: agents.json, read when None); None
+    when the repo's review is off or git cannot tell (then `integrate` says it)."""
     tab = project.repo(repo)
     if review.mode(tab) != "auto":
         return None
     try:
-        return review.state(project, tab, br, delivery.outcome_of(project, branch=br, name=agent))
+        return review.state(project, tab, br, delivery.outcome_of(project, branch=br, name=agent, agents=ags))
     except RuntimeError:
         return None
 
@@ -910,6 +913,7 @@ def report_part(project: Project, data: Data, repo: str, br: str, path: str | No
     """What `ready_line` says about a branch's report and outcome, without the parentheses ("" when nothing). With no
     worktree (`path` None) the branch is read from the repo's main checkout (git refs are shared)."""
     tab = project.repo(repo)
+    ags = agents(project)
     rep = delivery.branch_report(
         project,
         br,
@@ -917,10 +921,10 @@ def report_part(project: Project, data: Data, repo: str, br: str, path: str | No
         main=tab.get("main") or "main",
         main_path=tab.get("path"),
         data=data,
-        delivered=delivery.report_of(project, branch=br, name=agent),
-        since=delivery.started(project, br),
+        delivered=delivery.report_of(project, branch=br, name=agent, agents=ags),
+        since=delivery.started(project, br, ags),
     )
-    oc = delivery.outcome_of(project, branch=br, name=agent)
+    oc = delivery.outcome_of(project, branch=br, name=agent, agents=ags)
     oc = f"; outcome {oc}" if oc else ""
     if rep.path:
         whose = "the sub-issue's" if rep.stale_how == "sub-issue" else "the delivered"

@@ -1291,12 +1291,6 @@ class Integration:
             return [s for s in subs if s["id"] in sids]
         return [s for s in subs if s.get("branch", "").strip("`") == self.branch]
 
-    def measured(self, s: Mapping[str, Any]) -> bool:
-        """Whether a sub-issue is a measurement: `kind = "measure"`, or its agent's last delivery said `--kind
-        measure` (delivery.kind_of)."""
-        agent = s.get("agent")
-        return s.get("kind") == "measure" or bool(agent and delivery.kind_of(self.p, name=agent) == "measure")
-
     def refuse_measure_as_code(self) -> None:
         """Case h: a merge of sub-issues that are all `kind = "measure"` stops (exit 2), so a measurement branch's lab
         code never goes into main by mistake; one only the delivery called a measurement gets a warning."""
@@ -1313,7 +1307,7 @@ class Integration:
                 "code`) to merge its branch",
                 2,
             )
-        if all(self.measured(s) for s in subs):
+        if all(delivery.sub_is_measure(self.p, s) for s in subs):
             self.out(
                 f"== warning: the agent delivered {names} as a measurement (`progress --done --kind measure`): "
                 "read the report; if nothing is for main, close it with --measure instead"
@@ -1350,11 +1344,11 @@ class Integration:
         …» written and the sub-issues closed without a commit."""
         a = self.a
         subs = self.targets()
-        if subs and not all(self.measured(s) for s in subs):
-            code = ", ".join(f"{self.issue} {s['id']}" for s in subs if not self.measured(s))
+        code = [s["id"] for s in subs if not delivery.sub_is_measure(self.p, s)]
+        if code:
             raise Stop(
-                f"not a measurement ({code}): drop --measure to merge it, or mark it with `foreman backlog sub "
-                f"{self.issue} {next(s['id'] for s in subs if not self.measured(s))} --kind measure`",
+                f"not a measurement ({', '.join(f'{self.issue} {c}' for c in code)}): drop --measure to merge it, or "
+                f"mark it with `foreman backlog sub {self.issue} {code[0]} --kind measure`",
                 2,
             )
         if not subs:  # the report is closed on a sub-issue (backlog integrated)

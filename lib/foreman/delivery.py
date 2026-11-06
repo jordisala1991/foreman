@@ -55,12 +55,14 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from . import util
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from .backlog import Data
     from .config import Project, Table
     from .identity import Agent
     from .util import PathLike
+
+    Agents = Mapping[str, Agent]  # agents.json, read once by a caller that looks up several deliveries
 
 Result = dict[str, Any]  # check(): items
 
@@ -85,46 +87,34 @@ class Unknown(Exception):
     """A step of the check could not tell (git failed, a folder is gone): it counts as found."""
 
 
-def outcome_in(words: Iterable[str]) -> str | None:
-    """The `--outcome X` (or `--outcome=X`) of a `foreman progress` call's words; "ok" when absent, None when the
-    value is not one of OUTCOMES."""
+def _flag(words: Iterable[str], name: str) -> str | None:
+    """The value of the first `--NAME X` (or `--NAME=X`) of a `foreman progress` call's words: "" when it has none,
+    None when the flag is absent."""
     words = list(words)
     for i, w in enumerate(words):
-        if w == "--outcome":
-            v = words[i + 1] if i + 1 < len(words) else None
-        elif w.startswith("--outcome="):
-            v = w.split("=", 1)[1]
-        else:
-            continue
-        return v if v in OUTCOMES else None
-    return "ok"
+        if w == f"--{name}":
+            return words[i + 1] if i + 1 < len(words) else ""
+        if w.startswith(f"--{name}="):
+            return w.split("=", 1)[1]
+    return None
+
+
+def outcome_in(words: Iterable[str]) -> str | None:
+    """The `--outcome X` of a `foreman progress` call's words; "ok" when absent, None when the value is not one of
+    OUTCOMES."""
+    v = _flag(words, "outcome")
+    return "ok" if v is None else v if v in OUTCOMES else None
 
 
 def kind_in(words: Iterable[str]) -> str | None:
-    """The `--kind measure` (or `--kind=measure`) of a `foreman progress` call's words: "measure", or None when
-    absent or any other value (code is the default and is not recorded)."""
-    words = list(words)
-    for i, w in enumerate(words):
-        if w == "--kind":
-            v = words[i + 1] if i + 1 < len(words) else None
-        elif w.startswith("--kind="):
-            v = w.split("=", 1)[1]
-        else:
-            continue
-        return v if v == "measure" else None
-    return None
+    """The `--kind measure` of a `foreman progress` call's words: "measure", or None when absent or any other value
+    (code is the default and is not recorded)."""
+    return "measure" if _flag(words, "kind") == "measure" else None
 
 
 def report_in(words: Iterable[str]) -> str | None:
-    """The `--report PATH` (or `--report=PATH`) of a `foreman progress` call's words, or None when absent or
-    empty."""
-    words = list(words)
-    for i, w in enumerate(words):
-        if w == "--report":
-            return (words[i + 1] if i + 1 < len(words) else "") or None
-        if w.startswith("--report="):
-            return w.split("=", 1)[1] or None
-    return None
+    """The `--report PATH` of a `foreman progress` call's words, or None when absent or empty."""
+    return _flag(words, "report") or None
 
 
 def applies(project: Project, h: Agent) -> bool:
@@ -188,43 +178,69 @@ def progress_done(project: Project, aid: str | None, name: str | None, since: st
     return None
 
 
-def delivery(project: Project, aid: str | None, h: Agent) -> tuple[bool, str | None]:
-    """(delivered?, outcome) of an entry: its `delivered`, else a `done` line of the agent in progress.jsonl since its
-    start or its last block."""
+def _done_record(project: Project, aid: str | None, h: Agent) -> dict[str, Any] | None:
+    """The record of an entry's delivery: the entry once `delivered`, else the agent's `done` line in progress.jsonl
+    since its start or its last block; None when it has not delivered."""
     if h.get("delivered"):
-        return True, h.get("outcome") or "ok"
-    x = progress_done(project, aid, h.get("name"), h.get("blocked_at") or h.get("start"))
+        return h
+    return progress_done(project, aid, h.get("name"), h.get("blocked_at") or h.get("start"))
+
+
+def delivery(project: Project, aid: str | None, h: Agent) -> tuple[bool, str | None]:
+    """(delivered?, outcome) of an entry (`_done_record`)."""
+    x = _done_record(project, aid, h)
     return (True, x.get("outcome") or "ok") if x else (False, None)
 
 
 def delivered_kind(project: Project, aid: str | None, h: Agent) -> str | None:
-    """The `--kind` of an entry's delivery ("measure" or None), from the entry or its `done` line in
-    progress.jsonl (as `delivery`)."""
-    if h.get("delivered"):
-        return h.get("kind") or None
-    x = progress_done(project, aid, h.get("name"), h.get("blocked_at") or h.get("start"))
-    return (x.get("kind") or None) if x else None
+    """The `--kind` of an entry's delivery ("measure" or None, `_done_record`)."""
+    return (_done_record(project, aid, h) or {}).get("kind") or None
 
 
-def kind_of(project: Project, branch: str | None = None, name: str | None = None) -> str | None:
-    """The `--kind` ("measure" or None) of the last delivery of the agent with this branch (agents.json) or name
-    (agents.json, else progress.jsonl), as `outcome_of`."""
-    from . import loop
+def last_delivery(
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
+) -> dict[str, Any] | None:
+    """The last delivery of the agent with this branch or name: its newest `delivered` entry in agents.json (AGENTS
+    when given, read once by the caller), reviewers left out (launch --review: their delivery is not the branch's);
+    else, by name, its last `done` line in progress.jsonl; None when none is known."""
+    if agents is None:
+        from . import loop
 
+        agents = loop.agents(project)
     best = None
-    for h in loop.agents(project).values():
-        if h.get("review"):
-            continue  # a reviewer of the branch (launch --review): its delivery is not the branch's
+    for h in agents.values():
         mine = h.get("delivered") and ((branch and h.get("branch") == branch) or (name and h.get("name") == name))
-        if mine and (best is None or h["delivered"] > best["delivered"]):
+        if mine and not h.get("review") and (best is None or h["delivered"] > best["delivered"]):
             best = h
-    if best:
-        return best.get("kind") or None
-    if name:
-        x = progress_done(project, None, name, "")
-        if x:
-            return x.get("kind") or None
-    return None
+    return best or (progress_done(project, None, name, "") if name else None)
+
+
+def kind_of(
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
+) -> str | None:
+    """The `--kind` ("measure" or None) of the agent's last delivery (`last_delivery`)."""
+    return (last_delivery(project, branch, name, agents) or {}).get("kind") or None
+
+
+def report_of(
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
+) -> str | None:
+    """The report named by the agent's last delivery (`last_delivery`), or None when it named none or none is known."""
+    return (last_delivery(project, branch, name, agents) or {}).get("report")
+
+
+def outcome_of(
+    project: Project, branch: str | None = None, name: str | None = None, agents: Agents | None = None
+) -> str | None:
+    """The outcome of the agent's last delivery (`last_delivery`), or None when none is known."""
+    d = last_delivery(project, branch, name, agents)
+    return (d.get("outcome") or "ok") if d else None
+
+
+def sub_is_measure(project: Project, s: Mapping[str, Any], agents: Agents | None = None) -> bool:
+    """Whether a sub-issue is a measurement: `kind = "measure"`, or its agent's last delivery said `--kind measure`."""
+    agent = s.get("agent")
+    return s.get("kind") == "measure" or bool(agent and kind_of(project, name=agent, agents=agents) == "measure")
 
 
 SUB_CLOSED = ("done", "canceled", "moved")
@@ -241,27 +257,25 @@ def load_backlog(project: Project) -> Data | None:
         return None
 
 
-def branch_kind(project: Project, branch: str, data: Data | None = None) -> str:
+def branch_kind(project: Project, branch: str, data: Data | None = None, agents: Agents | None = None) -> str:
     """What BRANCH brings, by the backlog (`data`, loaded when None) and the deliveries: "closed" when every
     sub-issue naming it is closed (done, canceled, moved) and none has a commit (closed on purpose without
     integrating); "measure" when its open sub-issues are all measurements (`kind = "measure"`, or their agent's last
     delivery said `--kind measure`), or, with no sub-issue naming it, when the branch's last delivery said so;
-    "code" otherwise (a single open code sub-issue makes it code)."""
+    "code" otherwise (a single open code sub-issue makes it code). AGENTS: agents.json, read here when None."""
+    from . import loop
     from .backlog import Backlog
 
     if data is None:
         data = load_backlog(project)
     subs = [s for _, i, _ in Backlog.iter_issues(data) for s in i["subs"] if s.get("branch") == branch] if data else []
     if not subs:
-        return "measure" if kind_of(project, branch=branch) == "measure" else "code"
+        return "measure" if kind_of(project, branch=branch, agents=agents) == "measure" else "code"
     open_ = [s for s in subs if s.get("status") not in SUB_CLOSED]
     if not open_:
         return "code" if any(s.get("commit") for s in subs) else "closed"
-
-    def measured(s: dict[str, Any]) -> bool:
-        return s.get("kind") == "measure" or bool(s.get("agent") and kind_of(project, name=s["agent"]) == "measure")
-
-    return "measure" if all(measured(s) for s in open_) else "code"
+    agents = loop.agents(project) if agents is None else agents  # once for every sub-issue
+    return "measure" if all(sub_is_measure(project, s, agents) for s in open_) else "code"
 
 
 def measures(project: Project, aid: str | None, h: Agent, branch: str) -> bool:
@@ -387,33 +401,8 @@ def type_and_model(project: Project, aid: str | None, name: str | None) -> tuple
 
 
 def delivered_report(project: Project, aid: str | None, h: Agent) -> str | None:
-    """The report an entry named at its delivery (`progress --done --report`): its `report` once delivered, else the
-    one of its `done` line in progress.jsonl since its start or its last block."""
-    if h.get("delivered"):
-        return h.get("report")
-    x = progress_done(project, aid, h.get("name"), h.get("blocked_at") or h.get("start"))
-    return x.get("report") if x else None
-
-
-def report_of(project: Project, branch: str | None = None, name: str | None = None) -> str | None:
-    """The report named by the last delivery of the agent with this branch (agents.json) or name (progress.jsonl), or
-    None when that delivery named none or none is known."""
-    from . import loop
-
-    best = None
-    for h in loop.agents(project).values():
-        if h.get("review"):
-            continue  # a reviewer of the branch (launch --review): its delivery is not the branch's
-        mine = h.get("delivered") and ((branch and h.get("branch") == branch) or (name and h.get("name") == name))
-        if mine and (best is None or h["delivered"] > best["delivered"]):
-            best = h
-    if best:
-        return best.get("report")
-    if name:
-        x = progress_done(project, None, name, "")
-        if x:
-            return x.get("report")
-    return None
+    """The report an entry named at its delivery (`progress --done --report`, `_done_record`)."""
+    return (_done_record(project, aid, h) or {}).get("report")
 
 
 def is_plan(name: str) -> bool:
@@ -422,11 +411,13 @@ def is_plan(name: str) -> bool:
     return re.match(r"(?:\d{4}-\d{2}-\d{2}-)?plan(?:[-_.]|$)", name.lower()) is not None
 
 
-def started(project: Project, branch: str) -> float | None:
-    """When the first agent of agents.json with this branch started (epoch), or None when none is recorded."""
+def started(project: Project, branch: str, agents: Agents | None = None) -> float | None:
+    """When the first agent of agents.json (AGENTS, read when None) with this branch started (epoch), or None when
+    none is recorded."""
     from . import loop
 
-    times = [util.iso_epoch(h.get("start")) for h in loop.agents(project).values() if h.get("branch") == branch]
+    agents = loop.agents(project) if agents is None else agents
+    times = [util.iso_epoch(h.get("start")) for h in agents.values() if h.get("branch") == branch]
     known = [t for t in times if t]
     return min(known) if known else None
 
@@ -720,27 +711,6 @@ def block_reason(project: Project, result: Result, n: int) -> str:
             "If your task only measured (a report, no code for main), add `--kind measure`: it needs no commits."
         )
     return "\n".join(lines)
-
-
-def outcome_of(project: Project, branch: str | None = None, name: str | None = None) -> str | None:
-    """The outcome of the last delivery of the agent with this branch (agents.json) or name (progress.jsonl), or
-    None when none is known."""
-    from . import loop
-
-    best = None
-    for h in loop.agents(project).values():
-        if h.get("review"):
-            continue  # a reviewer of the branch (launch --review): its delivery is not the branch's
-        mine = h.get("delivered") and ((branch and h.get("branch") == branch) or (name and h.get("name") == name))
-        if mine and (best is None or h["delivered"] > best["delivered"]):
-            best = h
-    if best:
-        return best.get("outcome") or "ok"
-    if name:
-        x = progress_done(project, None, name, "")
-        if x:
-            return x.get("outcome") or "ok"
-    return None
 
 
 # ---------- the fixed lines of a report ----------
