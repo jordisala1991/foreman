@@ -3,9 +3,9 @@ per line in time order, with the token spend of each agent and of the orchestrat
 whoever develops foreman to debug with: where a spend came from, where foreman failed, which agent went wrong and with
 which instructions.
 
-The spend comes from the transcripts (transcripts.py, totals only): each agent's, and the orchestrator sessions' within
-the window (the marked one and those named by the handover notes foreman wrote before 0.44). Every line ends with
-`@ pointer`: where to dig. `--agent NAME` also prints that agent's brief (the first message of its transcript).
+The spend comes from the transcripts (transcripts.py, totals only): each agent's, and the marked orchestrator
+session's within the window. Every line ends with `@ pointer`: where to dig. `--agent NAME` also prints that
+agent's brief (the first message of its transcript).
 """
 
 from __future__ import annotations
@@ -148,8 +148,7 @@ def agent_spend(w: World, since: datetime, until: datetime) -> list[Event]:
 
 
 def orchestrator_spend(w: World, since: datetime, until: datetime) -> list[Event]:
-    """The orchestrator sessions' spend within the window (timeline.orchestrators: the marked one and the old
-    handover notes')."""
+    """The orchestrator session's spend within the window (timeline.orchestrators: the marked one)."""
     out: list[Event] = []
     tz_since = since.astimezone()
     tz_until = until.astimezone()

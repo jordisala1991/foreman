@@ -231,6 +231,5 @@ def build(claude_projects, state, notes_dir, prefix, repo_key):
     (nd / f"{DAY}.md").write_text(
         f"# Notes {DAY}\n\n## 08:55 Plan {P}-1 approved\nbody\n\n## 09:50 Integrated {repo_key}:{P.lower()}1/t1 "
         f"({P}-1 T1)\nMerged.\n- 10:40 the second agent is stuck on the old Python\n\n## 10:46 Handover\n"
-        f"Outgoing session: orch-a (session {S}, since {DAY}T08:50:00).\n"
     )
     (nd / "2020-01-14.md").write_text("# Notes\n\n## 23:00 The day before\n")

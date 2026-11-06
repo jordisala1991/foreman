@@ -254,36 +254,48 @@ def is_prompt(message: Record) -> bool:
     return isinstance(c, list) and not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c)
 
 
-def last_message(path: PathLike, sidechain: bool = False) -> dict[str, str] | None:
-    """The session's last message: {"uuid", "text"} with the text blocks of the main chain's assistant records since
-    the last prompt (a prompt written after them, like the one being submitted, is passed over), `uuid` the newest of
-    those records; None with no transcript or no assistant record in its tail. Reads only the tail. Never raises.
-    `sidechain`: a subagent's own file, where every record is a sidechain one."""
+def text_of(content: object, tags: bool = True) -> str:
+    """The text of a message's content: a string as it is, or its text blocks joined by lines. `tags=False` leaves
+    out the blocks that start with «<» (system reminders, command output)."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        b["text"]
+        for b in content
+        if isinstance(b, dict)
+        and b.get("type") == "text"
+        and isinstance(b.get("text"), str)
+        and (tags or not b["text"].lstrip().startswith("<"))
+    )
+
+
+def _chain_tail(path: PathLike, sidechain: bool) -> Iterator[tuple[Record, Record]]:
+    """(record, message) of the `user` and `assistant` records in the transcript's tail, newest first; those of a
+    sidechain only with `sidechain` (a subagent's own file, where every record is one). Raises OSError."""
+    for ln in tail_lines(path):
+        if b'"assistant"' not in ln and b'"user"' not in ln:
+            continue
+        d = _record(ln)
+        if d is not None and (sidechain or d.get("isSidechain") is not True) and isinstance(d.get("message"), dict):
+            yield d, d["message"]
+
+
+def last_message(path: PathLike) -> dict[str, str] | None:
+    """A subagent's last message (its own file): {"uuid", "text"} with the text of its assistant records since the
+    last prompt (a prompt written after them, like the one being submitted, is passed over), `uuid` the newest of
+    those records; None with no transcript or no assistant record in its tail. Reads only the tail. Never raises."""
     texts: list[str] = []
     uuid: str | None = None
     try:
-        for ln in tail_lines(path):
-            if b'"assistant"' not in ln and b'"user"' not in ln:
-                continue
-            d = _record(ln)
-            if d is None or (d.get("isSidechain") is True and not sidechain) or not isinstance(d.get("message"), dict):
-                continue
-            m = d["message"]
+        for d, m in _chain_tail(path, sidechain=True):
             if d.get("type") == "assistant" and m.get("model") != SYNTHETIC:
                 if uuid is None:
                     uuid = str(d.get("uuid") or m.get("id") or "")
-                c = m.get("content")
-                blocks = [c] if isinstance(c, str) else c if isinstance(c, list) else []
-                for b in reversed(blocks):
-                    t = (
-                        b
-                        if isinstance(b, str)
-                        else b.get("text")
-                        if isinstance(b, dict) and b.get("type") == "text"
-                        else None
-                    )
-                    if isinstance(t, str) and t.strip():
-                        texts.append(t)
+                t = text_of(m.get("content"))
+                if t.strip():
+                    texts.append(t)
             elif d.get("type") == "user" and uuid is not None and is_prompt(m):
                 break
     except (OSError, TypeError, ValueError):
@@ -293,10 +305,62 @@ def last_message(path: PathLike, sidechain: bool = False) -> dict[str, str] | No
     return {"uuid": uuid, "text": "\n\n".join(reversed(texts)).strip()}
 
 
+def last_text(path: PathLike) -> str | None:
+    """A subagent's last text block (its own file): the newest non-empty one of its assistant records, stripped;
+    None with none in the tail. Reads only the tail. Never raises."""
+    try:
+        for _, m in _chain_tail(path, sidechain=True):
+            c = m.get("content")
+            if m.get("role") != "assistant" or not isinstance(c, list):
+                continue
+            for b in reversed(c):
+                t = b.get("text") if isinstance(b, dict) and b.get("type") == "text" else None
+                if isinstance(t, str) and t.strip():
+                    return t.strip()
+    except (OSError, TypeError, ValueError):
+        pass
+    return None
+
+
+SKIP = ("<", "Caveat:", "[Request interrupted")  # prompts no person typed (notifications, command output)
+
+
+def owner_messages(path: PathLike | None, prompt: str, n: int) -> tuple[list[dict[str, str]], str]:
+    """([{time, text}] the last `n` messages a person typed in the transcript's main chain, oldest first; the
+    session's answer to the newest of them). No loop pass (`prompt`), notification, other agent's message, command
+    output, compaction summary or meta record. Reads only the tail. Never raises."""
+    found: list[dict[str, str]] = []
+    answer = ""
+    texts: list[str] = []
+    if not path:
+        return [], ""
+    try:
+        for d, m in _chain_tail(path, sidechain=False):
+            if d.get("type") == "assistant":
+                t = text_of(m.get("content"), tags=False)
+                if t.strip():
+                    texts.append(t)
+                continue
+            if d.get("type") != "user" or not is_prompt(m) or d.get("isMeta") or d.get("isCompactSummary"):
+                continue
+            t = text_of(m.get("content"), tags=False).strip()
+            if t and not t.startswith(SKIP) and not (prompt and t.startswith(prompt)):
+                if not found:
+                    answer = "\n\n".join(reversed(texts)).strip()
+                ts = _local(parse_ts(d.get("timestamp")))
+                found.append({"time": ts.strftime("%m-%d %H:%M") if ts else "", "text": t})
+                if len(found) >= n:
+                    break
+            texts = []
+    except (OSError, TypeError, ValueError):
+        pass
+    return list(reversed(found)), answer
+
+
 def final_chars(path: PathLike) -> int | None:
     """The length in characters of a subagent's final message (the text of its last turn), or None with no
     transcript or no message. Never raises."""
-    m = last_message(path, sidechain=True)
+    m = last_message(path)
     return len(m["text"]) if m else None
 
 
@@ -411,17 +475,9 @@ def first_prompt(path: PathLike, max_lines: int = 50) -> str:
                     or m.get("role", "user") != "user"
                 ):
                     continue
-                c = m.get("content")
-                if isinstance(c, str):
-                    return c
-                if isinstance(c, list):
-                    texts = [
-                        b["text"]
-                        for b in c
-                        if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str)
-                    ]
-                    if texts:
-                        return "\n".join(texts)
+                t = text_of(m.get("content"))
+                if t:
+                    return t
     except (OSError, TypeError, ValueError):
         pass
     return ""

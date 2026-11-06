@@ -439,63 +439,6 @@ def compacted_at(project: Project, session: str | None) -> float | None:
 # ---------- the pack ----------
 
 
-def _text_of(content: object) -> str:
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ""
-    return "\n".join(
-        b["text"]
-        for b in content
-        if isinstance(b, dict)
-        and b.get("type") == "text"
-        and isinstance(b.get("text"), str)
-        and not b["text"].lstrip().startswith("<")
-    )
-
-
-SKIP = ("<", "Caveat:", "[Request interrupted")
-
-
-def owner_messages(path: str | None, prompt: str, n: int = OWNER_MESSAGES) -> tuple[list[dict[str, str]], str]:
-    """([{time, text}] the last `n` messages a person typed in the transcript's main chain, oldest first; the
-    orchestrator's answer to the newest of them). No loop pass (`prompt`), notification, other agent's message,
-    command output, compaction summary or meta record. Reads only the tail. Never raises."""
-    found: list[dict[str, str]] = []
-    answer = ""
-    texts: list[str] = []
-    if not path:
-        return [], ""
-    try:
-        for ln in transcripts.tail_lines(path):
-            if b'"user"' not in ln and b'"assistant"' not in ln:
-                continue
-            d = transcripts._record(ln)
-            if d is None or d.get("isSidechain") is True or not isinstance(d.get("message"), dict):
-                continue
-            m = d["message"]
-            if d.get("type") == "assistant":
-                t = _text_of(m.get("content"))
-                if t.strip():
-                    texts.append(t)
-                continue
-            if d.get("type") != "user" or not transcripts.is_prompt(m) or d.get("isMeta") or d.get("isCompactSummary"):
-                continue
-            t = _text_of(m.get("content")).strip()
-            person = bool(t) and not t.startswith(SKIP) and not (prompt and t.startswith(prompt))
-            if person:
-                if not found:
-                    answer = "\n\n".join(reversed(texts)).strip()
-                ts = transcripts._local(transcripts.parse_ts(d.get("timestamp")))
-                found.append({"time": ts.strftime("%m-%d %H:%M") if ts else "", "text": t})
-                if len(found) >= n:
-                    break
-            texts = []
-    except (OSError, TypeError, ValueError):
-        pass
-    return list(reversed(found)), answer
-
-
 def pack(project: Project, session: str, transcript: str | None, a: Attempt | None, now: float | None = None) -> str:
     """The whole pack (module doc), and writes it to pack_file(). `a`: the attempt this compaction settles (a
     renewal), or None (a compaction foreman did not ask for)."""
@@ -518,7 +461,7 @@ def pack(project: Project, session: str, transcript: str | None, a: Attempt | No
     parts = [f"# {s['renew_pack_title'].format(time=hm)}", head]
     if a and a.get("note"):
         parts += [f"## {s['renew_pack_note']}", str(a["note"])]
-    msgs, answer = owner_messages(transcript, project.section("loop").get("prompt") or "")
+    msgs, answer = transcripts.owner_messages(transcript, project.section("loop").get("prompt") or "", OWNER_MESSAGES)
     parts.append(f"## {s['renew_pack_owner'].format(owner=project.owner, n=len(msgs))}")
     parts += [f"[{m['time']}] {util.clip(m['text'], OWNER_CHARS)}" for m in msgs] or [s["renew_pack_owner_none"]]
     if answer:

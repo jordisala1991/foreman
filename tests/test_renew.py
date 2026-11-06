@@ -10,7 +10,7 @@ from unittest import mock
 
 from test_loop_notices import NoticesCase
 
-from foreman import band, hooks, hooks_mod, i18n, orchestrator, renew, start, util
+from foreman import band, hooks, hooks_mod, i18n, orchestrator, renew, start, transcripts, util
 
 
 def line(kind, text, **extra):
@@ -466,12 +466,12 @@ class PackTest(RenewalCase):
             line("assistant", "a pass reply"),
         ]
         self.transcript.write_text("\n".join(rows) + "\n")
-        msgs, answer = renew.owner_messages(str(self.transcript), "Fake orchestrator loop")
+        msgs, answer = transcripts.owner_messages(str(self.transcript), "Fake orchestrator loop", 5)
         self.assertEqual([m["text"] for m in msgs], ["second", "third", "fourth", "fifth", "sixth"])
         self.assertEqual(answer, "the last answer")
         self.assertRegex(msgs[0]["time"], r"^\d\d-\d\d \d\d:\d\d$")
-        self.assertEqual(renew.owner_messages(None, ""), ([], ""))
-        self.assertEqual(renew.owner_messages(str(self.tmp / "none.jsonl"), ""), ([], ""))
+        self.assertEqual(transcripts.owner_messages(None, "", 5), ([], ""))
+        self.assertEqual(transcripts.owner_messages(str(self.tmp / "none.jsonl"), "", 5), ([], ""))
 
     def test_cut_to_fit_and_whole_in_the_file(self):
         self.project.board.parent.mkdir(parents=True, exist_ok=True)
