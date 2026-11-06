@@ -106,13 +106,10 @@ def live_agents(project: Project) -> list[Agent]:
 
 
 class Snapshot:
-    """The state a loop pass, the notices between passes (notices()), the band (band.py) or the session's pack
-    (start.agents_now) look at, each part read once: agents.json (`agents`) and its `live` agents now; when first
-    used, the head of their brief (`heads`), their identity (`ids`), the backlog (`data`, its `text`, or the `error`
-    that kept it from loading), the locks, the worktrees (`wts`), the unmerged branches with no worktree
-    (`unworktreed`), the sub-issues naming each branch (`subs_of`, archived included) and the agent each open one
-    names (`agent_of`), whether the product is paused and, seen from `session`, the `$.agent.list()` statuses and
-    the `dead` agents (dead_agents). `given` sets parts the caller already has (live, heads, ids)."""
+    """What a loop pass, notices(), the band and start.agents_now look at, each part read once: agents.json and its
+    `live` agents now, the rest when first used (the briefs' `heads`, `ids`, the backlog's `data`, `text` or `error`,
+    `locks`, worktrees, branches with no worktree, `subs_of` and `agent_of` by branch, `paused`, and seen from
+    `session` the `$.agent.list()` statuses and the `dead` agents). `given`: parts the caller has (live, heads, ids)."""
 
     def __init__(self, project: Project, session: str | None = None, **given: Any) -> None:
         self.project, self.session, self.b = project, session, Backlog(project)
@@ -248,24 +245,16 @@ def stalled(project: Project | Snapshot, session: str | None = None) -> list[str
     return out
 
 
-def known_names(s: Snapshot) -> set[str]:
-    names = {"orchestrator", s.project.owner.lower(), "owner"}
-    for h in s.agents.values():
-        if time.time() - (util.iso_epoch(h.get("start")) or 0) < 86400:
-            n = h.get("name")
-            if n:
-                names.add(n)
-    return names
-
-
 def lock_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     """Foreign names in a lock or its queue (not an agent of this project: another session) and a lock held for more
     than [loop] lock_long_min minutes (60), one notice per case. Each case is announced once (keys in
     <state>/lock-notified), then left out. `lock_foreign` is actionable unless the foreign name holds the lock through
     `run` and that process is alive (the other session uses it as it should); `lock_long` always is.
     mark=False reads the marks without writing them."""
-    project = s.project
-    known = known_names(s)
+    project, now = s.project, time.time()
+    known = {"orchestrator", project.owner.lower(), "owner"} | {
+        h["name"] for h in s.agents.values() if h.get("name") and now - (util.iso_epoch(h.get("start")) or 0) < 86400
+    }
     f = project.state / "lock-notified"
     try:
         seen = set(f.read_text().split("\n"))
@@ -1172,21 +1161,16 @@ def review_notices(s: Snapshot, held: Sequence[tuple[str, str, str, review.State
 def branch_notices(project: Project | Snapshot, live: Any = None, heads: Any = None, ids: Any = None) -> list[Notice]:
     """The notices about the backlog and the worktrees: an unreadable backlog, branches ready to integrate,
     measurements delivered (nothing to merge; a branch closed without a commit is in neither), worktrees
-    the backlog does not name, unmerged branches with no worktree, `in progress` issues with no agent, backlog
-    problems. LIVE, HEADS and IDS, when given with a project, are the live agents as in notices_for_pass."""
+    the backlog does not name, `in progress` issues with no agent, backlog problems. LIVE, HEADS and IDS, given with
+    a project, are the live agents as in notices_for_pass."""
     s = project if isinstance(project, Snapshot) else Snapshot(project, live=live, heads=heads, ids=ids)
-    if s.data is None:
+    project, data, text = s.project, s.data, s.text
+    if data is None:
         return [notice("backlog_unreadable", True, f"backlog could not be read: {s.error}")]
-    out = ready_notices(s) + loose_worktrees(s) + no_worktree_notices(s) + loose_branches(s)
-    return out + orphan_notices(s) + backlog_problems(s)
-
-
-def ready_notices(s: Snapshot) -> list[Notice]:
-    """`ready_to_integrate`, the review notices of the delivered branches held by their review (review_notices) and
-    `measure_delivered`; while the product is paused (integrate is blocked) they only inform."""
     out: list[Notice] = []
     withheld: list[tuple[str, str, str, review.State]] = []
     ready = [ready_line(s, repo, br, path) for repo, br, path in ready_branches(s, held=withheld)]
+    # paused: integrate is blocked, so a delivered branch only informs until the owner resumes the product
     act = not s.paused
     if ready:
         out.append(
@@ -1212,130 +1196,94 @@ def ready_notices(s: Snapshot) -> list[Notice]:
                 "measure_delivered:" + ";".join(r.split(" (")[0] for r in measured),
             )
         )
-    return out
-
-
-def loose_worktrees(s: Snapshot) -> list[Notice]:
-    """`loose_worktrees`: worktrees whose branch the backlog's text does not name."""
-    loose = [f"{repo}:{br}" for repo, br, _ in s.wts if br not in s.text]
-    if not loose:
-        return []
-    return [
-        notice(
-            "loose_worktrees",
-            True,
-            "Worktrees the backlog does not name: "
-            + ", ".join(loose)
-            + ": note them in their sub-issue (`foreman backlog sub … --branch`) or remove them.",
-            "loose_worktrees:" + ",".join(loose),
+    loose = [f"{repo}:{br}" for repo, br, _ in s.wts if br not in text]
+    if loose:
+        out.append(
+            notice(
+                "loose_worktrees",
+                True,
+                "Worktrees the backlog does not name: "
+                + ", ".join(loose)
+                + ": note them in their sub-issue (`foreman backlog sub … --branch`) or remove them.",
+                "loose_worktrees:" + ",".join(loose),
+            )
         )
-    ]
-
-
-def stranded(s: Snapshot) -> list[tuple[str, str, list[tuple[str, str]]]]:
-    """[(repo, branch, [(issue, sub-issue)])] of the unmerged branches with no worktree named by an open sub-issue
-    with no live agent."""
-    out: list[tuple[str, str, list[tuple[str, str]]]] = []
+    stranded: list[tuple[str, str, list[tuple[str, str]]]] = []  # named by an open sub-issue, no live agent
     for repo, br in s.unworktreed:
         open_ = [(iid, x) for iid, x in s.subs_of.get(br, []) if x.get("status") not in delivery.SUB_CLOSED]
         if not open_ or br in s.live_branches or any(x.get("agent") in s.live_names for _, x in open_):
             continue  # all closed (on purpose, or integrated by squash), or an agent is on it
-        out.append((repo, br, [(iid, x["id"]) for iid, x in open_]))
-    return out
-
-
-def no_worktree_notices(s: Snapshot) -> list[Notice]:
-    """`branch_no_worktree`: the stranded branches, each with what to do."""
-    left = stranded(s)
-    if not left:
-        return []
-    return [
-        notice(
-            "branch_no_worktree",
-            True,
-            "Unmerged branches of open sub-issues with no worktree: "
-            + "; ".join(no_worktree_line(s, repo, br, subs) for repo, br, subs in left)
-            + ": integrate needs a worktree: `foreman worktree REPO NAME BRANCH` (it reuses the branch), then "
-            '`foreman integrate REPO BRANCH "ID Tn" --check` (`--measure` for a measurement); not delivered: '
-            "relaunch the sub-issue on it (`foreman launch … --repo REPO --branch BRANCH`); dead: cancel the "
-            "sub-issue (`foreman backlog sub ID Tn --status canceled`) and delete the branch with a note giving "
-            "its tip.",
-            "branch_no_worktree:" + ";".join(f"{repo}:{br}" for repo, br, _ in left),
+        stranded.append((repo, br, [(iid, x["id"]) for iid, x in open_]))
+    if stranded:
+        out.append(
+            notice(
+                "branch_no_worktree",
+                True,
+                "Unmerged branches of open sub-issues with no worktree: "
+                + "; ".join(no_worktree_line(s, repo, br, subs) for repo, br, subs in stranded)
+                + ": integrate needs a worktree: `foreman worktree REPO NAME BRANCH` (it reuses the branch), then "
+                '`foreman integrate REPO BRANCH "ID Tn" --check` (`--measure` for a measurement); not delivered: '
+                "relaunch the sub-issue on it (`foreman launch … --repo REPO --branch BRANCH`); dead: cancel the "
+                "sub-issue (`foreman backlog sub ID Tn --status canceled`) and delete the branch with a note giving "
+                "its tip.",
+                "branch_no_worktree:" + ";".join(f"{repo}:{br}" for repo, br, _ in stranded),
+            )
         )
-    ]
-
-
-def loose_branches(s: Snapshot) -> list[Notice]:
-    """`loose_branches`: unmerged branches with no worktree that no sub-issue nor the backlog's text names (as
-    loose_worktrees), not on the remote (a PR, a pushed branch) and whose work is not in main (squashed,
-    cherry-picked)."""
-    project = s.project
-    stray: list[str] = []
+    stray: list[str] = []  # named by no sub-issue nor the backlog's text, only here, with work not in main
     for repo, br in s.unworktreed:
-        if br in s.subs_of or br in s.text:
-            continue
+        if br in s.subs_of or br in text:
+            continue  # the backlog keeps it (a closed sub-issue, or noted in an issue: as loose_worktrees)
         tab = project.repo(repo)
         path, main = tab["path"], tab.get("main") or "main"
         if on_remote(path, tab.get("remote", "origin"), br) or in_main(path, main, br):
-            continue
+            continue  # safe on the remote (a PR, a pushed branch), or already in main (squashed, cherry-picked)
         stray.append(f"{repo}:{br} ({tip_line(path, br, commits_ahead(project, repo, br))})")
-    if not stray:
-        return []
-    return [
-        notice(
-            "loose_branches",
-            True,
-            "Unmerged branches with no worktree that the backlog does not name: "
-            + "; ".join(stray)
-            + ": note them in their sub-issue (`foreman backlog sub … --branch`) or in the issue that keeps them. "
-            f"Ask {project.owner} before deleting one (it may be their own work); once agreed, delete it with a "
-            "note giving its tip (`git branch -D`; back with `git branch NAME SHA` until git prunes it, ~2 "
-            "weeks).",
-            "loose_branches:" + ";".join(x.split(" (")[0] for x in stray),
+    if stray:
+        out.append(
+            notice(
+                "loose_branches",
+                True,
+                "Unmerged branches with no worktree that the backlog does not name: "
+                + "; ".join(stray)
+                + ": note them in their sub-issue (`foreman backlog sub … --branch`) or in the issue that keeps them. "
+                f"Ask {project.owner} before deleting one (it may be their own work); once agreed, delete it with a "
+                "note giving its tip (`git branch -D`; back with `git branch NAME SHA` until git prunes it, ~2 "
+                "weeks).",
+                "loose_branches:" + ";".join(x.split(" (")[0] for x in stray),
+            )
         )
-    ]
-
-
-def orphan_notices(s: Snapshot) -> list[Notice]:
-    """`orphan_in_progress`: `in progress` issues with no live agent (recorded, named by a sub-issue or, for agents
-    with no recorded identity, «Issue: ID» in the brief) and no branch with work (a worktree, or stranded)."""
     live_issues = {i["issue"] for i in s.ids.values() if i["issue"]}  # recorded, or «Issue: ID» in the brief
     guessed_text = "\n".join(s.heads[h["id"]][:4000] for h in s.guessed)
-    held = {br for _, br, _ in s.wts} | {br for _, br, _ in stranded(s)}  # a branch with work: branch_no_worktree
-    orphans: list[str] = []
-    for i in s.issues(archived=False):
-        if i["status"] != "in progress" or i["id"] in live_issues:
-            continue
-        if any(x.get("agent") in s.live_names or x.get("branch") in held for x in i["subs"]):
-            continue
-        if re.search(rf"Issue:\s*{re.escape(i['id'])}(?![\w-])", guessed_text):
-            continue
-        orphans.append(i["id"])
-    if not orphans:
-        return []
-    return [
-        notice(
-            "orphan_in_progress",
-            True,
-            "`in progress` with no live agent or branch: " + ", ".join(orphans) + ": back to `ready` (or relaunch).",
-            "orphan_in_progress:" + ",".join(orphans),
-        )
+    held = {br for _, br, _ in s.wts} | {br for _, br, _ in stranded}  # a branch with work: branch_no_worktree
+    orphans = [
+        i["id"]
+        for i in s.issues(archived=False)
+        if i["status"] == "in progress"
+        and i["id"] not in live_issues
+        and not any(x.get("agent") in s.live_names or x.get("branch") in held for x in i["subs"])
+        and not re.search(rf"Issue:\s*{re.escape(i['id'])}(?![\w-])", guessed_text)
     ]
-
-
-def backlog_problems(s: Snapshot) -> list[Notice]:
-    """`backlog_problems`: what `foreman check` finds wrong in the backlog (not its warnings)."""
-    assert s.data is not None
-    problems = [p for p in backlog_check.validate(s.b, s.data) if not p.startswith("warning: ")]
-    if not problems:
-        return []
-    return [
-        notice(
-            "backlog_problems",
-            True,
-            "foreman check, backlog: " + "; ".join(problems[:6]) + (" …" if len(problems) > 6 else ""),
+    if orphans:
+        out.append(
+            notice(
+                "orphan_in_progress",
+                True,
+                "`in progress` with no live agent or branch: "
+                + ", ".join(orphans)
+                + ": back to `ready` (or relaunch).",
+                "orphan_in_progress:" + ",".join(orphans),
+            )
         )
-    ]
+    problems = [p for p in backlog_check.validate(s.b, data) if not p.startswith("warning: ")]
+    if problems:
+        out.append(
+            notice(
+                "backlog_problems",
+                True,
+                "foreman check, backlog: " + "; ".join(problems[:6]) + (" …" if len(problems) > 6 else ""),
+            )
+        )
+    return out
 
 
 def orchestrator_only_notices(project: Project, mark: bool = True) -> list[Notice]:
