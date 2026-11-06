@@ -273,6 +273,10 @@ class Integration:
                 return m.group(1).strip()
         return None
 
+    def contains(self, a: str, b: str) -> bool:
+        """Whether commit A is an ancestor of B (B contains A), in the main checkout."""
+        return not util.git_run(self.main_path, "merge-base", "--is-ancestor", a, b).returncode
+
     def home_only_merge(self) -> tuple[bool, str, int]:
         """Whether main can be merged into the branch on its own: no remote, the home inside the repo, everything
         main has that the branch lacks under the home, and a clean merge. Returns (ok, why, n commits); writes
@@ -295,20 +299,8 @@ class Integration:
         if outside:
             more = f" and {len(outside) - 5} more" if len(outside) > 5 else ""
             return False, f"{self.main} changed outside the home {home}/ ({', '.join(outside[:5])}{more})", n
-        r = sh(
-            [
-                "git",
-                *util.GIT_QUIET,
-                "-C",
-                str(self.main_path),
-                "merge-tree",
-                "--write-tree",
-                "--no-messages",
-                "--name-only",
-                self.main,
-                self.branch,
-            ],
-            check=False,
+        r = util.git_run(
+            str(self.main_path), "merge-tree", "--write-tree", "--no-messages", "--name-only", self.main, self.branch
         )
         if r.returncode == 1:
             files = sorted(set(r.stdout.splitlines()[1:]))
@@ -342,34 +334,19 @@ class Integration:
             if git(self.main_path, "rev-parse", self.main) != git(self.main_path, "rev-parse", upstream):
                 raise Stop(f"{self.main} differs from {upstream}: sync it (git pull --ff-only) first")
         if self.a.rebase_from:
-            if sh(
-                [
-                    "git",
-                    *util.GIT_QUIET,
-                    "-C",
-                    str(self.main_path),
-                    "rev-parse",
-                    "-q",
-                    "--verify",
-                    f"{self.a.rebase_from}^{{commit}}",
-                ],
-                check=False,
+            if util.git_run(
+                str(self.main_path), "rev-parse", "-q", "--verify", f"{self.a.rebase_from}^{{commit}}"
             ).returncode:
                 raise Stop(f"--rebase-from: {self.a.rebase_from} is not a commit")
             if self.a.check:
                 self.out(f"== --check: would run git rebase --onto {self.main} {self.a.rebase_from} in {self.wt}")
                 return
             self.out(f"== git rebase --onto {self.main} {self.a.rebase_from} ({self.branch})")
-            if sh(
-                ["git", *util.GIT_QUIET, "-C", self.wt, "rebase", "--onto", self.main, self.a.rebase_from], check=False
-            ).returncode:
+            if util.git_run(self.wt, "rebase", "--onto", self.main, self.a.rebase_from).returncode:
                 raise Stop(
                     f"rebase failed: git -C {self.wt} rebase --abort, or resolve it and rerun without --rebase-from"
                 )
-        if sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge-base", "--is-ancestor", self.main, self.branch],
-            check=False,
-        ).returncode:
+        if not self.contains(self.main, self.branch):
             ok, why, n = self.home_only_merge()
             if not ok:
                 raise Stop(
@@ -380,11 +357,9 @@ class Integration:
                 self.out(f"== --check: would merge {self.main} ({why}) into {self.branch}: clean")
                 return
             self.out(f"== git merge --no-ff --no-edit {self.main} in {self.wt} ({why})")
-            r = sh(
-                ["git", *util.GIT_QUIET, "-C", self.wt, "merge", "-q", "--no-ff", "--no-edit", self.main], check=False
-            )
+            r = util.git_run(self.wt, "merge", "-q", "--no-ff", "--no-edit", self.main)
             if r.returncode:
-                sh(["git", *util.GIT_QUIET, "-C", self.wt, "merge", "--abort"], check=False)
+                util.git_run(self.wt, "merge", "--abort")
                 raise Stop(
                     f"git merge {self.main} into {self.branch} failed (aborted, nothing merged): "
                     f"{(r.stderr or r.stdout).strip()[:300]}"
@@ -409,25 +384,9 @@ class Integration:
     def merged_tree(self) -> str:
         """The tree main will hold after this integration: the branch's own when it contains main, else the clean
         merge of both (`git merge-tree --write-tree`, as home_only_merge; it only adds loose objects)."""
-        if not sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge-base", "--is-ancestor", self.main, self.branch],
-            check=False,
-        ).returncode:
+        if self.contains(self.main, self.branch):
             return git(self.main_path, "rev-parse", f"{self.branch}^{{tree}}")
-        r = sh(
-            [
-                "git",
-                *util.GIT_QUIET,
-                "-C",
-                str(self.main_path),
-                "merge-tree",
-                "--write-tree",
-                "--no-messages",
-                self.main,
-                self.branch,
-            ],
-            check=False,
-        )
+        r = util.git_run(str(self.main_path), "merge-tree", "--write-tree", "--no-messages", self.main, self.branch)
         if r.returncode or not r.stdout.strip():
             raise Stop(self.s["integ_perm_error"].format(error=(r.stderr or r.stdout).strip()[:200] or "merge-tree"), 2)
         return r.stdout.split()[0]
@@ -582,11 +541,7 @@ class Integration:
 
     def blob(self, rel: str) -> bytes | None:
         """The file REL (relative to the main checkout) as merged_tree() holds it, or None when it has none."""
-        r = subprocess.run(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "cat-file", "blob", f"{self.tree}:{rel}"],
-            capture_output=True,
-            check=False,
-        )
+        r = util.git_run(self.main_path, "cat-file", "blob", f"{self.tree}:{rel}", binary=True)
         return None if r.returncode else r.stdout
 
     def judge_live(self, name: str, kinds: set[str], tmp: Path) -> dict[str, Any]:
@@ -1063,9 +1018,7 @@ class Integration:
         """Fast-forwards main to the branch, runs the CI on main (ci_on_main) and removes the worktree and branch."""
         before = git(self.main_path, "rev-parse", self.main)
         self.out(f"== git merge --ff-only {self.branch} (no remote)")
-        if sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge", "-q", "--ff-only", self.branch], check=False
-        ).returncode:
+        if util.git_run(str(self.main_path), "merge", "-q", "--ff-only", self.branch).returncode:
             raise Stop(f"git merge --ff-only {self.branch} failed in {self.main_path}: nothing merged")
         head = git(self.main_path, "rev-parse", self.main)
         try:
@@ -1074,9 +1027,7 @@ class Integration:
             # back only if nobody moved main meanwhile; --keep never discards uncommitted changes (the home's)
             if (
                 git(self.main_path, "rev-parse", self.main) == head
-                and not sh(
-                    ["git", *util.GIT_QUIET, "-C", str(self.main_path), "reset", "-q", "--keep", before], check=False
-                ).returncode
+                and not util.git_run(str(self.main_path), "reset", "-q", "--keep", before).returncode
             ):
                 raise Stop(
                     f"{e.args[0]} after the fast-forward: {self.main} is back at {before[:7]}; "
@@ -1203,27 +1154,13 @@ class Integration:
         self.before = git(self.main_path, "rev-parse", self.main)
         git(self.main_path, "pull", "-q", "--ff-only")
         oid = self.gh("pr", "view", pr, "--json", "mergeCommit", "--jq", ".mergeCommit.oid").stdout.strip()
-        if sh(
-            ["git", *util.GIT_QUIET, "-C", str(self.main_path), "merge-base", "--is-ancestor", oid, self.main],
-            check=False,
-        ).returncode:
+        if not self.contains(oid, self.main):
             raise Stop(f"merge commit {oid} is not in local {self.main}")
         head = git(self.main_path, "rev-parse", "--short", oid)
         # GitHub may have deleted it on merge already: only a branch that is still there is deleted (and warned about)
         gone = (
-            sh(
-                [
-                    "git",
-                    *util.GIT_QUIET,
-                    "-C",
-                    str(self.main_path),
-                    "ls-remote",
-                    "--exit-code",
-                    "--heads",
-                    self.remote,
-                    f"refs/heads/{self.branch}",
-                ],
-                check=False,
+            util.git_run(
+                str(self.main_path), "ls-remote", "--exit-code", "--heads", self.remote, f"refs/heads/{self.branch}"
             ).returncode
             == 2
         )
@@ -1398,11 +1335,7 @@ class Integration:
             rel = f"{self.home_in_repo()}/{a.report}"
             dest = self.p.home / a.report
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shown = subprocess.run(
-                ["git", *util.GIT_QUIET, "-C", str(self.main_path), "show", f"{self.branch}:{rel}"],
-                capture_output=True,
-                check=False,
-            )
+            shown = util.git_run(self.main_path, "show", f"{self.branch}:{rel}", binary=True)
             if shown.returncode:
                 raise Stop(f"could not read {rel} from {self.branch}, nothing closed")
             dest.write_bytes(shown.stdout)
@@ -1411,7 +1344,7 @@ class Integration:
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(src.read_bytes())
             src.unlink()  # copied into the home: the worktree is clean for its removal
-        r = sh(["git", *util.GIT_QUIET, "-C", str(self.main_path), "worktree", "remove", self.wt], check=False)
+        r = util.git_run(str(self.main_path), "worktree", "remove", self.wt)
         if r.returncode:
             raise Stop(f"git worktree remove {self.wt} failed, nothing closed: {(r.stderr or r.stdout).strip()[:300]}")
         if not a.keep_branch:

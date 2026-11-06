@@ -45,12 +45,7 @@ def destination(project: Project, repo: Table, name: str, branch: str) -> Path:
 
 
 def exists(repo: PathLike, ref: str) -> bool:
-    return (
-        subprocess.run(
-            ["git", *util.GIT_QUIET, "-C", str(repo), "show-ref", "--verify", "--quiet", ref], check=False
-        ).returncode
-        == 0
-    )
+    return util.git_run(repo, "show-ref", "--verify", "--quiet", ref).returncode == 0
 
 
 def remote_branch(main: PathLike, remote: str | None, branch: str) -> str | None:

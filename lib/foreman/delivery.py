@@ -125,9 +125,7 @@ def applies(project: Project, h: Agent) -> bool:
 
 def git(cwd: PathLike, *args: str) -> str:
     try:
-        r = subprocess.run(
-            ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=GIT_TIMEOUT, check=False
-        )
+        r = util.git_run(cwd, *args, timeout=GIT_TIMEOUT)
     except (OSError, subprocess.TimeoutExpired) as e:
         raise Unknown(str(e)) from e
     if r.returncode:
