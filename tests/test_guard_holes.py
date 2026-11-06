@@ -421,6 +421,56 @@ class ProgramHolesTest(BashWriteCase):
         got = {cmd: self.deny(cmd) for cmd in cases}
         self.assertEqual(got, dict.fromkeys(cases, "file:config"))
 
+    def test_a_call_without_parentheses(self):
+        """A call that writes a target held in a variable, without parentheses (review round 3, F10); a writing word
+        that is no such call (an import, a word in a string) still only reads."""
+        cases = {
+            'ruby -e \'p = "foreman.toml"; File.write p, "x"\'': "file:config",
+            'perl -e \'my $p = "foreman.toml"; open my $f, ">", $p; print $f "x"\'': "file:config",
+            "perl -e 'my $p = \"foreman.toml\"; unlink $p'": "file:config",
+            "ruby -e 'p = \"foreman.toml\"; FileUtils.rm p'": "file:config",
+            'ruby -e \'puts File.read("foreman.toml"); puts "remove it later"\'': "allow",
+            "python3 -c \"import copy, sys; print(open('foreman.toml').read())\"": "allow",
+        }
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, cases)
+
+    def test_a_string_replace(self):
+        """A string's replace with a pattern or a variable reads (review round 3, F11); os.replace and a Path's
+        replace with a target the code cannot name still write."""
+        cases = {
+            f"node -e \"console.log(require('fs').readFileSync('{TABLE}','utf8').replace(/\\t/g, ' '))\"": "allow",
+            "python3 -c \"import sys; s = open('foreman.toml').read(); old = 'a'; print(s.replace(old, 'b'))\"": (
+                "allow"
+            ),
+            "python3 -c \"import sys, os; t = 'foreman.toml'; os.replace('x', t)\"": "file:config",
+            "python3 -c \"import sys; from os import replace; t = 'foreman.toml'; replace('x', t)\"": "file:config",
+            "python3 -c \"import sys; from pathlib import Path; t = 'foreman.toml'; Path('x').replace(t)\"": (
+                "file:config"
+            ),
+        }
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, cases)
+
+    def test_a_path_built_across_statements(self):
+        """Code that does not pass the gate, writing a target it cannot name whose path is built in pieces over
+        several statements, from a worktree, with the home under HOME as on the machine (review round 3, F12)."""
+        os.environ["HOME"] = str(self.tmp)  # restored by FileCase
+        wt = self.tmp / "wt" / "x"
+        wt.mkdir(parents=True)
+        tail = '\n(base / "foreman.toml").write_text(s)'
+        cases = {
+            py(f'import os\nfrom pathlib import Path\ns = "x"\nbase = Path.home() / "home"{tail}'): "file:config",
+            py(f'import os\nfrom pathlib import Path\ns = "x"\nbase = Path.home() / "wt" / ".." / "home"{tail}'): (
+                "file:config"
+            ),
+            py(
+                f'import os\nfrom pathlib import Path\nbase = Path.home() / "home"\nprint({tail[2:-14]}.read_text())'
+            ): "allow",
+        }
+        got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
+        self.assertEqual(got, cases)
+
     def test_interpreters_that_read_or_write_elsewhere(self):
         """H11's rule by what the code writes: reading a reserved file passes; Python that passes the gate is judged
         by the files it names as written, other code by its quoted literals when it has a word that writes."""
