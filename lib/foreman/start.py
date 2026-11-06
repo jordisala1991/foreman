@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_text, i18n, identity, lock, loop, notes, orchestrator, pause, transcripts
+from . import backlog_text, i18n, lock, loop, notes, orchestrator, pause, transcripts
 from .backlog import Backlog, BacklogError
 
 if TYPE_CHECKING:
@@ -158,13 +158,11 @@ def active_backlog(project: Project) -> dict[str, Any]:
 def agents_now(project: Project) -> list[dict[str, Any]]:
     """The agents foreman counts as live (loop.live_agents), each with whether the session it runs in still does:
     [{id, name, type, issue, sub, branch, start, activity, session, session_state}]."""
+    s = loop.Snapshot(project)
     out: list[dict[str, Any]] = []
-    states: dict[str | None, Any] = {}
-    for h in loop.live_agents(project):
-        ident = identity.of(project, h)
-        sid = transcripts.session_of_subagent(h.get("transcript")) or h.get("session")
-        if sid and sid not in states:
-            states[sid] = orchestrator.liveness(project, sid)["state"]
+    for h in s.live:
+        ident = s.ids[h["id"]]
+        sid = loop.session_of(h)
         out.append(
             {
                 "id": h["id"],
@@ -176,7 +174,7 @@ def agents_now(project: Project) -> list[dict[str, Any]]:
                 "start": h.get("start"),
                 "activity": h.get("activity"),
                 "session": sid,
-                "session_state": states.get(sid, "unknown"),
+                "session_state": s.session_state(sid) if sid else "unknown",
             }
         )
     return out
