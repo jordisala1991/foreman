@@ -6,6 +6,7 @@ trigger, the cooldown, failures and what follows them (always another renewal, n
 import json
 import time
 from datetime import datetime
+from unittest import mock
 
 from test_loop_notices import NoticesCase
 
@@ -413,6 +414,19 @@ class RenewalTest(RenewalCase):
         self.measure(310000, session="S2")
         self.assertEqual(self.hook_tick(session="S2"), {"marked": False, "grants": False})
         self.assertIsNone(renew.due(self.project, None, {"busy": False}))
+
+
+class PruneTest(RenewalCase):
+    def test_old_records_go_when_one_is_written(self):
+        """renewals.jsonl keeps RETAIN_DAYS days: writing a record drops the older ones, and keeps the rest."""
+        f = renew.renewals_file(self.project)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        old = {"at": "2026-01-01T10:00:00", "session": "S1", "id": "old", "state": "asked"}
+        recent = {"at": "2026-10-30T10:00:00", "session": "S1", "id": "recent", "state": "asked"}
+        f.write_text("".join(json.dumps(r) + "\n" for r in (old, recent)))
+        with mock.patch.dict("os.environ", {"FOREMAN_NOW": "2026-11-06T10:00:00"}):
+            renew._append(self.project, {"at": "2026-11-06T10:00:00", "session": "S1", "id": "new", "state": "asked"})
+        self.assertEqual([r["id"] for r in self.records()], ["recent", "new"])
 
 
 class PackTest(RenewalCase):
