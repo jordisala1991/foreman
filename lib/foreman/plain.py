@@ -447,13 +447,8 @@ def stats(project: Project, since: datetime | None = None, session: str | None =
     """{messages, flagged, share, days: [{day, messages, flagged, share}], kinds: {kind: messages}, what: {rule:
     messages}} from <state>/plain.jsonl, optionally since a datetime and for one session. share is a % (1 decimal)."""
     rows = []
-    try:
-        lines = (project.state / LOG).read_text().splitlines()
-    except OSError:
-        lines = []
-    for ln in lines:
+    for d in util.read_jsonl(project.state / LOG):
         try:
-            d = json.loads(ln)
             t = util.fromiso(d["time"])
         except (ValueError, KeyError, TypeError):
             continue

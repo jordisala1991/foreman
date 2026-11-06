@@ -131,19 +131,11 @@ def k(n: object) -> str:
 
 
 def _lines(project: Project) -> list[dict[str, Any]]:
-    try:
-        text = renewals_file(project).read_text()
-    except OSError:
-        return []
-    out = []
-    for line in text.splitlines():
-        try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(d, dict) and isinstance(d.get("session"), str) and isinstance(d.get("id"), str):
-            out.append(d)
-    return out
+    return [
+        d
+        for d in util.read_jsonl(renewals_file(project))
+        if isinstance(d.get("session"), str) and isinstance(d.get("id"), str)
+    ]
 
 
 def _append(project: Project, rec: dict[str, Any]) -> None:
