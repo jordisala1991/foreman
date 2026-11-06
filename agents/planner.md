@@ -20,6 +20,8 @@ What is specific to this type:
   how it is measured, a narrower wording); if it must change its meaning, say so as a question for the owner. When
   the behaviour has cases, the criterion is a table, input → expected result. You do not touch the backlog: the
   orchestrator reviews and approves.
+  A claim of scope ("only X uses it", "read-only", "the full list") cites the search that shows it, or says it was
+  not checked.
 - **A hidden check**, when your brief asks for one (docs/config.md, «`[paths] holdout`»; the folder is
   `paths.holdout` of `foreman config --json`, and the guard lets only planners and the orchestrator reach it): some
   rows of that table go in the plan, the others only in `<holdout>/ID/holdout.toml` and its `files/`. The plan gets
