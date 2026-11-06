@@ -195,6 +195,19 @@ class BacklogTest(ProjectCase):
             b.set_status(d, "PF-1", "done", result="98 ms", verdict="met")
         self.assertIn("Result (met): 98 ms", self.show("PF-1"))
 
+    def test_show_is_plain_text(self):
+        """`show ID` drops the bold written in a goal, criterion or result (an owner's, or an older foreman's)."""
+        r = self.cli(
+            "backlog", "add", "E1", "--title", "Bold", "--id", "PF-1", "--claim", "x **y**", "--criterion", "a **b** c"
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        iid = r.stdout.split()[-1]
+        self.assertEqual(self.cli("backlog", "edit", iid, "--result", "r **s**").returncode, 0)
+        shown = self.cli("backlog", "show", iid).stdout
+        for text in ("x y", "a b c", "r s"):
+            self.assertIn(text, shown)
+        self.assertNotIn("**", shown)
+
     def test_add_short_and_dry_run(self):
         """`backlog add --short` stores the short name (and warns like `edit --short`); `--dry-run` shows the issue as
         `show ID` would and writes nothing; the errors are the same with and without it."""

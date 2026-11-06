@@ -84,9 +84,9 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
         + (f" · github {i['github']}" if i.get("github") else "")
         + (f" · short «{i['short']}»" if i.get("short") else "")
     ]
-    out += filter(
-        None, (backlog_text.render_fields(b, i), backlog_text.render_outcome(b, i), backlog_text.render_result(b, i))
-    )
+    # plain text: the bold an owner or an older foreman wrote in a goal, criterion or result is not shown
+    fields = (backlog_text.render_fields(b, i), backlog_text.render_outcome(b, i), backlog_text.render_result(b, i))
+    out += [re.sub(r"\*\*", "", line) for line in fields if line]
     r = b.relations_of(data, i["id"])
     rels = [f"{k.replace('_', ' ')} {', '.join(v) if isinstance(v, list) else v}" for k, v in r.items() if v]
     if rels:
