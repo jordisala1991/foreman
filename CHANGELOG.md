@@ -15,6 +15,7 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Changed
 
+- `foreman backlog decision add` refuses (exit 2, naming the option) a question with an `--option` that has no `--effect`; `--as-is` still records it (and `foreman check` still warns).
 - The guard reads each command once per check: its texts, with and without the pushes resolved, serve every deny
   list and group; one walk of the lines it runs serves the reserved-file, main-checkout, integrate and hidden-check
   rules; the registry is read once per call (also across a tool call's file and places), and a folder's repo in two

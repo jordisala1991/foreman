@@ -36,7 +36,24 @@ class BacklogTest(ProjectCase):
             ("add", "E1", "--id", "AB-1", "--title", "one", "--status", "ready"),
             ("sub", "AB-1", "T1", "--title", "first", "--report", "reviews/r.md"),
             ("status", "AB-1", "done", "--result", "ok"),
-            ("decision", "add", "--id", "OPS J1", "--title", "Which", "--text", "t", "--option", "a", "--option", "b"),
+            (
+                "decision",
+                "add",
+                "--id",
+                "OPS J1",
+                "--title",
+                "Which",
+                "--text",
+                "t",
+                "--option",
+                "a",
+                "--effect",
+                "x",
+                "--option",
+                "b",
+                "--effect",
+                "x",
+            ),
             ("decision", "resolve", "OPS J1", "--option", "1"),
             ("archive", "AB-1"),
         ]
@@ -310,11 +327,11 @@ class BacklogTest(ProjectCase):
         with self.assertRaises(BacklogError):
             with b.mutate() as d:
                 b.add_decision(d, None, "bad", "", ["a"], issue="nope")
-        r = self.cli("backlog", "decision", "add", "--issue", "AB-5", "--title", "t", "--option", "a")
+        r = self.cli("backlog", "decision", "add", "--issue", "AB-5", "--title", "t", "--option", "a", "--effect", "x")
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "decision AB-5 J1"), r.stderr)
-        r = self.cli("backlog", "decision", "add", "--title", "t", "--option", "a")
+        r = self.cli("backlog", "decision", "add", "--title", "t", "--option", "a", "--effect", "x")
         self.assertEqual(r.stdout.strip(), "decision DEC J3", r.stderr)
-        r = self.cli("backlog", "decision", "add", "--id", "oops", "--title", "t", "--option", "a")
+        r = self.cli("backlog", "decision", "add", "--id", "oops", "--title", "t", "--option", "a", "--effect", "x")
         self.assertEqual(r.returncode, 2)
         self.assertIn("next free one is «DEC J4»", r.stderr)
 
@@ -327,20 +344,34 @@ class BacklogTest(ProjectCase):
         with b.mutate() as d:
             b.add_decision(d, "RP J12", "t", "", ["a"])
             b.resolve_decision(d, "RP J12", "a")
-        r = self.cli("backlog", "decision", "add", "--issue", "RP-11", "--title", "t", "--option", "a")
+        r = self.cli("backlog", "decision", "add", "--issue", "RP-11", "--title", "t", "--option", "a", "--effect", "x")
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "decision RP J13"), r.stderr)
-        r = self.cli("backlog", "decision", "add", "--issue", "RP-11", "--title", "t", "--option", "a")
+        r = self.cli("backlog", "decision", "add", "--issue", "RP-11", "--title", "t", "--option", "a", "--effect", "x")
         self.assertEqual(r.stdout.strip(), "decision RP J14", r.stderr)
-        r = self.cli("backlog", "decision", "add", "--title", "t", "--option", "a")
+        r = self.cli("backlog", "decision", "add", "--title", "t", "--option", "a", "--effect", "x")
         self.assertEqual(r.stdout.strip(), "decision DEC J1", r.stderr)
-        r = self.cli("backlog", "decision", "add", "--id", "bad", "--issue", "RP-11", "--title", "t", "--option", "a")
+        r = self.cli(
+            "backlog",
+            "decision",
+            "add",
+            "--id",
+            "bad",
+            "--issue",
+            "RP-11",
+            "--title",
+            "t",
+            "--option",
+            "a",
+            "--effect",
+            "x",
+        )
         self.assertEqual(r.returncode, 2)
         self.assertIn("next free one is «RP J15»", r.stderr)
 
     def test_decision_id_no_default_fits(self):
         self.write_toml(BASE_TOML.replace("[ids]\n", '[ids]\ndecision = "^Z\\\\d+$"\n'))
         for args in ((), ("--issue", "RP-11"), ("--id", "bad", "--issue", "RP-11")):
-            r = self.cli("backlog", "decision", "add", *args, "--title", "t", "--option", "a")
+            r = self.cli("backlog", "decision", "add", *args, "--title", "t", "--option", "a", "--effect", "x")
             self.assertEqual(r.returncode, 2, r.stderr)
             self.assertIn("give --id matching that pattern", r.stderr)
             self.assertNotIn("next free one", r.stderr)
@@ -360,7 +391,7 @@ class BacklogTest(ProjectCase):
         """--blocks Tn / issue (with --issue) or a full reference; none by default, and then the
         decision is the one of before (no `blocks` key); `decision blocks` changes it later."""
         self.held_world()
-        add = ("backlog", "decision", "add", "--title", "t", "--option", "a")
+        add = ("backlog", "decision", "add", "--title", "t", "--option", "a", "--effect", "x")
         r = self.cli(*add, "--issue", "AB-1", "--blocks", "T3")
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "decision AB-1 J1"), r.stderr)
         r = self.cli(*add, "--issue", "AB-1", "--blocks", "issue")
@@ -374,12 +405,12 @@ class BacklogTest(ProjectCase):
         self.assertEqual(d["AB-1 J2"]["blocks"], ["AB-1"])
         self.assertEqual(d["AB-2 J1"]["blocks"], ["AB-1", "AB-2 T1"])
         self.assertEqual(
-            list(d["AB-2 J2"]), ["id", "title", "date", "text", "options", "recommendation"], "same keys as before"
+            list(d["AB-2 J2"]), ["id", "title", "date", "text", "options", "recommendation", "details"], "no blocks key"
         )
         raw = (self.home / "backlog.json").read_text()
         self.assertIn(
             '      "id": "AB-2 J2",\n      "title": "t",\n      "date": "2020-01-01",\n      "text": "",\n'
-            '      "options": [\n        "a"\n      ],\n      "recommendation": ""\n    }',
+            '      "options": [\n        "a"\n      ],\n      "recommendation": "",\n      "details": {',
             raw,
         )
         self.assertIn('"blocks": [\n        "AB-1 T3"\n      ]', raw)
@@ -469,7 +500,7 @@ class BacklogTest(ProjectCase):
         self.assertEqual(r.stdout, "freed: AB-1 T3\n")
         r = self.cli("backlog", "decision", "resolve", "AB-2 J1")
         self.assertEqual(r.stdout, "freed: AB-2\nAB-2 T1: still held by AB-2 J2\n")
-        r = self.cli("backlog", "decision", "add", "--title", "t", "--option", "a")
+        r = self.cli("backlog", "decision", "add", "--title", "t", "--option", "a", "--effect", "x")
         r = self.cli("backlog", "decision", "resolve", "DEC J1")
         self.assertEqual((r.returncode, r.stdout), (0, ""), "a decision that holds nothing prints nothing")
         resolved = {x["id"]: x for x in b.load()["decisions_resolved"]}
@@ -696,7 +727,24 @@ class BacklogTest(ProjectCase):
             ("block", "AB-1", "waiting"),
             ("unblock", "AB-1"),
             ("edit", "AB-1", "--append", "more detail", "--github", "acme/app#7"),
-            ("decision", "add", "--id", "OPS J2", "--title", "t", "--text", "x", "--option", "a", "--option", "b"),
+            (
+                "decision",
+                "add",
+                "--id",
+                "OPS J2",
+                "--title",
+                "t",
+                "--text",
+                "x",
+                "--option",
+                "a",
+                "--effect",
+                "x",
+                "--option",
+                "b",
+                "--effect",
+                "x",
+            ),
         ]
         for s in steps:
             r = self.cli("backlog", *s)

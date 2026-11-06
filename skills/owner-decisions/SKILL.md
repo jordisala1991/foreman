@@ -18,7 +18,7 @@ project's language (`[project] language`): explain the decisions' texts in other
      `plans`, not the whole plan;
    - each option, numbered: what changes for them, concretely (what they will see or do differently). When the
      question has `details`, give each option its `effect`, its `cost` and whether it can be undone (`undo`: yes,
-     with difficulty, no) from there, in other words, instead of improvising; an option without them, as today;
+     with difficulty, no) from there, in other words, instead of improvising; an option without them (one recorded with --as-is), as today;
    - the recommendation and why; what waits for the answer (`holds`), by name, not by id; when it has `unanswered`,
      say what stays stopped meanwhile (`waits`) and the day (`by`) the orchestrator will remind them. Nothing is
      decided for them: it only reminds and always waits, so never say «if you do not answer I go on with A»;

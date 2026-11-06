@@ -95,12 +95,9 @@ Book a berth from the phone.
   HB-5    backlog      missing criterion
 $ foreman --project harbor backlog archive HB-1
 [exit 0]
-$ foreman --project harbor backlog decision add --issue HB-2 --title "Do we take cash at the berth?" --text "Some sailors ask to pay cash; taking it means a till and a daily count." --option "a: card only" --option "b: card and cash" --recommend "a, no till to count" --recommend-option "a: card only" --date 2020-01-17
+$ foreman --project harbor backlog decision add --issue HB-2 --title "Do we take cash at the berth?" --text "Some sailors ask to pay cash; taking it means a till and a daily count." --option "a: card only" --effect "the first copy stays" --option "b: card and cash" --effect "the second copy stays" --recommend "a, no till to count" --recommend-option "a: card only" --date 2020-01-17
 [exit 0]
 decision HB-2 J1
---- stderr
-foreman backlog: warning: HB-2 J1: option 1 («a: card only») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
-foreman backlog: warning: HB-2 J1: option 2 («b: card and cash») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
 $ foreman --project harbor backlog decision add --title "Close HB-2 with T1 of loop.py?" --text "HB-2 T1 asks for it." --option a --option b --date 2020-01-17
 [exit 2]
 --- stderr
@@ -258,7 +255,7 @@ $ foreman --project harbor backlog show "DEC J1" --json
 }
 $ foreman --project harbor backlog show "HB-2 J1"
 [exit 0]
-- **HB-2 J1, Do we take cash at the berth?** (2020-01-17): Some sailors ask to pay cash; taking it means a till and a daily count. Recommendation: a, no till to count Options: a: card only · b: card and cash
+- **HB-2 J1, Do we take cash at the berth?** (2020-01-17): Some sailors ask to pay cash; taking it means a till and a daily count. Recommendation: a, no till to count Options: a: card only · b: card and cash What each option changes: a: card only: the first copy stays · b: card and cash: the second copy stays
 resolved <TODAY>: «a: card only»
 $ foreman --project harbor backlog show "HB-2 J1" --json
 [exit 0]
@@ -273,6 +270,14 @@ $ foreman --project harbor backlog show "HB-2 J1" --json
   ],
   "recommendation": "a, no till to count",
   "recommended": "a: card only",
+  "details": {
+    "a: card only": {
+      "effect": "the first copy stays"
+    },
+    "b: card and cash": {
+      "effect": "the second copy stays"
+    }
+  },
   "resolved": "<TODAY>",
   "answer": "a: card only"
 }
@@ -666,6 +671,14 @@ foreman backlog: unknown field nofield
       ],
       "recommendation": "a, no till to count",
       "recommended": "a: card only",
+      "details": {
+        "a: card only": {
+          "effect": "the first copy stays"
+        },
+        "b: card and cash": {
+          "effect": "the second copy stays"
+        }
+      },
       "resolved": "<TODAY>",
       "answer": "a: card only"
     }
@@ -695,12 +708,16 @@ $ foreman --project harbor backlog decision add --issue HB-2 --title "Do we open
 decision HB-2 J2
 --- stderr
 foreman backlog: warning: HB-2 J2: --answer-by 2020-01-26 is in the past: the reminder would come at once; give a later date
-$ foreman --project harbor backlog decision add --title "Do we paint it? And do we light it?" --option yes --option no --undo no
+$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --effect "boats can moor after dusk" --option no
+[exit 2]
+--- stderr
+foreman backlog: decision not recorded: an option has no --effect:
+  option 2 («no»)
+Say what the owner will see or do differently with each one: --effect right after its --option. Or add --as-is to record it as it is.
+$ foreman --project harbor backlog decision add --title "Do we paint it? And do we light it?" --option yes --effect "boats can moor after dusk" --option no --effect "it stays as today" --undo no
 [exit 0]
 decision DEC J2
 --- stderr
-foreman backlog: warning: DEC J2: option 1 («yes») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
-foreman backlog: warning: DEC J2: option 2 («no») has no --effect: say what the owner will see or do differently with it (--effect after its --option)
 foreman backlog: warning: DEC J2: the title asks 2 questions: split it, one decision per question, or keep only the one the owner answers (a quoted question «…» does not count)
 $ foreman --project harbor backlog decision add --title "When you say «is it ready?», do I look at the north berth?" --option yes --effect "boats can moor after dusk" --date 2020-01-19
 [exit 0]
@@ -719,11 +736,11 @@ usage: foreman backlog decision add [-h] [--id DID] [--issue ISSUE]
                                     [--date DATE] [--as-is]
                                     [--blocks REF [REF ...]]
 foreman backlog decision add: error: --effect goes after the --option it describes
-$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --page ../x.md
+$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --effect "boats can moor after dusk" --page ../x.md
 [exit 2]
 --- stderr
 foreman backlog: --page '../x.md' must be a .md file relative to the home, without «..»
-$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --answer-by 2020-01-26
+$ foreman --project harbor backlog decision add --title "Do we open the north berth at night?" --option yes --effect "boats can moor after dusk" --answer-by 2020-01-26
 [exit 2]
 --- stderr
 foreman backlog: --answer-by needs --if-no-answer: say what stays stopped until the owner answers
