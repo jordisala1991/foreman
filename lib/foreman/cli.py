@@ -883,18 +883,8 @@ def cmd_wait(project_name: str | None, argv: list[str]) -> int:
 def cmd_selftest(args: argparse.Namespace) -> int:
     from . import selftest
 
-    return selftest.run(
-        verbose=args.v,
-        pattern=args.pattern,
-        jobs=args.j,
-        python=args.python,
-        update_golden=args.update_golden,
-        quality=args.quality,
-        quality_only=args.quality_only,
-        fix=args.fix,
-        mods=args.mods,
-        coverage=args.coverage,
-    )
+    same = ("pattern", "python", "update_golden", "quality", "quality_only", "fix", "mods", "coverage")
+    return selftest.run(verbose=args.v, jobs=args.j, **{k: getattr(args, k) for k in same})
 
 
 def cmd_docs(args: argparse.Namespace) -> int:
@@ -1172,16 +1162,8 @@ def cmd_agents(p: Project, args: argparse.Namespace) -> int:
         from . import identity
 
         try:
-            aid = identity.name_hand(
-                p,
-                args.name[0],
-                args.name[1],
-                issue=args.issue,
-                sub=args.sub,
-                repo=args.repo,
-                branch=args.branch,
-                worktree=args.worktree,
-            )
+            fields = {k: getattr(args, k) for k in ("issue", "sub", "repo", "branch", "worktree")}
+            aid = identity.name_hand(p, args.name[0], args.name[1], **fields)
         except identity.IdentityError as e:
             print(f"foreman agents: {e}", file=sys.stderr)
             return 2

@@ -616,28 +616,11 @@ def sessions_command(only_behind: bool = False, as_json: bool = False) -> int:
         entries = [e for e in entries if e["behind"] or e.get("settling")]
     if as_json:
         keep = (
-            "session",
-            "name",
-            "project",
-            "cwd",
-            "started",
-            "status",
-            "version",
-            "root",
-            "kind",
-            "estimated",
-            "behind",
-            "settling",
-            "orchestrator",
-            "entrypoint",
-        )
-        print(
-            json.dumps(
-                {"installed": inst, "sessions": [{k: e.get(k) for k in keep} for e in entries]},
-                ensure_ascii=False,
-                indent=1,
-            )
-        )
+            "session name project cwd started status version root kind estimated behind settling orchestrator "
+            "entrypoint"
+        ).split()
+        sessions = [{k: e.get(k) for k in keep} for e in entries]
+        print(json.dumps({"installed": inst, "sessions": sessions}, ensure_ascii=False, indent=1))
         return 0
     print(
         f"installed foreman {inst['version']} ({inst['root']})"
@@ -652,14 +635,10 @@ def sessions_command(only_behind: bool = False, as_json: bool = False) -> int:
             e["project"],
             e.get("name") or e["session"][:8],
             label(e),
-            " ".join(
-                x
-                for x in (
-                    "BEHIND" if e["behind"] else "settling" if e.get("settling") else "",
-                    "orchestrator" if e["orchestrator"] else "",
-                )
-                if x
-            ),
+            (
+                ("BEHIND " if e["behind"] else "settling " if e.get("settling") else "")
+                + ("orchestrator" if e["orchestrator"] else "")
+            ).rstrip(),
             e["session"],
         )
         for e in entries
