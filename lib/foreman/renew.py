@@ -141,7 +141,7 @@ def _lines(project: Project) -> list[dict[str, Any]]:
 def _append(project: Project, rec: dict[str, Any]) -> None:
     f = renewals_file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f), open(f, "a") as out:
+    with util.file_lock(f), open(f, "a") as out:
         out.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
 
 

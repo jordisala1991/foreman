@@ -38,7 +38,7 @@ import sys
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, TextIO
 
-from . import config, i18n, notes, util
+from . import config, i18n, util
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -425,7 +425,7 @@ def record(project: Project, session_id: str | None, msg: dict[str, str], found:
     }
     f = project.state / LOG
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f), open(f, "a") as out:
+    with util.file_lock(f), open(f, "a") as out:
         out.write(json.dumps(line, ensure_ascii=False) + "\n")
     return line
 

@@ -30,11 +30,9 @@ the checks in backlog_check and the `foreman backlog` command line in backlog_cl
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
 import re
 import subprocess
-import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -412,23 +410,11 @@ class Backlog:
     @contextlib.contextmanager
     def locked(self, timeout: float = 30) -> Iterator[None]:
         """Exclusive lock next to the backlog file (panel, orchestrator and hooks may write at the same time)."""
-        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.lock_path, "a") as f:
-            end = time.monotonic() + timeout
-            while True:
-                try:
-                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() > end:
-                        raise BacklogError(
-                            f"{self.lock_path} is held by another writer for more than {timeout} s"
-                        ) from None
-                    time.sleep(0.05)
-            try:
+        try:
+            with util.file_lock(self.lock_path.with_suffix(""), timeout=timeout):  # .backlog.lock
                 yield
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+        except TimeoutError:
+            raise BacklogError(f"{self.lock_path} is held by another writer for more than {timeout} s") from None
 
     @contextlib.contextmanager
     def mutate(self, timeout: float = 30) -> Iterator[Data]:

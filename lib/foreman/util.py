@@ -28,6 +28,7 @@ atomic writes, local ISO times, process ids and git.
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import json
 import os
 import re
@@ -35,6 +36,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
@@ -132,6 +134,40 @@ def write_text_atomic(path: PathLike, text: str) -> bool:
             os.unlink(tmp)
         raise
     return True
+
+
+@contextlib.contextmanager
+def file_lock(path: Path, lock_dir: Path | None = None, timeout: float | None = None) -> Iterator[None]:
+    """Exclusive flock for the file `path`, on a `<path>.lock` file next to it; with `lock_dir` the lock file lives
+    there instead (`<lock_dir>/<name>.lock`). The product's home is the user's: note() locks in the state
+    (`<state>/locks-notes/`), so no `.lock` file appears among the notes. Waits for ever, or `timeout` seconds
+    (then TimeoutError)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = (lock_dir / path.name) if lock_dir is not None else path
+    if lock_dir is not None:
+        lock_dir.mkdir(parents=True, exist_ok=True)
+    with open(str(lock) + ".lock", "a") as f:
+        end = None if timeout is None else time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | (0 if end is None else fcntl.LOCK_NB))
+                break
+            except BlockingIOError:
+                if end is not None and time.monotonic() > end:
+                    raise TimeoutError(f"{lock}.lock is held by another process for more than {timeout} s") from None
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def locked_json(path: Path, default: Any) -> Iterator[Any]:
+    """Under `file_lock(path)`, yields what `read_json(path, default)` reads; the caller writes it back (write_json)
+    or not."""
+    with file_lock(path):
+        yield read_json(path, default)
 
 
 def write_json(path: PathLike, obj: Any) -> None:
