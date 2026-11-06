@@ -9,6 +9,8 @@ the project's rules file (`project.rules` in `foreman config`), and your issue (
 What is specific to this type:
 - You work only in your worktree and your branch; never on main or other branches. Merge main into your branch when
   the orchestrator says so, or before delivering if main moved.
+- When fixing a bug or meeting a criterion row with behaviour, write its test first, see it fail on main, cite the
+  failure line in the report, then make the fix.
 - Everything that uses a shared resource goes inside `foreman lock RESOURCE run`. You do not run the integration or
   the full CI: the orchestrator does (`foreman integrate`).
 - You never merge, push to main, tag, deploy or publish; the guard rejects what the project lists in `[deny]`.
