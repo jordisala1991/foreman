@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .backlog import CLOSED, PENDING_SUBS, SUB_SYMBOLS
+from .backlog import CLOSED, OUTCOME, PENDING_SUBS, SUB_SYMBOLS
 
 if TYPE_CHECKING:
-    from .backlog import Backlog, Data, Holds, Issue, Record
+    from .backlog import Backlog, Holds, Issue, Record
 
 
 def render_sub(b: Backlog, s: Record) -> str:
@@ -42,22 +42,22 @@ def render_subs(b: Backlog, subs: list[Record]) -> str:
     return " · ".join(render_sub(b, s) for s in subs)
 
 
-def render_outcome(b: Backlog, data: Data, i: Issue) -> str:
-    h = i.get("acceptance")
+def render_outcome(b: Backlog, i: Issue) -> str:
+    h = i.get(OUTCOME)
     if not h:
         return ""
     alias = f" ({', '.join(h['aliases'])})" if h.get("aliases") else ""
     if not h.get("claim"):  # the title states the goal
-        return f"**{b.s['criterion_label']}**{alias}: {h['criterion']}"
-    return f"**{b.s['claim_label']}**{alias}: {h['claim']} · **{b.s['criterion_inline']}:** {h['criterion']}"
+        return f"{b.s['criterion_label']}{alias}: {h['criterion']}"
+    return f"{b.s['claim_label']}{alias}: {h['claim']} · {b.s['criterion_inline']}: {h['criterion']}"
 
 
-def render_result(b: Backlog, data: Data, i: Issue) -> str:
-    label = b.verdict_label(data, i)
+def render_result(b: Backlog, i: Issue) -> str:
+    label = b.verdict_label(i)
     name = b.s["result_label"]
     if not i.get("result"):
-        return f"**{name}:** {label}" if label else ""
-    return f"**{name}**" + (f" ({label})" if label else "") + f": {i['result']}"
+        return f"{name}: {label}" if label else ""
+    return name + (f" ({label})" if label else "") + f": {i['result']}"
 
 
 def render_fields(b: Backlog, i: Issue) -> str:
@@ -125,7 +125,7 @@ def render_project_meta(b: Backlog, p: Record) -> str:
         )
         if x
     ]
-    return f"*{' · '.join(meta)}*" if meta else ""
+    return " · ".join(meta)
 
 
 def render_decision(b: Backlog, d: Record) -> str:

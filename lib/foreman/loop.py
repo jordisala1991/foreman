@@ -145,13 +145,14 @@ class Snapshot:
         out: dict[str, list[tuple[str, Record]]] = {}
         for i in self.issues():
             for s in i["subs"]:
-                if s.get("branch"):
-                    out.setdefault(s["branch"], []).append((i["id"], s))
+                if s.get("branch"):  # in backquotes too, as backlog.on_branch
+                    out.setdefault(s["branch"].strip("`"), []).append((i["id"], s))
         return out
 
     @cached_property
     def agent_of(self) -> dict[str, str | None]:
-        return {s["branch"]: s.get("agent") for i in self.issues(archived=False) for s in i["subs"] if s.get("branch")}
+        subs = [s for i in self.issues(archived=False) for s in i["subs"] if s.get("branch")]
+        return {s["branch"].strip("`"): s.get("agent") for s in subs}
 
     locks = cached_property(lambda self: lock.all_status(self.project))
     wts = cached_property(lambda self: worktree.all_worktrees(self.project))
