@@ -46,12 +46,22 @@ def liveness(project: Project, session_id: str | None, now: float | None = None)
     return heartbeat.liveness(project, (session_id or "").strip(), when)
 
 
+def every_min(project: Project) -> float:
+    """[loop] every_min as a positive number of minutes (60 when it is not one)."""
+    every = project.section("loop").get("every_min", 60)
+    return every if isinstance(every, (int, float)) and not isinstance(every, bool) and every > 0 else 60
+
+
 def loop_limit_min(project: Project) -> float:
     """max(2 × [loop] every_min, 90): how long a loop may go without a pass before it counts as not running (a pass
     held behind a long turn and the first pass after resuming a session fit in it)."""
-    every = project.section("loop").get("every_min", 60)
-    every = every if isinstance(every, (int, float)) and not isinstance(every, bool) and every > 0 else 60
-    return max(2 * every, 90)
+    return max(2 * every_min(project), 90)
+
+
+def last_pass(project: Project) -> str | None:
+    """The `loop` heartbeat (local ISO): the last pass, or None."""
+    last = notes.heartbeats(project).get("loop")
+    return last if isinstance(last, str) else None
 
 
 def watches_loop(project: Project) -> bool:
@@ -63,10 +73,16 @@ def watches_loop(project: Project) -> bool:
 def pass_window(project: Project, o: Mark | None) -> tuple[str | None, float | None]:
     """(last_pass, window_from_ts) without looking at processes: the `loop` heartbeat (local ISO, or None when not
     watched) and the latest of it and the mark's `since`."""
-    last = notes.heartbeats(project).get("loop") if watches_loop(project) else None
-    last = last if isinstance(last, str) else None
+    last = last_pass(project) if watches_loop(project) else None
     times = [t for t in (util.iso_epoch(last), util.iso_epoch((o or {}).get("since"))) if t is not None]
     return last, (max(times) if times else None)
+
+
+def pass_late(project: Project, o: Mark, now: float) -> bool | None:
+    """Whether the marked session `o` had no pass for loop_limit_min (since the latest of the last pass and the
+    mark); None when neither is known."""
+    window = pass_window(project, o)[1]
+    return None if window is None else now - window > loop_limit_min(project) * 60
 
 
 def health(project: Project, o: Mark | None = None, now: float | None = None) -> Health | None:

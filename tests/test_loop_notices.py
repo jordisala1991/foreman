@@ -2450,7 +2450,7 @@ class TickTest(LivenessCase):
     def test_bad_input(self):
         r = self.cli("hook", "mod", "tick", inp="[]")
         self.assertEqual(r.returncode, 2)
-        self.assertEqual(hooks_mod.every_min(self.project), 60)
+        self.assertEqual(orchestrator.every_min(self.project), 60)
 
 
 class GoneOrchestratorTest(LivenessCase):

@@ -355,20 +355,14 @@ def context_text(m: dict[str, Any] | None, limit: int | None = None) -> str:
     return f"{n} tokens ({n // 1000}K{of}, at {m.get('at')}{rot})"
 
 
-def every_min(project: Project) -> float:
-    """[loop] every_min as a positive number of minutes (60 when it is not one)."""
-    every = project.section("loop").get("every_min", 60)
-    return every if isinstance(every, (int, float)) and not isinstance(every, bool) and every > 0 else 60
-
-
 def pass_due(project: Project, o: Mark, now: float | None = None) -> bool:
     """Whether the marked session `o` (orchestrator.current) is due a pass: no `loop` heartbeat, one older than
     [loop] every_min (less DUE_SLACK_S), or one older than the mark (a session marked since the last pass gets its
     first pass at its next tick) or than the session's last renewal (renew.compacted_at: the pass right after it)."""
-    from . import notes
+    from . import orchestrator
 
     now = time.time() if now is None else now
-    last = util.iso_epoch(notes.heartbeats(project).get("loop"))
+    last = util.iso_epoch(orchestrator.last_pass(project))
     if last is None:
         return True
     marked = util.iso_epoch(o.get("since"))
@@ -376,7 +370,7 @@ def pass_due(project: Project, o: Mark, now: float | None = None) -> bool:
         return True
     if renewed_since_pass(project, o):
         return True
-    return now - last >= every_min(project) * 60 - DUE_SLACK_S
+    return now - last >= orchestrator.every_min(project) * 60 - DUE_SLACK_S
 
 
 def renewed_since_pass(project: Project, o: Mark) -> bool:
@@ -384,7 +378,7 @@ def renewed_since_pass(project: Project, o: Mark) -> bool:
     heartbeat; none counts as before): the pass due then is sent to the model even with nothing actionable
     (_tick_pass), since after `/compact` the session gets no turn otherwise and its pack says a pass comes.
     Never raises."""
-    from . import notes, renew
+    from . import orchestrator, renew
 
     try:
         renewed_at = renew.compacted_at(project, o.get("session"))
@@ -392,7 +386,7 @@ def renewed_since_pass(project: Project, o: Mark) -> bool:
         return False
     if renewed_at is None:
         return False
-    last = util.iso_epoch(notes.heartbeats(project).get("loop"))
+    last = util.iso_epoch(orchestrator.last_pass(project))
     return last is None or renewed_at > last
 
 

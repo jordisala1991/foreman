@@ -34,7 +34,7 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from . import hooks_mod, i18n, loop, notes, orchestrator, util
+from . import hooks_mod, i18n, loop, orchestrator, util
 from .backlog import short_title
 
 if TYPE_CHECKING:
@@ -79,14 +79,14 @@ def pass_part(project: Project, s: dict[str, Any], o: Mark | None, now: float) -
     had no pass for orchestrator.loop_limit_min; None without a [loop] prompt."""
     if not orchestrator.watches_loop(project):
         return None
-    last = util.iso_epoch(notes.heartbeats(project).get("loop"))
+    last = util.iso_epoch(orchestrator.last_pass(project))
     if o:
-        _, window = orchestrator.pass_window(project, o)
-        if window is not None and now - window > orchestrator.loop_limit_min(project) * 60:
-            return part(s["band_late"].format(time=_hhmm(last if last is not None else window)), "bad", PRIO_KEEP)
+        late = last if last is not None else orchestrator.pass_window(project, o)[1]
+        if late is not None and orchestrator.pass_late(project, o, now):
+            return part(s["band_late"].format(time=_hhmm(late)), "bad", PRIO_KEEP)
     if last is None:
         return part(s["band_no_pass"], "plain", PRIO_NEXT_PASS)
-    due = last + hooks_mod.every_min(project) * 60
+    due = last + orchestrator.every_min(project) * 60
     text = s["band_next_pass_due"] if due <= now else s["band_next_pass"].format(time=_hhmm(due))
     return part(text, "plain", PRIO_NEXT_PASS)
 
@@ -102,8 +102,7 @@ def memory_parts(project: Project, s: dict[str, Any], o: Mark | None, now: float
 
     m = hooks_mod.read_measure(project, o["session"]) if o else None
     tokens = m.get("tokens") if m else None
-    limit = project.section("loop").get("context_rotate", 200000)
-    limit = limit if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0 else 0
+    limit = renew.limit(project)
     if not isinstance(tokens, int) or isinstance(tokens, bool):
         out = [part(s["band_memory_bare"].format(tokens="—"), "plain", PRIO_MEMORY)]
     elif limit:
