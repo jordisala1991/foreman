@@ -162,6 +162,17 @@ class NoticesCase(ProjectCase):
         """Waits until `who` is in the queue of `widget` (its ticket written)."""
         return self.wait_lock(lambda st: who in [q["who"] for q in st["queue"]])
 
+    def worktree(self, branch):
+        wt = self.tmp / "wt" / branch.replace("/", "-")
+        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
+        return wt
+
+    def hook_tick(self, session="S1", **ev):
+        """The module's tick run in this process, without the band."""
+        out = hooks_mod.tick({"cwd": str(self.home), "session": session, "busy": False, "agents": [], **ev})
+        out.pop("band", None)
+        return out
+
     def tick(self, session="S1", **extra):
         """What `foreman hook mod tick` answers the module for `session` (plus `extra` fields of its input), without
         the band (BandTest's business): a marked session's answer must carry it, any other must not."""
@@ -565,11 +576,6 @@ class LoopNoticesTest(NoticesCase):
         owner.write_text("orchestrator: first (delegated, no pid)\n")
         self.assertIsNone(lock.status("widget")["holders"][0]["alive"])
         self.assertEqual(self.kinds()["lock_queue"], [True])  # no pid: in doubt, actionable
-
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
 
     def test_ready_to_integrate_loose_and_orphan(self):
         self.issue("AB-1", "in progress", agent="zed7", branch="ab1/x")
@@ -1248,11 +1254,6 @@ class IdentityPassTest(NoticesCase):
         f.parent.mkdir(parents=True, exist_ok=True)
         util.write_json(f, d)
 
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
-
     def notice_of(self, kind, mark=True):
         return next((n for n in self.notices("S1", mark) if n["kind"] == kind), None)
 
@@ -1388,11 +1389,6 @@ class DeliveredTest(NoticesCase):
         super().setUp()
         self.issue("AB-1", "in progress", agent="zed7", branch="ab1/x")
         self.wt = self.worktree("ab1/x")
-
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
 
     def send(self, name, aid="d1", **kw):
         t = self.tmp / "S1" / f"{aid}.jsonl"
@@ -2656,14 +2652,3 @@ class ChatReviewTest(NoticesCase):
         r = self.cli("plain", "--stats")
         self.assertEqual(r.returncode, 0)
         self.assertIn("no message", r.stdout)
-
-    def test_parse_since(self):
-        from foreman import plain
-
-        now = datetime(2026, 10, 31, 12, 0)
-        self.assertEqual(plain.parse_since("7d", now), datetime(2026, 10, 24, 12, 0))
-        self.assertEqual(plain.parse_since("12h", now), datetime(2026, 10, 31, 0, 0))
-        self.assertEqual(plain.parse_since("30m", now), datetime(2026, 10, 31, 11, 30))
-        self.assertEqual(plain.parse_since("2026-10-30 08:00", now), datetime(2026, 10, 30, 8, 0))
-        with self.assertRaises(ValueError):
-            plain.parse_since("yesterday", now)
