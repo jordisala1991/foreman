@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-11-06
+
 ### Changed
 
 - «A branch review» (agents/reviewer.md) also looks where reviews missed known bugs: time and concurrency (a
