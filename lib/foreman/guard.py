@@ -442,9 +442,9 @@ def _deny(
     words_of = [[t for t in s.toks if t.kind == "word"] for s in segs]
     info = [runs(w) for w in words_of]
     here = gitpush.folders(segs, words_of, info, at[1]) if at else []
-    heads = gitpush.branches(segs, words_of, info, here) if at else []
-    before = gitpush.changes(words_of, info, at[2], segs, here) if at else []
     fn = gitpush.called(segs, words_of, info, cmd) if at and lx.redefines else {}
+    heads = gitpush.branches(segs, words_of, info, here, fn) if at else []
+    before = gitpush.changes(words_of, info, at[2], segs, here, fn) if at else []
 
     def sub(k: int, more: bool = False) -> At | None:  # what a command nested in segment k starts in
         if not at:
@@ -530,9 +530,10 @@ def _deny(
         if at and prog is not None and prog.literal and PurePath(prog.value).name == "git":
             try:
                 shells: list[tuple[str, frozenset[str], gitpush.Changes]] = []
-                for v, j in gitpush.variants(w, r.prog, fn.get(k)):  # a function's body: also where it is called
-                    dirs = here[k] if j is None else here[k] | here[j]
-                    for t, d in at[0].resolve(v, r.prog, dirs, heads[k], before[k], shells):
+                for v, j in gitpush.variants(w, r.prog, fn.get(k)):  # a function's body runs where it is called,
+                    dirs = here[k] if j is None else here[k] | here[j]  # with the branch and config of the call
+                    at_k = k if j is None else j  # (before[j] holds the body's own changes, as may-not-have-run)
+                    for t, d in at[0].resolve(v, r.prog, dirs, heads[at_k], before[at_k], shells):
                         resolved.setdefault(t, d)
                 nested += [(c, False, False, "", (at[0], dirs, ch)) for c, dirs, ch in shells]  # `!` aliases
             except Exception as e:  # a push it cannot resolve is never let through: check() denies

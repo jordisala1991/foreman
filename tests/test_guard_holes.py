@@ -177,6 +177,8 @@ class PushHolesTest(PushCase):
         self.assertEqual(self.verdict(cmd, self.own), "deny")
         cmd = f'G() {{ git "$@"; }}; git remote set-url origin {self.SAFE}; G {PUSH[4:]}'
         self.assertEqual(self.verdict(cmd, self.own), "allow")
+        cmd = f'G() {{ git "$@"; }}; G remote set-url origin {self.PUB}; {PUSH}'  # a change the body makes
+        self.assertEqual(self.verdict(cmd, self.own), "deny")
 
 
 class SwitchControlTest(PushCase):
@@ -201,6 +203,8 @@ class SwitchControlTest(PushCase):
         git(self.wt, "switch", "-q", "feat")
         self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; G {PUSH[4:]} origin HEAD', self.wt), "allow")
         cmd = f'G() {{ git "$@"; }}; git switch main && G {PUSH[4:]} origin HEAD'
+        self.assertEqual(self.verdict(cmd, self.wt), "deny")
+        cmd = f'G() {{ git "$@"; }}; G switch main && {PUSH} origin HEAD'  # a switch the body makes
         self.assertEqual(self.verdict(cmd, self.wt), "deny")
 
 
