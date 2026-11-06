@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from . import backlog_list, backlog_text, util
-from .backlog import CLOSED, Backlog, BacklogError, DecisionResolved
+from .backlog import CLOSED, UNDO, Backlog, BacklogError, DecisionResolved
 
 if TYPE_CHECKING:
     import argparse
@@ -447,9 +447,6 @@ def closed_without_commit(project: Project, b: Backlog, data: Data, iid: str, si
     return ""
 
 
-UNDO_WORDS = {"yes": "can be undone", "hard": "can be undone, with work", "no": "cannot be undone"}
-
-
 def show_review(b: Backlog, data: Data, as_json: bool = False) -> str:
     """`decision list`: the pending decisions in review order (Backlog.pending_review), as JSON or one block each
     with its options numbered as `decision resolve --option N` takes them, each with its effect when it has one,
@@ -475,7 +472,7 @@ def show_review(b: Backlog, data: Data, as_json: bool = False) -> str:
             block.append(f"  {n}. {o}" + ("  (recommended)" if o == d["recommended"] else ""))
             x = (d.get("details") or {}).get(o) or {}
             extra = [x["cost"]] if x.get("cost") else []
-            extra += [UNDO_WORDS[x["undo"]]] if x.get("undo") in UNDO_WORDS else []
+            extra += [b.s[f"undo_{x['undo']}"]] if x.get("undo") in UNDO else []
             if x.get("effect") or extra:
                 block.append(
                     f"     {x.get('effect') or '(no effect given)'}" + (f" ({'; '.join(extra)})" if extra else "")
