@@ -145,13 +145,14 @@ class Snapshot:
         out: dict[str, list[tuple[str, Record]]] = {}
         for i in self.issues():
             for s in i["subs"]:
-                if s.get("branch"):
-                    out.setdefault(s["branch"], []).append((i["id"], s))
+                if s.get("branch"):  # in backquotes too, as backlog.on_branch
+                    out.setdefault(s["branch"].strip("`"), []).append((i["id"], s))
         return out
 
     @cached_property
     def agent_of(self) -> dict[str, str | None]:
-        return {s["branch"]: s.get("agent") for i in self.issues(archived=False) for s in i["subs"] if s.get("branch")}
+        subs = [s for i in self.issues(archived=False) for s in i["subs"] if s.get("branch")]
+        return {s["branch"].strip("`"): s.get("agent") for s in subs}
 
     locks = cached_property(lambda self: lock.all_status(self.project))
     wts = cached_property(lambda self: worktree.all_worktrees(self.project))
@@ -607,7 +608,7 @@ def context_notice(project: Project, session: str | None, mark: bool = True) -> 
     the context goes back below (after a renewal or a /compact)."""
     from . import renew
 
-    limit = project.section("loop").get("context_rotate", 200000)
+    limit = renew.limit(project)
     if not session:
         return None
     m = (renew.measure(project, session) if limit else None) or {}
@@ -747,8 +748,7 @@ def stale_notice(project: Project, session: str | None, now: float | None = None
         return None
     now = util.now().timestamp() if now is None else now
     limit = orchestrator.loop_limit_min(project)
-    _, window = orchestrator.pass_window(project, o)
-    if window is not None and now - window <= limit * 60:
+    if orchestrator.pass_late(project, o, now) is False:
         return None
     h = orchestrator.health(project, o, now=now)
     if not h or h["verdict"] not in ("no_loop", "silent"):
@@ -756,7 +756,7 @@ def stale_notice(project: Project, session: str | None, now: float | None = None
     last = h["last_pass"]
     since = f"since {last[11:16]}" if last else "yet"
     text = (
-        f"No loop pass {since} (> {limit} min, [loop] every_min {project.section('loop').get('every_min', 60)}): "
+        f"No loop pass {since} (> {limit} min, [loop] every_min {orchestrator.every_min(project)}): "
         "foreman's hooks module is not running its timer in this session (Claude Code below foreman's minimum, "
         f"plugin mods turned off, or a foreman installed after the session started): ask {project.owner} to run "
         "`/reload-plugins` here; until then run the pass by hand with `foreman loop`."
