@@ -9,6 +9,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Changed
+
+- «A harness review» (agents/reviewer.md) has a fifth outcome for a rule: replace it with an automatic check (a
+  test, a guard row, a `foreman check` item), which ends as a code sub-issue.
+
 ## [0.60.0] - 2026-11-06
 
 ### Removed
