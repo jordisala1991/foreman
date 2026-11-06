@@ -1,0 +1,260 @@
+"""Eleven known holes of the guard, one test each (H1-H11), and the controls that must keep their verdict when they are
+closed.
+
+Each hole test asserts the verdict the guard should give; while the hole is open it is an expected failure, so the
+suite stays green and the change that closes a hole turns its test into an unexpected success (remove the decorator
+there). Every hole has a control next to it, a plain test that passes today: it proves the fixture reaches the rule
+(the same command without the disguise is refused), so an expected failure fails for the hole and not for a broken
+fixture.
+
+- H1-H2 (main checkout): a `cd` to a folder that does not exist followed by `;`, and a folder the line cannot name
+  (`"$WT"` may be empty: the current folder). H2 contradicts FoldersTest.test_cd_and_lists in
+  test_guard_main_checkout.py (`cd "$X" && git merge main` and `git -C "$X" merge main` pass there): the change that
+  closes H2 flips those two rows too.
+- H3-H6 (where a push goes): config changed earlier on the line by a command that may not have run (a removal, a
+  single-valued key), a `!` alias under --git-dir/GIT_DIR, a global alias outside a repo.
+- H7-H11 (programs): a way to builtins through a module's attribute and a full-width `＿`, a module the program writes
+  under a computed name and then imports, a file with a computed name the line then runs, a path with a space in a
+  literal, and an interpreter (python, node) that writes a reserved file.
+
+Commands that name a push or a publish are only passed to guard.check as strings; nothing here runs them.
+"""
+
+import unittest
+
+from helpers import git, make_repo
+from test_guard_bash_writes import BashWriteCase
+from test_guard_files import TABLE
+from test_guard_main_checkout import MainCheckoutCase
+from test_guard_push import PRIVATE, PUSH, PushCase, remote
+
+from foreman import guard
+
+PUBLISH = "npm " + "publish"  # built in pieces, as test_guard_push.py does with its push
+ENV = "(^|[\\s/'\"=<])\\.env($|[\\s'\"])"  # the secrets rule of a machine's [machine.deny.grants]
+ENV_TOML = ENV.replace("\\", "\\\\").replace('"', '\\"')
+PY_TOML = f"""
+[project]
+name = "fake"
+owner = "Owner"
+language = "en"
+
+[deny]
+patterns = ["{PUBLISH}", "{ENV_TOML}"]
+"""
+hole = unittest.expectedFailure  # open today: the change that closes it removes the decorator
+
+
+def py(body, head="python3 -"):
+    """A Python program read from a quoted heredoc."""
+    return f"{head} <<'EOF'\n{body}\nEOF"
+
+
+class MainCheckoutHolesTest(MainCheckoutCase):
+    """H1, H2 and their controls, as an agent (MainCheckoutCase: `top` is a main checkout, `wt` a worktree of it)."""
+
+    def test_controls(self):
+        top, wt = self.top, self.wt
+        self.assertEqual(self.v("git merge main", top), "orchestrator")  # the rule H1 and H2 slip past
+        self.assertEqual(self.v(f"cd {top}; git merge main", top), "orchestrator")
+        for cmd in (f"cd {wt} && git merge main", "git -C ~/nowhere merge main"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.v(cmd, top), "allow")
+        for cmd in ('git -C "$X" merge main', 'cd "$X" && git merge main'):  # from a worktree they never reach top
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.v(cmd, wt), "allow")
+
+    @hole
+    def test_h1_cd_to_a_missing_folder_then_a_semicolon(self):
+        """A `cd` that fails leaves the shell where it was: the merge runs in the main checkout."""
+        gone = self.tmp / "wt/ours-gone"
+        self.assertFalse(gone.exists())
+        self.assertEqual(self.v(f"cd {gone}; git merge main", self.top), "orchestrator")
+
+    @hole
+    def test_h2_a_folder_the_line_cannot_name(self):
+        """An empty "$WT" is the current folder, the main checkout (the hole wins over two rows that pass it today)."""
+        cases = ('git -C "$WT" merge main', 'cd "$WT" && git merge main', "git -C $WT merge main")
+        got = {cmd: self.v(cmd, self.top) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(got, "orchestrator"))
+
+
+class PushHolesTest(PushCase):
+    """H3-H6 and their controls, with test_guard_push.py's PUBLIC list (`git push .*pub-org`, tags and
+    --follow-tags): lib's origin is pub-org, own's is a remote no rule names."""
+
+    SAFE = "https://example.test/me/safe.git"
+    PUB = "https://example.test/pub-org/x.git"
+
+    def setUp(self):
+        super().setUp()
+        self.lib = self.tmp / "lib"
+        self.hidden = make_repo(self.tmp / "hidden")  # its push URL is public, its URL is not
+        remote(self.hidden, self.SAFE)
+        git(self.hidden, "config", "remote.origin.pushurl", self.PUB)
+        self.tagged = make_repo(self.tmp / "tagged")  # a safe remote, but every push sends tags
+        remote(self.tagged, self.SAFE)
+        git(self.tagged, "config", "push.followTags", "true")
+        self.plain = self.tmp / "plain"  # a folder that is no repo
+        self.plain.mkdir()
+
+    def global_alias(self, name, value):
+        with open(self.tmp / "gitconfig", "a") as f:
+            f.write(f"[alias]\n\t{name} = {value}\n")
+
+    def test_controls(self):
+        for repo in (self.lib, self.hidden, self.tagged):
+            with self.subTest(repo=repo.name):
+                self.assertEqual(self.verdict(PUSH, repo), "deny")
+        self.assertEqual(self.verdict(PUSH, self.own), "allow")
+        # an unset that surely ran: the push goes to the safe URL (only one that may not have run counts both states)
+        self.assertEqual(self.verdict(f"git config --unset remote.origin.pushurl && {PUSH}", self.hidden), "allow")
+        cmd = f"git remote remove origin; git remote add origin https://example.test/me/new.git && {PUSH}"
+        self.assertEqual(self.verdict(cmd, self.own), "allow")  # test_guard_push.py's dropped keys: stays allowed
+        self.global_alias("pu", "!git " + PUSH[4:])
+        self.assertEqual(self.verdict("git pu", self.lib), "deny")
+        self.global_alias("ship", f"!git -C {self.lib} " + PUSH[4:])
+        self.assertEqual(self.verdict("git ship", self.own), "deny")
+
+    @hole
+    def test_h3_a_removal_that_may_not_have_run(self):
+        got = {
+            (f"false && git remote remove origin; {PUSH}", "lib"): self.verdict(
+                f"false && git remote remove origin; {PUSH}", self.lib
+            ),
+            (f"false && git config --unset remote.origin.pushurl; {PUSH}", "hidden"): self.verdict(
+                f"false && git config --unset remote.origin.pushurl; {PUSH}", self.hidden
+            ),
+            (f"git -C /no/such/dir config --unset remote.origin.pushurl; {PUSH}", "hidden"): self.verdict(
+                f"git -C /no/such/dir config --unset remote.origin.pushurl; {PUSH}", self.hidden
+            ),
+        }
+        self.assertEqual(got, dict.fromkeys(got, "deny"))
+
+    @hole
+    def test_h4_a_single_valued_key_that_may_not_have_changed(self):
+        cases = (
+            (f"false && git config remote.pushDefault safe; {PUSH}", self.lib),
+            (f"false && git config push.default nothing; {PUSH}", self.lib),
+            (f"false && git config push.followTags false; {PUSH}", self.tagged),
+        )
+        got = {(cmd, cwd.name): self.verdict(cmd, cwd) for cmd, cwd in cases}
+        self.assertEqual(got, dict.fromkeys(got, "deny"))
+
+    @hole
+    def test_h5_a_shell_alias_under_another_git_dir(self):
+        self.global_alias("pu", "!git " + PUSH[4:])
+        cases = (f"git --git-dir={self.lib}/.git pu", f"GIT_DIR={self.lib}/.git git pu")
+        got = {cmd: self.verdict(cmd, self.own) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(got, "deny"))
+
+    @hole
+    def test_h6_a_global_alias_outside_a_repo(self):
+        self.global_alias("ship", f"!git -C {self.lib} " + PUSH[4:])
+        self.assertEqual(self.verdict("git ship", self.plain), "deny")
+
+
+class SwitchControlTest(PushCase):
+    """§2.2: a switch to an existing branch before a push keeps today's verdict (PRIVATE: main needs the owner)."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_toml(PRIVATE)
+        self.api = make_repo(self.tmp / "api")
+        remote(self.api, "https://example.test/owner/api.git")
+        git(self.api, "branch", "feat")
+        self.wt = self.tmp / "wt/api-a1"
+        git(self.api, "worktree", "add", "-q", "--detach", str(self.wt))
+
+    def test_switch_then_push(self):
+        self.assertEqual(self.verdict(f"git switch feat && {PUSH}", self.wt), "allow")
+        self.assertEqual(self.verdict(f"git switch feat && {PUSH} origin HEAD", self.wt), "allow")
+        self.assertEqual(self.verdict(f"git switch feat; {PUSH} origin HEAD", self.wt), "deny")  # it may not have
+
+
+class ProgramHolesTest(BashWriteCase):
+    """H7-H11 and their controls: a product whose list has a publish and the secrets rule; its foreman.toml and guard
+    table are reserved files (FileCase)."""
+
+    toml = PY_TOML
+
+    def deny(self, cmd, role="agent"):
+        """The rule or the reserved file's class that refuses cmd from the home, or "allow"."""
+        v = guard.check(self.project, cmd, guard.as_role(role, str(self.home)))
+        if v is None:
+            return "allow"
+        return f"file:{v[1].kind}" if v[0] == "file" else v[1]
+
+    def test_controls(self):
+        cases = {
+            py(f'import subprocess\nsubprocess.run("{PUBLISH}", shell=True)'): PUBLISH,
+            py(
+                f'from pathlib import Path\nPath("difflib.py").write_text("import os; os.system(\'{PUBLISH}\')")\n'
+                "import difflib"
+            ): PUBLISH,  # fmt: skip
+            py(f'from pathlib import Path\nPath("x.sh").write_text("{PUBLISH}")') + "\nsh x.sh": PUBLISH,
+            py('print(open("/opt/MyApp/.env").read())'): ENV,
+            'cat "/opt/My App/.env"': ENV,
+            "sed -i '' 's/a/b/' foreman.toml": "file:config",
+            f"echo x >> {TABLE}": "file:table",
+            # what stays allowed (§2.2): reading a reserved file, writing an ordinary one with a rule's words in it
+            py("import tomllib\nprint(tomllib.load(open('foreman.toml', 'rb')))"): "allow",
+            py(
+                f'from pathlib import Path\np = Path("ops/rules.md")\np.write_text(p.read_text().replace("x", '
+                f'"never {PUBLISH}"))'
+            ): "allow",  # fmt: skip
+            py(
+                f'import re\ns = open("CHANGELOG.md").read()\nopen("CHANGELOG.md", "w").write(re.sub("a", '
+                f'"{PUBLISH} later", s))',
+                head="python3 -I -",
+            ): "allow",  # fmt: skip
+        }
+        for cmd, want in cases.items():
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.deny(cmd), want)
+
+    @hole
+    def test_h7_builtins_through_a_module_or_a_full_width_underscore(self):
+        cases = (
+            py(
+                'import re\nre.enum.bltns.eval("_"+"_import_"+"_(\'subprocess\').run(\'' + PUBLISH + "', shell=True)\")"
+            ),
+            py('_\uff3fimport_\uff3f("subprocess").run("' + PUBLISH + '", shell=True)'),
+        )
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(got, PUBLISH))
+
+    @hole
+    def test_h8_a_module_written_under_a_computed_name(self):
+        payload = f"import os; os.system('{PUBLISH}')"
+        cases = (
+            py(f'from pathlib import Path\nPath("difflib").with_suffix(".py").write_text("{payload}")\nimport difflib'),
+            py(f'from pathlib import Path\nPath("difflib" + ".py").write_text("{payload}")\nimport difflib'),
+        )
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(got, PUBLISH))
+
+    @hole
+    def test_h9_a_computed_file_the_line_runs(self):
+        cmd = py(f'from pathlib import Path\nPath("hs.x"[::-1]).write_text("{PUBLISH}")') + "\nsh x.sh"
+        self.assertEqual(self.deny(cmd), PUBLISH)
+
+    @hole
+    def test_h10_a_path_with_a_space_in_a_literal(self):
+        cmd = py('print(open("/opt/My App/.env").read())')
+        self.assertEqual(self.deny(cmd), ENV)
+
+    @hole
+    def test_h11_an_interpreter_that_writes_a_reserved_file(self):
+        """Nobody writes a reserved file, whatever writes it: the agent and the orchestrator alike."""
+        cases = {
+            py("s = open('foreman.toml').read()\nopen('foreman.toml', 'w').write(s)"): "file:config",
+            "python3 -c \"from pathlib import Path; p = Path('foreman.toml'); p.write_text('x')\"": "file:config",
+            f"node -e \"require('fs').appendFileSync('{TABLE}', 'allow\\tls\\n')\"": "file:table",
+        }
+        got = {(cmd, role): self.deny(cmd, role) for cmd in cases for role in ("agent", "orchestrator")}
+        self.assertEqual(got, {(cmd, role): cases[cmd] for cmd, role in got})
+
+
+if __name__ == "__main__":
+    unittest.main()
