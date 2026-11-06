@@ -327,12 +327,7 @@ def run_cases(
             f.write(f"== rc {r.rc}{' (cut)' if r.timed_out else ''} in {r.seconds:.0f} s\n")
         return r
 
-    r = subprocess.run(
-        ["git", *util.GIT_QUIET, "-C", str(main), "worktree", "add", "-q", "--detach", str(copy), tip],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    r = util.git_run(main, "worktree", "add", "-q", "--detach", str(copy), tip)
     if r.returncode:
         raise HoldoutError(f"could not make the copy of {tip[:8]}: {(r.stderr or r.stdout).strip()[:300]}")
     try:
@@ -366,14 +361,10 @@ def run_cases(
     finally:
         if held is not None:
             subprocess.run([*held[0], "release"], env=held[1], capture_output=True, text=True, check=False)
-        gone = subprocess.run(
-            ["git", *util.GIT_QUIET, "-C", str(main), "worktree", "remove", "--force", str(copy)],
-            capture_output=True,
-            check=False,
-        )
+        gone = util.git_run(main, "worktree", "remove", "--force", str(copy))
         if gone.returncode:
             shutil.rmtree(copy, ignore_errors=True)
-        subprocess.run(["git", *util.GIT_QUIET, "-C", str(main), "worktree", "prune"], capture_output=True, check=False)
+        util.git_run(main, "worktree", "prune")
     return Outcome(passed, failed, log, tip, int(seconds))
 
 
