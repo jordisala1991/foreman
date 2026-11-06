@@ -99,10 +99,11 @@ runs() skips) running `integrate`, also nested (sh -c, $(…), a pipe into a she
 lexer cannot read), in any folder and any product, but with --help, -h or --check as a word of its own (argparse
 takes no abbreviation; --check stops before anything is written); the text of a note, a commit message, a sed script
 or a heredoc to an interpreter is never such a call.
-MAIN_CHECKOUT: a git that rewrites a main checkout holding a live home: the checkout (the nearest folder up with a
-`.git` entry, a stat per level, never git) of the live config or guard table of any product of the registry
-(main_checkouts; a worktree outside it, one nested in .claude/worktrees and a submodule have their own `.git` file,
-so they are not it). The folder of each git is gitpush.folders' (the event's cwd, the line's cd and pushd with the
+MAIN_CHECKOUT: a git that rewrites a main checkout of any product of the registry: the checkout (the nearest folder up
+with a `.git` entry, a stat per level, never git) of its live config or guard table, and that of each of its
+[repos.*] paths that exists (a home outside its code repo leaves that repo in), for an agent only (main_checkouts; a
+worktree outside it, one nested in .claude/worktrees and a submodule have their own `.git` file, so they are not
+it). The folder of each git is gitpush.folders' (the event's cwd, the line's cd and pushd with the
 values the line gives them, unknown_chain: a cd the line cannot name followed by && leaves only that unknown folder,
 one followed by || keeps the one before) with its -C applied, plus a --work-tree or GIT_WORK_TREE the line gives;
 also in what the line runs nested (_walk: sh -c, eval, $(…), a pipe or heredoc into a shell, xargs, find -exec; not
@@ -115,11 +116,12 @@ word that is no path in that folder); and, by paths, when one reaches a live fil
 holds it, a .claude folder or settings file of the checkout; a path with a variable or a wildcard, when a live file
 lies under the folder of its literal start; a `:` pathspec): checkout -- PATHS (or TREE PATHS), restore (but
 --staged alone), rm (but --cached), mv (sources and destination), stash push -- PATHS. Everything else passes:
-reading (log, diff, show, status, stash list|show…), commit, add, branch, worktree, fetch, reset --soft and a mixed
-reset (the index only). A git alias is read in that folder's config (and the line's -c): to a git command, as that
-command; `!`, as a shell command from the same folder; a subcommand the line computes (`git $C`) rewrites. A line
-the lexer cannot read is refused when it has `git [options] SUB` with SUB one of those (GIT_REWRITE_TEXT) and names
-such a checkout or runs in one. A failure of the rule refuses only a line that has such a `git SUB` and names such a
+reading (log, diff, show, status, stash list|show…), commit (a commit on main in a main checkout is not seen: the
+projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset (the index only). A git
+alias is read in that folder's config (and the line's -c): to a git command, as that command; `!`, as a shell
+command from the same folder; a subcommand the line computes (`git $C`) rewrites. A line the lexer cannot read is
+refused when it has `git [options] SUB` with SUB one of those (GIT_REWRITE_TEXT) and names such a checkout or runs
+in one. A failure of the rule refuses only a line that has such a `git SUB` and names such a
 checkout as text. Not seen: a git command that writes the shared .git/config or .git/hooks (`git config`, `git
 remote add`; their writes by name are the git class of the reserved files, below), a
 branch moved without touching files (update-ref, branch -f: the copy is then dirty and integrate stops), patch, tar
@@ -1288,7 +1290,7 @@ def _file_hit(e: Reserved, path: str, who: str, cmd: str) -> Hit:
     return out
 
 
-# ---------- an agent's git in a main checkout that holds a live home, and `foreman integrate` (module doc) ----------
+# ---------- an agent's git in a main checkout (a repo or a live home), and `foreman integrate` (module doc) ----------
 
 # The pattern of an agent's refused git (Hit: kind the subcommand, dir the main checkout, name its project) and the
 # regex of `foreman integrate` (bin/foreman, a path, --project P, quoted words), but with --help, -h or --check.
@@ -1416,21 +1418,32 @@ def _git_rewrites(sub: str, args: Sequence[Tok], folder: str) -> bool | list[Tok
     return a.pos + (a.paths or [])  # restore, rm, mv (its sources and its destination)
 
 
-Top = tuple[str, str, list[str]]  # a main checkout with a live home: (its path, the project, its live files folded)
+Top = tuple[str, str, list[str]]  # a main checkout: (its path, the project, its live files folded)
 
 
 def main_checkouts(project: Project, projects: Sequence[Project] | None = None) -> dict[str, Top]:
-    """{the folded path of a checkout: Top} of each checkout that holds a live config or guard table of a project of
-    the registry (reserved()), with its live files: those, and the checkout's .claude/settings*.json."""
+    """{the folded path of a checkout: Top} of each main checkout of a project of the registry: the one that holds
+    a live config or guard table (reserved()), and the one of each [repos.*] path that exists (a home outside its
+    repo), with its live files: those configs and tables, and the checkout's .claude/settings*.json."""
     out: dict[str, Top] = {}
-    for _kind, path, name in _live(project, _projects(project, projects)):
-        top = gitdir.checkout_of(os.path.dirname(path))
-        if top is None:
-            continue
+
+    def add(top: str, name: str) -> list[str]:
         key = _fold(top)
         if key not in out:
             out[key] = (top, name, [_fold(os.path.join(top, ".claude", s)) for s in CLAUDE_SETTINGS])
-        out[key][2].append(_fold(path))
+        return out[key][2]
+
+    projects = _projects(project, projects)
+    for _kind, path, name in _live(project, projects):
+        top = gitdir.checkout_of(os.path.dirname(path))
+        if top is not None:
+            add(top, name).append(_fold(path))
+    for p in projects:
+        for r in p.repos.values():
+            where = str(p.path(r["path"])) if isinstance(r, dict) and r.get("path") else ""
+            top = gitdir.checkout_of(where) if where and os.path.isdir(where) else None
+            if top is not None:
+                add(top, p.name)
     return out
 
 
@@ -1476,7 +1489,7 @@ def _git_hit(sub: str, top: Top, part: str) -> Hit:
 
 
 def _main_checkout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
-    """The git an agent's line runs that rewrites a main checkout holding a live home (module doc), as a Hit, or None.
+    """The git an agent's line runs that rewrites a main checkout (main_checkouts; module doc), as a Hit, or None.
     Never raises: a failure refuses only a line that names git and such a checkout as text."""
     cache: dict[str, dict[str, Top]] = {}
 
@@ -1606,8 +1619,8 @@ def names_integrate(cmd: str) -> bool:
 
 def _agent_only(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
     """The built-in rules for an agent only (module doc): its `foreman integrate` (but --help, -h, --check), its
-    git that rewrites a main checkout holding a live home, and what reaches the hidden acceptance checks (_holdout:
-    a planner passes). Only an agent (_who, no process) is compared."""
+    git that rewrites a main checkout (a repo or a live home), and what reaches the hidden acceptance checks
+    (_holdout: a planner passes). Only an agent (_who, no process) is compared."""
     integrate, git = names_integrate(cmd), bool(GIT_WORDS.search(cmd))
     if _who(project, ctx, process=False) != "agent":
         return None

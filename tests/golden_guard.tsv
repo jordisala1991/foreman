@@ -258,11 +258,14 @@ orchestrator	foreman integrate foreman ab1/x "AB-1 T0" --opens
 orchestrator	foreman integrate foreman ab1/x "AB-1 T0" '--opens'
 orchestrator	foreman integrate foreman ab1/x "AB-1 T0" --note "--opens"
 orchestrator	foreman integrate foreman ab1/x "AB-1 T0"
-# an agent never integrates (but --help, -h, --check); its git in a code repo (no live home in it) passes
+# an agent never integrates (but --help, -h, --check), nor rewrites with git the main checkout of a code repo (a
+# [repos.*] path, no live home in it): a branch is made in its worktree
 allow	foreman integrate --help
 allow	foreman integrate foreman ab1/x "AB-1 T0" --check
-allow@../faro-app	git merge main
-allow@../faro-app	git checkout -b x
+orchestrator@../faro-app	git merge main
+orchestrator@../faro-app	git checkout -b x
+orchestrator@../faro-app	git switch -c x
+allow@../faro-app	git log --oneline -5
 # any tool but Bash: a path or URL it names gets the verdict of `cat PATH`, a command it runs that of the command;
 # free text (content, prompt, message) is not compared
 deny	cat .env

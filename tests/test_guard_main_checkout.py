@@ -1,8 +1,8 @@
-"""The built-in rules for an agent only (guard._agent_only): its git that rewrites a main checkout holding a
-live home (which subcommands, which paths reach a live file, how the checkout and the folder of each git are found:
--C, cd, --work-tree, nested commands, aliases, an unknown folder), its `foreman integrate` (but --help, -h and
---check), who passes (the orchestrator, another session), the refusal, the permissions view, a failure of the rule
-and the table's rows."""
+"""The built-in rules for an agent only (guard._agent_only): its git that rewrites a main checkout, a live home's or
+a [repos.*] path's (RepoCheckoutTest): which subcommands, which paths reach a live file, how the checkout and the
+folder of each git are found (-C, cd, --work-tree, nested commands, aliases, an unknown folder); its `foreman
+integrate` (but --help, -h and --check), who passes (the orchestrator, another session), the refusal, the permissions
+view, a failure of the rule and the table's rows."""
 
 import os
 import subprocess
@@ -252,7 +252,7 @@ class WhoTest(MainCheckoutCase):
                                                                         "agent", "merge", "ours"))  # fmt: skip
         msg = guard.message(self.project, v)
         self.assertIn(f"`git merge` changes the files of {os.path.realpath(self.top)}", msg)
-        self.assertIn("live configuration of ours", msg)
+        self.assertIn("a main checkout of ours (one of its repos, or the one that holds its live configuration)", msg)
         self.assertIn("git stash push -- PATH", msg)
         self.assertIn("It matched in the command `git -C ", msg)
         rec = permissions.refusal(self.project, {"agent_id": "a1"}, v)
@@ -341,6 +341,70 @@ class TableAndViewTest(MainCheckoutCase):
         text = permissions.render(self.project, d)
         self.assertIn("an agent's git that rewrites a main checkout", text)
         self.assertIn("`foreman integrate` (but --check and --help)", text)
+
+
+class RepoCheckoutTest(MainCheckoutCase):
+    """A product whose home lies outside its code repo (its [repos.*] path): that repo's main checkout is protected
+    too, though it holds no live file, for an agent of any product; its worktrees and the orchestrator pass."""
+
+    def setUp(self):
+        super().setUp()
+        self.code = self.tmp / "code"
+        (self.code / "lib").mkdir(parents=True)
+        (self.code / "README.md").write_text("x\n")
+        subprocess.run(["git", "init", "-q", str(self.code)], check=True)
+        self.code_home = self.tmp / "code-ops"
+        self.code_home.mkdir()
+        (self.code_home / "foreman.toml").write_text(
+            '[project]\nname = "coded"\nowner = "Owner"\n\n'
+            f'[repos.app]\npath = "{self.code}"\n\n[repos.gone]\npath = "{self.tmp}/outer/no-such-repo"\n'
+        )
+        with open(self.tmp / "projects.toml", "a") as f:
+            f.write(f'\n[[project]]\nname = "coded"\nhome = "{self.code_home}"\nmode = "active"\n')
+        self.code_wt = self.tmp / "wt/code-a1"
+        self.code_wt.mkdir(parents=True)
+        (self.code_wt / ".git").write_text(f"gitdir: {self.code}/.git/worktrees/code-a1\n")
+
+    def test_a_branch_in_the_repo_main_checkout(self):
+        for cmd in ("git checkout -b x", "git switch -c x", "git merge main", "git stash", "git reset --hard"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.v(cmd, self.code), "orchestrator")
+                self.assertEqual(self.v(cmd, self.code / "lib"), "orchestrator")
+                self.assertEqual(self.v(cmd.replace("git", f"git -C {self.code}", 1), self.tmp), "orchestrator")
+                self.assertEqual(self.v(cmd, self.code_wt), "allow")
+                self.assertEqual(self.v(cmd, self.code, role="orchestrator"), "allow")
+
+    def test_what_passes_there(self):
+        for cmd in ("git log", "git status", "git checkout -- README.md", "git fetch", "git worktree add ../w -b x"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.v(cmd, self.code), "allow")
+        self.assertEqual(self.v("git checkout -- .claude/settings.json", self.code), "orchestrator")
+
+    def test_the_refusal_names_the_repo_and_its_product(self):
+        v = guard.check(self.project, "git checkout -b x", guard.as_role("agent", str(self.code)))
+        self.assertEqual((v[1].kind, v[1].dir, v[1].name), ("checkout", os.path.realpath(self.code), "coded"))
+        msg = guard.message(self.project, v)
+        self.assertIn(f"`git checkout` changes the files of {os.path.realpath(self.code)}, a main checkout of", msg)
+        self.assertIn("coded", msg)
+
+    def test_a_missing_repo_path_protects_nothing_above_it(self):
+        subprocess.run(["git", "init", "-q", str(self.tmp / "outer")], check=True)  # a repo above the missing path
+        tops = guard.main_checkouts(self.project)
+        self.assertIn(guard._fold(os.path.realpath(self.code)), tops)
+        self.assertNotIn(guard._fold(str(self.tmp / "outer")), tops)
+        self.assertEqual(self.v("git checkout -b x", self.tmp / "outer"), "allow")
+
+    def test_rows(self):
+        table = self.tmp / "rows.tsv"
+        table.write_text(
+            f"orchestrator@{self.code}\tgit checkout -b x\n"
+            f"orchestrator@{self.code}\tgit switch -c x\n"
+            f"allow@{self.code_wt}\tgit checkout -b x\n"
+            f"allow@{self.code_wt}\tgit switch -c x\n"
+        )
+        counts, failures = guard.run_table(self.project, table)
+        self.assertEqual(failures, [])
+        self.assertEqual(counts, {"orchestrator": 2, "allow": 2})
 
 
 class CostTest(MainCheckoutCase):

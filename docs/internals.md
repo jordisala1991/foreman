@@ -259,9 +259,10 @@ the product pass, in every product:
   `foreman lock … run`, inside `sh -c` or `$(…)`), in any folder, except with `--help`, `-h` or `--check` (which stops
   before it writes anything); its mention in a note, a commit message, a `sed` script or a heredoc is not. An agent
   delivers with `foreman progress --done`.
-- A git that rewrites the files of a main checkout holding a live home: the checkout (the nearest folder up with a
-  `.git` entry) of the live foreman.toml or guard table of any product of the registry (a home inside its repo, such
-  as `ops/`, or at its top). A worktree outside it or nested in `.claude/worktrees/` has its own `.git` file, so it is
+- A git that rewrites the files of a main checkout of any product of the registry: the checkout (the nearest folder
+  up with a `.git` entry) of its live foreman.toml or guard table (a home inside its repo, such as `ops/`, or at its
+  top), and that of each of its `[repos.*]` paths that exists (a home kept outside its code repo leaves that repo
+  in). A worktree outside it or nested in `.claude/worktrees/` has its own `.git` file, so it is
   not that checkout. What is refused there: `merge`, `pull`, `rebase`, `cherry-pick`, `revert`, `am`, `switch`,
   `clean`, `filter-branch`, `checkout-index`, `bisect` (but `log`/`view`), `read-tree -u`, `sparse-checkout` (but
   `list`), `submodule update`, `apply` (but `--check`, `--stat`, `--numstat`, `--summary`, `--cached`), `reset --hard`,
