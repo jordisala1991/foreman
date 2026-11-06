@@ -1595,18 +1595,6 @@ class Backlog:
         return plain.check(self.project, fields)
 
     @staticmethod
-    def decision_ref(data: Data, ref: str) -> str:
-        """The id of the decision `ref` names: its id, or the panel's card title «ID, title» (an older page sends
-        that); `ref` as given when nothing matches."""
-        every = data["decisions"] + data["decisions_resolved"]
-        if any(d["id"] == ref for d in every):
-            return ref
-        return next(
-            (d["id"] for d in every if ref.startswith(f"{d['id']}, ") or ref == d.get("title")),
-            ref,
-        )
-
-    @staticmethod
     def resolved_decision(data: Data, did: str) -> Record | None:
         """The resolved decision `did` (the last one, should an id repeat), or None."""
         return next((d for d in reversed(data["decisions_resolved"]) if d["id"] == did), None)

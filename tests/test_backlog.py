@@ -500,8 +500,6 @@ class BacklogTest(ProjectCase):
                     b.answer_decision(d, did, opt, "Owner, now (panel)")
                 self.assertIn(said, str(e.exception))
             self.assertEqual(b.answer_decision(d, "AB-1 J3", "b", "Owner, now (panel)"), [])
-            self.assertEqual(b.decision_ref(d, "AB-1 J3, t"), "AB-1 J3")
-            self.assertEqual(b.decision_ref(d, "nothing"), "nothing")
         self.assertEqual(b.resolved_decision(b.load(), "AB-1 J3")["by"], "Owner, now (panel)")
         raw = json.loads(b.data_path.read_text())
         raw["decisions_resolved"][0]["by"] = 3
