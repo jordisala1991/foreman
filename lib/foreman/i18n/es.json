@@ -201,6 +201,7 @@
   "pause_line": "PAUSADO desde el panel (desde las {since}): no lances agentes de producción ni integres (foreman worktree y foreman integrate están bloqueados) hasta que {owner} lo reanude allí; atiende el buzón, toma notas y deja terminar a los agentes vivos.",
   "pause_guard": "Bloqueado por el guardián de foreman: {project} está pausado desde el panel (desde las {since}); `foreman {what}` espera a que {owner} lo reanude allí.",
   "pause_agents": "Bloqueado por foreman: {project} está pausado desde el panel (desde las {since}); no se lanzan agentes de producción ({type}) hasta que {owner} lo reanude allí. Los demás tipos (planificación, exploración) sí pueden.",
+  "launch_dearer": "Bloqueado por foreman: el plan de esta sub-issue dice {plan} y esta llamada costaría más. Vuelve a llamar al agente con subagent_type \"{type}\" y model \"{model}\", o cambia antes el plan (foreman backlog sub ID Tn --type TIPO/MODELO) y di por qué en una nota.",
   "loop_idle": "Pasada del bucle {time}: nada que hacer (omitida sin llamar al modelo).",
   "loop_idle_info": "Para información: {items}",
   "band_late": "pasada atrasada desde {time}",

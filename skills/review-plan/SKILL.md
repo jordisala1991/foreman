@@ -23,7 +23,8 @@ asking for changes to a plan is the orchestrator's; approved means it can run no
   whole issue by habit) and link it:
   `foreman backlog edit ID --plan reviews/…md` and `foreman backlog sub ID Tn --title …` (never by hand). A
   sub-issue that only measures (a report, no code for main) gets `--kind measure` there (or at
-  `foreman launch … --kind measure`). The brief comes from the plan. Third-party figures cited by a plan are re-checked at their source that day.
+  `foreman launch … --kind measure`). The plan names each sub-issue's agent type and model: `--type T[/M]` (`dev/sonnet`) there;
+  launch uses it and the Agent call may not be dearer. The brief comes from the plan. Third-party figures cited by a plan are re-checked at their source that day.
   A plan whose criterion changes the meaning of the issue's acceptance block (the goal and criterion agreed with
   the owner) asks them before you approve it, as a decision; a figure, how it is measured or a narrower wording
   that keeps the meaning needs no question.

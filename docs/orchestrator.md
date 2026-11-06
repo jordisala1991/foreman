@@ -263,7 +263,8 @@ they disagree.
      agent, so `foreman agents` knows its name, issue, sub-issue, branch and worktree whatever the language of the
      rest of the brief. Then: «Follow `<foreman>/docs/agent.md` and `<rules>`», the plan, the conditions of this
      task. Types: `dev` (production), `planner` (plans), `reviewer` (reviews of code or of the product, read only), `mechanic` (checked code changes, cheaper model: see «Which agent type and model»). The Agent call carries the same `model` as
-     `--model` (the table). The brief
+     `--model` (the table); a sub-issue with a type and model (`backlog sub … --type dev/sonnet`) gives
+     launch its default, a dearer `--type` or `--model` is refused, and so is an Agent call dearer than its launch. The brief
      ends with «last command: `foreman progress --done "result" --outcome ok|partial|failed --report
      reviews/<file>.md`» (the agent names its report; the pass and `foreman integrate` take it).
    - A production agent launched without the line gets you a warning right after the launch: give it its identity

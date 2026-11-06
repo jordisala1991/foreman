@@ -33,6 +33,7 @@ def render_sub(b: Backlog, s: Record) -> str:
         who,
         s.get("moved_to", ""),
         s.get("text", ""),
+        f"({s['type']})" if s.get("type") else "",
         rep,
     ]
     return " ".join(p for p in parts if p)
