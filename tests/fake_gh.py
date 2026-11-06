@@ -2,20 +2,20 @@
 """A stand-in for `gh` in the integrate tests: PRs live in $FAKE_GH_DIR/state.json and merges really happen on the
 bare `origin` remote of the current repository (squash, merge commit or rebase), so foreman integrate can pull
 them. Every call is appended to $FAKE_GH_DIR/calls.log. FAKE_GH_CHECKS=fail makes `pr checks` fail;
-FAKE_GH_DELETE_HEAD=1 deletes the head branch on the remote when merging, as GitHub may."""
+FAKE_GH_DELETE_HEAD=1 deletes the head branch on the remote when merging, as GitHub may.
+It runs once per call of foreman's: it imports only json, os and sys, and what a merge needs only when merging."""
 
 import json
 import os
-import subprocess
 import sys
-import tempfile
-from pathlib import Path
 
-D = Path(os.environ["FAKE_GH_DIR"])
-STATE = D / "state.json"
+D = os.environ["FAKE_GH_DIR"]
+STATE = os.path.join(D, "state.json")
 
 
 def git(cwd, *args):
+    import subprocess
+
     r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=False)
     if r.returncode:
         sys.exit(f"fake gh: git {' '.join(args)}: {r.stderr}")
@@ -27,10 +27,14 @@ def opt(args, name, default=None):
 
 
 def main(args):
-    D.mkdir(parents=True, exist_ok=True)
-    with open(D / "calls.log", "a") as f:
+    os.makedirs(D, exist_ok=True)
+    with open(os.path.join(D, "calls.log"), "a") as f:
         f.write(json.dumps(args) + "\n")
-    st = json.loads(STATE.read_text()) if STATE.exists() else {"prs": {}}
+    if os.path.exists(STATE):
+        with open(STATE) as f:
+            st = json.load(f)
+    else:
+        st = {"prs": {}}
     prs = st["prs"]
     if args[:2] == ["pr", "create"]:
         n = str(len(prs) + 1)
@@ -63,10 +67,12 @@ def main(args):
         prs[args[2]]["comments"].append(opt(args, "--body"))
     elif args[:2] == ["pr", "merge"]:
         n, p = args[2], prs[args[2]]
+        import tempfile
+
         origin = git(os.getcwd(), "remote", "get-url", "origin")
         with tempfile.TemporaryDirectory() as tmp:
             git(tmp, "clone", "-q", origin, "c")
-            c = Path(tmp) / "c"
+            c = os.path.join(tmp, "c")
             git(c, "checkout", "-q", p["base"])
             head = git(c, "rev-parse", f"origin/{p['head']}")
             if opt(args, "--match-head-commit") != head:
@@ -89,7 +95,8 @@ def main(args):
         print(os.environ.get("FAKE_GH_ISSUES", "[]"))
     else:
         sys.exit(f"fake gh: unsupported {args}")
-    STATE.write_text(json.dumps(st, indent=1))
+    with open(STATE, "w") as f:
+        f.write(json.dumps(st, indent=1))
 
 
 if __name__ == "__main__":
