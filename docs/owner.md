@@ -32,6 +32,28 @@ the orchestrator.
   if the owner may want to open it).
 - **A question stands alone:** whoever opens the decision without the chat understands it and can answer.
 
+## Explaining a decision
+
+The owner decides from the panel, often on a phone, with only what you wrote. Write it from their side, not yours.
+
+- **Ask only what is theirs.** A small change that can be undone is made and told (a line in the catch-up or the
+  inbox), not asked. An idea you recommend dropping and nothing waits for: a line in the notes with its reason. A
+  question is only what is theirs: cost, risk, the product's taste, their credentials, or what cannot be undone or
+  is hard to undo. Agents never ask: they propose the question in their report and the orchestrator weighs it.
+- **Start from what they will see.** The list shows only the title and the first sentence of the text: put there
+  what is at stake for them, not what you would change.
+- **One concrete case,** a real one from their week, with the figure in their units («a 60 s answer would take
+  59 s», «2 holidays a year»); a percentage or a size alone does not say whether it matters.
+- **Say how you know:** seen (how often), measured, or estimated from the code.
+- **Options are outcomes:** what they will see or do with each, not a state of the backlog («ready to do», «an issue
+  with a measurement»). Nothing waits for the answer: leave `--if-no-answer` out.
+- **Their words, not the source's:** no labels, terms or numbering of the study, plan or review it came from
+  («idea A2», «finding F3»), no «details in…»; a term explained in another question is explained again.
+
+| before | after |
+|---|---|
+| «Store the state of the GDN layers in bf16, as engine X does? It would be ~1.6 % faster and 31 MB less per snapshot, but it changes the answers.» Options: «No» / «Yes» (an issue with a measurement). Page: a 263-line review of other engines. | «Make answers about 2 % faster in exchange for them no longer matching the reference exactly? A 60 s answer would take about 59 s; the exact answers are what catches engine bugs after every change. Estimated from the code, not measured.» Options: «No, keep them exact» (nothing changes) / «Yes, as a setting you switch on» (answers change slightly with it on). Recommended: no, 1 s in 60 does not pay for losing that check. No page: the text is enough. |
+
 ## Templates
 
 - **Decision:** title = the question in one plain sentence, **one question per decision** (two questions in the
@@ -42,7 +64,8 @@ the orchestrator.
   option: the panel marks its button «(recommended)»). When work waits for the answer, `--if-no-answer` says what
   stays stopped meanwhile and `--answer-by` the day to remind the owner: foreman never answers for them, so a
   question never says «if you do not answer, I go with A». When a screenshot or a table explains it better than a
-  sentence, `--page` names a page (.md) with them under the reviews folder (see docs/orchestrator.md).
+  sentence, `--page` names a page (.md) written for this question alone, as «Question page» below says (where it
+  goes: docs/orchestrator.md).
 - **Progress line:** what was reached or what broke, with its figure: «Search answers in 1.2 s instead of 3; the
   last part, the cache, is next».
 - **Result line:** what the product or the owner can do now that they could not before, with its figure.
@@ -53,6 +76,41 @@ the orchestrator.
   About 15 lines; detail only when asked.
 - **Orchestrator session changed:** the old one closed or stopped responding and a new one took over; whether
   anything is asked.
+
+## Question page
+
+The page of one question (`decision add --page`), written for it alone: never a report, a plan, a study or the
+page of another question, even when they hold the answer (copy the part that matters). No page when the text is
+enough. About 30 lines; `decision add` warns past 60, of a page another question already has, of a report or plan
+given as the page, and of what the page names without explaining (`foreman plain`, as the question). Fill this in:
+
+```markdown
+# <the question, in the owner's words>
+
+**What happens today.** Two or three plain sentences from the owner's side, and why it comes up now.
+
+**An example.** One concrete case: a screenshot, the real text or output, or a situation of their week.
+
+![what they see today](before-390.png)
+
+**How we know.** Seen (how often) / measured (where, one line) / estimated (from what).
+
+| | <option A> | <option B> |
+|---|---|---|
+| what you will see | … | … |
+| figure, today → after | 60 s → 59 s | 60 s |
+| cost or risk | time, money, work, what could go wrong | … |
+| can it be undone | yes / with work / no | … |
+
+**Recommendation:** <option>, because <one reason in the owner's terms>.
+
+More, for whoever wants it: <the report, plan or review, only here>
+```
+
+- One question, one topic: nothing about other work, other questions or how it was found.
+- Words the owner uses, no ids, paths, line numbers or labels of the source; each figure with today's value beside it.
+- Screenshots are welcome: beside the page, linked relative; a before and after when an option changes what they see.
+- The same options as the question's buttons, in the same order and words.
 
 ## Before and after
 

@@ -130,12 +130,25 @@ class ReviewLoop(LoopCase):
         self.write_review(tip, high=1)
         new = self.commit({"lib/guard.py": "x = 3\n"}, "fix")
         rv = self.write_review(new, rnd=2, high=1)
-        page = str(rv.relative_to(self.home))
         n = self.ns()["review_findings"][0]
         self.assertTrue(n["actionable"])
         self.assertIn("app:ab1: round 2 of 2 left H 1, M 0 open", n["text"])
-        self.assertIn("no third round: ask Owner with a question written for them (docs/owner.md)", n["text"])
-        self.assertIn(f"`foreman backlog decision add --issue AB-1 --blocks T1 --page {page} --title …`", n["text"])
+        self.assertIn("no third round: ask Owner with a question written for them, its page written for it", n["text"])
+        self.assertIn(f"linking the review ({rv.relative_to(self.home)}) on its last line", n["text"])
+        self.assertIn("`foreman backlog decision add --issue AB-1 --blocks T1 --page PAGE --title …`", n["text"])
+        # a page for another question, even one that names a review, is not this one
+        other = self.home / "reviews/q0/question.md"
+        other.parent.mkdir(parents=True)
+        other.write_text("# Another question\n\nMore: reviews/2026-11-01-review-other.md\n")
+        r = self.cli(
+            "backlog", "decision", "add", "--title", "Another question", "--text", "Unrelated.",
+            "--option", "Yes", "--effect", "x", "--page", "reviews/q0/question.md", "--as-is",
+        )  # fmt: skip
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(self.ns()["review_findings"][0]["actionable"])
+        page = "reviews/q1/question.md"
+        (self.home / "reviews/q1").mkdir(parents=True)
+        (self.home / page).write_text(f"# A serious problem is still open\n\nMore: {rv.relative_to(self.home)}\n")
         r = self.cli(
             "backlog", "decision", "add", "--issue", "AB-1", "--blocks", "T1", "--page", page, "--title",
             "A serious problem is still open in the feature", "--text", "Two reviews could not close it.",
@@ -143,7 +156,7 @@ class ReviewLoop(LoopCase):
             "--option", "Drop it", "--effect", "nothing changes", "--as-is",
         )  # fmt: skip
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        did = Backlog_ids(self)[0]
+        did = Backlog_ids(self)[-1]
         ns = self.ns()
         self.assertEqual([x["actionable"] for x in ns["review_findings"]], [False])
         self.assertIn(f"app:ab1 waits for Owner's answer to {did}", ns["review_findings"][0]["text"])

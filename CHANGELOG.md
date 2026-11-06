@@ -9,6 +9,22 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Changed
+
+- A question's page is written for that question: docs/owner.md has a «Question page» template (what is happening,
+  one example, a table of the options with what changes, cost, risk and whether it can be undone, the
+  recommendation; about 30 lines), and `backlog decision add` warns, without blocking, of a `--page` longer than 60
+  lines, already the page of another question, named or recorded as a report or a plan, or whose text fails
+  `foreman plain`. docs/owner.md also gains «Explaining a decision»: ask only what is the owner's, start from what
+  they will see, one concrete case in their units, how we know, options as outcomes, their words.
+- Agents never add a question for the owner: they propose it in their report, and the orchestrator weighs each
+  question first (docs/agent.md, docs/orchestrator.md): only what is the owner's (cost, risk, the product's taste,
+  credentials, what cannot be undone) goes to them; the rest it decides with a note of why, or makes and tells.
+- A branch whose last review round left serious findings open is asked about with a question page that links the
+  review on its last line, not with the review as the page: the loop's notice says so, and the pass finds the
+  question by a page that names the review's file (a question asked with the review itself as its page still
+  counts).
+
 ## [0.61.0] - 2026-11-06
 
 ### Changed
