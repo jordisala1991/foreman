@@ -73,7 +73,7 @@ class MainCheckoutHolesTest(MainCheckoutCase):
 
     @hole
     def test_h2_a_folder_the_line_cannot_name(self):
-        """An empty "$WT" is the current folder, the main checkout (J1: the hole wins over FO-160's O5 and O6)."""
+        """An empty "$WT" is the current folder, the main checkout (the hole wins over two rows that pass it today)."""
         cases = ('git -C "$WT" merge main', 'cd "$WT" && git merge main', "git -C $WT merge main")
         got = {cmd: self.v(cmd, self.top) for cmd in cases}
         self.assertEqual(got, dict.fromkeys(got, "orchestrator"))
@@ -193,8 +193,8 @@ class ProgramHolesTest(BashWriteCase):
                 "import difflib"
             ): PUBLISH,  # fmt: skip
             py(f'from pathlib import Path\nPath("x.sh").write_text("{PUBLISH}")') + "\nsh x.sh": PUBLISH,
-            py('print(open("/Users/me/Library/AppSupport/app/.env").read())'): ENV,
-            'cat "/Users/me/Library/Application Support/app/.env"': ENV,
+            py('print(open("/opt/MyApp/.env").read())'): ENV,
+            'cat "/opt/My App/.env"': ENV,
             "sed -i '' 's/a/b/' foreman.toml": "file:config",
             f"echo x >> {TABLE}": "file:table",
             # what stays allowed (§2.2): reading a reserved file, writing an ordinary one with a rule's words in it
@@ -241,7 +241,7 @@ class ProgramHolesTest(BashWriteCase):
 
     @hole
     def test_h10_a_path_with_a_space_in_a_literal(self):
-        cmd = py('print(open("/Users/me/Library/Application Support/app/.env").read())')
+        cmd = py('print(open("/opt/My App/.env").read())')
         self.assertEqual(self.deny(cmd), ENV)
 
     @hole
