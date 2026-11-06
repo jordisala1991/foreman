@@ -934,6 +934,40 @@ class BetweenPassesTest(NoticesCase):
         self.assertEqual(self.between(), [])
         self.assertNotIn("lock_foreign", self.kinds())  # said between passes: the pass does not repeat it
 
+    def test_lock_marks_past_the_size_limit_keep_the_new_case(self):
+        """A long mark is cut to its newest whole keys: a new case whose key sorts first is not forgotten."""
+        self.project.state.mkdir(parents=True, exist_ok=True)
+        old = [f"long widget {'x' * 40} 2020-01-01 {i:04d}" for i in range(120)]  # more than 4,000 characters
+        (self.project.state / "lock-notified").write_text("\n".join(old))
+        r = self.cli("lock", "widget", "acquire", "by hand", "10", env={"FOREMAN_LOCK_WHO": "stranger"})
+        self.assertIn("LOCKED", r.stdout)
+        first = [n["kind"] for n in loop.lock_notices(loop.Snapshot(self.project))]
+        self.assertIn("lock_foreign", first)
+        second = [n["kind"] for n in loop.lock_notices(loop.Snapshot(self.project))]
+        self.assertNotIn("lock_foreign", second)
+
+    def test_decision_marks_past_the_size_limit_keep_the_new_case(self):
+        from datetime import date
+
+        self.project.state.mkdir(parents=True, exist_ok=True)
+        old = [f"zz{'x' * 40} {i:04d}|2020-01-01" for i in range(120)]
+        (self.project.state / "decision-due-notified").write_text("\n".join(old))
+        with self.b.mutate() as d:
+            d["decisions"].append(
+                {
+                    "id": "E1 J1",
+                    "title": "t",
+                    "date": date.today().isoformat(),
+                    "text": "",
+                    "options": ["a", "b"],
+                    "recommendation": "a",
+                    "unanswered": {"waits": "the release", "by": date.today().isoformat()},
+                }
+            )
+        first = [n["kind"] for n in loop.decision_notices(loop.Snapshot(self.project))]
+        self.assertEqual(first, ["decision_due"])
+        self.assertEqual(loop.decision_notices(loop.Snapshot(self.project)), [])
+
     def test_lock_not_actionable_is_left_for_the_pass(self):
         self.lock_run("stranger")
         self.holding("stranger")
