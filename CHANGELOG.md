@@ -11,6 +11,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Changed
 
+- The `mechanic` agent now runs at `effort: low` (set in its definition, since a model other than the session's does
+  not take the session's level); the orchestrator guide says so.
 - «A harness review» (agents/reviewer.md) has a fifth outcome for a rule: replace it with an automatic check (a
   test, a guard row, a `foreman check` item), which ends as a code sub-issue.
 - The guard's refusal of an agent's git that rewrites a main checkout (`git:main-checkout`: a merge, a checkout or

@@ -464,7 +464,8 @@ board, notes) about 15 % of what is re-read. Little of it is code you needed to 
 
 ## Which agent type and model
 
-- **`mechanic` (a cheaper model)** for well-defined work with an objective check that does not depend on the
+- **`mechanic` (a cheaper model: Sonnet at low effort, `effort` in its definition, because a model other than the
+  session's does not take the session's level)** for well-defined work with an objective check that does not depend on the
   agent's judgment: moving and splitting code proven by identical outputs (the golden corpus, CONTRIBUTING.md), a
   small fix with its test, mechanical edits, translations, inventories. It may be a production agent: with a
   worktree, a branch and a launch line, exactly like `dev`.
@@ -489,7 +490,7 @@ board, notes) about 15 % of what is re-read. Little of it is code you needed to 
   a small fix with a test, 38K tokens and 2 min; a small change, 28K tokens and 2 min; splitting a module with
   identical outputs, 64K tokens and 4.4 min (the comparable split by `dev`: 130K tokens and 9.6 min); splitting
   two modules with identical guard decisions, 125K tokens and 6.4 min. None needed rework and the CI was green
-  at the first run.
+  at the first run. The transcript also records the effort of each response, which shows the level a run used.
 
 ## Decisions about how to orchestrate
 
