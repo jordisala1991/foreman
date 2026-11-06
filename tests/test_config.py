@@ -429,6 +429,30 @@ worktree = "{{worktrees}}/{{repo}}-{{name}}"
         self.assertNotRegex(out, r"(?m)^hook\b")
         self.assertEqual(self.cli("hook", "nope", inp="{}").returncode, 0)
 
+    def test_help_mentions_every_long_option(self):
+        """Every long option of every command's parser is in the general help, on that command's lines."""
+        import argparse
+
+        blocks: dict[str, str] = {}
+        cur = None
+        for line in cli.doc().splitlines():
+            m = re.match(r"([a-z][a-z-]*)\b", line)
+            if m:
+                cur = m.group(1)
+            if cur:
+                blocks[cur] = blocks.get(cur, "") + line + "\n"
+        sp = next(a for a in cli.build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+        for name, sub in sp.choices.items():
+            if name == "hook" or name in cli.PASS_THROUGH:
+                continue
+            for act in sub._actions:
+                for opt in act.option_strings:
+                    if opt.startswith("--") and opt != "--help":
+                        self.assertRegex(blocks.get(name, ""), rf"{re.escape(opt)}\b", f"help: {name} lacks {opt}")
+                if "--as" in act.option_strings:
+                    for c in act.choices:
+                        self.assertIn(c, blocks[name], f"help: {name} --as lacks {c}")
+
     def test_replaced_commands(self):
         """A command folded into another (cli.REPLACED) says, for one version, which command replaces it, and exits
         2 without doing anything; the new form works, and `foreman -h` names neither the old one nor a line for it."""

@@ -59,9 +59,6 @@ def free_port():
 
 
 class TraceTest(ProjectCase):
-    def env_for(self, root, data="foreman-foreman"):
-        return {"CLAUDE_PLUGIN_ROOT": str(root), "CLAUDE_PLUGIN_DATA": str(self.tmp / "data" / data)}
-
     def roots(self):
         return install.roots_file().read_text().splitlines()
 

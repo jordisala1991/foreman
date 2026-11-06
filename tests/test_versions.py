@@ -43,9 +43,6 @@ class VersionsCase(ProjectCase):
             os.utime(mark, (t, t))
         return root
 
-    def env_for(self, root, data="foreman-m"):
-        return {"CLAUDE_PLUGIN_ROOT": str(root), "CLAUDE_PLUGIN_DATA": str(self.tmp / "data" / data)}
-
     def write_installs(self, *roots, seen=None):
         """installs.json with `roots` first seen at `seen` (default an hour ago: past the grace, see aged())."""
         install.install_dir().mkdir(parents=True, exist_ok=True)

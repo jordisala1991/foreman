@@ -42,6 +42,7 @@ import subprocess
 import time
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -101,7 +102,92 @@ def agent_state(h: Agent, now: float | None = None) -> str:
 
 def live_agents(project: Project) -> list[Agent]:
     """Agents working or waiting for a task of their own (agent_state); never delivered or stopped ones."""
-    return [{"id": aid, **h} for aid, h in agents(project).items() if agent_state(h) in LIVE_STATES]
+    return Snapshot(project).live
+
+
+class Snapshot:
+    """What a loop pass, notices(), the band and start.agents_now look at, each part read once: agents.json and its
+    `live` agents now, the rest when first used (the briefs' `heads`, `ids`, the backlog's `data`, `text` or `error`,
+    `locks`, worktrees, branches with no worktree, `subs_of` and `agent_of` by branch, `paused`, and seen from
+    `session` the `$.agent.list()` statuses and the `dead` agents). `given`: parts the caller has (live, heads, ids)."""
+
+    def __init__(self, project: Project, session: str | None = None, **given: Any) -> None:
+        self.project, self.session = project, session
+        self.agents = agents(project)
+        self.live = [{"id": aid, **h} for aid, h in self.agents.items() if agent_state(h) in LIVE_STATES]
+        self.states: dict[str, str] = {}  # session id -> its orchestrator.liveness state (session_state)
+        self.__dict__.update({k: v for k, v in given.items() if v is not None})
+        self.live_branches = {h["branch"] for h in self.live if h.get("branch")}  # recorded at launch or by hand
+
+    b = cached_property(lambda self: Backlog(self.project))
+    heads = cached_property(lambda self: {h["id"]: identity.transcript_head(h) for h in self.live})
+    ids = cached_property(lambda self: {h["id"]: identity.of(self.project, h, self.heads[h["id"]]) for h in self.live})
+    live_names = cached_property(lambda self: {i["name"] for i in self.ids.values() if i["name"]})
+    # the live agents with no recorded identity: the fallbacks (their brief) apply
+    guessed = cached_property(lambda self: [h for h in self.live if not self.ids[h["id"]]["registered"]])
+
+    @cached_property
+    def backlog(self) -> tuple[Data | None, str, Exception | None]:
+        try:
+            return self.b.load(), self.b.data_path.read_text(), None
+        except (BacklogError, OSError, ValueError) as e:
+            return None, "", e
+
+    data = property(lambda self: self.backlog[0])
+    text = property(lambda self: self.backlog[1])
+    error = property(lambda self: self.backlog[2])
+
+    def issues(self, archived: bool = True) -> list[Issue]:
+        return [i for _, i, _ in self.b.iter_issues(self.data, archived)] if self.data else []
+
+    @cached_property
+    def subs_of(self) -> dict[str, list[tuple[str, Record]]]:
+        out: dict[str, list[tuple[str, Record]]] = {}
+        for i in self.issues():
+            for s in i["subs"]:
+                if s.get("branch"):
+                    out.setdefault(s["branch"], []).append((i["id"], s))
+        return out
+
+    @cached_property
+    def agent_of(self) -> dict[str, str | None]:
+        return {s["branch"]: s.get("agent") for i in self.issues(archived=False) for s in i["subs"] if s.get("branch")}
+
+    locks = cached_property(lambda self: lock.all_status(self.project))
+    wts = cached_property(lambda self: worktree.all_worktrees(self.project))
+    unworktreed = cached_property(lambda self: unworktreed_branches(self.project))
+    paused = cached_property(lambda self: pause.since(self.project))
+
+    @cached_property
+    def statuses(self) -> dict[str, str]:
+        from . import heartbeat
+
+        return heartbeat.agents_of(self.project, self.session) if self.session else {}
+
+    def session_state(self, sid: str) -> str:
+        if sid not in self.states:
+            self.states[sid] = orchestrator.liveness(self.project, sid)["state"]
+        return self.states[sid]
+
+    @cached_property
+    def dead(self) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for h in self.live:
+            st = self.statuses.get(h["id"])
+            if st in DEAD_STATUSES:
+                out[h["id"]] = st
+                continue
+            sid = session_of(h)
+            if sid and sid != self.session and self.session_state(sid) != "alive":
+                out[h["id"]] = "session gone"
+        return out
+
+
+def session_of(h: Agent) -> str | None:
+    """The session an agent runs in (its transcript's, else the one recorded), None when not known."""
+    from . import transcripts
+
+    return transcripts.session_of_subagent(h.get("transcript")) or h.get("session")
 
 
 def last_sign(h: Agent) -> float | None:
@@ -133,70 +219,43 @@ def quiet_minutes(project: Project, h: Agent, busy: Collection[str] = (), now: f
 DEAD_STATUSES = ("failed", "killed")  # `$.agent.list()` statuses of a loop that will not come back
 
 
-def dead_agents(project: Project, session: str | None, live: Iterable[Agent] | None = None) -> dict[str, str]:
+def dead_agents(project: Project, session: str | None) -> dict[str, str]:
     """{agent id: why} of the live agents (live_agents) that are dead, seen from the marked orchestrator's session
     `session`: its last tick lists them as failed or killed (`$.agent.list()`, heartbeat.agents_of), or they run in
     another session whose heartbeat is not alive (gone, or none: a session the module never ran in counts as gone
     here, as an earlier session whose agents died with it). An agent whose session is not known (no transcript) is
     not dead. `why` is the status, or "session gone"."""
-    from . import heartbeat, transcripts
-
-    statuses = heartbeat.agents_of(project, session) if session else {}
-    states: dict[str, str] = {}
-    out: dict[str, str] = {}
-    for h in live_agents(project) if live is None else live:
-        st = statuses.get(h["id"])
-        if st in DEAD_STATUSES:
-            out[h["id"]] = st
-            continue
-        sid = transcripts.session_of_subagent(h.get("transcript")) or h.get("session")
-        if not sid or sid == session:
-            continue
-        if sid not in states:
-            states[sid] = orchestrator.liveness(project, sid)["state"]
-        if states[sid] != "alive":
-            out[h["id"]] = "session gone"
-    return out
+    return Snapshot(project, session).dead
 
 
-def stalled(project: Project, session: str | None = None) -> list[str]:
+def stalled(project: Project | Snapshot, session: str | None = None) -> list[str]:
     """`name (N min)` of each live agent quiet_minutes calls stalled, with its `$.agent.list()` status when the
     marked session `session` lists it (`name (N min, idle)`); not the dead ones (dead_agents)."""
-    from . import heartbeat
-
-    holders, waiting = lock.people(lock.all_status(project).values())
-    live = live_agents(project)
-    dead = dead_agents(project, session, live) if session else {}
-    statuses = heartbeat.agents_of(project, session) if session else {}
+    s = project if isinstance(project, Snapshot) else Snapshot(project, session)
+    holders, waiting = lock.people(s.locks.values())
+    dead = s.dead if s.session else {}
     out: list[str] = []
-    for h in live:
+    for h in s.live:
         if h["id"] in dead:
             continue
-        m = quiet_minutes(project, h, holders | waiting)
+        m = quiet_minutes(s.project, h, holders | waiting)
         if m is not None:
             name = h.get("name") or Path(h.get("transcript", "")).stem[:8] or h["id"][:8]
-            st = statuses.get(h["id"])
+            st = s.statuses.get(h["id"])
             out.append(f"{name} ({m} min{', ' + st if st else ''})")
     return out
 
 
-def known_names(project: Project) -> set[str]:
-    names = {"orchestrator", project.owner.lower(), "owner"}
-    for h in agents(project).values():
-        if time.time() - (util.iso_epoch(h.get("start")) or 0) < 86400:
-            n = h.get("name")
-            if n:
-                names.add(n)
-    return names
-
-
-def lock_notices(project: Project, mark: bool = True) -> list[Notice]:
+def lock_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     """Foreign names in a lock or its queue (not an agent of this project: another session) and a lock held for more
     than [loop] lock_long_min minutes (60), one notice per case. Each case is announced once (keys in
     <state>/lock-notified), then left out. `lock_foreign` is actionable unless the foreign name holds the lock through
     `run` and that process is alive (the other session uses it as it should); `lock_long` always is.
     mark=False reads the marks without writing them."""
-    known = known_names(project)
+    project, now = s.project, time.time()
+    known = {"orchestrator", project.owner.lower(), "owner"} | {
+        h["name"] for h in s.agents.values() if h.get("name") and now - (util.iso_epoch(h.get("start")) or 0) < 86400
+    }
     f = project.state / "lock-notified"
     try:
         seen = set(f.read_text().split("\n"))
@@ -206,7 +265,7 @@ def lock_notices(project: Project, mark: bool = True) -> list[Notice]:
     keys: list[str] = []
     hint = ": check it is used well (`foreman lock RESOURCE check`)."
     long_min = project.section("loop").get("lock_long_min", 60)
-    for name, st in lock.all_status(project).items():
+    for name, st in s.locks.items():
         for x, holds in [(h, True) for h in st["holders"] if not h["taking"]] + [(q, False) for q in st["queue"]]:
             if x["who"] not in known:
                 # a holder by its owner line (what, date, pid): its `since` comes from `meta`, which lock.sh writes
@@ -242,13 +301,13 @@ def lock_notices(project: Project, mark: bool = True) -> list[Notice]:
     return out
 
 
-def lock_queues(project: Project) -> list[Notice]:
+def lock_queues(s: Snapshot) -> list[Notice]:
     """One `lock_queue` notice per resource with a queue. Information only while every holder took the lock through
     `run` and its process is alive, or is just taking it (lock.status `taking` "writing": the queue moves by itself);
     actionable if a holder is dead, took it without `run` (`acquire`, whose pid ended with the call), gives no pid,
     took it and never wrote its owner line ("stuck"), or nobody holds it."""
     out: list[Notice] = []
-    for name, st in lock.all_status(project).items():
+    for name, st in s.locks.items():
         if not st["queue"]:
             continue
         going = lambda h: h.get("alive") is True or h.get("taking") == "writing"  # noqa: E731
@@ -302,7 +361,7 @@ HOLD_UNTIL = {  # what new production waits for in pipeline(), by the kind of th
 }
 
 
-def pipeline(project: Project, rotating: str | bool = False) -> list[Notice]:
+def pipeline(project: Project | Snapshot, rotating: str | bool = False) -> list[Notice]:
     """The WIP notices when production or ready is below target (none otherwise). `wip_production` is actionable only
     if a launchable ready issue is there (Backlog.launchable: unblocked, and not held by a pending decision; an answer
     from the panel resolves its decision) and nothing holds new production (`rotating`: the session renews its memory
@@ -310,14 +369,15 @@ def pipeline(project: Project, rotating: str | bool = False) -> list[Notice]:
     ready issue waits for which decision (held_waits, up to HELD_SHOWN). `wip_ready` only if something can be planned
     (an unblocked backlog or refining issue) and no planner agent is live. Below target with nothing to do (a backlog
     with only triage, on purpose) is information."""
+    s = project if isinstance(project, Snapshot) else Snapshot(project)
+    project, b, data = s.project, s.b, s.data
     cfg = project.section("agents")
     goal_prod, goal_ready = cfg.get("production_slots", 1), cfg.get("ready_target", 2)
-    live = live_agents(project)
-    prod = sum(1 for h in live if identity.is_production(project, h))
-    b = Backlog(project)
+    prod = sum(1 for h in s.live if identity.is_production(project, h))
+    if data is None:
+        return []  # branch_notices says the backlog cannot be read
     try:
-        data = b.load()
-        issues = [i for _, i, _ in b.iter_issues(data, archived=False)]
+        issues = s.issues(archived=False)
         rb = b.relation_blockers(data)  # blocked: a free-text reason or an open blocker through relations.blocks
         holds = b.decision_holds(data)
     except (BacklogError, OSError, ValueError, KeyError):
@@ -331,7 +391,7 @@ def pipeline(project: Project, rotating: str | bool = False) -> list[Notice]:
     ]
     refining = sum(1 for i in issues if i["status"] == "refining")
     to_plan = [i["id"] for i in issues if i["status"] in ("backlog", "refining") and not b.is_blocked(i, rb)]
-    planner = any(identity.role(project, h.get("type")) == "planner" for h in live)
+    planner = any(identity.role(project, h.get("type")) == "planner" for h in s.live)
     out: list[Notice] = []
     if prod < goal_prod:
         waits = (
@@ -686,12 +746,12 @@ def stale_notice(project: Project, session: str | None, now: float | None = None
     return notice("loop_stale", True, text, f"loop_stale:{session}:{last or '-'}")
 
 
-def incomplete_notice(project: Project) -> Notice | None:
+def incomplete_notice(s: Snapshot) -> Notice | None:
     """`delivery_incomplete`: agents the delivery check let stop after delivery.MAX_BLOCKS tries with their delivery
     still incomplete (`delivery_incomplete` in their entry; it goes when the agent is resumed or delivers complete);
     None when there are none. Not for agents marked stopped."""
     bad: list[tuple[str, str]] = []
-    for aid, h in agents(project).items():
+    for aid, h in s.agents.items():
         x = h.get("delivery_incomplete")
         if isinstance(x, dict) and not h.get("stopped"):
             name = h.get("name") or aid[:8]
@@ -710,15 +770,13 @@ def incomplete_notice(project: Project) -> Notice | None:
     )
 
 
-def agent_notices(
-    project: Project, session: str | None, live: Iterable[Agent], ids: Mapping[str, Identity], mark: bool = True
-) -> list[Notice]:
+def agent_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     """The notices about the agents: dead ones of an earlier session, incomplete deliveries, nameless production ones,
     idle ones."""
     out: list[Notice] = []
-    if session:
-        why = dead_agents(project, session, live)
-        dead = [ids[aid]["name"] or aid[:8] for aid in why]
+    if s.session:
+        why = s.dead
+        dead = [s.ids[aid]["name"] or aid[:8] for aid in why]
         if dead:
             out.append(
                 notice(
@@ -731,13 +789,13 @@ def agent_notices(
                     "dead_agents:" + ",".join(sorted(dead)),
                 )
             )
-    incomplete = incomplete_notice(project)
+    incomplete = incomplete_notice(s)
     if incomplete:
         out.append(incomplete)
-    nameless = nameless_notice(project, live, ids, mark)
+    nameless = nameless_notice(s.project, s.live, s.ids, mark)
     if nameless:
         out.append(nameless)
-    idle = stalled(project, session)
+    idle = stalled(s)
     if idle:
         out.append(
             notice(
@@ -751,45 +809,26 @@ def agent_notices(
 
 
 def ready_branches(
-    b: Backlog,
-    data: Data,
-    wts: Iterable[tuple[str, str, str]],
-    live: Iterable[Agent],
-    heads: Mapping[str, str],
-    ids: Mapping[str, Identity],
-    kind: str = "code",
-    held: list[tuple[str, str, str, review.State]] | None = None,
+    s: Snapshot, kind: str = "code", held: list[tuple[str, str, str, review.State]] | None = None
 ) -> list[tuple[str, str, str]]:
-    """The worktrees ready to integrate, [(repo, branch, worktree path)]: a branch the backlog names (`b`, its loaded
-    `data`) whose worktree (`wts`, worktree.all_worktrees) no live agent (`live`, with `heads` and `ids` as in
-    notices_for_pass) has, by its recorded branch, by the agent the sub-issue names, or by its brief citing the
+    """The worktrees ready to integrate, [(repo, branch, worktree path)]: a branch the backlog names whose worktree
+    no live agent has, by its recorded branch, by the agent the sub-issue names, or by its brief citing the
     worktree's path, and whose `delivery.branch_kind` is KIND: "code" (to integrate) or "measure" (measurements to
     close with `integrate --measure`); a branch whose sub-issues are all closed without a commit ("closed") is in
     neither. A code branch whose review does not let it in yet (review.state: a repo with `review = "auto"`, the
     branch needs a review and has none clean on its tip) is not ready either: it goes to HELD, when given, with its
     state (the pass's `review_needed` and `review_findings`). The one rule of the pass's `ready_to_integrate` and
-    `measure_delivered` and the orchestrator's band (band.py)."""
-    live_names = {i["name"] for i in ids.values()} - {None}
-    live_branches = {h["branch"] for h in live if h.get("branch")}  # recorded at launch or by hand
-    guessed = [h for h in live if not ids[h["id"]]["registered"]]  # no recorded identity: the fallbacks apply
-    named_branches = {s.get("branch") for _, i, _ in b.iter_issues(data) for s in i["subs"] if s.get("branch")}
-    agent_of = {
-        s.get("branch"): s.get("agent")
-        for _, i, _ in b.iter_issues(data, archived=False)
-        for s in i["subs"]
-        if s.get("branch")
-    }
+    `measure_delivered` and the orchestrator's band (band.py). `s` has a backlog that loads."""
     out: list[tuple[str, str, str]] = []
-    ags = agents(b.project)  # once for every branch
-    for repo, br, path in wts:
-        if br not in named_branches or br in live_branches or agent_of.get(br) in live_names:
+    for repo, br, path in s.wts:
+        if br not in s.subs_of or br in s.live_branches or s.agent_of.get(br) in s.live_names:
             continue
-        if any(identity.cites_path(heads[h["id"]], path) for h in guessed):
+        if any(identity.cites_path(s.heads[h["id"]], path) for h in s.guessed):
             continue  # a live agent with no recorded identity names its worktree
-        if delivery.branch_kind(b.project, br, data, ags) != kind:
+        if delivery.branch_kind(s.project, br, s.data, s.agents) != kind:
             continue
         if kind == "code":
-            st = review_state(b.project, repo, br, agent_of.get(br), ags)
+            st = review_state(s.project, repo, br, s.agent_of.get(br), s.agents)
             if st is not None and not st.passes:
                 if held is not None:
                     held.append((repo, br, path, st))
@@ -909,18 +948,18 @@ def plural(n: int, word: str) -> str:
     return f"{n} {word}" + ("" if n == 1 else "s")
 
 
-def report_part(project: Project, data: Data, repo: str, br: str, path: str | None, agent: str | None) -> str:
+def report_part(s: Snapshot, repo: str, br: str, path: str | None) -> str:
     """What `ready_line` says about a branch's report and outcome, without the parentheses ("" when nothing). With no
     worktree (`path` None) the branch is read from the repo's main checkout (git refs are shared)."""
+    project, agent, ags = s.project, s.agent_of.get(br), s.agents
     tab = project.repo(repo)
-    ags = agents(project)
     rep = delivery.branch_report(
         project,
         br,
         wt=path or tab.get("path"),
         main=tab.get("main") or "main",
         main_path=tab.get("path"),
-        data=data,
+        data=s.data,
         delivered=delivery.report_of(project, branch=br, name=agent, agents=ags),
         since=delivery.started(project, br, ags),
     )
@@ -937,41 +976,38 @@ def report_part(project: Project, data: Data, repo: str, br: str, path: str | No
     return oc[2:]
 
 
-def ready_line(project: Project, data: Data, repo: str, br: str, path: str | None, agent: str | None) -> str:
+def ready_line(s: Snapshot, repo: str, br: str, path: str | None) -> str:
     """One branch of `ready_to_integrate`: `repo:br (report[; outcome X])`, with the report `delivery.branch_report`
     finds (the same rule as the delivery check, with the report the agent named at its delivery), «report X not
     found» when the sub-issue or the delivery names one that exists nowhere, «no report» when there is none, and
     nothing about a report when the project keeps none."""
-    part = report_part(project, data, repo, br, path, agent)
+    part = report_part(s, repo, br, path)
     return f"{repo}:{br} ({part})" if part else f"{repo}:{br}"
 
 
-def no_worktree_line(
-    project: Project, data: Data, repo: str, br: str, subs: Sequence[tuple[str, str]], agent: str | None
-) -> str:
+def no_worktree_line(s: Snapshot, repo: str, br: str, subs: Sequence[tuple[str, str]]) -> str:
     """One branch of `branch_no_worktree`: `repo:br (ID Tn[, measurement]; report…; N commits not in main)`."""
-    kind = ", measurement" if delivery.branch_kind(project, br, data) == "measure" else ""
+    kind = ", measurement" if delivery.branch_kind(s.project, br, s.data, s.agents) == "measure" else ""
     parts = [", ".join(f"{iid} {sid}" for iid, sid in subs) + kind]
-    part = report_part(project, data, repo, br, None, agent)
+    part = report_part(s, repo, br, None)
     if part:
         parts.append(part)
-    parts.append(plural(commits_ahead(project, repo, br), "commit") + " not in main")
+    parts.append(plural(commits_ahead(s.project, repo, br), "commit") + " not in main")
     return f"{repo}:{br} ({'; '.join(parts)})"
 
 
-def review_target(data: Data, b: Backlog, br: str) -> tuple[str, str]:
+def review_target(s: Snapshot, br: str) -> tuple[str, str]:
     """(issue, sub-issue) of the open sub-issue that names BR, else of any that does; ("ID", "Tn") when none."""
-    subs = [(i["id"], s) for _, i, _ in b.iter_issues(data) for s in i["subs"] if s.get("branch") == br]
-    subs.sort(key=lambda x: x[1].get("status") in delivery.SUB_CLOSED)
+    subs = sorted(s.subs_of.get(br, []), key=lambda x: x[1].get("status") in delivery.SUB_CLOSED)
     return (subs[0][0], subs[0][1]["id"]) if subs else ("ID", "Tn")
 
 
-def agent_entry(project: Project, name: str | None, br: str) -> Agent | None:
+def agent_entry(s: Snapshot, name: str | None, br: str) -> Agent | None:
     """The latest agents.json entry (with its `id`) of the agent NAME that made BR (not a reviewer); None without
     one."""
     mine = [
         {"id": aid, **h}
-        for aid, h in agents(project).items()
+        for aid, h in s.agents.items()
         if not h.get("review") and ((name and h.get("name") == name) or h.get("branch") == br)
     ]
     return max(mine, key=lambda h: str(h.get("start") or "")) if mine else None
@@ -999,14 +1035,7 @@ def asks_about(b: Backlog, d: Record, review_file: Path) -> bool:
         return False
 
 
-def review_notices(
-    project: Project,
-    b: Backlog,
-    data: Data,
-    held: Sequence[tuple[str, str, str, review.State]],
-    agent_of: Mapping[str, str | None],
-    act: bool,
-) -> list[Notice]:
+def review_notices(s: Snapshot, held: Sequence[tuple[str, str, str, review.State]], act: bool) -> list[Notice]:
     """`review_needed` and `review_findings`: the delivered branches whose review does not let them in yet
     (ready_branches' HELD), each with its next step. Needed (round 1, or round 2 once the fixes moved the tip):
     launch a reviewer with `foreman launch NAME --review REPO:BRANCH`, or resume the one of round 1. Findings (round
@@ -1018,13 +1047,15 @@ def review_notices(
     findings: list[str] = []
     waiting: list[str] = []
     keys: dict[str, list[str]] = {"needed": [], "findings": [], "waiting": []}  # the case of each: branch@state
-    everyone = [{"id": aid, **h} for aid, h in agents(project).items()]
+    project, b, data = s.project, s.b, s.data
+    assert data is not None
+    everyone = [{"id": aid, **h} for aid, h in s.agents.items()]
     owner = project.owner
     for repo, br, _, st in held:
         ref = f"{repo}:{br}"
-        iid, sid = review_target(data, b, br)
-        name = agent_of.get(br)
-        dev = agent_entry(project, name, br)
+        iid, sid = review_target(s, br)
+        name = s.agent_of.get(br)
+        dev = agent_entry(s, name, br)
         base = name or (dev or {}).get("name") or re.sub(r"[^\w.-]", "-", br)
         why = "; ".join(r.text for r in st.reasons)
         rv = st.review
@@ -1128,39 +1159,20 @@ def review_notices(
     return out
 
 
-def branch_notices(
-    project: Project, live: Iterable[Agent], heads: Mapping[str, str], ids: Mapping[str, Identity]
-) -> list[Notice]:
+def branch_notices(project: Project | Snapshot, live: Any = None, heads: Any = None, ids: Any = None) -> list[Notice]:
     """The notices about the backlog and the worktrees: an unreadable backlog, branches ready to integrate,
     measurements delivered (nothing to merge; a branch closed without a commit is in neither), worktrees
-    the backlog does not name, `in progress` issues with no agent, backlog problems."""
-    out: list[Notice] = []
-    live_names = {i["name"] for i in ids.values()} - {None}
-    live_issues = {i["issue"] for i in ids.values() if i["issue"]}  # recorded, or «Issue: ID» in the brief
-    guessed = [h for h in live if not ids[h["id"]]["registered"]]  # no recorded identity: the fallbacks apply
-    guessed_text = "\n".join(heads[h["id"]][:4000] for h in guessed)
-    b = Backlog(project)
-    try:
-        data = b.load()
-        text = b.data_path.read_text()
-    except (BacklogError, OSError, ValueError) as e:
-        data, text = None, ""
-        out.append(notice("backlog_unreadable", True, f"backlog could not be read: {e}"))
-    wts = worktree.all_worktrees(project)
+    the backlog does not name, `in progress` issues with no agent, backlog problems. LIVE, HEADS and IDS, given with
+    a project, are the live agents as in notices_for_pass."""
+    s = project if isinstance(project, Snapshot) else Snapshot(project, live=live, heads=heads, ids=ids)
+    project, data, text = s.project, s.data, s.text
     if data is None:
-        return out
-    agent_of = {
-        s.get("branch"): s.get("agent")
-        for _, i, _ in b.iter_issues(data, archived=False)
-        for s in i["subs"]
-        if s.get("branch")
-    }
-    ready: list[str] = []
+        return [notice("backlog_unreadable", True, f"backlog could not be read: {s.error}")]
+    out: list[Notice] = []
     withheld: list[tuple[str, str, str, review.State]] = []
-    for repo, br, path in ready_branches(b, data, wts, live, heads, ids, held=withheld):
-        ready.append(ready_line(project, data, repo, br, path, agent_of.get(br)))
+    ready = [ready_line(s, repo, br, path) for repo, br, path in ready_branches(s, held=withheld)]
     # paused: integrate is blocked, so a delivered branch only informs until the owner resumes the product
-    act = not pause.since(project)
+    act = not s.paused
     if ready:
         out.append(
             notice(
@@ -1170,11 +1182,8 @@ def branch_notices(
                 "ready_to_integrate:" + ";".join(r.split(" (")[0] for r in ready),
             )
         )
-    out += review_notices(project, b, data, withheld, agent_of, act)
-    measured = [
-        ready_line(project, data, repo, br, path, agent_of.get(br))
-        for repo, br, path in ready_branches(b, data, wts, live, heads, ids, kind="measure")
-    ]
+    out += review_notices(s, withheld, act)
+    measured = [ready_line(s, repo, br, path) for repo, br, path in ready_branches(s, kind="measure")]
     if measured:
         out.append(
             notice(
@@ -1188,7 +1197,7 @@ def branch_notices(
                 "measure_delivered:" + ";".join(r.split(" (")[0] for r in measured),
             )
         )
-    loose = [f"{repo}:{br}" for repo, br, _ in wts if br not in text]
+    loose = [f"{repo}:{br}" for repo, br, _ in s.wts if br not in text]
     if loose:
         out.append(
             notice(
@@ -1200,27 +1209,19 @@ def branch_notices(
                 "loose_worktrees:" + ",".join(loose),
             )
         )
-    live_branches = {h["branch"] for h in live if h.get("branch")}
-    unworktreed = unworktreed_branches(project)
-    subs_of: dict[str, list[tuple[str, dict[str, Any]]]] = {}
-    for _, i, _ in b.iter_issues(data):  # archived included, as ready_branches
-        for s in i["subs"]:
-            if s.get("branch"):
-                subs_of.setdefault(s["branch"], []).append((i["id"], s))
     stranded: list[tuple[str, str, list[tuple[str, str]]]] = []  # named by an open sub-issue, no live agent
-    for repo, br in unworktreed:
-        open_ = [(iid, s) for iid, s in subs_of.get(br, []) if s.get("status") not in delivery.SUB_CLOSED]
-        if not open_ or br in live_branches or any(s.get("agent") in live_names for _, s in open_):
+    for repo, br in s.unworktreed:
+        open_ = [(iid, x) for iid, x in s.subs_of.get(br, []) if x.get("status") not in delivery.SUB_CLOSED]
+        if not open_ or br in s.live_branches or any(x.get("agent") in s.live_names for _, x in open_):
             continue  # all closed (on purpose, or integrated by squash), or an agent is on it
-        stranded.append((repo, br, [(iid, s["id"]) for iid, s in open_]))
+        stranded.append((repo, br, [(iid, x["id"]) for iid, x in open_]))
     if stranded:
-        lines = [no_worktree_line(project, data, repo, br, subs, agent_of.get(br)) for repo, br, subs in stranded]
         out.append(
             notice(
                 "branch_no_worktree",
                 True,
                 "Unmerged branches of open sub-issues with no worktree: "
-                + "; ".join(lines)
+                + "; ".join(no_worktree_line(s, repo, br, subs) for repo, br, subs in stranded)
                 + ": integrate needs a worktree: `foreman worktree REPO NAME BRANCH` (it reuses the branch), then "
                 '`foreman integrate REPO BRANCH "ID Tn" --check` (`--measure` for a measurement); not delivered: '
                 "relaunch the sub-issue on it (`foreman launch … --repo REPO --branch BRANCH`); dead: cancel the "
@@ -1229,10 +1230,9 @@ def branch_notices(
                 "branch_no_worktree:" + ";".join(f"{repo}:{br}" for repo, br, _ in stranded),
             )
         )
-    stranded_branches = {br for _, br, _ in stranded}
     stray: list[str] = []  # named by no sub-issue nor the backlog's text, only here, with work not in main
-    for repo, br in unworktreed:
-        if br in subs_of or br in text:
+    for repo, br in s.unworktreed:
+        if br in s.subs_of or br in text:
             continue  # the backlog keeps it (a closed sub-issue, or noted in an issue: as loose_worktrees)
         tab = project.repo(repo)
         path, main = tab["path"], tab.get("main") or "main"
@@ -1250,21 +1250,20 @@ def branch_notices(
                 f"Ask {project.owner} before deleting one (it may be their own work); once agreed, delete it with a "
                 "note giving its tip (`git branch -D`; back with `git branch NAME SHA` until git prunes it, ~2 "
                 "weeks).",
-                "loose_branches:" + ";".join(s.split(" (")[0] for s in stray),
+                "loose_branches:" + ";".join(x.split(" (")[0] for x in stray),
             )
         )
-    orphans: list[str] = []
-    for _, i, _ in b.iter_issues(data, archived=False):
-        if i["status"] != "in progress":
-            continue
-        if i["id"] in live_issues:
-            continue
-        held = {br for _, br, _ in wts} | stranded_branches  # a branch with work: branch_no_worktree says it
-        if any(s.get("agent") in live_names or s.get("branch") in held for s in i["subs"]):
-            continue
-        if re.search(rf"Issue:\s*{re.escape(i['id'])}(?![\w-])", guessed_text):
-            continue
-        orphans.append(i["id"])
+    live_issues = {i["issue"] for i in s.ids.values() if i["issue"]}  # recorded, or «Issue: ID» in the brief
+    guessed_text = "\n".join(s.heads[h["id"]][:4000] for h in s.guessed)
+    held = {br for _, br, _ in s.wts} | {br for _, br, _ in stranded}  # a branch with work: branch_no_worktree
+    orphans = [
+        i["id"]
+        for i in s.issues(archived=False)
+        if i["status"] == "in progress"
+        and i["id"] not in live_issues
+        and not any(x.get("agent") in s.live_names or x.get("branch") in held for x in i["subs"])
+        and not re.search(rf"Issue:\s*{re.escape(i['id'])}(?![\w-])", guessed_text)
+    ]
     if orphans:
         out.append(
             notice(
@@ -1276,7 +1275,7 @@ def branch_notices(
                 "orphan_in_progress:" + ",".join(orphans),
             )
         )
-    problems = [p for p in backlog_check.validate(b, data) if not p.startswith("warning: ")]
+    problems = [p for p in backlog_check.validate(s.b, data) if not p.startswith("warning: ")]
     if problems:
         out.append(
             notice(
@@ -1385,14 +1384,14 @@ def machine_notices(project: Project, mark: bool = True) -> list[Notice]:
     return out
 
 
-def decision_notices(project: Project, mark: bool = True) -> list[Notice]:
+def decision_notices(s: Snapshot, mark: bool = True) -> list[Notice]:
     """`decision_due`: a pending question reached its reminder day (`unanswered.by`) without an answer: said once
     per question (<state>/decision-due-notified: `ID|day`; mark=False reads it without writing). Only a reminder:
     foreman never answers for the owner."""
-    try:
-        due = backlog_mod.due_decisions(Backlog(project).load())
-    except (BacklogError, OSError, ValueError):
+    project = s.project
+    if s.data is None:
         return []  # backlog_unreadable says it
+    due = backlog_mod.due_decisions(s.data)
     f = project.state / "decision-due-notified"
     try:
         seen = set(f.read_text().split("\n"))
@@ -1444,24 +1443,21 @@ def notices_for_pass(project: Project, session: str | None = None, mark: bool = 
     """The notices of a loop pass, in the order the summary shows them; each check decides its `actionable` (table in
     docs/orchestrator.md). mark=False (`foreman loop`) reads the markers that keep a notice from repeating without
     writing them, so looking does not use up a pass's notices. Each group of notices is one function."""
-    paused_at = pause.since(project)
-    out = paused_notices(project, paused_at) + config_notices(project, mark)
+    s = Snapshot(project, session)
+    out = paused_notices(project, s.paused) + config_notices(project, mark)
     out += session_notices(project, session, mark)
     at_version = len(out)  # where foreman_behind goes (with_versions)
     found = foreman_versions(project, session)
-    live = live_agents(project)
-    heads = {h["id"]: identity.transcript_head(h) for h in live}
-    ids = {h["id"]: identity.of(project, h, heads[h["id"]]) for h in live}
-    if not paused_at:  # paused: nothing to launch, so no WIP notice asking for it
+    if not s.paused:  # paused: nothing to launch, so no WIP notice asking for it
         ctx = any(holds_production(n) for n in out)
-        out += pipeline(project, rotating="context_rotate" if ctx else False)
-    out += agent_notices(project, session, live, ids, mark)
+        out += pipeline(s, rotating="context_rotate" if ctx else False)
+    out += agent_notices(s, mark)
     out += orchestrator_only_notices(project, mark)
-    out += lock_notices(project, mark)
-    out += lock_queues(project)
-    out += branch_notices(project, live, heads, ids)
+    out += lock_notices(s, mark)
+    out += lock_queues(s)
+    out += branch_notices(s)
     out += machine_notices(project, mark)
-    out += decision_notices(project, mark)
+    out += decision_notices(s, mark)
     out += run_checks(project)
     return with_versions(project, session, out, at_version, found, mark)
 
@@ -1548,7 +1544,7 @@ def loop_pass(project: Project, session: str | None, send: bool = False) -> tupl
     return render(ns, f"Loop pass {datetime.now():%H:%M} (heartbeat written, {time.time() - t0:.1f} s)"), ns
 
 
-def notices(project: Project, session: str | None = None) -> list[Notice]:
+def notices(project: Project, session: str | None = None, snap: Snapshot | None = None) -> list[Notice]:
     """Between passes (UserPromptSubmit outside the loop, PostToolUse): the actionable notices whose `key` was not
     emitted yet. It computes the cheap part of a pass (new inbox messages, locks, the session's context, pipeline,
     idle agents, a loop with no pass (loop_stale); never the project checks, the checks of the backlog or git) and
@@ -1557,7 +1553,8 @@ def notices(project: Project, session: str | None = None) -> list[Notice]:
     Information-only notices never go out here (the pass shows them). The inbox (inbox-notified) and the locks
     (lock-notified) keep their own once-only marks, shared with the pass: a lock case said here is marked there, so
     the pass does not repeat it; one that is not actionable is left for the pass. The context (context-rotate-notified)
-    too: crossing the threshold said here is not actionable again in the pass."""
+    too: crossing the threshold said here is not actionable again in the pass. `snap`: the tick's Snapshot."""
+    s = snap or Snapshot(project, session)
     cand: list[Notice] = []
     new = new_inbox(project)
     if new:
@@ -1570,7 +1567,7 @@ def notices(project: Project, session: str | None = None) -> list[Notice]:
                 f"inbox_new:{max(m['id'] for m in new)}",
             )
         )
-    locks = [n for n in lock_notices(project, mark=False) if n["actionable"]]
+    locks = [n for n in lock_notices(s, mark=False) if n["actionable"]]
     cand += locks
     ctx = context_notice(project, session)
     if ctx:
@@ -1578,12 +1575,12 @@ def notices(project: Project, session: str | None = None) -> list[Notice]:
     stale = stale_notice(project, session)
     if stale:
         cand.append(stale)
-    if not pause.since(project):  # paused: nothing to launch
-        cand += pipeline(project, rotating=ctx is not None and holds_production(ctx))
-    incomplete = incomplete_notice(project)
+    if not s.paused:  # paused: nothing to launch
+        cand += pipeline(s, rotating=ctx is not None and holds_production(ctx))
+    incomplete = incomplete_notice(s)
     if incomplete:
         cand.append(incomplete)
-    quiet = stalled(project, session)
+    quiet = stalled(s)
     if quiet:
         cand.append(
             notice(

@@ -140,12 +140,14 @@ launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch 
                                    Production work of an issue (a production type, --production, or a mechanic)
                                    without --repo/--branch is exit 2: give it its worktree, or --no-production if
                                    it changes no code
-integrate REPO BRANCH "ID [Tn]" … (foreman integrate --help)
+integrate REPO BRANCH "ID [Tn]" … [--title T] [--body B | --body-file F] [--sub Tn] [--note N] [--report PATH]
+          [--result R] [--verdict V] [--rebase-from REF] [--approved A] [--ci ARGS]… [--no-ci] [--no-review WHY]
+          [--opens] [--check] [--measure] [--keep-branch]   (foreman integrate --help says what each does)
 holdout seal ID [--no-baseline] | run REPO BRANCH ID [--full] | status [ID]   an issue's hidden acceptance check
                                    (the orchestrator's; foreman holdout --help): seal hashes its folder and runs
                                    the cases on main; run runs them on a branch as integrate does
-guard "command" [--as agent|orchestrator] | guard --table FILE   what the guard hook would say about a command
-guard --file PATH [--as agent|orchestrator] [--cwd DIR]   …and about a Write or Edit call that writes PATH
+guard "command" [--as agent|planner|orchestrator] | guard --table FILE   what the guard hook would say about a command
+guard --file PATH [--as agent|planner|orchestrator] [--cwd DIR]   …and about a Write or Edit call that writes PATH
                                    (exit 2 = rejected; --as: who runs it, default an agent), or check a table of
                                    commands with their expected verdict
 permissions [--table T] [--json] | permissions --candidate FILE [--table T] [--json]   the product's permissions in
@@ -154,6 +156,8 @@ permissions [--table T] [--json] | permissions --candidate FILE [--table T] [--j
                                    orchestrator must keep; --candidate: what a new foreman.toml would change (rules,
                                    rows whose verdict changes, rows that fail; exit 1 if a row fails or the
                                    orchestrator loses a command, 2 if it does not load); only reads
+permissions --machine-candidate FILE [--json]   what a changed [machine] section of the registry would do to
+                                   each product (FILE: a copy of the registry; only reads)
 permissions --refused [--since 7d] [--json]   the guard's refusals by rule and who ran into them (<state>/guard.jsonl,
                                    without the commands); the view shows each rule's count of the last 7 days
 permissions apply FILE [--table T] [--base HASH] [--opens]   tests the candidate as --candidate and, only with 0,
@@ -222,7 +226,7 @@ catchup [--since 2h|HH:MM|DATE] [--json]   what the owner missed, in four parts:
                                    moves that mark
 docs [orchestrator|agent|owner|config|extending|…]   prints a page of docs/ (agents need no path; alone: the list)
 selftest [-v] [-j N] [--python PATH] [--quality auto|require|off] [--mods auto|require|off] [--quality-only] [--fix]
-         [--coverage] [NAME]
+         [--coverage] [--update-golden] [NAME]
                                    the test suite on fake projects in a temporary directory; -j: test classes run
                                    in N processes (default: the cores shared by the selftests running on the
                                    machine; -j 1 serial); --python: with that interpreter (e.g. /usr/bin/python3);
@@ -230,7 +234,8 @@ selftest [-v] [-j N] [--python PATH] [--quality auto|require|off] [--mods auto|r
                                    (ruff, pyright) at the versions of pyproject.toml, skipped without them in auto;
                                    --mods: the hooks module (claude plugin validate/test), skipped without Claude
                                    Code in auto; --quality-only: no tests; --fix: ruff's safe fixes first;
-                                   --coverage: the suite under coverage.py, a table per module and the total
+                                   --coverage: the suite under coverage.py, a table per module and the total;
+                                   --update-golden: only the golden corpus, rewriting its files under tests/golden/
 $ foreman backlog --help
 [exit 0]
 usage: foreman backlog [-h]

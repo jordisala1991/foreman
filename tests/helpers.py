@@ -21,7 +21,7 @@ ENTRY = ROOT / "lib/main.py"  # foreman's Python entry: the tests run it with th
 sys.path.insert(0, str(ROOT / "lib"))
 
 import forkentry  # noqa: E402
-from foreman import commands, config  # noqa: E402
+from foreman import commands, config, util  # noqa: E402
 
 # git as the tests' own, not the machine's: no system file, a global file of the tests (an identity for their commits
 # on a machine with none, as a CI runner; no signing, no includes, no credential helper of the user's)
@@ -145,6 +145,21 @@ class ProjectCase(unittest.TestCase):
     @property
     def env(self):
         return dict(os.environ)
+
+    def launches(self):
+        return util.read_json(self.project.state / "launches.json", {})
+
+    def launch(self, *args, rc=0):
+        r = self.cli("launch", *args)
+        self.assertEqual(r.returncode, rc, r.stdout + r.stderr)
+        return r
+
+    def notes_text(self):
+        return "".join(f.read_text() for f in sorted(self.project.notes_dir.glob("*.md")))
+
+    def env_for(self, root, data="foreman-m"):
+        """The environment of a session of the plugin installed at `root`."""
+        return {"CLAUDE_PLUGIN_ROOT": str(root), "CLAUDE_PLUGIN_DATA": str(self.tmp / "data" / data)}
 
     def cli(self, *args, cwd=None, inp=None, env=None, timeout=120):
         e = self.env

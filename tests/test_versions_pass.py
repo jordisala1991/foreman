@@ -38,9 +38,6 @@ class VersionPassCase(NoticesCase):
     def root(self, version, **kw):
         return fake_root(self.cache / version, version, **kw)
 
-    def env_for(self, root):
-        return {"CLAUDE_PLUGIN_ROOT": str(root), "CLAUDE_PLUGIN_DATA": str(self.tmp / "data/foreman-m")}
-
     def runs(self, root):
         """This process plays a hook of the orchestrator's session running `root` (None: the CLI)."""
         for k, v in (self.env_for(root) if root else {"CLAUDE_PLUGIN_ROOT": None, "CLAUDE_PLUGIN_DATA": None}).items():
@@ -160,9 +157,9 @@ class OwnSessionTest(VersionPassCase):
         self.installs({self.old: time.time() - 7200, self.new: time.time() - 600})  # the tick runs the real grace
         self.runs(self.old)
         self.old_beat()
-        self.assertIn(ASK, self.tick()["submit"])  # the first pass reaches the model
+        self.assertIn(ASK, self.hook_tick()["submit"])  # the first pass reaches the model
         self.old_beat()
-        log = self.tick()["log"]  # then information: the pass stays on screen as one line
+        log = self.hook_tick()["log"]  # then information: the pass stays on screen as one line
         self.assertEqual(log.count("foreman 0.1.0 in this session"), 1, log)
 
 
@@ -435,14 +432,11 @@ class TerminalSessionTest(VersionPassCase):
             ev["interactive"] = interactive
         return hooks_mod.start(ev)
 
-    def tick(self, session="S1", **ev):
-        return hooks_mod.tick({"cwd": str(self.home), "session": session, "busy": False, "agents": [], **ev})
-
     def test_asked_once_like_any_other_session(self):
         self.issue("AB-1", "ready")
         self.assertEqual(self.start(self.old), {"active": True, "below": False, "min": versions.CLAUDE_CODE_MIN})
         self.assertTrue(heartbeat.read(self.project, "S1")["interactive"])  # still recorded: information only
-        got = self.tick()
+        got = self.hook_tick()
         self.assertNotIn("reload", got)
         self.assertEqual((got["marked"], got["due"]), (True, False))
         k = self.kinds("S1")
@@ -454,11 +448,11 @@ class TerminalSessionTest(VersionPassCase):
         self.assertFalse((self.project.state / "reloads.jsonl").exists())
         # the same with no live agent, between ticks and once the turn ends: never a reload
         for ev in ({}, {"busy": True}, {"agents": [{"id": "a1", "status": "completed"}]}):
-            self.assertNotIn("reload", self.tick(**ev))
+            self.assertNotIn("reload", self.hook_tick(**ev))
         # the same as a session whose start said nothing of `interactive`, or false (-p, an SDK host)
         for interactive in (False, None):
             self.start(self.old, interactive=interactive)
-            self.assertNotIn("reload", self.tick())
+            self.assertNotIn("reload", self.hook_tick())
             self.assertIn(ASK, self.text_of("foreman_behind"))
 
     def test_the_marked_session_gets_the_version_notice(self):
@@ -478,7 +472,7 @@ class TerminalSessionTest(VersionPassCase):
                     any("[loop] reload is no longer used" in w for w in self.project.warnings), self.project.warnings
                 )
                 self.start(self.old)
-                self.assertNotIn("reload", self.tick())
+                self.assertNotIn("reload", self.hook_tick())
                 self.assertIn(ASK, self.text_of("foreman_behind"))
         self.config()
         self.assertEqual(self.project.warnings, [])
