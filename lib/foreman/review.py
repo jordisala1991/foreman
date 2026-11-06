@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import fnmatch
 import re
-import subprocess
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -291,13 +290,7 @@ def _own_patch_id(main_path: PathLike, main: str, commit: str) -> str | None:
     diff = util.git(main_path, "diff", "--no-color", "--no-ext-diff", f"{base}..{commit}", check=False)
     if not diff:
         return ""
-    r = subprocess.run(
-        ["git", *util.GIT_QUIET, "-C", str(main_path), "patch-id", "--stable"],
-        input=diff + "\n",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    r = util.git_run(main_path, "patch-id", "--stable", input=diff + "\n")
     return r.stdout.split()[0] if r.returncode == 0 and r.stdout.strip() else None
 
 

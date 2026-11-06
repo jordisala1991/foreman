@@ -67,7 +67,8 @@ class ReleaseChecks(unittest.TestCase):
         argvs = [c.args[0] for c in run.call_args_list]
         self.assertTrue(argvs)
         for argv in argvs:
-            self.assertEqual(argv[: 1 + len(util.GIT_QUIET)], ["git", *util.GIT_QUIET])
+            self.assertEqual(Path(argv[0]).name, "git")
+            self.assertEqual(argv[1 : 1 + len(util.GIT_QUIET)], list(util.GIT_QUIET))
 
     def test_copy_passes(self):
         self.assertEqual(self.check(), [])

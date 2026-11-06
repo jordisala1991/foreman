@@ -26,6 +26,7 @@ import contextlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from datetime import datetime, timedelta
@@ -146,14 +147,28 @@ def pid_alive(pid: int | str | None) -> bool | None:
 GIT_QUIET: tuple[str, ...] = ("-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false")
 
 
+def git_run(
+    repo: PathLike, *args: str, input: str | bytes | None = None, binary: bool = False, timeout: float | None = None
+) -> subprocess.CompletedProcess[Any]:
+    """git -C repo args, without hooks nor fsmonitor (GIT_QUIET): never for a push. Never raises on a status; an OSError
+    or a timeout propagates."""
+    return subprocess.run(
+        [shutil.which("git") or "git", *GIT_QUIET, "-C", str(repo), *args],
+        capture_output=True,
+        close_fds=False,  # Python's own fds are not inheritable; with the full path this lets 3.9+ use posix_spawn
+        text=not binary,
+        input=input,
+        timeout=timeout,
+        check=False,
+    )
+
+
 def git(
     repo: PathLike, *args: str, check: bool = True, error: type[Exception] = RuntimeError, timeout: float | None = None
 ) -> str:
-    """git -C repo args, without hooks nor fsmonitor (GIT_QUIET): never for a push."""
+    """The stripped stdout of git_run; on failure, `error` is raised (check) or "" returned."""
     try:
-        r = subprocess.run(
-            ["git", *GIT_QUIET, "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout, check=False
-        )
+        r = git_run(repo, *args, timeout=timeout)
     except (OSError, subprocess.SubprocessError) as e:
         if check:
             raise error(f"git {' '.join(args)}: {e}") from e
