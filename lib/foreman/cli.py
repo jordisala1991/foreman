@@ -514,7 +514,7 @@ def run_checks_report(p: Project) -> int:
         print(
             f"  loop check `{r['cmd']}`: "
             + (f"FAILED, {r['failed']}" if r["failed"] else f"rc {r['rc']}")
-            + f", {len(r['lines'])} notice{'' if len(r['lines']) == 1 else 's'}"
+            + f", {util.plural(len(r['lines']), 'notice')}"
         )
         if r["failed"]:
             rc = 1
@@ -544,8 +544,8 @@ def check(p: Project, run_checks: bool = False) -> int:
     rc = max(rc, 1 if p.warnings else 0)
     keys, rules, dropped = p.inherited()
     print(
-        f"  inherited from the machine (registry [machine]): {keys} setting{'' if keys == 1 else 's'}, "
-        f"{rules} deny rule{'' if rules == 1 else 's'}" + (f"; [deny] drop removes {dropped} here" if dropped else "")
+        f"  inherited from the machine (registry [machine]): {util.plural(keys, 'setting')}, "
+        f"{util.plural(rules, 'deny rule')}" + (f"; [deny] drop removes {dropped} here" if dropped else "")
     )
     from . import versions
 

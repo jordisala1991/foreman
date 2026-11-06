@@ -314,7 +314,7 @@ class Integration:
             return False, f"merging {self.main} conflicts in {', '.join(files) or '?'}", n
         if r.returncode:  # an old git without --write-tree, or another error: never merged blindly
             return False, f"git merge-tree could not check the merge ({(r.stderr or r.stdout).strip()[:200]})", n
-        return True, f"{n} commit{'s' if n != 1 else ''}, only under {home}/", n
+        return True, f"{util.plural(n, 'commit')}, only under {home}/", n
 
     def preflight(self) -> None:
         self.wt = self.worktree()
@@ -945,7 +945,7 @@ class Integration:
         runs = self.ci_runs()
         src = "--ci" if self.a.ci is not None else "ci_runs" if self.repo.get("ci_runs") != [""] else "default"
         lines = [
-            f"== local CI: {len(runs)} run{'s' if len(runs) != 1 else ''} ({src}) in {self.wt}"
+            f"== local CI: {util.plural(len(runs), 'run')} ({src}) in {self.wt}"
             + (self.main_ci_plan() if self.local else "")
             + f"; log: {self.ci_log()}"
         ]
@@ -1314,7 +1314,7 @@ class Integration:
         drop = (
             f"kept ({tip})"
             if a.keep_branch
-            else f"deleted (tip {tip}; {ahead} commit{'s' if ahead != 1 else ''} not in {self.main})"
+            else f"deleted (tip {tip}; {util.plural(ahead, 'commit')} not in {self.main})"
         )
         if a.check:
             self.out("== backlog after closing (dry run):")

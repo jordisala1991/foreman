@@ -33,7 +33,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import toml_reader
+from . import toml_reader, util
 
 if TYPE_CHECKING:
     from .util import PathLike
@@ -204,7 +204,7 @@ def check_format(cmd: list[str], root: PathLike, env: Mapping[str, str]) -> tupl
     if not files:
         return 0, []
     shown = ", ".join(files[:MAX_LINES]) + (f" and {len(files) - MAX_LINES} more" if len(files) > MAX_LINES else "")
-    return len(files), [f"FAIL ruff format: {plural(len(files), 'file')} would change: {shown}  (fix: {FIX})"]
+    return len(files), [f"FAIL ruff format: {util.plural(len(files), 'file')} would change: {shown}  (fix: {FIX})"]
 
 
 def check_pyright(cmd: list[str], root: PathLike, env: Mapping[str, str]) -> tuple[int, list[str]]:
@@ -252,10 +252,6 @@ def suppressions(root: PathLike) -> tuple[int, int]:
                     else:
                         ignore += 1
     return noqa, ignore
-
-
-def plural(n: int, unit: str) -> str:
-    return f"{n} {unit}{'s' if n != 1 else ''}"
 
 
 class Report:
@@ -319,7 +315,7 @@ def run(
         n, lines = RUNNERS[check](cmd, root, env)
         rep.lines += lines
         rep.problems += n
-        parts.append(f"{check} {plural(n, UNITS[check])}")
+        parts.append(f"{check} {util.plural(n, UNITS[check])}")
     noqa, ignore = suppressions(root)
     rep.line = (
         f"quality: {', '.join(parts)}"
@@ -327,7 +323,7 @@ def run(
         + f"; {noqa} noqa, {ignore} pyright: ignore"
     )
     rep.word = (
-        f"quality {plural(rep.problems, 'problem')}"
+        f"quality {util.plural(rep.problems, 'problem')}"
         if rep.problems
         else f"quality skipped: {', '.join(rep.skipped)}"
         if rep.skipped
@@ -403,7 +399,7 @@ def fix(root: PathLike, env: Mapping[str, str] | None = None, out: Callable[[str
     changed = sorted(k for k in after if before.get(k) != after[k])
     what = " and ".join(label for label, _ in steps)
     out(
-        f"fix: {what} changed {plural(len(changed), 'file')}"
+        f"fix: {what} changed {util.plural(len(changed), 'file')}"
         + (f": {', '.join(changed)}" if changed else "")
         + f" ({time.monotonic() - t0:.1f} s)"
     )

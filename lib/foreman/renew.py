@@ -496,10 +496,6 @@ def owner_messages(path: str | None, prompt: str, n: int = OWNER_MESSAGES) -> tu
     return list(reversed(found)), answer
 
 
-def _cut(text: str, n: int) -> str:
-    return text if len(text) <= n else text[: n - 1] + "…"
-
-
 def pack(project: Project, session: str, transcript: str | None, a: Attempt | None, now: float | None = None) -> str:
     """The whole pack (module doc), and writes it to pack_file(). `a`: the attempt this compaction settles (a
     renewal), or None (a compaction foreman did not ask for)."""
@@ -524,9 +520,9 @@ def pack(project: Project, session: str, transcript: str | None, a: Attempt | No
         parts += [f"## {s['renew_pack_note']}", str(a["note"])]
     msgs, answer = owner_messages(transcript, project.section("loop").get("prompt") or "")
     parts.append(f"## {s['renew_pack_owner'].format(owner=project.owner, n=len(msgs))}")
-    parts += [f"[{m['time']}] {_cut(m['text'], OWNER_CHARS)}" for m in msgs] or [s["renew_pack_owner_none"]]
+    parts += [f"[{m['time']}] {util.clip(m['text'], OWNER_CHARS)}" for m in msgs] or [s["renew_pack_owner_none"]]
     if answer:
-        parts += [f"## {s['renew_pack_answer']}", _cut(answer, OWNER_CHARS)]
+        parts += [f"## {s['renew_pack_answer']}", util.clip(answer, OWNER_CHARS)]
     fixed = "\n\n".join(parts)
     d = start.collect(project, env={"CLAUDE_CODE_SESSION_ID": session}, cwd=str(project.home))
     summary = start.render(project, d, renewal=True)

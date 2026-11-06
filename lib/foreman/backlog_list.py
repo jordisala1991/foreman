@@ -10,6 +10,7 @@ import re
 import sys
 from typing import TYPE_CHECKING, Any
 
+from . import util
 from .backlog import (
     CLOSED,
     EXTRA_ISSUE_KEYS,
@@ -141,7 +142,7 @@ def counts(found: list[Row], by: str, many: bool) -> dict[str, int]:
 def line(row: Row, many: bool) -> str:
     i = row["issue"]
     title = re.sub(r"\*\*|`", "", str(i.get("title") or ""))
-    title = title if len(title) <= TITLE_WIDTH else title[: TITLE_WIDTH - 1] + "…"
+    title = util.clip(title, TITLE_WIDTH)
     group = (row["group"] or NO_GROUP) + ("*" if row["archived"] else "")
     head = f"{row['product']:<10} " if many else ""
     return f"{head}{i['id']:<8} {i['status']:<12} {group:<6} {title}"

@@ -56,6 +56,20 @@ class UtilTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 util.fromiso(bad)
 
+    def test_when_clip_plural(self):
+        self.assertEqual(util.when("2026-10-31 09:30"), datetime(2026, 10, 31, 9, 30))
+        local = datetime(2026, 10, 31, 7, 18, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+        self.assertEqual(util.when("2026-10-31T07:18:00Z"), local)
+        for bad in (None, "", "  ", 12, "yesterday"):
+            self.assertIsNone(util.when(bad), bad)
+        self.assertEqual(util.clip("abcdef", 6), "abcdef")
+        self.assertEqual(util.clip("abcdefg", 6), "abcde…")
+        self.assertEqual(util.clip(None, 6), "")
+        self.assertEqual(util.clip("a  b\n c", 10), "a  b\n c")
+        self.assertEqual(util.clip("a  b\n c", 10, squash=True), "a b c")
+        self.assertEqual(util.clip(" a  b  c  d ", 6, squash=True), "a b c…")
+        self.assertEqual([util.plural(n, "file") for n in (0, 1, 2)], ["0 files", "1 file", "2 files"])
+
     def test_parse_when(self):
         now = datetime(2020, 1, 15, 12, 0, tzinfo=timezone.utc)
         self.assertEqual(util.parse_when("24h", now), now - timedelta(hours=24))

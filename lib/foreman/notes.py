@@ -250,15 +250,6 @@ def last_time(project: Project, source: Table, beats: Beats) -> datetime | None:
     return None
 
 
-def _when(value: Any) -> datetime | None:
-    """A time of agents.json (ISO) or progress.jsonl (`YYYY-MM-DD HH:MM`) as a naive local datetime; None if bad."""
-    try:
-        t = util.fromiso(str(value).replace(" ", "T", 1))
-    except (TypeError, ValueError):
-        return None
-    return t.astimezone().replace(tzinfo=None) if t.tzinfo else t
-
-
 def models_seen(project: Project, after: datetime | None = None) -> dict[str, datetime]:
     """{model: the last time an agent ran on it} for the agents seen after `after` (all when None): each agents.json
     entry's `model` (the one its transcript said, written at its stop) at its end (else its last activity, else its
@@ -267,7 +258,7 @@ def models_seen(project: Project, after: datetime | None = None) -> dict[str, da
     seen: dict[str, datetime] = {}
 
     def add(model: Any, when: Any) -> None:
-        t = _when(when) if when else None
+        t = util.when(when)
         if isinstance(model, str) and model and t and (after is None or t > after):
             seen[model] = max(t, seen.get(model, t))
 
