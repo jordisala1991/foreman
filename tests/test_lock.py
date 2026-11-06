@@ -4,10 +4,11 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from helpers import ENTRY, ProjectCase
 
-from foreman import lock
+from foreman import cli, lock
 
 TOML = """
 [project]
@@ -209,6 +210,12 @@ class LockTest(ProjectCase):
         r = self.lock_cli("a", "nope", "check")
         self.assertEqual(r.returncode, 2)
         self.assertIn("unknown resource", r.stderr)
+
+    def test_cli_returns_what_lock_run_returns(self):
+        """`foreman lock` hands back lock.run's result (it replaces the process today), never falls to the parser."""
+        with mock.patch.object(lock, "run", return_value=7) as run:
+            self.assertEqual(cli.main(["lock", "widget", "check"]), 7)
+        self.assertEqual(run.call_args.args[1:], ("widget", ["check"]))
 
 
 if __name__ == "__main__":
