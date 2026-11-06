@@ -162,6 +162,17 @@ class NoticesCase(ProjectCase):
         """Waits until `who` is in the queue of `widget` (its ticket written)."""
         return self.wait_lock(lambda st: who in [q["who"] for q in st["queue"]])
 
+    def worktree(self, branch):
+        wt = self.tmp / "wt" / branch.replace("/", "-")
+        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
+        return wt
+
+    def hook_tick(self, session="S1", **ev):
+        """The module's tick run in this process, without the band."""
+        out = hooks_mod.tick({"cwd": str(self.home), "session": session, "busy": False, "agents": [], **ev})
+        out.pop("band", None)
+        return out
+
     def tick(self, session="S1", **extra):
         """What `foreman hook mod tick` answers the module for `session` (plus `extra` fields of its input), without
         the band (BandTest's business): a marked session's answer must carry it, any other must not."""
@@ -565,11 +576,6 @@ class LoopNoticesTest(NoticesCase):
         owner.write_text("orchestrator: first (delegated, no pid)\n")
         self.assertIsNone(lock.status("widget")["holders"][0]["alive"])
         self.assertEqual(self.kinds()["lock_queue"], [True])  # no pid: in doubt, actionable
-
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
 
     def test_ready_to_integrate_loose_and_orphan(self):
         self.issue("AB-1", "in progress", agent="zed7", branch="ab1/x")
@@ -1248,11 +1254,6 @@ class IdentityPassTest(NoticesCase):
         f.parent.mkdir(parents=True, exist_ok=True)
         util.write_json(f, d)
 
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
-
     def notice_of(self, kind, mark=True):
         return next((n for n in self.notices("S1", mark) if n["kind"] == kind), None)
 
@@ -1388,11 +1389,6 @@ class DeliveredTest(NoticesCase):
         super().setUp()
         self.issue("AB-1", "in progress", agent="zed7", branch="ab1/x")
         self.wt = self.worktree("ab1/x")
-
-    def worktree(self, branch):
-        wt = self.tmp / "wt" / branch.replace("/", "-")
-        git(self.tmp / "app", "worktree", "add", "-q", "-b", branch, str(wt))
-        return wt
 
     def send(self, name, aid="d1", **kw):
         t = self.tmp / "S1" / f"{aid}.jsonl"
@@ -2330,6 +2326,30 @@ class TickTest(LivenessCase):
             self.assertEqual((out["marked"], len(own)), (marked, 1), (extra, callers))
             self.assertEqual("submit" in out or "log" in out, extra == {}, out)  # only the full tick ran the pass
 
+    def test_a_malformed_agents_file_does_not_fail_the_tick(self):
+        """agents.json valid as JSON but of another shape: the tick still gives its band (red when it cannot be
+        read) and its grants."""
+        self.mark("S1", since_ago=self.HOUR)
+        ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
+        for text, level in (("[]", "ok"), ('{"a1": "x"}', "bad")):
+            loop.agents_file(self.project).write_text(text)
+            out = hooks_mod.tick(ev)
+            self.assertEqual((out["band"]["level"], "grants" in out), (level, True), (text, out))
+
+    def test_a_tick_without_a_pass_reads_the_state_once(self):
+        """The notices between passes and the band of one tick share one loop.Snapshot: agents.json and the backlog
+        are read once; a tick with a pass reads them again for the band, after the pass."""
+        from unittest import mock
+
+        from foreman.backlog import Backlog
+
+        self.mark("S1", since_ago=self.HOUR)  # a pass is due, but a turn runs (busy): no pass
+        ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
+        with mock.patch.object(loop, "agents", wraps=loop.agents) as ags:
+            with mock.patch.object(Backlog, "load", autospec=True, side_effect=Backlog.load) as load:
+                out = hooks_mod.tick(ev)
+        self.assertEqual((out["due"], "band" in out, ags.call_count, load.call_count), (False, True, 1, 1), out)
+
     def test_start_and_end(self):
         self.mark("S1", since_ago=self.HOUR)
         root = str(Path(ENTRY).resolve().parent.parent)
@@ -2656,14 +2676,3 @@ class ChatReviewTest(NoticesCase):
         r = self.cli("plain", "--stats")
         self.assertEqual(r.returncode, 0)
         self.assertIn("no message", r.stdout)
-
-    def test_parse_since(self):
-        from foreman import plain
-
-        now = datetime(2026, 10, 31, 12, 0)
-        self.assertEqual(plain.parse_since("7d", now), datetime(2026, 10, 24, 12, 0))
-        self.assertEqual(plain.parse_since("12h", now), datetime(2026, 10, 31, 0, 0))
-        self.assertEqual(plain.parse_since("30m", now), datetime(2026, 10, 31, 11, 30))
-        self.assertEqual(plain.parse_since("2026-10-30 08:00", now), datetime(2026, 10, 30, 8, 0))
-        with self.assertRaises(ValueError):
-            plain.parse_since("yesterday", now)

@@ -46,9 +46,6 @@ class LaunchTest(ProjectCase):
             self.b.add_issue(d, "E1", "AB-1", "feature", status="ready")
             self.b.set_sub(d, "AB-1", "T1", title="the feature")
 
-    def launches(self):
-        return util.read_json(self.project.state / "launches.json", {})
-
     def agents(self):
         return util.read_json(self.project.state / "agents.json", {})
 

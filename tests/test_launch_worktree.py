@@ -7,7 +7,6 @@ table of the plan."""
 from helpers import ProjectCase, make_repo
 from test_identity import TOML
 
-from foreman import util
 from foreman.backlog import Backlog
 
 REFUSED = "a production agent needs --repo REPO --branch BRANCH (its worktree); --no-production if it changes no code"
@@ -25,14 +24,6 @@ class LaunchNeedsWorktreeTest(ProjectCase):
             self.b.add_project(d, "E1", "One", "intro")
             self.b.add_issue(d, "E1", "AB-1", "feature", status="ready")
             self.b.set_sub(d, "AB-1", "T0", title="the feature")
-
-    def launches(self):
-        return util.read_json(self.project.state / "launches.json", {})
-
-    def launch(self, *args, rc=0):
-        r = self.cli("launch", *args)
-        self.assertEqual(r.returncode, rc, r.stdout + r.stderr)
-        return r
 
     def assert_refused(self, *args):
         before = self.b.data_path.read_bytes()

@@ -128,9 +128,6 @@ class GrantCase(FakePs, ProjectCase):
         f = approved.log_file(self.project)
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
-    def notes_text(self):
-        return "".join(f.read_text() for f in sorted(self.project.notes_dir.glob("*.md")))
-
     def shift(self, group, **delta):
         """Moves the group's grant `until` by `delta` (timedelta's keywords)."""
         d = json.loads(grants.file(self.project).read_text())
