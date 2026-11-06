@@ -500,7 +500,7 @@ class MisledTest(DeliveryCase):
 
     def test_report_lines_join_wrapped_lines(self):
         text = (
-            "Misled: brief: decia «toma el siguiente número», pero el 21 (de FO-180) aún no\n"
+            "Misled: brief: dijo «toma el siguiente número», pero el 21 (de otro) aún no\n"
             "está publicado y la regla dice que las claves comparten esquema; me uní al\n"
             "21 (5 min)\n"
             "Misled: plan: pedía mirar 24 h;\n"
@@ -515,7 +515,7 @@ class MisledTest(DeliveryCase):
         self.assertEqual(
             delivery.report_lines(text)["Misled"],
             [
-                "brief: decia «toma el siguiente número», pero el 21 (de FO-180) aún no está publicado y la regla "
+                "brief: dijo «toma el siguiente número», pero el 21 (de otro) aún no está publicado y la regla "
                 "dice que las claves comparten esquema; me uní al 21 (5 min)",
                 "plan: pedía mirar 24 h; usé otra ventana (10 min)",
                 "none",
