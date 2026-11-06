@@ -101,7 +101,7 @@ they disagree.
    | `lock_long` | a lock held over `[loop] lock_long_min` minutes (60): yes, once per case |
    | `lock_queue` | no while every holder holds it through a live `run` or is just taking it; yes if a holder is dead, took it without `run`, gives no pid, never wrote its owner line, or nobody holds it |
    | `ready_to_integrate`, `measure_delivered`, `loose_worktrees`, `branch_no_worktree`, `loose_branches`, `orphan_in_progress`, `backlog_problems`, `backlog_unreadable`, `hung_shells`, `recurring_late`, `inbox` | yes |
-   | `review_needed`, `review_findings` | a delivered branch of a repo with `review = "auto"` whose review does not let it in yet (docs/config.md, «`[repos.*] review`»): it is not in `ready_to_integrate`. `review_needed`, yes: launch a reviewer with the command it gives (`foreman launch NAME --review REPO:BRANCH`: no worktree; the branch is held while it lives), or for round 2 resume the one of round 1. `review_findings`, yes: send the H and M back to the agent that made the branch (SendMessage), or the plan B command it gives (a new agent on the branch's worktree); after round 2 with H or M open, a question for the owner with the review as its page, then no while it is pending, then yes with their answer |
+   | `review_needed`, `review_findings` | a delivered branch of a repo with `review = "auto"` whose review does not let it in yet (docs/config.md, «`[repos.*] review`»): it is not in `ready_to_integrate`. `review_needed`, yes: launch a reviewer with the command it gives (`foreman launch NAME --review REPO:BRANCH`: no worktree; the branch is held while it lives), or for round 2 resume the one of round 1. `review_findings`, yes: send the H and M back to the agent that made the branch (SendMessage), or the plan B command it gives (a new agent on the branch's worktree); after round 2 with H or M open, a question for the owner whose page links the review, then no while it is pending, then yes with their answer |
    | `decision_due` | yes, once per question on its reminder day (`--answer-by`, stored as `unanswered.by`) or the first pass after it while it is still pending: remind the owner in the chat; the notice says what waits. foreman never answers for them: the question stays pending |
    | `disk_low` | yes when it crosses `[loop] disk_low_gb`, then no until it goes back above |
    | `check` (or the kind a check line gives) | what the line says (`[loop] checks`, docs/config.md): a JSON line's `actionable`, a plain line yes; a line that gives one of the kinds of this table is a `check` |
@@ -185,9 +185,10 @@ they disagree.
        finding of the review and only what the fixes changed»), or launch one with the previous review in its
        brief. A merge of main or a clean rebase keeps a review valid (same own patch); other commits need round 2.
      - **No third round:** round 2 with H or M open makes the state `for the owner`. Ask them with the command the
-       notice gives (`foreman backlog decision add` with `--page` the review: the pass finds the question by its
-       page), written as docs/owner.md says, with the options in as it is with the problem noted, fixed by another
-       agent and reviewed again, or dropped, each with its `--effect`. The branch waits; while the question is
+       notice gives (`foreman backlog decision add` with `--page` a page written for this question, docs/owner.md
+       «Question page», whose last line links the review: the pass finds the question by that link; never the
+       review itself as the page), written as docs/owner.md says, with the options in as it is with the problem
+       noted, fixed by another agent and reviewed again, or dropped, each with its `--effect`. The branch waits; while the question is
        pending the notice only informs. With their answer: in as it is, `foreman integrate … --approved "OWNER,
        DATE (ID)"`; another agent, plan B and then a review with `Round: 3`; dropped, cancel the sub-issue and
        remove the branch with a note giving its tip.
@@ -346,6 +347,11 @@ they disagree.
      `foreman inbox read ID`. «No longer wants it»: if nothing was started, it goes back to `triage` (stop its
      planner, keep its plan); if a production agent is already building it, **ask him with a decision before
      stopping the agent**, and meanwhile let it run.
+   - Weigh each question before it reaches the owner, yours or one an agent proposes in its report (agents never
+     add one): only what is theirs (cost, risk, the product's taste, credentials, what cannot be undone or is hard
+     to undo) goes to them; what you can decide, decide it and note it with its why (`foreman note`); a small
+     change that can be undone, make it and tell them (a line in the catch-up or the inbox). docs/owner.md,
+     «Explaining a decision».
    - A question they do not answer on the spot: `foreman backlog decision add` (options = buttons); remind after 3
      days. `--title` is the question in one plain sentence, `--text` what it is about, why now and what each option
      changes, `--recommend` the option and why (shown with its label), and `--recommend-option` with the exact text
@@ -358,10 +364,11 @@ they disagree.
      `--page`: one folder per question, `<reviews>/YYYY-MM-DD-<ID with hyphens>-question/question.md` (in the home,
      never in the repo: screenshots may show the product's data), its images beside it and linked relative
      (`![before](before-390.png)`); any .md under the reviews or notes folders or a report prefix is accepted, up to
-     400 KB. `decision add` warns, without blocking, of an option without `--effect`, two questions in one, a reminder
-     date in the past and a page that is missing or too large: fix them while the question is fresh. The effects,
-     costs and what waits pass `foreman plain` like the title. `decision list --json` gives `details`, `unanswered`
-     and `page` with `page_path` (absolute) when set. Record such a question only when `foreman session --all
+     400 KB. Write it for that question alone, with the template of docs/owner.md («Question page»), never a report
+     or a study. `decision add` warns, without blocking, of an option without `--effect`, two questions in one, a
+     reminder date in the past and a page that is missing, too large or not written for the question: fix them
+     while the question is fresh. The effects, costs and what waits pass `foreman plain` like the title.
+     `decision list --json` gives `details`, `unanswered` and `page` with `page_path` (absolute) when set. Record such a question only when `foreman session --all
      --behind` shows no session of this product behind: an older foreman that writes the backlog drops these
      fields (`foreman check` warns of unknown keys in a decision). A question that names ids or
      internal names without explaining them is refused (exit 2, with what to explain): rewrite it; `--as-is` only when the owner
