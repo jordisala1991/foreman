@@ -13,6 +13,14 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 - `foreman agents --cost`: what each agent run cost at API list prices (tokens by model, minutes, outcome), recorded from the transcript at `progress --done` or when the pass sees the agent stopped, kept in `costs.jsonl` beside the backlog; by issue, sub-issue, type, model, week or day, with the share of tokens on Sonnet or Haiku, as text or JSON; `--backfill DAY` records older runs. The panel's issue page shows the issue's cost.
 
+### Changed
+
+- The guard reads each command once per check: its texts, with and without the pushes resolved, serve every deny
+  list and group; one walk of the lines it runs serves the reserved-file, main-checkout, integrate and hidden-check
+  rules; the registry is read once per call (also across a tool call's file and places), and a folder's repo in two
+  git calls instead of three, shared with the main-checkout rule. A `git push` is checked in about 50 ms instead of
+  55, compound commands and writes about 2 ms faster; no verdict changes.
+
 ## [0.62.0] - 2026-11-06
 
 ### Fixed
