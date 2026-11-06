@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from .util import PathLike
 
 MODES = ("auto", "off")
-DEFAULT_LINES = 400
 MAX_ROUNDS = 2
 HEADER_LINES = 15  # a review's header lies within its first lines
 # not code, for the size: test folders (any level), docs, data and lock files
@@ -146,7 +145,7 @@ class State:
 
 
 def mode(repo: Table) -> str:
-    return str(repo.get("review", "off"))
+    return str(repo["review"])
 
 
 def matches(path: str, entry: str) -> bool:
@@ -207,13 +206,13 @@ def reasons(project: Project, repo: Table, branch: str, outcome: str | None = No
     """Why BRANCH of REPO (project.repo()) needs a review; [] when it does not, or when the repo's `review` is off."""
     if mode(repo) != "auto":
         return []
-    main_path, main = repo["path"], repo.get("main", "main")
+    main_path, main = repo["path"], repo["main"]
     out: list[Reason] = []
-    entries = list(dict.fromkeys([*repo.get("risky_paths", []), *repo.get("review_paths", [])]))
+    entries = list(dict.fromkeys([*repo["risky_paths"], *repo["review_paths"]]))
     touched = paths_touched(main_path, main, branch, entries)
     if touched:
         out.append(Reason("paths", "delicate paths: " + ", ".join(touched)))
-    limit = int(repo.get("review_lines", DEFAULT_LINES) or 0)
+    limit = int(repo["review_lines"] or 0)
     if limit:
         n = code_lines(main_path, main, branch)
         if n > limit:
@@ -326,7 +325,7 @@ def state(project: Project, repo: Table, branch: str, outcome: str | None = None
         return st
     if rv is None:
         return st
-    current = covers(repo["path"], repo.get("main", "main"), branch, rv.tip)
+    current = covers(repo["path"], repo["main"], branch, rv.tip)
     if rv.open and rv.round >= MAX_ROUNDS:
         st.status = OWNER
     elif current:

@@ -90,7 +90,7 @@ def create(
     if not main or not (main / ".git").exists():
         raise WorktreeError(f"repo {repo_key}: {main} is not a git checkout")
     wt = destination(project, repo, name, branch)
-    for step in repo.get("post_create", []):  # before anything is made: a bad step could not run afterwards
+    for step in repo["post_create"]:  # before anything is made: a bad step could not run afterwards
         try:
             commands.expand("repo.post_create", step)
         except commands.PlaceholderError as e:
@@ -115,19 +115,19 @@ def create(
             warnings.append(f"branch {branch} already exists: BASE {base} ignored, the branch is not moved")
         opts, start, made_branch = [], branch, False
         how = f"existing branch at {git(main, 'rev-parse', '--short', branch)}"
-    elif upstream := remote_branch(main, repo.get("remote", "origin"), branch):
+    elif upstream := remote_branch(main, repo["remote"], branch):
         if base:
             warnings.append(f"branch {branch} exists on {upstream}: BASE {base} ignored")
         opts, start = ["--track", "-b", branch], upstream
         how = f"tracking {upstream} at {git(main, 'rev-parse', '--short', upstream)}"
     else:
-        base_ref: str = base or repo.get("main", "main")
+        base_ref: str = base or repo["main"]
         opts, start = ["-b", branch], base_ref
         how = f"from {base_ref} {git(main, 'rev-parse', '--short', base_ref)}"
     wt.parent.mkdir(parents=True, exist_ok=True)
     git(main, "worktree", "add", "-q", *opts, str(wt), start)
     values = {"main": main, "wt": wt, "repo": repo_key, "name": name, "branch": branch}
-    for step in repo.get("post_create", []):
+    for step in repo["post_create"]:
         cmd = commands.expand("repo.post_create", step, values)
         r = commands.run("repo.post_create", cmd, project=project, values=values, cwd=wt)
         if r.rc != 0:
