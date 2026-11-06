@@ -2,8 +2,8 @@
 
 Every agent the orchestrator launches follows this (docs/orchestrator.md): short, with one brief, leaving the detail
 in its report under `reviews/` (the next sub-issue is done by a new agent that reads it). The brief brings the task,
-its branch and the agent's name; the project's rules file (named in the brief) adds what is specific and wins when
-they disagree.
+its branch and the agent's name; the project's rules file (`project.rules` in `foreman config`) adds what is
+specific and wins when they disagree.
 
 The brief starts with foreman's launch line, `[foreman launch TOKEN] NAME · ISSUE Tn · branch B · worktree W`: that
 is your name (use it as `<you>` below), your issue and sub-issue, your branch and your worktree. foreman recorded
@@ -11,8 +11,9 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
 
 ## At the start
 
-- Read the project's rules file and whatever the brief cites; `foreman backlog show ID` gives the goal, the
-  acceptance criterion and the plan of your issue.
+- Read the project's rules file (`project.rules` in `foreman config`) and
+  whatever the brief cites; `foreman backlog show ID` gives the goal, the acceptance criterion and the plan of your
+  issue.
 - Work in your worktree and your own scratch folder; do not touch other agents' work.
 
 ## While working
