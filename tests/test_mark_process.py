@@ -136,7 +136,7 @@ class MarkTest(FakePs, ProjectCase):
         r = self.cli("session")
         self.assertIn("process: none recorded (marked by hand)", r.stdout)
         (self.project.state / "orchestrator.json").unlink()  # a mark written by an older foreman
-        self.assertIn("marked by an older foreman", self.cli("session").stdout)
+        self.assertIn("marked without a process", self.cli("session").stdout)
 
 
 class GuardProcessTest(FakePs, ProjectCase):

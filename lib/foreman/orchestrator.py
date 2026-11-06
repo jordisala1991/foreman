@@ -1,6 +1,6 @@
 """Who orchestrates a project: the session marked with `foreman session ID [--name NAME]`.
 
-<state>/session holds the session id alone (the hooks compare it; older tools write it the same way) and
+<state>/session holds the session id alone (the hooks compare it; a hand-written one is the same) and
 <state>/orchestrator.json adds {session, name, since}: the name other sessions write to with SendMessage (as
 `ListAgents` shows it, given with --name; marking the same session again without one keeps it) and the time it was
 marked. Nothing here is invented: no name given, an empty name. When the session marks itself (its own id), the
@@ -247,14 +247,14 @@ def process_line(project: Project) -> str:
             "there)"
         )
     return (
-        f"process: none recorded ({rec.get('process') or 'marked by an older foreman'}): orchestrator-only commands "
+        f"process: none recorded ({rec.get('process') or 'marked without a process'}): orchestrator-only commands "
         "are refused until the session marks itself with its own id"
     )
 
 
 def current(project: Project) -> Mark | None:
     """{session, name, since} of the marked orchestrator, or None. `since` falls back to <state>/session's mtime
-    when the record is missing or belongs to another session (the id written by hand or by an older tool)."""
+    when the record is missing or belongs to another session (the id written by hand)."""
     f = session_file(project)
     try:
         sid = f.read_text().strip()

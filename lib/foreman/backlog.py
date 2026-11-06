@@ -14,7 +14,7 @@ The model: the registry is the workspace, a registered project is a *product* wh
 product's backlog holds *projects* (groups of work E1…: status, priority, repos), *issues* (Linear's workflow
 states by category, priority, relations, assignee, repo; plus ours:
 acceptance criterion, verdict, result, plan, reports, branch and commit) inside a project or in the product's own list
-(no project), and *sub-issues* (T0, T1…). Triage is the old «idea». No layers above the projects, no cycles.
+(no project), and *sub-issues* (T0, T1…). Triage is where an issue starts, before it is ready. No layers above the projects, no cycles.
 
 Schema: 5 (the model above, SCHEMA below), the only one foreman reads and writes. Every command refuses an older
 file: foreman 0.54 moves a schema 4 file to 5 (`foreman backlog migrate`), foreman 0.25 or older a schema 2 or 3 file
