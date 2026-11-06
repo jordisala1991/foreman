@@ -18,6 +18,12 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   `[repos.*]` path of every registered product, not only the one that holds a live home: a product whose home lives
   outside its code repo had that repo unprotected. Its worktrees and the orchestrator pass as before; the refusal
   says «a main checkout of PRODUCT».
+- `foreman agents --misled` reads a `Misled:` line (and any other fixed line of a report) whole when the report wraps
+  it over several lines, with its cost.
+- The agent instructions: the rules file is found in `project.rules` (`foreman config`), not in the brief; a plan's
+  claim of scope cites its search or says it was not checked; the final-message length (now 2,000 characters) is
+  stated only in docs/agent.md; the schema test says the whole rule for `CONFIG_SCHEMA` (join the unreleased list,
+  else bump).
 
 ## [0.60.0] - 2026-11-06
 

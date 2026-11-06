@@ -497,6 +497,32 @@ class MisledTest(DeliveryCase):
             {"Misled": [], "Evidence": ["shot.png"]},
         )
         self.assertEqual(delivery.report_lines("Misled: x", ()), {})
+
+    def test_report_lines_join_wrapped_lines(self):
+        text = (
+            "Misled: brief: dijo «toma el siguiente número», pero el 21 (de otro) aún no\n"
+            "está publicado y la regla dice que las claves comparten esquema; me uní al\n"
+            "21 (5 min)\n"
+            "Misled: plan: pedía mirar 24 h;\n"
+            "usé otra ventana (10 min)\n"
+            "- Misled: none\n"
+            "Misled: code: uno\n"
+            "\n"
+            "otro párrafo\n"
+            "Misled: code: dos\n"
+            "| tabla\n"
+        )
+        self.assertEqual(
+            delivery.report_lines(text)["Misled"],
+            [
+                "brief: dijo «toma el siguiente número», pero el 21 (de otro) aún no está publicado y la regla "
+                "dice que las claves comparten esquema; me uní al 21 (5 min)",
+                "plan: pedía mirar 24 h; usé otra ventana (10 min)",
+                "none",
+                "code: uno",
+                "code: dos",
+            ],
+        )
         self.assertEqual(
             [delivery.is_nothing(v) for v in ("none", "None.", "nada", "-", "plan: x")], [True, True, True, True, False]
         )
