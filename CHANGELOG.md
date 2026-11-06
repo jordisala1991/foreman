@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-11-06
+
 ### Fixed
 
 - The guard no longer lets six git forms past it. A git that rewrites a main checkout after `cd MISSING;`, or in a
