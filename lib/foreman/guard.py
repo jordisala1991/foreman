@@ -1139,6 +1139,7 @@ CODE_LITERAL = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"|`([^`\n]*)`")
 MAX_LITERAL = 4096  # a longer quoted literal is not a file name
 ADJACENT = re.compile(r"\s*([,/+])\s*")  # between two literals of one path written in pieces
 PIECE = re.compile(r"/?[\w.~-]+(/[\w.~-]+)*/?")  # a literal that may be a piece of a path
+JOINED = re.compile(r"[/,+]\s*\Z")  # before a literal joined onto a name: `base / "x"`, `join(base, "x")`
 STATEMENT = re.compile(r"(^|[;{}\n])\s*\Z")  # the start of a statement, before a call
 OS_DOT = re.compile(r"\bos\.\Z")
 MAX_PIECES = 8
@@ -1306,15 +1307,16 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
 def _pieces(code: str, spread: bool = False) -> list[str]:
     """The quoted literals of code (perl's `>` in front of a file dropped), and each run of literals written next to
     each other also joined as one path, the way a path is built in pieces (`'a', 'b'` and `"a" / "b"`: a/b; `'a' +
-    'b'`: ab; runs of up to MAX_PIECES); with spread (a target the code cannot name), literals that look like a
-    path's pieces also run on across statements (`base = home / "a"` … `base / "b"`: a/b)."""
+    'b'`: ab; runs of up to MAX_PIECES); with spread (a target the code cannot name), a path's piece joined onto a
+    name also runs on from the literal before it (`base = home / "a"` … `base / "b"`: a/b)."""
     out: list[str] = []
     run: list[tuple[str, str]] = []
     last = None
     for m in CODE_LITERAL.finditer(code):
         lit = re.sub(r"^\s*\+?[<>]{1,2}\s*", "", next(x for x in m.groups() if x is not None))
         gap = ADJACENT.fullmatch(code, last.end(), m.start()) if last else None
-        joins = spread and run and PIECE.fullmatch(lit) and PIECE.fullmatch(run[-1][1])
+        joins = spread and last and run and JOINED.search(code, last.end(), m.start())
+        joins = joins and PIECE.fullmatch(lit) and PIECE.fullmatch(run[-1][1])
         sep = gap.group(1) if gap else "/" if joins else ""
         run, last = ([*run, ("" if sep == "+" else "/", lit)] if sep else [("", lit)]), m
         run = run[-MAX_PIECES:]
