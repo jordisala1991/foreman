@@ -135,8 +135,21 @@ def project_of(ev: Event) -> Project | None:
     return config.project_for_cwd(cwd, active_only=True) if cwd else None
 
 
+def out(obj: dict[str, Any]) -> None:
+    """The hook's JSON answer to Claude Code, on stdout."""
+    print(json.dumps(obj, ensure_ascii=False))
+
+
 def emit(event: str, text: str) -> None:
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}, ensure_ascii=False))
+    out({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}})
+
+
+SESSION_SOURCES = ("startup", "resume", "compact")
+
+
+def session_start(ev: Event) -> bool:
+    """Whether a SessionStart event is one `who` speaks at (no source counts as startup)."""
+    return ev.get("source", "startup") in SESSION_SOURCES
 
 
 def is_orchestrator(project: Project, ev: Event) -> bool:
@@ -145,14 +158,8 @@ def is_orchestrator(project: Project, ev: Event) -> bool:
 
 def delivers(ev: Event) -> bool:
     """Whether a PostToolUse event is a Bash that runs `foreman progress --done` (the agent's delivery)."""
-    return delivered_outcome(ev) is not None
-
-
-def delivered_outcome(ev: Event) -> str | None:
-    """The outcome of the `foreman progress --done` a PostToolUse Bash runs (`--outcome`, default ok; delivery.py),
-    or None when it runs none (or one with an invalid outcome, which the CLI refused)."""
     words = done_words(ev)
-    return None if words is None else delivery.outcome_in(words)
+    return words is not None and delivery.outcome_in(words) is not None
 
 
 def done_words(ev: Event) -> list[str] | None:
@@ -165,23 +172,6 @@ def done_words(ev: Event) -> list[str] | None:
         if sub == "progress" and "--done" in rest:
             return list(rest)
     return None
-
-
-def delivered_kind(ev: Event) -> str | None:
-    """The `--kind measure` of the `foreman progress --done` a PostToolUse Bash runs ("measure"), or None."""
-    words = done_words(ev)
-    return delivery.kind_in(words) if words else None
-
-
-def delivered_report(project: Project, ev: Event, a: Agent) -> str | None:
-    """The `--report` of the `foreman progress --done` a PostToolUse Bash runs, relative to the home (an absolute
-    path inside the home or inside its folder in the agent's worktree is made relative), or None. Not checked here:
-    the delivery check and the pass say when it exists nowhere."""
-    words = done_words(ev)
-    path = delivery.report_in(words) if words else None
-    if not path:
-        return None
-    return delivery.report_rel(project, path, [a.get("worktree"), ev.get("cwd")]) or path
 
 
 def hook_agents(project: Project, ev: Event) -> None:
@@ -248,7 +238,7 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
                 a["delivery_incomplete"] = {"at": now, "missing": missing}
         util.write_json(f, d)
     if block:
-        print(json.dumps({"decision": "block", "reason": block}, ensure_ascii=False))
+        out({"decision": "block", "reason": block})
 
 
 def agent_event(project: Project, d: dict[str, Agent], aid: str, name: str, ev: Event, now: str) -> None:
@@ -289,19 +279,21 @@ def agent_event(project: Project, d: dict[str, Agent], aid: str, name: str, ev: 
         if a.pop("end", None):  # a resumed agent is running again, until it delivers again
             for k in ("delivered", "outcome", "report", "kind", "delivery_incomplete"):
                 a.pop(k, None)
-        outcome = delivered_outcome(ev)
-        if outcome:
+        # its delivery (delivery.py): outcome (an invalid one was refused by the CLI), report relative to the home
+        # (not checked here: the delivery check and the pass do), `--kind measure`
+        words = done_words(ev)
+        outcome = delivery.outcome_in(words) if words else None
+        if words and outcome:
             a["delivered"] = now
             a["outcome"] = outcome
-            report = delivered_report(project, ev, a)
-            if report:
-                a["report"] = report
-            else:
-                a.pop("report", None)
-            if delivered_kind(ev):
-                a["kind"] = "measure"
-            else:
-                a.pop("kind", None)
+            path = delivery.report_in(words)
+            report = path and (delivery.report_rel(project, path, [a.get("worktree"), ev.get("cwd")]) or path)
+            kind = delivery.kind_in(words)
+            for k, v in (("report", report), ("kind", kind)):
+                if v:
+                    a[k] = v
+                else:
+                    a.pop(k, None)
 
 
 def hook_resume(project: Project, ev: Event) -> None:
@@ -325,12 +317,6 @@ def hook_resume(project: Project, ev: Event) -> None:
         + "\n\n"
         + board
     )
-
-
-def short_since(o: Mark) -> str:
-    """When the marked orchestrator took over: hh:mm today, otherwise YYYY-MM-DD hh:mm."""
-    since = o["since"].replace("T", " ")[:16]
-    return since[11:] if since[:10] == time.strftime("%Y-%m-%d") else since
 
 
 def short_time(project: Project, iso: str | None) -> str:
@@ -366,7 +352,7 @@ def not_alive_text(project: Project, o: Mark, session_id: str | None, h: Health 
     return i18n.for_project(project)["who_" + h["verdict"]].format(
         project=project.name,
         name=marked_name(o),
-        since=short_since(o),
+        since=short_time(project, o["since"]),
         last=short_time(project, h["last_pass"] if h["verdict"] == "gone" else h["window_from"]),
         limit=h["limit_min"],
         session=session_id or "<your session id>",
@@ -379,23 +365,31 @@ def case_key(o: Mark, h: Health) -> str:
     return f"{o['session']}:{h['verdict']}:{h['last_pass'] or '-'}"
 
 
+def gone_notice(project: Project, o: Mark, session_id: str | None) -> tuple[str, bool]:
+    """(who_gone / who_silent for this session when the marked session `o` is gone or silent, from its health
+    (orchestrator.health), '' otherwise; whether that case was already said to this session). The case is recorded
+    as said (<state>/who-gone-notified.json {session: case})."""
+    h = orchestrator.health(project, o)
+    text = not_alive_text(project, o, session_id, h)
+    if not text or h is None or not session_id:  # a text only comes from a health
+        return text, False
+    return text, notified(project, "who-gone-notified.json", session_id, case_key(o, h))
+
+
 def who_text(project: Project, session_id: str | None) -> str:
     """The notice for a session that is not the project's orchestrator ('' for the orchestrator itself). When the
-    marked session is gone or silent (orchestrator.health, from its heartbeat), who_gone / who_silent instead
-    of who_other; that case is then recorded as said to this session (open_session_notice does not repeat it)."""
+    marked session is gone or silent, who_gone / who_silent instead of who_other (gone_notice: open_session_notice
+    does not repeat it)."""
     o = orchestrator.current(project)
     if o and session_id and session_id == o["session"]:
         return ""
     s = i18n.for_project(project)
     if not o:
         return s["who_none"].format(project=project.name)
-    h = orchestrator.health(project, o)
-    text = not_alive_text(project, o, session_id, h)
-    if text and h is not None:  # a text only comes from a health
-        if session_id:
-            notified(project, "who-gone-notified.json", session_id, case_key(o, h))
+    text = gone_notice(project, o, session_id)[0]
+    if text:
         return text
-    since = short_since(o)
+    since = short_time(project, o["since"])
     if o["name"]:
         return s["who_other"].format(project=project.name, name=o["name"], since=since)
     return s["who_other_unnamed"].format(project=project.name, session=o["session"][:8], since=since)
@@ -408,11 +402,8 @@ def open_session_notice(project: Project, session_id: str | None) -> str:
     o = orchestrator.current(project)
     if not o or not session_id or session_id == o["session"]:
         return ""
-    h = orchestrator.health(project, o)
-    text = not_alive_text(project, o, session_id, h)
-    if not text or h is None or notified(project, "who-gone-notified.json", session_id, case_key(o, h)):
-        return ""
-    return text
+    text, said = gone_notice(project, o, session_id)
+    return "" if said else text
 
 
 def warnings_text(project: Project) -> str:
@@ -446,7 +437,7 @@ def claude_min_texts(project: Project, session_id: str | None) -> tuple[str, str
 
 
 def hook_who(project: Project, ev: Event) -> None:
-    if ev.get("source", "startup") not in ("startup", "resume", "compact"):
+    if not session_start(ev):
         return
     text = "\n".join(x for x in (who_text(project, ev.get("session_id")), warnings_text(project)) if x)
     old = claude_min_texts(project, ev.get("session_id"))
@@ -455,11 +446,9 @@ def hook_who(project: Project, ev: Event) -> None:
             emit("SessionStart", text)
         return
     context = "\n".join(x for x in (old[0], text) if x)
-    obj = {
-        "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context},
-        "systemMessage": old[1],
-    }
-    print(json.dumps(obj, ensure_ascii=False))
+    out(
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}, "systemMessage": old[1]}
+    )
 
 
 def hook_broken(name: str, ev: Event) -> None:
@@ -471,7 +460,7 @@ def hook_broken(name: str, ev: Event) -> None:
     if not hit:
         return
     entry, project = hit
-    if name == "who" and ev.get("source", "startup") in ("startup", "resume", "compact"):
+    if name == "who" and session_start(ev):
         emit("SessionStart", broken_text(entry, project))
 
 
@@ -568,17 +557,14 @@ def hook_pause_agents(project: Project, ev: Event) -> None:
     reason = i18n.for_project(project)["pause_agents"].format(
         project=project.name, since=at, type=kind, owner=project.owner
     )
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            },
-            ensure_ascii=False,
-        )
+    out(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
     )
 
 
@@ -638,7 +624,7 @@ def version_notice(name: str, project: Project, ev: Event, best: str | None, out
         if ev.get("agent_id") or not ev.get("session_id"):
             return out
         if name == "who":
-            if ev.get("source", "startup") not in ("startup", "resume", "compact"):
+            if not session_start(ev):
                 return out
             event = "SessionStart"
         elif name != "loop" or event != "UserPromptSubmit":
