@@ -101,8 +101,12 @@ class PushCase(ProjectCase):
         self.own = make_repo(self.tmp / "own")  # a repo of no project, with a remote no rule names
         remote(self.own, "https://example.test/me/own.git")
 
-    def verdict(self, cmd, cwd="-"):
-        """allow | deny | orchestrator, as an agent from cwd ("-": no cwd at all, as a table run)."""
+    def verdict(self, cmd, cwd="-", role="agent"):
+        """allow | deny | orchestrator, as an agent (or the orchestrator) from cwd ("-": no cwd at all, as a table
+        run)."""
+        if role != "agent":
+            v = guard.check(self.project, cmd, guard.as_role(role, None if cwd == "-" else str(cwd)))
+            return "allow" if v is None else v[0]
         v = guard.check(self.project, cmd, {} if cwd == "-" else {"cwd": str(cwd) if cwd else None})
         return "allow" if v is None else v[0]
 
@@ -577,7 +581,9 @@ class SwitchTest(PushCase):
         remote(self.api, "https://example.test/owner/api.git")
 
     def test_switch_then_push(self):
+        """As the orchestrator: api is the main checkout of a [repos.*] path, where an agent switches no branch."""
         api = self.api
+        self.assertEqual(self.verdict(f"git switch -q -c chore/x && {PUSH} -u origin HEAD", api), "orchestrator")
         allow = [
             f"git switch -q -c chore/x && git commit -qm x && {PUSH} -q -u origin HEAD",
             f"git checkout -b fix/y && {PUSH} -u origin HEAD",
@@ -586,7 +592,7 @@ class SwitchTest(PushCase):
             f"git -C {api} switch -c fix/v && git -C {api} push -u origin HEAD",
         ]
         for cmd in allow:
-            self.assertEqual(self.verdict(cmd, api), "allow", cmd)
+            self.assertEqual(self.verdict(cmd, api, "orchestrator"), "allow", cmd)
         deny = [
             f"git switch -c fix/x; {PUSH} -u origin HEAD",  # the switch may fail: main is still possible
             f"git switch -c fix/x || true && {PUSH} -u origin HEAD",
@@ -600,9 +606,9 @@ class SwitchTest(PushCase):
             f"git switch -c fix/x && git switch main && {PUSH} origin HEAD",
         ]
         for cmd in deny:
-            self.assertEqual(self.verdict(cmd, api), "deny", cmd)
-        self.assertEqual(self.verdict(f"git checkout -- x && {PUSH} origin HEAD", api), "deny")  # files only
-        self.assertEqual(self.verdict(f"git switch && {PUSH} origin fix/q", api), "allow")
+            self.assertEqual(self.verdict(cmd, api, "orchestrator"), "deny", cmd)
+        self.assertEqual(self.verdict(f"git checkout -- x && {PUSH} origin HEAD", api, "orchestrator"), "deny")
+        self.assertEqual(self.verdict(f"git switch && {PUSH} origin fix/q", api, "orchestrator"), "allow")
 
 
 class SameLineTest(PushCase):

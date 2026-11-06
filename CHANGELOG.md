@@ -13,6 +13,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 - «A harness review» (agents/reviewer.md) has a fifth outcome for a rule: replace it with an automatic check (a
   test, a guard row, a `foreman check` item), which ends as a code sub-issue.
+- The guard's refusal of an agent's git that rewrites a main checkout (`git:main-checkout`: a merge, a checkout or
+  switch of a branch, `checkout -b`, `switch -c`, a hard reset, a stash…) now covers the main checkout of every
+  `[repos.*]` path of every registered product, not only the one that holds a live home: a product whose home lives
+  outside its code repo had that repo unprotected. Its worktrees and the orchestrator pass as before; the refusal
+  says «a main checkout of PRODUCT».
 
 ## [0.60.0] - 2026-11-06
 

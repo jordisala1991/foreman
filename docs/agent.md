@@ -45,7 +45,7 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   A `git push` is judged by where it goes (the repo of the folder it runs in, its remote and the branch it would
   push), not by how it is written: to push your own branch, name it, from a folder written literally.
   Integrating is the orchestrator's: `foreman integrate` is refused to you (`--check` and `--help` pass), and so is a
-  git that rewrites a main checkout holding a live home (merge, pull, switch or checkout of a branch, reset --hard,
+  git that rewrites a main checkout of a repo (merge, pull, switch or checkout of a branch, reset --hard,
   stash, restore or rm of foreman.toml or the guard table…): do it in your worktree (`git -C <worktree> …`, `cd
   <worktree> && git …`), or limit it to the files you mean (`git stash push -- PATH`, `git checkout -- PATH`).
 - **What you check yourself:** what the CI does not see: tests of what you touch and the checks the plan asks for.
