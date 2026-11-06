@@ -11,6 +11,9 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Changed
 
+- «A branch review» (agents/reviewer.md) also looks where reviews missed known bugs: time and concurrency (a
+  blocking call in a timer tick or heartbeat), absent data read as empty, and a guard or gate that refuses too much;
+  a finding that leaves a safety check or a main function of the change not working is never L.
 - The `mechanic` agent now runs at `effort: low` (set in its definition, since a model other than the session's does
   not take the session's level); the orchestrator guide says so.
 - «A harness review» (agents/reviewer.md) has a fifth outcome for a rule: replace it with an automatic check (a

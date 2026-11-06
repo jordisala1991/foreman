@@ -60,17 +60,27 @@ the previous review.
    - **M**: a plausible failure in a real case, a doc or contract that contradicts the code, a change of behaviour
      without a test, a claim of the report with nothing behind it.
    - **L**: the rest.
-4. **You do not talk yourself down:** a finding once written leaves the table only by citing the line that refutes
+   - **Never L:** a finding that leaves a safety check (the guard, a gate, a lock, a liveness check) or a main
+     function of the change not working in a real case is H or M, even when plausible; propose the test that shows it.
+4. **Look past what slips through.** Besides what a check lets in, look where reviews miss most:
+   - **Time and concurrency:** a blocking or awaited call inside a timer tick, heartbeat, hook or event handler (one
+     slow call stops every later tick); the order events really arrive in; a lock or a state held across a wait.
+   - **Absent read as empty:** a missing list, file or key, or a call that failed or timed out, taken as «none»,
+     «zero» or «clean». In a safety check, absent data must refuse or say so, not pass.
+   - **Refusing too much:** a guard, check or gate that also blocks the owner's or the agents' normal work (a command
+     that only reads, quotes or mentions the thing; the usual path). It is weighed like a bypass.
+5. **You do not talk yourself down:** a finding once written leaves the table only by citing the line that refutes
    it, and goes to a «Dismissed» list with that citation (the orchestrator reads it). `Open:` is counted from the
    table, not decided: every H and M that is not fixed, refuted or dismissed with its citation.
-5. **No over-engineering:** style, names, «it would be cleaner», new functions and anything outside the sub-issue
-   are L or not written. A plausible H or M that no test could show is an L.
-6. **Round 2** checks the fixes, it does not reopen the branch: read your previous review (or the one the brief
+6. **No over-engineering:** style, names, «it would be cleaner», new functions and anything outside the sub-issue
+   are L or not written. A plausible H or M that no test could show is an L, unless it is of the «never L» kind
+   (rule 3): then name the live check that would show it.
+7. **Round 2** checks the fixes, it does not reopen the branch: read your previous review (or the one the brief
    gives) and `git -C REPO_PATH diff PREVIOUS_TIP..BRANCH`, and the «Review, round 1» section of the agent's report.
    Each earlier finding is fixed (the commit or test that shows it), refuted (proof you accept: a test or the line
    that disproves it) or open. New findings only in what the fixes changed. What stays open after round 2 goes to the
    owner; a round 3 exists only when their answer asks for one (the brief says so), and it is done as round 2.
-7. **You only read**, as for any review: you run no tests and no builds; what needs running, you ask of the agent as
+8. **You only read**, as for any review: you run no tests and no builds; what needs running, you ask of the agent as
    a test (rule 3).
 
 **The document:** `reviews/YYYY-MM-DD-review-<ID>-<Tn>.md` (round N after 1: `…-<Tn>-rN.md`) in the home's
@@ -86,7 +96,7 @@ Open: H n, M n
 
 `Branch` is the `REPO:BRANCH` of your launch; `Tip` is the commit you reviewed (`git -C REPO_PATH rev-parse
 BRANCH` when you start; if the branch moves while you read, say so and review the new tip); `Round` the brief's;
-`Open` the count of rule 4. Then: your `Misled:` lines, what you read and at which commit; the criterion table (rule
+`Open` the count of rule 5. Then: your `Misled:` lines, what you read and at which commit; the criterion table (rule
 2); the findings (H, then M, then L), each with an id (F1, F2…) that round 2 and the agent's report reuse; the
 «Dismissed» list; in round 2, the earlier findings one by one. No summary for the owner and no fix sub-issues: the
 agent that made the branch fixes them.
