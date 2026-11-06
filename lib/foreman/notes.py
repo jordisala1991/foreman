@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import fcntl
 import json
 import re
@@ -295,14 +294,9 @@ def models_seen(project: Project, after: datetime | None = None) -> dict[str, da
     for h in agents.values() if isinstance(agents, dict) else ():
         if isinstance(h, dict):
             add(h.get("model"), h.get("end") or h.get("activity") or h.get("start"))
-    with contextlib.suppress(OSError):
-        for ln in (project.state / "progress.jsonl").read_text(errors="replace").splitlines():
-            try:
-                x = json.loads(ln)
-            except ValueError:
-                continue
-            if isinstance(x, dict) and x.get("done"):
-                add(x.get("model"), x.get("time"))
+    for x in util.read_jsonl(project.state / "progress.jsonl"):
+        if x.get("done"):
+            add(x.get("model"), x.get("time"))
     return seen
 
 

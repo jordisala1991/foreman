@@ -45,7 +45,6 @@ incomplete, and every delivery states its outcome.
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import time
@@ -160,16 +159,8 @@ def progress_done(project: Project, aid: str | None, name: str | None, since: st
     """The last `done` line of this agent in progress.jsonl (by agent_id, else by name) at or after `since` (an ISO
     time, compared by the minute), or None."""
     since = (since or "").replace("T", " ")[:16]
-    try:
-        lines = (project.state / "progress.jsonl").read_text(errors="replace").splitlines()[-300:]
-    except OSError:
-        return None
-    for ln in reversed(lines):
-        try:
-            x = json.loads(ln)
-        except ValueError:
-            continue
-        if not isinstance(x, dict) or not x.get("done") or str(x.get("time", "")) < since:
+    for x in reversed(util.read_jsonl(project.state / "progress.jsonl", tail=300)):
+        if not x.get("done") or str(x.get("time", "")) < since:
             continue
         if (aid and x.get("agent_id") == aid) or (name and x.get("agent") == name):
             return x
@@ -796,16 +787,8 @@ def is_review(name: str) -> bool:
 def deliveries_by_report(project: Project) -> dict[str, dict[str, Any]]:
     """{report: the last `done` line of progress.jsonl that names it}."""
     out: dict[str, dict[str, Any]] = {}
-    try:
-        lines = (project.state / "progress.jsonl").read_text(errors="replace").splitlines()
-    except OSError:
-        return out
-    for ln in lines:
-        try:
-            x = json.loads(ln)
-        except ValueError:
-            continue
-        if isinstance(x, dict) and x.get("done") and x.get("report"):
+    for x in util.read_jsonl(project.state / "progress.jsonl"):
+        if x.get("done") and x.get("report"):
             out[str(x["report"])] = x
     return out
 

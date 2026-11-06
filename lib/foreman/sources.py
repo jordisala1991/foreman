@@ -5,8 +5,6 @@ ProjectState only opens files for reading.
 
 from __future__ import annotations
 
-import contextlib
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -14,19 +12,6 @@ from . import util
 
 if TYPE_CHECKING:
     from .config import Project
-
-
-def read_jsonl_tail(path: util.PathLike, n: int) -> list[Any]:
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            lines = f.read().splitlines()[-n:]
-    except OSError:
-        return []
-    out: list[Any] = []
-    for ln in lines:
-        with contextlib.suppress(ValueError):
-            out.append(json.loads(ln))
-    return out
 
 
 class ProjectState:
@@ -54,7 +39,7 @@ class ProjectState:
 
     def progress(self, n: int = 40) -> list[Any]:
         """[{time, agent, text}], newest first."""
-        return read_jsonl_tail(self.path("progress"), n)[::-1]
+        return util.read_jsonl(self.path("progress"), tail=n)[::-1]
 
     def inbox(self) -> list[Any]:
         """[{id, time, from: owner|orchestrator, text, read, decision?, move?, approve?}]."""

@@ -17,7 +17,6 @@ that, and printing the history, is the developer tool's (dev/foreman-dev timelin
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Collection
 from datetime import date, datetime, timedelta
@@ -284,16 +283,8 @@ def from_launches(w: World, since: datetime, until: datetime) -> list[Event]:
 def from_progress(w: World, since: datetime, until: datetime) -> list[Event]:
     out: list[Event] = []
     f = w.p.state / "progress.jsonl"
-    try:
-        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return out
-    for n, ln in enumerate(lines, 1):
-        try:
-            d = json.loads(ln)
-        except ValueError:
-            continue
-        t = when(d.get("time")) if isinstance(d, dict) else None
+    for n, d in util.read_jsonl(f, numbered=True):
+        t = when(d.get("time"))
         if not t or not since <= t < until:
             continue
         name, aid = d.get("agent") or "?", d.get("agent_id")
@@ -439,16 +430,8 @@ def ci_event(
 def from_loop(w: World, since: datetime, until: datetime, names: dict[str, str]) -> list[Event]:
     out: list[Event] = []
     f = w.p.state / "loop.jsonl"
-    try:
-        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return out
-    for n, ln in enumerate(lines, 1):
-        try:
-            d = json.loads(ln)
-        except ValueError:
-            continue
-        t = when(d.get("time")) if isinstance(d, dict) else None
+    for n, d in util.read_jsonl(f, numbered=True):
+        t = when(d.get("time"))
         if not t or not since <= t < until:
             continue
         act = [k for k in d.get("actionable") or [] if isinstance(k, str)]
