@@ -455,9 +455,7 @@ def seal(project: Project, issue: str, baseline: bool = True, out: Callable[[str
                 wrong.append(f"{c.id} {'passes' if got == 'pass' else 'fails'} on {main} (on_main = {c.on_main})")
         if wrong:
             out(f"== baseline on {main} {o.tip[:8]}: " + "; ".join(wrong) + f" (full output: {o.log})")
-            raise HoldoutError(
-                f"not sealed: {len(wrong)} case{'s' if len(wrong) != 1 else ''} do not do on {main} what on_main says"
-            )
+            raise HoldoutError(f"not sealed: {util.plural(len(wrong), 'case')} do not do on {main} what on_main says")
         if fingerprint(s.folder)[0] != digest:
             raise HoldoutError("not sealed: the folder changed while the baseline ran")
         base = {"main": o.tip, "fail": [c.id for c in s.scenarios if c.on_main == "fail"], "log": o.log.name}

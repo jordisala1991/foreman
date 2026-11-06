@@ -15,6 +15,9 @@ atomic writes, local ISO times, process ids and git.
 - `parse_when(value, now)`: a `--since`/`--until` text (`24h`, `7d`, `30m`, `HH:MM`, a date, a date and time) as an
   aware datetime; ValueError otherwise.
 - `iso_epoch(s)`: epoch seconds of an ISO time (local when it has no offset), or None; each caller picks its default.
+- `when(value)`: a state file's time (ISO, or `YYYY-MM-DD HH:MM`) as a naive local datetime, or None.
+- `clip(text, n, squash)`: the text cut to `n` characters ending in `…` (whitespace runs squashed first with
+  `squash`); `plural(n, word)`: `1 file`, `2 files`.
 - `now()`: the local time (`datetime.now()`), unless `$FOREMAN_NOW` (an ISO local time) sets the clock for this
   process: then it reads that time and keeps running from it. A hook for tests that must not depend on the hour they
   run at (a panel as its own process, a note's day); only the code paths that call it honour it.
@@ -205,6 +208,31 @@ def iso_epoch(s: object) -> float | None:
         return fromiso(str(s)).timestamp() if s else None
     except (TypeError, ValueError, OverflowError):
         return None
+
+
+def when(value: object) -> datetime | None:
+    """A state file's time (`2026-10-31T09:30:00`, `2026-10-31 09:30`, with or without an offset) as a naive local
+    datetime, or None."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        t = fromiso(value.strip().replace(" ", "T", 1))
+    except ValueError:
+        return None
+    return t.astimezone().replace(tzinfo=None) if t.tzinfo else t
+
+
+def clip(text: object, n: int, squash: bool = False) -> str:
+    """`text` cut to `n` characters, the last one an ellipsis when it was longer; with `squash`, each run of
+    whitespace first becomes one space."""
+    t = str(text or "")
+    t = " ".join(t.split()) if squash else t
+    return t if len(t) <= n else t[: n - 1] + "…"
+
+
+def plural(n: int, word: str) -> str:
+    """`1 file`, `2 files`."""
+    return f"{n} {word}" + ("" if n == 1 else "s")
 
 
 def pid_alive(pid: int | str | None) -> bool | None:

@@ -7,7 +7,7 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_list, backlog_text
+from . import backlog_list, backlog_text, util
 from .backlog import CLOSED, Backlog, BacklogError, DecisionResolved
 
 if TYPE_CHECKING:
@@ -459,9 +459,9 @@ def show_review(b: Backlog, data: Data, as_json: bool = False) -> str:
         return json.dumps(items, ensure_ascii=False, indent=2)
     if not items:
         return "no pending decisions"
-    out = [f"{len(items)} pending decision{'s' if len(items) != 1 else ''} ({b.project.owner}), in review order:"]
+    out = [f"{util.plural(len(items), 'pending decision')} ({b.project.owner}), in review order:"]
     for d in items:
-        age = f", {d['age_days']} day{'s' if d['age_days'] != 1 else ''} ago" if d["age_days"] is not None else ""
+        age = f", {util.plural(d['age_days'], 'day')} ago" if d["age_days"] is not None else ""
         block = [f"\n{d['id']} · {d['title']}  ({d['date']}{age})"]
         if d["holds"]:
             block.append(f"  holds: {', '.join(d['holds'])}")

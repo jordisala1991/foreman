@@ -24,7 +24,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import quality, versions
+from . import quality, util, versions
 
 if TYPE_CHECKING:
     from .util import PathLike
@@ -114,7 +114,7 @@ def check_test(exe: str, root: PathLike, env: Mapping[str, str]) -> tuple[list[s
     passed = sum(int(m) for m in PASSED.findall(out))
     failed = sum(int(m) for m in FAILED.findall(out))
     if r.returncode == 0 and passed and not failed:
-        return [], f"{quality.plural(passed, 'test')} pass"
+        return [], f"{util.plural(passed, 'test')} pass"
     lines = [ln for ln in out.splitlines() if ln.startswith("(fail)")][: quality.MAX_LINES]
     lines = [f"FAIL mods: plugin test {ln[len('(fail)') :].strip()}" for ln in lines]
     if not lines:
@@ -160,7 +160,7 @@ def run(root: PathLike, mode: str = "auto", env: Mapping[str, str] | None = None
     rep.lines += v_lines + t_lines
     rep.problems = len(v_lines) + len(t_lines)
     rep.line = f"mods: {v_sum}; plugin test {t_sum} (Claude Code {found})"
-    rep.word = f"mods {quality.plural(rep.problems, 'problem')}" if rep.problems else "mods ok"
+    rep.word = f"mods {util.plural(rep.problems, 'problem')}" if rep.problems else "mods ok"
     return rep
 
 

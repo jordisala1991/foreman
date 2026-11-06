@@ -326,7 +326,7 @@ def waiting_part(
                 "",
                 "",
                 g,
-                s["catchup_permission"].format(command=timeline.short(r.get("command"), 120)),
+                s["catchup_permission"].format(command=util.clip(r.get("command"), 120, squash=True)),
                 f"{grants.file(project)}#{g}",
                 kind="permission",
                 group=g,
@@ -347,7 +347,7 @@ def waiting_part(
                 "",
                 "",
                 "",
-                s["catchup_approval"].format(why=timeline.short(why, 120)),
+                s["catchup_approval"].format(why=util.clip(why, 120, squash=True)),
                 timeline.where(project.state / "progress.jsonl", n),
                 kind="approval",
                 branch=branch,
@@ -386,7 +386,7 @@ def wrong_part(
                 iid,
                 sid,
                 bl.title(iid),
-                s[f"catchup_outcome_{outcome}"].format(text=timeline.short(d.get("text"))),
+                s[f"catchup_outcome_{outcome}"].format(text=util.clip(d.get("text"), timeline.TEXT_CHARS, squash=True)),
                 timeline.where(project.state / "progress.jsonl", n),
                 kind="delivery",
                 outcome=outcome,
@@ -523,7 +523,7 @@ def line(project: Project, s: dict[str, Any], x: Item, today: str) -> str:
             text = f"{s['catchup_planning']}: {text}"
         if x.get("minutes") is not None:
             text += f" ({s['catchup_minutes'].format(n=x['minutes'])})"
-    return "- " + " · ".join(v for v in (when, name, timeline.short(text)) if v)
+    return "- " + " · ".join(v for v in (when, name, util.clip(text, timeline.TEXT_CHARS, squash=True)) if v)
 
 
 def part(s: dict[str, Any], lines: list[str], extras: list[str], newest: bool = False) -> list[str]:
