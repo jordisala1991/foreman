@@ -360,6 +360,36 @@ class ProgramHolesTest(BashWriteCase):
         got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
         self.assertEqual(got, cases)
 
+    def test_a_reserved_file_named_in_pieces(self):
+        """A path from home written in several literals, the usual way (review round 2, F2)."""
+        wt = self.tmp / "wt"
+        wt.mkdir()
+        parts = os.path.relpath(self.home, self.user).split(os.sep)
+        slashes = " / ".join(f'"{p}"' for p in parts)
+        commas = ", ".join(f"'{p}'" for p in parts)
+        base = f'from pathlib import Path\nbase = Path.home() / {slashes}\n(base / "foreman.toml").write_text("x")'
+        cases = {
+            py(base): "file:config",
+            py(f'from pathlib import Path\n(Path.home() / "{"/".join(parts)}" / "foreman.toml").write_text("x")'): (
+                "file:config"
+            ),
+            py('from pathlib import Path\n(Path.home() / ".claude" / "settings.json").write_text("{}")'): "file:claude",
+            f"node -e \"fs.writeFileSync(path.join(os.homedir(), {commas}, 'foreman.toml'), s)\"": "file:config",
+            py("import os\n" + base): "file:config",  # not through the gate: the Path a method writes is its object
+        }
+        got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
+        self.assertEqual(got, cases)
+
+    def test_a_target_held_in_a_variable(self):
+        """Code that does not pass the gate and writes a file held in a variable (review round 2, F9)."""
+        cases = {
+            "python3 -c \"import sys; p = 'foreman.toml'; s = open(p).read(); open(p, 'w').write(s.replace('a', "
+            "'b'))\"": "file:config",
+            f"node -e \"const f = '{TABLE}'; require('fs').appendFileSync(f, 'allow\\tls\\n')\"": "file:table",
+        }
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, cases)
+
     def test_a_name_a_match_pattern_binds(self):
         """A match pattern binds a name again (review round 1, F3)."""
         cmd = py(
