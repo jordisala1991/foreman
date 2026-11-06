@@ -320,18 +320,13 @@ def run_cases(
     seconds = 0.0
 
     def logged(point: str, cmd: str, timeout: float) -> commands.Result:
-        with open(log, "a") as f:
-            f.write(f"== {util.now():%Y-%m-%d %H:%M:%S} {point}: {cmd}\n")
-        r = commands.run(point, cmd, project=project, values=values, cwd=copy, timeout=timeout, log=log)
-        with open(log, "a") as f:
-            f.write(f"== rc {r.rc}{' (cut)' if r.timed_out else ''} in {r.seconds:.0f} s\n")
-        return r
+        return commands.run_logged(point, cmd, log, point, project=project, values=values, cwd=copy, timeout=timeout)
 
     r = util.git_run(main, "worktree", "add", "-q", "--detach", str(copy), tip)
     if r.returncode:
         raise HoldoutError(f"could not make the copy of {tip[:8]}: {(r.stderr or r.stdout).strip()[:300]}")
     try:
-        for step in repo.get("post_create", []):
+        for step in repo["post_create"]:
             cmd = commands.expand("repo.post_create", step, values)
             if logged("repo.post_create", cmd, commands.POINTS["repo.post_create"].timeout or 600).rc != 0:
                 raise HoldoutError(f"the repo's post_create failed in the copy ({cmd}); see {log}")
@@ -400,7 +395,7 @@ def record(project: Project, s: Spec, repo: Table, branch: str, o: Outcome) -> t
         and not x.get("ok")
     ]
     passes = len(o.passed) >= s.needed
-    main = repo.get("main", "main")
+    main = repo["main"]
     same = next((x for x in mine if review.covers(repo["path"], main, o.tip, x.get("tip", ""))), None)
     rnd = same["round"] if same else max((x.get("round", 0) for x in mine), default=0) + 1
     entry.setdefault("runs", []).append(
@@ -432,7 +427,7 @@ def passed_on(project: Project, s: Spec, repo: Table, branch: str) -> dict[str, 
             x.get("digest") == digest
             and x.get("repo") == repo["key"]
             and x.get("ok")
-            and review.covers(repo["path"], repo.get("main", "main"), branch, x.get("tip", ""))
+            and review.covers(repo["path"], repo["main"], branch, x.get("tip", ""))
         ):
             return x
     return None
@@ -451,7 +446,7 @@ def seal(project: Project, issue: str, baseline: bool = True, out: Callable[[str
     base: dict[str, Any] | None = None
     if baseline:
         repo = project.repo(s.repo)
-        main = repo.get("main", "main")
+        main = repo["main"]
         o = run_cases(project, s, main, f"baseline-{main}", out)
         wrong = []
         for c in s.scenarios:
