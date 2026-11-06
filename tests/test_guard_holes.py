@@ -170,6 +170,14 @@ class PushHolesTest(PushCase):
         self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; cd {self.lib} && G {PUSH[4:]}', self.own), "deny")
         self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; G {PUSH[4:]}', self.own), "allow")
 
+    def test_a_function_sees_the_config_of_its_call(self):
+        """What the line changes in git's config between a function's definition and its call counts for the call
+        (review of the git holes, round 2, F9)."""
+        cmd = f'G() {{ git "$@"; }}; git remote set-url origin {self.PUB}; G {PUSH[4:]}'
+        self.assertEqual(self.verdict(cmd, self.own), "deny")
+        cmd = f'G() {{ git "$@"; }}; git remote set-url origin {self.SAFE}; G {PUSH[4:]}'
+        self.assertEqual(self.verdict(cmd, self.own), "allow")
+
 
 class SwitchControlTest(PushCase):
     """§2.2: a switch to an existing branch before a push keeps today's verdict (PRIVATE: main needs the owner)."""
@@ -187,6 +195,13 @@ class SwitchControlTest(PushCase):
         self.assertEqual(self.verdict(f"git switch feat && {PUSH}", self.wt), "allow")
         self.assertEqual(self.verdict(f"git switch feat && {PUSH} origin HEAD", self.wt), "allow")
         self.assertEqual(self.verdict(f"git switch feat; {PUSH} origin HEAD", self.wt), "deny")  # it may not have
+
+    def test_a_function_sees_the_branch_of_its_call(self):
+        """A switch between a function's definition and its call counts for the call (review round 2, F9)."""
+        git(self.wt, "switch", "-q", "feat")
+        self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; G {PUSH[4:]} origin HEAD', self.wt), "allow")
+        cmd = f'G() {{ git "$@"; }}; git switch main && G {PUSH[4:]} origin HEAD'
+        self.assertEqual(self.verdict(cmd, self.wt), "deny")
 
 
 class FunctionArgsTest(PushCase):
