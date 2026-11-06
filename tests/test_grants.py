@@ -694,6 +694,14 @@ class PanelApproveTest(GrantCase):
         grants.file(self.project).write_text(json.dumps(d))
         self.assertEqual(grants.pending(self.project), {})
         refused("process", True)
+        # the same session, but the request records no process: not the mark's
+        self.pend()
+        d = json.loads(grants.file(self.project).read_text())
+        for k in ("pid", "pid_start"):
+            del d["pending"]["deploy"][k]
+        grants.file(self.project).write_text(json.dumps(d))
+        self.assertEqual(grants.pending(self.project), {})
+        refused("process", True)
         # the marked process is gone, or `ps` cannot be read: nothing is granted
         self.pend()
         self.ps_rows = [r for r in self.ps_rows if r[0] != helpers.CLAUDE_PID]
