@@ -1422,11 +1422,9 @@ class DeliveredTest(NoticesCase):
         return [h["id"] for h in loop.live_agents(self.project)]
 
     def panel_status(self, aid="d1"):
-        from foreman import panel, sources
+        from foreman import panel
 
-        return {
-            a["id"]: a["status"] for a in panel.agents(self.project, sources.ProjectState(self.project), [], {})
-        }.get(aid)
+        return {a["id"]: a["status"] for a in panel.agents(self.project, [], {})}.get(aid)
 
     def age(self, aid="d1", **minutes):
         """Moves the entry's timestamps back (key=minutes ago); `activity` moves its transcript's time too."""
