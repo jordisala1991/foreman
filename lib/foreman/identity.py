@@ -41,6 +41,7 @@ PENDING_S = 86400
 AGENT_TOOLS = ("Agent", "Task")
 PRODUCTION_TYPES = ("dev", "foreman:dev")
 PLANNER_TYPES = ("planner", "foreman:planner")
+MECHANIC_TYPES = ("mechanic", "foreman:mechanic")  # may be production: launched for an issue, it is unless told not
 
 
 class IdentityError(Exception):
@@ -280,6 +281,15 @@ def production_at_launch(
     if production is None and (worktree or (agent_type and role(project, agent_type) == "production")):
         return True
     return production
+
+
+def needs_worktree(project: Project, production: bool | None, agent_type: str | None) -> bool:
+    """Whether a launch for an issue without --repo must be refused (`launch`): a production one (--production, or a
+    production type unless --no-production) or a mechanic not marked --no-production, since a mechanic that changes
+    code is production and one launched without its worktree runs with no delivery check (delivery.applies)."""
+    if production_at_launch(project, production, False, agent_type):
+        return True
+    return production is None and _type_in(agent_type, MECHANIC_TYPES)
 
 
 def new_launch(

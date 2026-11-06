@@ -18,6 +18,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   `[repos.*]` path of every registered product, not only the one that holds a live home: a product whose home lives
   outside its code repo had that repo unprotected. Its worktrees and the orchestrator pass as before; the refusal
   says «a main checkout of PRODUCT».
+- `foreman launch` refuses production work of an issue without its worktree: a `dev` (or a production type, or
+  `--production`) or a `mechanic` launched with `--issue` and without `--repo/--branch` is exit 2, nothing made.
+  Such a launch recorded no branch, so the delivery check never ran for the agent. A mechanic that changes no code
+  takes `--no-production`; planners, reviewers and `--review` launch as before.
 - `foreman agents --misled` reads a `Misled:` line (and any other fixed line of a report) whole when the report wraps
   it over several lines, with its cost.
 - The agent instructions: the rules file is found in `project.rules` (`foreman config`), not in the brief; a plan's

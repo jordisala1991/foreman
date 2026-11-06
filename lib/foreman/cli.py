@@ -34,7 +34,10 @@ launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch 
                                    drops a pending launch). A production launch of an issue or sub-issue that a
                                    pending decision holds (decision add --blocks; a panel answer resolves it)
                                    is exit 2, nothing made: answer it, or --despite DID (each one that holds it)
-                                   --why TEXT, recorded in the launch and the notes, with a line for the owner
+                                   --why TEXT, recorded in the launch and the notes, with a line for the owner.
+                                   Production work of an issue (a production type, --production, or a mechanic)
+                                   without --repo/--branch is exit 2: give it its worktree, or --no-production if
+                                   it changes no code
 integrate REPO BRANCH "ID [Tn]" … (foreman integrate --help)
 holdout seal ID [--no-baseline] | run REPO BRANCH ID [--full] | status [ID]   an issue's hidden acceptance check
                                    (the orchestrator's; foreman holdout --help): seal hashes its folder and runs
@@ -553,6 +556,10 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         args.agent_type = args.agent_type or "reviewer"
         args.no_backlog = True
         rec_repo, rec_branch = rkey, rbranch
+    elif args.issue and not args.repo and identity.needs_worktree(p, args.production, args.agent_type):
+        return fail(
+            "a production agent needs --repo REPO --branch BRANCH (its worktree); --no-production if it changes no code"
+        )
     taken = identity.name_taken(p, args.name)
     if taken:
         return fail(f"{taken}: choose another name")

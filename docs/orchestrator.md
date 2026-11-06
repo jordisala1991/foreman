@@ -249,9 +249,11 @@ they disagree.
      the worktree (as `foreman worktree`: an existing BRANCH, local or only on the remote, such as a PR's branch
      opened by another session, is reused without moving it and BASE is ignored; one checked out in another
      worktree is an error with its path), marks the sub-issue ▶ with its agent and branch and the issue `in
-     progress` (`--no-backlog` leaves the backlog alone), and prints the **launch line**. A planner, a reviewer or a mechanic
-     without a worktree: `foreman launch NAME --issue ID --type planner`; a reviewer agent without production
-     takes no `--repo`, and `--issue ID --no-backlog` when the review hangs from an issue and must not move it;
+     progress` (`--no-backlog` leaves the backlog alone), and prints the **launch line**. Production work of an issue
+     (a `dev` or production type, `--production`, or a `mechanic`) without `--repo/--branch` is refused (exit 2):
+     without its branch the delivery check never runs for it; a mechanic that changes no code takes
+     `--no-production`. A planner or a reviewer without a worktree: `foreman launch NAME --issue ID --type planner`;
+     a reviewer agent without production takes no `--repo`, and `--issue ID --no-backlog` when the review hangs from an issue and must not move it;
      the reviewer of a branch the pass holds for review, `foreman launch NAME --review REPO:BRANCH --issue ID --sub
      Tn` (step 2). A NAME a live agent or a pending launch already has is refused (`foreman launch NAME --cancel`
      drops a launch you did not use).
