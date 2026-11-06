@@ -141,6 +141,28 @@ class UtilTest(unittest.TestCase):
         self.assertEqual(lock.people(sts), ({"ana", "dee"}, {"bo", "cy", "ana"}))
         self.assertEqual(lock.people([]), (set(), set()))
 
+    def test_file_lock_timeout_and_locked_json(self):
+        import fcntl
+        import time
+
+        f = self.tmp / "d" / "x.json"
+        with util.locked_json(f, {"n": 0}) as d:  # missing file: the default, and the lock file next to it
+            self.assertEqual(d, {"n": 0})
+            util.write_json(f, {"n": 1})
+            self.assertTrue((self.tmp / "d" / "x.json.lock").exists())
+            with open(str(f) + ".lock", "a") as other, self.assertRaises(BlockingIOError):  # held
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            t0 = time.monotonic()
+            with self.assertRaises(TimeoutError), util.file_lock(f, timeout=0.1):
+                pass
+            self.assertLess(time.monotonic() - t0, 1.0)
+        with util.locked_json(f, {}) as d:  # released: reads what was written back
+            self.assertEqual(d, {"n": 1})
+        with util.file_lock(f, timeout=0):  # free: taken at once
+            pass
+        with util.file_lock(f, self.tmp / "ld"):  # lock_dir
+            self.assertTrue((self.tmp / "ld" / "x.json.lock").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1502,7 +1502,7 @@ def log_pass(project: Project, session: str | None, ns: Sequence[Notice], second
     f = loop_log_file(project)
     try:
         f.parent.mkdir(parents=True, exist_ok=True)
-        with notes.file_lock(f):
+        with util.file_lock(f):
             with open(f, "a") as out:
                 out.write(json.dumps(line, ensure_ascii=False) + "\n")
             if f.stat().st_size > LOOP_LOG_TRIM_BYTES:
@@ -1614,8 +1614,7 @@ def mark_locks(project: Project, keys: Collection[str]) -> None:
 
 def stop_agent(project: Project, aid: str) -> list[str]:
     f = agents_file(project)
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
+    with util.locked_json(f, {}) as d:
         hits = [k for k in d if k == aid or k.startswith(aid) or d[k].get("name") == aid]
         for k in hits:
             d[k]["stopped"] = True

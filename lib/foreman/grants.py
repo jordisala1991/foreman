@@ -47,7 +47,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import config, notes, util
+from . import config, util
 
 if TYPE_CHECKING:
     from .config import Project
@@ -186,7 +186,7 @@ def give(
     g = _entry(project, mark, via, surfaces, tool_use_id)
     f = file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read(project)
         _put(d, group, g)
         _write(project, d)
@@ -222,7 +222,7 @@ def cool(project: Project, group: str, session: str) -> str:
     until = (util.now() + timedelta(seconds=COOLDOWN_S)).strftime(ISO)
     f = file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read(project)
         d["cooldowns"][group] = {"session": session, "until": until}
         _write(project, d)
@@ -233,7 +233,7 @@ def pend(project: Project, group: str, req: dict[str, Any]) -> None:
     """Keeps the group's unanswered request (the last one) for the owner to approve later from the panel."""
     f = file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read(project)
         d["pending"][group] = {"at": _now(), **req}
         _write(project, d)
@@ -280,7 +280,7 @@ def approve(project: Project, group: str) -> tuple[dict[str, Any], dict[str, Any
     f = file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
     key = panel_key(create=True)
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read(project)
         r = d["pending"].get(group)
         if r is None:
@@ -324,7 +324,7 @@ def give_once(
     g = {"session": session, "kind": kind, "path": path, "command": command, "at": _now()}
     f = file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read(project)
         d["once"] = {t: e for t, e in d["once"].items() if _fresh(e)}
         d["once"][tool_use_id] = g
@@ -351,7 +351,7 @@ def take_once(
     if tool_use_id not in read(project)["once"]:  # the usual case, without the lock
         return None
     f = file(project)
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read(project)
         e = d["once"].get(tool_use_id)
         if e is None or e.get("session") != session:
@@ -407,7 +407,7 @@ def revoke(project: Project, group: str | None = None) -> list[str]:
     f = file(project)
     if not f.exists():
         return []
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read(project)
         names = [g for g in d["grants"] if group is None or g == group]
         for g in names:

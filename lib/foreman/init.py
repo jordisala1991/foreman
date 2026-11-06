@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog, config, i18n, notes, util
+from . import backlog, config, i18n, util
 
 if TYPE_CHECKING:
     from .config import Table
@@ -456,7 +456,7 @@ def write_registry(plan: Plan) -> None:
     """Appends the entry under a lock (in the state root, so no file appears beside the registry), checking again
     what another writer may have added meanwhile, and puts the old text back if the new one does not read."""
     reg = config.registry_path()
-    with notes.file_lock(reg, config.state_root() / "locks-registry"):
+    with util.file_lock(reg, config.state_root() / "locks-registry"):
         before = reg.read_text() if reg.exists() else ""
         plan.steps = [s for s in plan.steps if not s[0].startswith(f"{reg}:")]
         plan_registry(plan, before)
