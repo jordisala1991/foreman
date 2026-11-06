@@ -75,8 +75,9 @@ class ReviewLoop(LoopCase):
                 n = ns["review_needed"][0]
                 self.assertTrue(n["actionable"])
                 self.assertIn(f"app:ab1 (AB-1 T1; {why}; round 1)", n["text"])
-                self.assertIn("`foreman launch w1-rv1 --review app:ab1 --issue AB-1 --sub T1`", n["text"])
+                self.assertIn("`foreman launch w1-rv1 --review app:ab1 --issue AB-1 --sub T1 --model", n["text"])
                 self.assertEqual(n["key"], "review_needed:app:ab1@needed")
+                self.assertIn("--model " + ("opus" if kind == "paths" else "sonnet"), n["text"])
                 self.assertNotIn("review_findings", ns)
 
     def test_small_branch_is_ready_as_today(self):
@@ -107,7 +108,7 @@ class ReviewLoop(LoopCase):
         t = self.text("review_needed")
         self.assertIn("app:ab1 (AB-1 T1; round 2: the fixes are in, reviews/2026-11-05-review-AB-1-T1.md left H 1", t)
         self.assertIn("resume the reviewer w1-rv1 (id rev1) with SendMessage, or launch one: ", t)
-        self.assertIn("`foreman launch w1-rv2 --review app:ab1 --issue AB-1 --sub T1`", t)
+        self.assertIn("`foreman launch w1-rv2 --review app:ab1 --issue AB-1 --sub T1 --model", t)
         self.write_review(new, rnd=2)
         self.assertIn("app:ab1", self.ready())
         self.assertFalse({"review_needed", "review_findings"} & set(self.ns()))
