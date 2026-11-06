@@ -1400,7 +1400,7 @@ class GoldenPanel(GoldenCase):
         self.t.section("the owner's writes")
         g("/api/message?p=faro", "POST", "¿Seguimos mañana?".encode())
         g("/api/message?p=faro", "POST", b"  ")
-        g("/api/decide?p=harbor&d=" + urllib.request.quote("DEC J1, Close it?") + "&op=a", "POST")
+        g("/api/decide?p=harbor&id=" + urllib.request.quote("DEC J1") + "&op=a", "POST")
         g("/api/decide?p=harbor", "POST")
         g("/api/approve?p=faro&repo=app&branch=fa2/t1", "POST")
         g("/api/approve?p=faro&repo=nope&branch=x", "POST")

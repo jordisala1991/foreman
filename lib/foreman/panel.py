@@ -695,8 +695,8 @@ def act(path: str, q: Query, body: str) -> Obj:
     if path == "/api/decide":
         act = change_answer if arg("change") == "1" else decide  # a change of an answer the orchestrator has not read
         if arg("free") == "1":  # his own words, in the body
-            return act(p, arg("id") or arg("d"), body.strip(), free=True)
-        return act(p, arg("id") or arg("d"), arg("op"))
+            return act(p, arg("id"), body.strip(), free=True)
+        return act(p, arg("id"), arg("op"))
     if path == "/api/grants/approve":
         return grant_approve(p, arg("g"))
     if path == "/api/approve":
@@ -798,11 +798,10 @@ def mutate_or_400(p: Project, fn: Callable[[Backlog, Any], Any]) -> Any:
     return out
 
 
-def card_of(b: Backlog, data: Any, ref: str) -> tuple[str, str]:
-    """(decision id, «ID, title» of its card) of a decision reference; the card is `ref` when it is not pending."""
-    did = b.decision_ref(data, ref)
+def card_of(data: Any, did: str) -> str:
+    """The «ID, title» of the card of pending decision `did`; `did` itself when it is not pending."""
     d = next((x for x in data["decisions"] if x["id"] == did), None)
-    return did, clean(f"{did}, {d['title']}") if d else ref
+    return clean(f"{did}, {d['title']}") if d else did
 
 
 class _NoChange(Exception):
@@ -819,7 +818,7 @@ FREE_ANSWER_MAX = 2000  # characters of an answer in the owner's own words
 
 def decide(p: Project, ref: str, option: str, free: bool = False) -> Obj:
     """The owner's answer to a decision with one of its options, or with his own words (`free`: the text of the
-    «other answer» box) (`ref`: its id, or «ID, title» from an older page): it resolves the decision in the backlog
+    «other answer» box) (`ref`: its id): it resolves the decision in the backlog
     at once, under the backlog's lock (Backlog.answer_decision, `by` «Owner, YYYY-MM-DD HH:MM (panel)», `free` marked),
     then tells the orchestrator in the inbox (with did, resolved and freed, and free) so it applies it, interpreting a
     free one. ValueError (400) when the decision is not pending, the option is not one of its options, or a free
@@ -838,14 +837,14 @@ def decide(p: Project, ref: str, option: str, free: bool = False) -> Obj:
     did, card, freed = ref, ref, []
     try:
         with b.mutate(timeout=DECIDE_LOCK_S) as data:
-            did, card = card_of(b, data, ref)
+            did, card = ref, card_of(data, ref)
             try:
                 freed = b.answer_decision(data, did, option, by, free=free)
             except BacklogError as e:  # the caller's mistake: 400, and nothing is saved
                 raise ValueError(str(e)) from e
     except BacklogError as e:  # not saved: the owner's answer still reaches the orchestrator
         with contextlib.suppress(BacklogError, OSError, ValueError):  # its card title, read without the lock
-            did, card = card_of(b, b.load(), ref)
+            card = card_of(b.load(), ref)
         m = notes.inbox_add(p, option, sender="owner", decision=card, **mark)
         return Accepted(m, note=f"recorded; the orchestrator will resolve it ({e})")
     notes.inbox_add(p, option, sender="owner", decision=card, did=did, resolved=True, freed=freed, **mark)
@@ -868,7 +867,7 @@ def change_answer(p: Project, ref: str, option: str, free: bool = False) -> Obj:
         msgs = util.read_json(f, [])
         try:
             with b.mutate(timeout=DECIDE_LOCK_S) as data:
-                did = b.decision_ref(data, ref)
+                did = ref
                 was = b.change_answer(data, did, option, by, free=free)  # raising here, nothing is saved
                 old = next((m for m in reversed(msgs) if m.get("did") == did and m.get("resolved")), None)
                 if old is None or old.get("read"):
