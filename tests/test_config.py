@@ -416,7 +416,7 @@ worktree = "{{worktrees}}/{{repo}}-{{name}}"
     def test_help_lists_every_command(self):
         """Every command main() dispatches (before or through argparse) is named in `foreman -h` with its own line."""
         src = (ROOT / "lib/foreman/cli.py").read_text()
-        main_src = src[src.index("def main(") : src.index("ap = build_parser()")]
+        main_src = src[src.index("def main(") : src.index("ap = build_parser(")]
         before = set(re.findall(r'argv\[:\d\] == \["([a-z][a-z-]*)"', main_src))
         after = set(re.findall(r'^    if c == "([a-z-]+)"', src, re.M))
         self.assertTrue({"hook", "hung-shells", "time-limit", "lock", "wait"} <= before, before)
