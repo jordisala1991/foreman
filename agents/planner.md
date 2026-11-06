@@ -21,7 +21,9 @@ What is specific to this type:
   the behaviour has cases, the criterion is a table, input → expected result. You do not touch the backlog: the
   orchestrator reviews and approves.
   A claim of scope ("only X uses it", "read-only", "the full list") cites the search that shows it, or says it was
-  not checked.
+  not checked. Before delivering, add a «Repaso» section: each scope claim with its search or «not checked»; each
+  command the plan assumes harmless, checked in its doc; that no step asks an agent to write a reserved file; each
+  criterion row with its sub-issue and the test that will show it; the discarded approaches, one line each.
 - **A hidden check**, when your brief asks for one (docs/config.md, «`[paths] holdout`»; the folder is
   `paths.holdout` of `foreman config --json`, and the guard lets only planners and the orchestrator reach it): some
   rows of that table go in the plan, the others only in `<holdout>/ID/holdout.toml` and its `files/`. The plan gets
