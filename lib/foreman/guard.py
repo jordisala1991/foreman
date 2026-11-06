@@ -222,7 +222,7 @@ import os
 import re
 import shlex
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -231,6 +231,8 @@ from .shell import (
     ASSIGN,
     CODE_OPTS,
     RAW_INTERPRETERS,
+    Runs,
+    Seg,
     Tok,
     Unparsed,
     Write,
@@ -262,7 +264,6 @@ from .shell import (
 
 if TYPE_CHECKING:
     from .config import Project, Table
-    from .shell import Runs, Seg
     from .util import PathLike
 
 # The built-in rules (module doc): any form of `foreman hook mod` (bin/foreman, a path, --project P, quoted words);
@@ -367,20 +368,57 @@ def _excerpt(pattern: str, text: str) -> str:
     return ("…" if a else "") + flat[a : a + EXCERPT] + ("…" if a + EXCERPT < len(flat) else "")
 
 
-def _first(pats: Iterable[str], texts: Iterable[tuple[str, str]], dirs: dict[str, str] | None = None) -> Hit | None:
-    """The first pattern that matches one of the (text, where) pairs, in order. dirs: {resolved text: its folder}."""
+Text = tuple[str, str, str, tuple[str, ...]]  # one text a command is compared as: (the text, where, the folder of a
+# resolved push, the marks of the lines it is nested in, innermost first)
+
+
+def _items(texts: Iterable[tuple[str, str]], dirs: dict[str, str] | None = None) -> Iterator[Text]:
+    """The (text, where) pairs of one line as Texts, in order, each text once. dirs: {resolved text: its folder}."""
     seen: set[str] = set()
     for raw, where in texts:
         text = _flat(raw)
-        if not text or text in seen:
-            continue
-        seen.add(text)
+        if text and text not in seen:
+            seen.add(text)
+            yield text, where, (dirs or {}).get(raw, "") if where in ("resolved", "unknown") else "", ()
+
+
+def _scan(pats: Sequence[str], texts: Iterable[Text]) -> Hit | None:
+    """The first pattern that matches one of the texts, in order (text by text)."""
+    for text, where, folder, marks in texts:
         for pat in pats:
             if re.search(pat, text):
                 hit = Hit(pat, where, text)
-                hit.dir = (dirs or {}).get(raw, "") if where in ("resolved", "unknown") else ""
+                hit.dir = folder
+                for mark in marks:  # a text written to a file the line runs says so, but a resolved push
+                    hit = Hit(hit, mark, hit.part) if hit.where not in ("resolved", "unknown") else hit
                 return hit
     return None
+
+
+class _Kept:
+    """A generator's items kept as they come, so that each reader walks them in order and the generator runs once and
+    only as far as the furthest reader; its exception is raised again to each reader at the same place."""
+
+    def __init__(self, gen: Iterator[Text]) -> None:
+        self.gen, self.items, self.err = gen, [], None
+
+    def __iter__(self) -> Iterator[Text]:
+        k = 0
+        while k < len(self.items) or self._more():
+            yield self.items[k]
+            k += 1
+
+    def _more(self) -> bool:
+        if self.err is not None:
+            raise self.err
+        try:
+            self.items.append(next(self.gen))
+        except StopIteration:
+            return False
+        except Exception as e:
+            self.err = e
+            raise
+        return True
 
 
 def _where(w: Sequence[Tok], prog: int) -> str:
@@ -437,12 +475,12 @@ At = tuple[gitpush.Resolver, frozenset[str], gitpush.Changes]  # the resolver of
 # starts in and what the line around it changed in git's config before it
 
 
-def _deny(
-    pats: Sequence[str], cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | None = None
-) -> tuple[Hit | None, str]:
-    """(the first pattern the command runs or None, the command with its data values blanked). feeds: the output of
-    the command is run by a shell (it is $(…) in a program's place, or a pipe into one). at: resolve its pushes
-    (gitpush.py), compared after every other text."""
+def _texts(
+    cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | None = None
+) -> Generator[Text, None, str]:
+    """The texts the command is compared as, in order (module doc); returns the command with its data values blanked.
+    feeds: the output of the command is run by a shell (it is $(…) in a program's place, or a pipe into one). at:
+    resolve its pushes (gitpush.py), after every other text of their line."""
     segs, lx = lex(cmd, depth)
     segs = pipelines(segs)
     words_of = [[t for t in s.toks if t.kind == "word"] for s in segs]
@@ -502,12 +540,8 @@ def _deny(
         prog = w[r.prog] if r.prog < len(w) else None
         remote = prog is not None and prog.literal and PurePath(prog.value).name == "ssh"  # runs elsewhere
         for tok, text, blankable in r.strings:  # sh -c S, eval…: S is a command of its own
-            hit, b = _deny(pats, text, depth + 1, ex and blankable, at=None if remote else sub(k))
-            if hit:
-                return hit, cmd
-            if (
-                blankable and b != text and tok is not None and tok.oneword
-            ):  # only its data values differ: compare it blanked
+            b = yield from _texts(text, depth + 1, ex and blankable, at=None if remote else sub(k))
+            if blankable and b != text and tok is not None and tok.oneword:  # only its data values differ
                 q = tok.raw[0] if tok.raw[:1] in ("'", '"') else ""
                 swap[tok] = q + b + q
         execdir = any(t.literal and t.value in ("-execdir", "-okdir") for t in w)  # runs in each file's folder
@@ -565,20 +599,15 @@ def _deny(
         blanked = blanked[:a] + new + blanked[b:]
     texts += [(x, "command") for x in quoted_segments(strip_heredocs(blanked))]  # the old guard's texts, minus data
     texts += [(t, "unknown" if d.startswith("?") else "resolved") for t, d in resolved.items()]  # after all of them
-    hit = _first(pats, texts, {t: d.lstrip("?") for t, d in resolved.items()})
-    if hit:
-        return hit, cmd
+    yield from _items(texts, {t: d.lstrip("?") for t, d in resolved.items()})
     for content, ex, fd, mark, inner in nested:
-        hit = _deny(pats, content, depth + 1, ex, fd, inner)[0]
-        if hit:
-            if mark and hit.where not in ("resolved", "unknown"):
-                hit = Hit(hit, mark, hit.part)
-            return hit, cmd
-    return None, blanked
+        for text, where, folder, marks in _texts(content, depth + 1, ex, fd, inner):
+            yield text, where, folder, (*marks, mark) if mark else marks
+    return blanked
 
 
-def _whole(pats: Iterable[str], cmd: str) -> Hit | None:
-    """The fallback for a command the lexer cannot read: every pattern against all of the text, no exemption."""
+def _whole(cmd: str) -> Iterator[Text]:
+    """The texts of a command the lexer cannot read: all of it, no exemption."""
     spaced = re.sub(r"[\"'`()$\\]", " ", cmd)
     texts = [
         *quoted_segments(strip_heredocs(cmd)),
@@ -590,25 +619,34 @@ def _whole(pats: Iterable[str], cmd: str) -> Hit | None:
         cmd,
         spaced,
     ]
-    return _first(pats, ((x, "whole") for x in texts))
+    return _items((x, "whole") for x in texts)
 
 
-def deny(pats: Sequence[str], cmd: str, at: gitpush.Resolver | None = None) -> Hit | None:
-    """The first [deny] pattern the command runs, or None (see the module doc). at: also compare each `git push` as
-    git would do it from the resolver's folder (gitpush.py)."""
+def deny(
+    pats: Sequence[str], cmd: str, at: gitpush.Resolver | None = None, texts: Iterable[Text] | None = None
+) -> Hit | None:
+    """The first [deny] pattern the command runs, or None (see the module doc); an empty list is not compared. at:
+    also compare each `git push` as git would do it from the resolver's folder (gitpush.py). texts: the command's,
+    already read for at (_Check.texts)."""
+    if not pats:
+        return None
     try:
-        return _deny(pats, cmd, 0, True, at=(at, at.start, gitpush.NONE) if at else None)[0]
+        return _scan(pats, texts if texts is not None else _texts(cmd, 0, True, at=_start(at)))
     except gitpush.Failed:
         raise
     except Exception:  # noqa: BLE001 (the pattern check falls back to the whole-line check on any parser error)
-        hit = _whole(pats, cmd)
+        hit = _scan(pats, _whole(cmd))
     if hit is None and at is not None and re.search(r"\bgit\b.*\bpush\b", cmd, re.S):
         try:  # it cannot say which push: every branch and tag, from the event's folder and every repo
             blind = at.blind()
         except Exception as e:
             raise gitpush.Failed(type(e).__name__) from e
-        hit = _first(pats, ((t, "unknown") for t, _ in blind), {t: d.lstrip("?") for t, d in blind})
+        hit = _scan(pats, _items(((t, "unknown") for t, _ in blind), {t: d.lstrip("?") for t, d in blind}))
     return hit
+
+
+def _start(at: gitpush.Resolver | None) -> At | None:
+    return (at, at.start, gitpush.NONE) if at else None
 
 
 LAUNCHERS = ("xcrun", "npx", "bunx", "pnpm", "yarn", "bundle", "uv", "uvx", "mise")
@@ -667,18 +705,60 @@ def _who(project: Project, ctx: Ctx | None, process: bool = True) -> str:
     return ""
 
 
-def _why(project: Project, cmd: str, ctx: Ctx | None, hit: Hit, at: gitpush.Resolver | None = None) -> str:
+class _Check:
+    """One check() of a Bash command: what its rules share, each read once when first asked and kept (an exception
+    too, raised again to each rule that asks): the registry, who calls, the lines the command runs (_walk), its texts
+    with and without its pushes resolved (_texts) and what git says of each folder (the Resolver)."""
+
+    def __init__(self, project: Project, cmd: str, ctx: Ctx | None, projects: Sequence[Project] | None = None):
+        self.project, self.cmd, self.ctx = project, cmd, ctx
+        cwd = (ctx or {}).get("cwd")
+        self.cwd = os.path.normpath(os.path.expanduser(cwd or os.getcwd()))
+        self.git = gitpush.Resolver(project, cwd)
+        self.at = self.git if ctx is not None and "cwd" in ctx else None  # without the key: the text only
+        self.kept: dict[Any, tuple[Any, Exception | None]] = {}
+        if projects is not None:
+            self.kept["projects"] = (_projects(project, projects), None)
+
+    def once(self, key: Any, make: Callable[[], Any]) -> Any:
+        if key not in self.kept:
+            try:
+                self.kept[key] = (make(), None)
+            except Exception as e:  # noqa: BLE001 (kept, and raised to each caller)
+                self.kept[key] = (None, e)
+        value, err = self.kept[key]
+        if err is not None:
+            raise err
+        return value
+
+    def projects(self) -> Sequence[Project]:
+        return self.once("projects", lambda: _projects(self.project, None))
+
+    def who(self) -> str:
+        return self.once("who", lambda: _who(self.project, self.ctx, process=False))
+
+    def lines(self) -> list[Line | str]:
+        return self.once("lines", lambda: _walk(self.cmd, frozenset({self.cwd}), {"HOME": [str(Path.home())]}, 0))
+
+    def deny(self, pats: Sequence[str], resolve: bool = True) -> Hit | None:
+        at = self.at if resolve else None
+        texts = self.once(("texts", at is not None), lambda: _Kept(_texts(self.cmd, 0, True, at=_start(at))))
+        return deny(pats, self.cmd, at, texts)
+
+
+def _why(chk: _Check, hit: Hit) -> str:
     """Why a command of a [deny.grants] group does not pass (agent | session | process | grant), or "" when it does.
     For grant, hit.group is the first group without a live grant; on a pass, hit.grant lists those used."""
     from . import grants
 
-    who = _who(project, ctx)
-    if who or ctx is None:
+    who = _who(chk.project, chk.ctx)
+    if who or chk.ctx is None:
         return who or "agent"
-    simulated = "marked" in ctx
     used = []
-    for group in grants.groups_of(project, cmd, at) if not simulated else []:
-        g = grants.live(project, group)
+    for group, pats in grants.groups(chk.project, True).items() if "marked" not in chk.ctx else ():
+        if not chk.deny(pats):
+            continue
+        g = grants.live(chk.project, group)
         if g is None:
             hit.group = group
             return "grant"
@@ -687,38 +767,37 @@ def _why(project: Project, cmd: str, ctx: Ctx | None, hit: Hit, at: gitpush.Reso
     return ""
 
 
-def check(project: Project, cmd: str, ctx: Ctx | None = None) -> Verdict | None:
+def check(
+    project: Project, cmd: str, ctx: Ctx | None = None, projects: Sequence[Project] | None = None
+) -> Verdict | None:
     """None if allowed, or (kind, detail) with kind "deny" (detail = the pattern, a Hit that says where it matched),
     "orchestrator" (a [deny.grants] Hit whose why says why this caller may not: module doc) or "lock"
-    (detail = (resource, the matching segment)). ctx: who calls (None: an agent). Never raises: anything
-    unexpected is a deny."""
+    (detail = (resource, the matching segment)). ctx: who calls (None: an agent). projects: the registry's, if
+    already loaded. Never raises: anything unexpected is a deny."""
     try:
         from . import grants
 
-        hit = deny(list(BUILTIN), cmd)
+        chk = _Check(project, cmd, ctx, projects)
+        hit = chk.deny(list(BUILTIN), resolve=False)
         if hit:
             return "deny", hit
-        apply = names_apply(cmd)
-        hit = deny([PERMISSIONS_APPLY], cmd) if apply else None
+        hit = chk.deny([PERMISSIONS_APPLY], resolve=False) if names_apply(cmd) else None
         if hit:
             hit.why = _who(project, ctx)
             if hit.why:
                 return "orchestrator", hit
-        hit = _bash_file(project, cmd, ctx)
+        hit = _bash_file(chk)
         if hit:
             return "file", hit
-        section = project.section("deny")
-        at = gitpush.Resolver(project, ctx["cwd"]) if ctx is not None and "cwd" in ctx else None
-        hit = deny(section.get("patterns", []), cmd, at)
+        hit = chk.deny(project.section("deny").get("patterns", []))
         if hit:
             return "deny", hit
-        hit = _agent_only(project, cmd, ctx)
+        hit = _agent_only(chk)
         if hit:
             return "orchestrator", hit
-        orch = grants.patterns(project, internal=names_internal(cmd))
-        hit = deny(orch, cmd, at) if orch else None
+        hit = chk.deny(grants.patterns(project, internal=names_internal(cmd)))
         if hit:
-            hit.why = _why(project, cmd, ctx, hit, at)
+            hit.why = _why(chk, hit)
             if hit.why:
                 return "orchestrator", hit
             if ctx is not None:
@@ -737,6 +816,18 @@ def check(project: Project, cmd: str, ctx: Ctx | None = None) -> Verdict | None:
         return None
     except Exception as e:  # noqa: BLE001 (the guard reports any failure as a deny, never a crash)
         return "deny", f"(the guard could not check this command: {type(e).__name__})"
+
+
+def _either(rule: Callable[[], Hit | None], text_only: Callable[[], Hit | None]) -> Hit | None:
+    """rule(); when it fails, text_only() (the rule on the command's text alone); when that fails too, None: a failure
+    of foreman blocks only what the text names (O7)."""
+    try:
+        return rule()
+    except Exception:  # noqa: BLE001
+        try:
+            return text_only()
+        except Exception:  # noqa: BLE001
+            return None
 
 
 # ---------- the reserved files (module doc) ----------
@@ -1120,22 +1211,20 @@ def _cd_known(
     return out
 
 
-Visit = Any  # _walk's visit(cmd, segs, words_of, info, here, env), once per line read (nested ones included)
+Line = tuple[str, list[Seg], list[list[Tok]], list[Runs], list[frozenset[str]], dict[str, list[str]]]  # one line
+# a command runs (_walk): its text, segments, their words and what each runs, the folders each may run in, the
+# values the line gives its variables
 
 
-def _walk(
-    cmd: str,
-    start: frozenset[str],
-    env: dict[str, list[str]],
-    depth: int,
-    visit: Visit,
-    unparsed: Any,
-) -> None:
-    """Calls visit with every line the command runs, from the folders each segment may run in (the line's cd and
-    pushd, gitpush.folders, with the values the line gives its variables): the command itself, then what is nested
-    in it (sh -c, eval, $(…), a heredoc or a pipe into a shell, xargs and find -exec; not what ssh runs), and
-    unparsed(text) with a nested text the lexer cannot read. Raises Unparsed for a command the lexer cannot read."""
-    segs, lx = lex(cmd, depth)
+def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int) -> list[Line | str]:
+    """Every line the command runs, in order, from the folders each segment may run in (the line's cd and pushd,
+    gitpush.folders, with the values the line gives its variables): the command itself, then what is nested in it
+    (sh -c, eval, $(…), a heredoc or a pipe into a shell, xargs and find -exec; not what ssh runs); a text the lexer
+    cannot read (the command itself, or one nested) is given as its str."""
+    try:
+        segs, lx = lex(cmd, depth)
+    except Unparsed:
+        return [cmd]
     segs = pipelines(segs)
     words_of = [[t for t in s.toks if t.kind == "word"] for s in segs]
     info = [runs(w) for w in words_of]
@@ -1143,7 +1232,7 @@ def _walk(
     _assigned(words_of, info, env)
     known = _cd_known(words_of, info, env)
     here = gitpush.folders(segs, known, info, start, exists=False)
-    visit(cmd, segs, words_of, info, here, env)
+    out: list[Line | str] = [(cmd, segs, words_of, info, here, env)]
     nested: list[tuple[str, frozenset[str]]] = [(c, start) for c in lx.body_subs]
     printers = {k for k, w in enumerate(words_of) if printer(w)}
     for k, (seg, r) in enumerate(zip(segs, info)):
@@ -1161,10 +1250,8 @@ def _walk(
                     fw = words_of[f]
                     nested.append((" ".join(str(x.value) for x in fw[info[f].prog + 1 :]), here[k]))
     for text, dirs in nested:
-        try:
-            _walk(text, dirs, env, depth + 1, visit, unparsed)
-        except Unparsed:
-            unparsed(text)
+        out += _walk(text, dirs, env, depth + 1)
+    return out
 
 
 def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
@@ -1221,26 +1308,22 @@ def _pieces(code: str) -> list[str]:
     return [x for x in out if x and len(x) <= MAX_LITERAL]
 
 
-def _targets(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int, out: list[_Target]) -> None:
-    """Adds to out every file the line writes (shell.writes) and what the commands nested in it write (_walk), from
-    the folders each may run in. Raises Unparsed for a text the lexer cannot read."""
-
-    def visit(_cmd: str, segs: Any, words_of: Any, info: Any, here: Any, env: dict[str, list[str]]) -> None:
+def _targets(lines: Iterable[Line | str]) -> Iterator[_Target]:
+    """Every file the lines write (shell.writes, _code_writes), from the folders each may run in; a text the lexer
+    cannot read, as text only."""
+    for line in lines:
+        if isinstance(line, str):
+            yield _Target([line], frozenset(), Write(-1, Tok("word", 0)), line)
+            continue
+        _cmd, segs, words_of, info, here, env = line
         for wr in writes(segs, info):
             t = wr.tok
-            texts = _expand(str(t.value), t.literal, env, t.raw.startswith("~"))
-            out.append(_Target(texts, here[wr.seg], wr, t.raw))
+            yield _Target(_expand(str(t.value), t.literal, env, t.raw.startswith("~")), here[wr.seg], wr, t.raw)
         for k, (seg, w) in enumerate(zip(segs, words_of)):
             for path in _code_writes(seg, w, info[k].prog):  # also from HOME: Path.home() / "x", os.homedir()
                 tok = Tok("word", 0)
                 tok.value, tok.raw = path, path
-                texts = _expand(path, True, env, True)
-                out.append(_Target(texts, here[k] | {str(Path.home())}, Write(k, tok), path))
-
-    def unparsed(text: str) -> None:  # read as text only
-        out.append(_Target([text], frozenset(), Write(-1, Tok("word", 0)), text))
-
-    _walk(cmd, start, env, depth, visit, unparsed)
+                yield _Target(_expand(path, True, env, True), here[k] | {str(Path.home())}, Write(k, tok), path)
 
 
 def _names(text: str, entries: Sequence[Reserved]) -> Reserved | None:
@@ -1320,24 +1403,20 @@ def _target_hits(t: _Target, entries: Sequence[Reserved]) -> Iterable[tuple[Rese
                     yield e, _real(f)
 
 
-def _bash_file(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
+def _bash_file(chk: _Check) -> Hit | None:
     """The reserved file a Bash command writes by name (module doc), as check_file's Hit with bash set, or None.
     The orchestrator's own board passes for its main thread. Never raises: a failure denies only a line that looks
     like a write and names a reserved path as text."""
-    try:
-        cwd = (ctx or {}).get("cwd") or os.getcwd()
-        out: list[_Target] = []
-        try:
-            _targets(cmd, frozenset({os.path.normpath(os.path.expanduser(cwd))}), {"HOME": [str(Path.home())]}, 0, out)
-        except Unparsed:
-            out = [_Target([cmd], frozenset(), Write(-1, Tok("word", 0)), cmd)]
+
+    def rule() -> Hit | None:
+        out = list(_targets(chk.lines()))
         if not out:
             return None
-        entries = reserved(project)
-        who = _who(project, ctx, process=False)
+        entries = reserved(chk.project, chk.projects())
+        who = chk.who()
         if who != "agent":  # the git class: the orchestrator and the owner's sessions write it
             entries = [e for e in entries if e[0] not in AGENT_KINDS]
-        board = _real(project.board)
+        board = _real(chk.project.board)
         spent: bool | None = None
         for t in out:
             for e, where in _target_hits(t, entries):
@@ -1345,17 +1424,17 @@ def _bash_file(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
                     continue  # the orchestrator's own board
                 if e[0] in ASK_KINDS and who != "agent":
                     if spent is None:
-                        spent = _spend(project, e[0], who, ctx, None, cmd)
+                        spent = _spend(chk.project, e[0], who, chk.ctx, None, chk.cmd)
                     if spent:
                         continue  # the owner's yes for this one command
-                return _file_hit(e, t.raw, who, cmd)
+                return _file_hit(e, t.raw, who, chk.cmd)
         return None
-    except Exception:  # noqa: BLE001 (a failure never stops a command that does not look like a reserved write: O7)
-        try:
-            e = _names(cmd, _machine(lambda p: _fold(os.path.normpath(p)))) if WRITE_WORDS.search(cmd) else None
-            return _file_hit(e, "", _who(project, ctx, process=False), cmd) if e is not None else None
-        except Exception:  # noqa: BLE001 (not even that: let it pass, as any failure of a command that writes no such text)
-            return None
+
+    def text_only() -> Hit | None:
+        e = _names(chk.cmd, _machine(lambda p: _fold(os.path.normpath(p)))) if WRITE_WORDS.search(chk.cmd) else None
+        return _file_hit(e, "", chk.who(), chk.cmd) if e is not None else None
+
+    return _either(rule, text_only)
 
 
 SHORT_PATH = 30  # in the refusal's quote of the command, a longer path (the refusal names it whole) is …/its name
@@ -1571,114 +1650,110 @@ def _git_hit(sub: str, top: Top, part: str) -> Hit:
     return hit
 
 
-def _main_checkout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
+def _main_checkout(chk: _Check) -> Hit | None:
     """The git an agent's line runs that rewrites a main checkout (main_checkouts; module doc), as a Hit, or None.
     Never raises: a failure refuses only a line that names git and such a checkout as text."""
-    cache: dict[str, dict[str, Top]] = {}
 
     def tops() -> dict[str, Top]:
-        if "t" not in cache:
-            cache["t"] = main_checkouts(project)
-        return cache["t"]
+        return chk.once("tops", lambda: main_checkouts(chk.project, chk.projects()))
 
     found: list[Hit] = []
-    try:
-        cwd = os.path.normpath(os.path.expanduser((ctx or {}).get("cwd") or os.getcwd()))
 
-        def one(w: Sequence[Tok], prog: int, dirs: frozenset[str], env: dict[str, list[str]], line: str) -> Hit | None:
-            c = gitpush.parse_git(w, prog)
-            if c is None or c.sub >= len(w):
-                return None
-            t = w[c.sub]
-            sub = str(t.value) if t.literal else None
-            if sub is not None and sub in gitpush.BUILTINS and sub not in GIT_REWRITES:
-                return None  # it reads, or changes no file of the copy
-            here = gitpush.moved(dirs, c.dirs, exists=False)
-            trees: list[str | None] = list(env.get("GIT_WORK_TREE", []))
-            for k in range(prog + 1, c.sub):
-                v = str(w[k].value) if w[k].literal else None
-                if v is not None and v.startswith("--work-tree="):
-                    trees.append(v.partition("=")[2])
-                elif v == "--work-tree" and k + 1 < c.sub:
-                    trees.append(str(w[k + 1].value) if w[k + 1].literal else None)
-                elif v is None and w[k].raw.lstrip("\"'").startswith("--work-tree"):
-                    trees.append(None)
-            for wt in trees:  # the work tree it is given, besides the folder (whose repo it still changes)
-                here |= gitpush.moved(here, [wt], exists=False)
-            all_tops = tops()
-            if not all_tops:
-                return None
-            top: Top | None = None
-            folder = ""
-            for f in sorted(x for x in here if x != gitpush.UNKNOWN):
-                got = gitdir.checkout_of(f)
-                if got is not None and _fold(got) in all_tops:
-                    top, folder = all_tops[_fold(got)], f
-                    break
-            if top is None and gitpush.UNKNOWN in here:
-                key = _names_top(line, all_tops)
-                top = all_tops[key] if key else None
-            if top is None:
-                return None
-            part = " ".join(x.raw for x in w)
-            args: Sequence[Tok] = w[c.sub + 1 :]
-            if sub is None:  # a subcommand the line computes
-                return _git_hit(t.raw, top, part)
-            if sub not in gitpush.BUILTINS:  # an alias (with the config of that folder and the line's -c)
-                repo = gitpush.read_repo(folder or top[0])
-                for cfg in gitpush.overlay(repo.config if repo else {}, c.changes.config):
-                    ex = gitpush.aliased(w[prog:], gitpush.Repo(None, None, cfg))
-                    if isinstance(ex, str):  # a shell command, from the same folder
-                        _walk(ex, frozenset({folder or gitpush.UNKNOWN}), env, 1, visit, unparsed)
-                    elif ex is not None:  # a git command, or one the line computes, from the same folders
-                        found.extend(h for h in [one(ex, 0, dirs, env, line)] if h)
-                return found[0] if found else None
-            got = _git_rewrites(sub, args, folder)
-            if got is True or (isinstance(got, list) and any(_reaches(x, folder, _fold(top[0]), top[2]) for x in got)):
-                return _git_hit(sub, top, part)
+    def one(w: Sequence[Tok], prog: int, dirs: frozenset[str], env: dict[str, list[str]], line: str) -> Hit | None:
+        c = gitpush.parse_git(w, prog)
+        if c is None or c.sub >= len(w):
             return None
+        t = w[c.sub]
+        sub = str(t.value) if t.literal else None
+        if sub is not None and sub in gitpush.BUILTINS and sub not in GIT_REWRITES:
+            return None  # it reads, or changes no file of the copy
+        here = gitpush.moved(dirs, c.dirs, exists=False)
+        trees: list[str | None] = list(env.get("GIT_WORK_TREE", []))
+        for k in range(prog + 1, c.sub):
+            v = str(w[k].value) if w[k].literal else None
+            if v is not None and v.startswith("--work-tree="):
+                trees.append(v.partition("=")[2])
+            elif v == "--work-tree" and k + 1 < c.sub:
+                trees.append(str(w[k + 1].value) if w[k + 1].literal else None)
+            elif v is None and w[k].raw.lstrip("\"'").startswith("--work-tree"):
+                trees.append(None)
+        for wt in trees:  # the work tree it is given, besides the folder (whose repo it still changes)
+            here |= gitpush.moved(here, [wt], exists=False)
+        all_tops = tops()
+        if not all_tops:
+            return None
+        top: Top | None = None
+        folder = ""
+        for f in sorted(x for x in here if x != gitpush.UNKNOWN):
+            got = gitdir.checkout_of(f)
+            if got is not None and _fold(got) in all_tops:
+                top, folder = all_tops[_fold(got)], f
+                break
+        if top is None and gitpush.UNKNOWN in here:
+            key = _names_top(line, all_tops)
+            top = all_tops[key] if key else None
+        if top is None:
+            return None
+        part = " ".join(x.raw for x in w)
+        args: Sequence[Tok] = w[c.sub + 1 :]
+        if sub is None:  # a subcommand the line computes
+            return _git_hit(t.raw, top, part)
+        if sub not in gitpush.BUILTINS:  # an alias (with the config of that folder and the line's -c)
+            repo = chk.git.repo(folder or top[0])
+            for cfg in gitpush.overlay(repo.config if repo else {}, c.changes.config):
+                ex = gitpush.aliased(w[prog:], gitpush.Repo(None, None, cfg))
+                if isinstance(ex, str):  # a shell command, from the same folder
+                    each(_walk(ex, frozenset({folder or gitpush.UNKNOWN}), env, 1))
+                elif ex is not None:  # a git command, or one the line computes, from the same folders
+                    found.extend(h for h in [one(ex, 0, dirs, env, line)] if h)
+            return found[0] if found else None
+        got = _git_rewrites(sub, args, folder)
+        if got is True or (isinstance(got, list) and any(_reaches(x, folder, _fold(top[0]), top[2]) for x in got)):
+            return _git_hit(sub, top, part)
+        return None
 
-        def visit(line: str, segs: Any, words_of: Any, info: Any, here: Any, env: dict[str, list[str]]) -> None:
-            fn = gitpush.called(segs, words_of, info, line) if any(s.sep == "(" for s in segs) else {}
+    def each(lines: Iterable[Line | str]) -> None:
+        for line in lines:
+            if found:
+                return
+            if isinstance(line, str):  # a text the lexer cannot read: git and a checkout it names, as text
+                if GIT_REWRITE_TEXT.search(line):
+                    key = _names_top(line, tops())
+                    if key is None:
+                        got = gitdir.checkout_of(chk.cwd)
+                        key = _fold(got) if got is not None and _fold(got) in tops() else None
+                    if key is not None:
+                        found.append(_git_hit("?", tops()[key], line))
+                continue
+            text, segs, words_of, info, here, env = line
+            fn = gitpush.called(segs, words_of, info, text) if any(s.sep == "(" for s in segs) else {}
             for k, w in enumerate(words_of):
                 for v, j in gitpush.variants(w, info[k].prog, fn.get(k)):  # a body runs where it is called too
                     dirs = here[k] if j is None else here[k] | here[j]
-                    hit = None if found else one(v, info[k].prog, dirs, env, line)
+                    hit = None if found else one(v, info[k].prog, dirs, env, text)
                     if hit is not None:
                         found.append(hit)
 
-        def unparsed(text: str) -> None:  # a text the lexer cannot read: git and a checkout it names, as text
-            if found or not GIT_REWRITE_TEXT.search(text):
-                return
-            key = _names_top(text, tops())
-            if key is None:
-                got = gitdir.checkout_of(cwd)
-                key = _fold(got) if got is not None and _fold(got) in tops() else None
-            if key is not None:
-                found.append(_git_hit("?", tops()[key], text))
-
-        try:
-            _walk(cmd, frozenset({cwd}), {"HOME": [str(Path.home())]}, 0, visit, unparsed)
-        except Unparsed:
-            unparsed(cmd)
+    def rule() -> Hit | None:
+        each(chk.lines())
         return found[0] if found else None
-    except Exception:  # noqa: BLE001 (a failure never stops a line that does not name git and a main checkout: O7)
-        try:
-            key = _names_top(cmd, tops()) if GIT_REWRITE_TEXT.search(cmd) else None
-            return _git_hit("?", tops()[key], cmd) if key is not None else None
-        except Exception:  # noqa: BLE001 (not even that: let it pass)
-            return None
+
+    def text_only() -> Hit | None:
+        key = _names_top(chk.cmd, tops()) if GIT_REWRITE_TEXT.search(chk.cmd) else None
+        return _git_hit("?", tops()[key], chk.cmd) if key is not None else None
+
+    return _either(rule, text_only)
 
 
 def main_checkout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None:
     """The MAIN_CHECKOUT Hit of a command an agent runs in cwd (permissions.touches: the rows of the rule)."""
-    return _main_checkout(project, cmd, {"cwd": cwd} if cwd else None)
+    return _main_checkout(_Check(project, cmd, {"cwd": cwd} if cwd else None))
 
 
 def holdout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None:
     """The HOLDOUT Hit of a command an agent (not a planner) runs in cwd (permissions.touches: the rows of the
     rule)."""
-    return _holdout(project, cmd, {"cwd": cwd} if cwd else None)
+    return _holdout(_Check(project, cmd, {"cwd": cwd} if cwd else None))
 
 
 def names_integrate(cmd: str) -> bool:
@@ -1686,47 +1761,43 @@ def names_integrate(cmd: str) -> bool:
     return "integrate" in re.sub(r"\\\n|[\\'\"]", "", cmd)
 
 
-def _agent_only(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
+def _agent_only(chk: _Check) -> Hit | None:
     """The built-in rules for an agent only (module doc): its `foreman integrate` (but --help, -h, --check), its
     git that rewrites a main checkout (a repo or a live home), and what reaches the hidden acceptance checks
     (_holdout: a planner passes). Only an agent (_who, no process) is compared."""
-    integrate, git = names_integrate(cmd), bool(GIT_WORDS.search(cmd))
-    if _who(project, ctx, process=False) != "agent":
+    integrate, git = names_integrate(chk.cmd), bool(GIT_WORDS.search(chk.cmd))
+    if chk.who() != "agent":
         return None
-    hit = _integrates(cmd) if integrate else None
+    hit = _integrates(chk) if integrate else None
     if hit:
         hit.why = "agent"
         return hit
-    hit = _main_checkout(project, cmd, ctx) if git else None
-    return hit or _holdout(project, cmd, ctx)
+    hit = _main_checkout(chk) if git else None
+    return hit or _holdout(chk)
 
 
-def _integrates(cmd: str) -> Hit | None:
+def _integrates(chk: _Check) -> Hit | None:
     """The INTEGRATE Hit of a line that runs `foreman integrate` without --help, -h or --check as a word of its own:
     a segment whose program is foreman (shell.foreman_call), also nested (_walk); a text the lexer cannot read, by the
     regex (also when the walk fails). Values of foreman note, git commit -m, a heredoc to an interpreter are never
     commands here."""
-    found: list[Hit] = []
 
-    def visit(_line: str, segs: Any, words_of: Any, info: Any, _here: Any, _env: Any) -> None:
-        for w, r in zip(words_of, info):
-            got = foreman_call([str(t.value) for t in w[r.prog :]]) if not found and r.prog < len(w) else None
-            if got and got[1] == "integrate" and not set(got[2]) & set(INTEGRATE_FREE):
-                found.append(Hit(INTEGRATE, "command", " ".join(t.raw for t in w)))
+    def whole(text: str) -> Hit | None:
+        return Hit(INTEGRATE, "whole", text) if re.search(INTEGRATE, text) else None
 
-    def unparsed(text: str) -> None:
-        m = None if found else re.search(INTEGRATE, text)
-        if m:
-            found.append(Hit(INTEGRATE, "whole", text))
+    def rule() -> Hit | None:
+        for line in chk.lines():
+            if isinstance(line, str):
+                if whole(line):
+                    return whole(line)
+                continue
+            for w, r in zip(line[2], line[3]):
+                got = foreman_call([str(t.value) for t in w[r.prog :]]) if r.prog < len(w) else None
+                if got and got[1] == "integrate" and not set(got[2]) & set(INTEGRATE_FREE):
+                    return Hit(INTEGRATE, "command", " ".join(t.raw for t in w))
+        return None
 
-    try:
-        _walk(cmd, frozenset({gitpush.UNKNOWN}), {}, 0, visit, unparsed)
-    except Unparsed:
-        unparsed(cmd)
-    except Exception:  # noqa: BLE001 (a failure of the walk: the regex on the whole line, as for a text it cannot read)
-        found.clear()
-        unparsed(cmd)
-    return found[0] if found else None
+    return _either(rule, lambda: whole(chk.cmd))
 
 
 # ---------- the hidden acceptance checks: what an agent but a planner may not reach (module doc) ----------
@@ -1834,86 +1905,82 @@ def _walks(name: str, args: Sequence[str]) -> bool:
     return False
 
 
-def _holdout(project: Project, cmd: str, ctx: Ctx | None) -> Hit | None:
+def _holdout(chk: _Check) -> Hit | None:
     """The HOLDOUT Hit of an agent's line (module doc), or None: `foreman holdout` but --help or -h; a line that names
     a folder of hidden checks as text; a word (also a redirection's file, `--opt=VALUE`'s value, nested commands)
     that is, resolved from each folder the segment may run in, such a folder or a path in it, or a folder that holds
     one for a program that walks it (_walks; given no existing path, the folder it runs in); a segment that runs in
     one. Only for a caller holdout_reader refuses, and only while such a folder exists. Never raises: a failure
     compares the line's text only."""
+    project, cmd = chk.project, chk.cmd
     try:
-        dirs = holdout_dirs(project)
+        dirs = holdout_dirs(project, chk.projects())
     except Exception:  # noqa: BLE001 (a registry that does not read: this product's folder alone)
         dirs = holdout_dirs(project, [project]) if project.holdout_dir.is_dir() else []
     if not dirs and "holdout" not in cmd:
         return None
-    if holdout_reader(project, ctx):
+    if holdout_reader(project, chk.ctx):
         return None
-    found: list[Hit] = []
-    try:
-        cwd = os.path.normpath(os.path.expanduser((ctx or {}).get("cwd") or os.getcwd()))
 
-        def visit(_line: str, segs: Any, words_of: Any, info: Any, here: Any, env: dict[str, list[str]]) -> None:
-            for k, (seg, w, r) in enumerate(zip(segs, words_of, info)):
-                if found:
-                    return
-                values = [str(t.value) for t in w[r.prog :]]
-                got = foreman_call(values) if r.prog < len(w) else None
-                if got and got[1] == "holdout" and not set(got[2]) & set(HOLDOUT_FREE):
-                    found.append(_holdout_hit(("", "", project.name), "command", " ".join(t.raw for t in w)))
-                    return
-                if not dirs:
+    def line_hit(segs: list[Seg], words_of: list[list[Tok]], info: list[Runs], here: Any, env: Any) -> Hit | None:
+        for k, (seg, w, r) in enumerate(zip(segs, words_of, info)):
+            values = [str(t.value) for t in w[r.prog :]]
+            got = foreman_call(values) if r.prog < len(w) else None
+            if got and got[1] == "holdout" and not set(got[2]) & set(HOLDOUT_FREE):
+                return _holdout_hit(("", "", project.name), "command", " ".join(t.raw for t in w))
+            if not dirs:
+                continue
+            folders = [f for f in here[k] if f != gitpush.UNKNOWN]
+            walk = r.prog < len(w) and _walks(PurePath(values[0]).name, values[1:])
+            named = False
+            for t in seg.toks:
+                if t.kind not in ("word", "target"):
                     continue
-                folders = [f for f in here[k] if f != gitpush.UNKNOWN]
-                walk = r.prog < len(w) and _walks(PurePath(values[0]).name, values[1:])
-                named = False
-                for t in seg.toks:
-                    if t.kind not in ("word", "target"):
-                        continue
-                    for text in _expand(str(t.value), t.literal, env, t.raw.startswith("~")):
-                        for v in (text, text.partition("=")[2] if text.startswith("-") else ""):
-                            if not v:
-                                continue
-                            for full in [v] if os.path.isabs(v) else [os.path.join(f, v) for f in folders]:
-                                named = named or (walk and os.path.exists(full))
-                                d = _holdout_reach(full, dirs, walk)
-                                if d is not None:
-                                    found.append(_holdout_hit(d, "command", " ".join(t.raw for t in w)))
-                                    return
-                for f in folders:  # where it runs: in such a folder, or one above it that it walks given no path
-                    d = _holdout_reach(f, dirs, walk and not named)
-                    if d is not None:
-                        found.append(_holdout_hit(d, "command", " ".join(t.raw for t in w)))
-                        return
+                for text in _expand(str(t.value), t.literal, env, t.raw.startswith("~")):
+                    for v in (text, text.partition("=")[2] if text.startswith("-") else ""):
+                        for full in ([v] if os.path.isabs(v) else [os.path.join(f, v) for f in folders]) if v else ():
+                            named = named or (walk and os.path.exists(full))
+                            d = _holdout_reach(full, dirs, walk)
+                            if d is not None:
+                                return _holdout_hit(d, "command", " ".join(t.raw for t in w))
+            for f in folders:  # where it runs: in such a folder, or one above it that it walks given no path
+                d = _holdout_reach(f, dirs, walk and not named)
+                if d is not None:
+                    return _holdout_hit(d, "command", " ".join(t.raw for t in w))
+        return None
 
-        def unparsed(text: str) -> None:  # a text that names the folder was refused before the walk
-            if not found and re.search(HOLDOUT_CALL, text) and not re.search(HOLDOUT_HELP, text):
-                found.append(_holdout_hit(("", "", project.name), "whole", text))
-
+    def rule() -> Hit | None:
         d = _holdout_named(cmd, dirs)
         if d is not None:
             return _holdout_hit(d, "command", cmd)
-        try:
-            _walk(cmd, frozenset({cwd}), {"HOME": [str(Path.home())]}, 0, visit, unparsed)
-        except Unparsed:
-            unparsed(cmd)
-        return found[0] if found else None
-    except Exception:  # noqa: BLE001 (a failure of the walk: the text alone)
-        try:
-            d = _holdout_named(cmd, dirs)
-            return _holdout_hit(d, "whole", cmd) if d is not None else None
-        except Exception:  # noqa: BLE001 (not even that: let it pass)
-            return None
+        for line in chk.lines():
+            if isinstance(line, str):  # a text that names the folder was refused before the walk
+                hit = None
+                if re.search(HOLDOUT_CALL, line) and not re.search(HOLDOUT_HELP, line):
+                    hit = _holdout_hit(("", "", project.name), "whole", line)
+            else:
+                hit = line_hit(*line[1:])
+            if hit is not None:
+                return hit
+        return None
+
+    def text_only() -> Hit | None:
+        d = _holdout_named(cmd, dirs)
+        return _holdout_hit(d, "whole", cmd) if d is not None else None
+
+    return _either(rule, text_only)
 
 
-def _holdout_tool(project: Project, tool: str | None, tool_input: Any, ctx: Ctx | None) -> Hit | None:
+def _holdout_tool(
+    project: Project, tool: str | None, tool_input: Any, ctx: Ctx | None, projects: Sequence[Project] | None = None
+) -> Hit | None:
     """The HOLDOUT Hit of a Grep or Glob call that walks a folder holding hidden checks (Grep: its `path`, else the
     call's cwd; Glob: its pattern from there), for a caller holdout_reader refuses; a place in or under such a folder is
     check()'s (`cat PLACE`). Never raises."""
     try:
         if tool not in WALK_TOOLS or not isinstance(tool_input, dict):
             return None
-        dirs = holdout_dirs(project)
+        dirs = holdout_dirs(project, projects)
         if not dirs or holdout_reader(project, ctx):
             return None
         cwd = (ctx or {}).get("cwd") or os.getcwd()
@@ -2007,7 +2074,13 @@ def _home_form(path: str) -> str | None:
     return "~/" + (shlex.quote(rest) if rest else "")
 
 
-def check_tool(project: Project, tool: str | None, tool_input: Any, ctx: Ctx | None = None) -> Verdict | None:
+def check_tool(
+    project: Project,
+    tool: str | None,
+    tool_input: Any,
+    ctx: Ctx | None = None,
+    projects: Sequence[Project] | None = None,
+) -> Verdict | None:
     """The verdict of a call of any tool but Bash by what it names (tool_texts): each command as check() would give
     it in Bash, each place as check() gives `cat PLACE` (and `cat ~/…` for a path under $HOME), the first refusal
     winning; a place's Hit says where=tool, part `<tool> <place>`, tool and call. A place never gets a lock verdict
@@ -2016,11 +2089,13 @@ def check_tool(project: Project, tool: str | None, tool_input: Any, ctx: Ctx | N
     try:
         places, commands = tool_texts(tool, tool_input)
         before = (ctx or {}).get("passed")
-        hit = _holdout_tool(project, tool, tool_input, ctx)
+        if projects is None and (places or tool in WALK_TOOLS):
+            projects = _registry()  # once for every place
+        hit = _holdout_tool(project, tool, tool_input, ctx, projects)
         if hit is not None:
             return "orchestrator", hit
         for cmd in commands:
-            v = check(project, cmd, ctx)
+            v = check(project, cmd, ctx, projects)
             if v is not None:
                 if isinstance(v[1], Hit):
                     v[1].tool, v[1].call = str(tool), cmd
@@ -2032,7 +2107,7 @@ def check_tool(project: Project, tool: str | None, tool_input: Any, ctx: Ctx | N
             if home:
                 texts.append("cat " + home)
             for text in texts:
-                v = check(project, text, ctx)
+                v = check(project, text, ctx, projects)
                 if v is None or v[0] == "lock":
                     _mark_passed(ctx, before, tool, place, where="tool")
                     continue
@@ -2064,7 +2139,7 @@ def _raw_place(project: Project, place: str) -> Verdict | None:
         from . import grants
 
         pats = [*BUILTIN, *project.section("deny").get("patterns", []), *grants.patterns(project, internal=False)]
-        hit = _whole(pats, place)
+        hit = _scan(pats, _whole(place))
         return ("deny", hit) if hit else None
     except Exception:  # noqa: BLE001
         return None
@@ -2086,10 +2161,21 @@ def check_call(
         return check(project, cmd, ctx) if isinstance(cmd, str) and cmd else None
     path = tool_path(tool, ti)
     if path is not None:
+        projects = _registry() if projects is None else projects  # once for the file and its places
         v = check_file(project, path, ctx, projects)
         if v is not None:
             return v
-    return check_tool(project, tool, tool_input, ctx)
+    return check_tool(project, tool, tool_input, ctx, projects)
+
+
+def _registry() -> Sequence[Project] | None:
+    """The registry's projects, or None when it does not read (each rule then reads it and fails its own way)."""
+    from . import config
+
+    try:
+        return config.registered_projects()
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def row_path(project: Project, row: str, cwd: str) -> str:
