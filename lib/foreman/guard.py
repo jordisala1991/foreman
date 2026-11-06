@@ -195,7 +195,8 @@ sources of mv, sed -i, gsed -i, perl -i, rm, rmdir, unlink, truncate, touch, shr
 of=, curl -o, wget -O, a find that deletes), behind the wrappers runs() skips, and in what the line runs nested (sh -c,
 eval, $(…), xargs, find -exec, a heredoc or a printer piped into a shell; not ssh's), and the files the code of an
 interpreter (python -c, node -e, a heredoc to perl…) may write (_code_writes: Python that passes pyscript's gate by
-what it writes, other code by its quoted literals when it has a word that writes). A target is expanded (`~` when
+what it writes, other code by the quoted literals in the arguments of a call that writes; from the segment's
+folders and from HOME, `~` expanded). A target is expanded (`~` when
 unquoted, $HOME and the line's own literal assignments) and joined to each folder the segment may run in
 (gitpush.folders: the ctx's cwd, else the process's, and the line's cd and pushd), then compared as check_file does,
 also as the link itself (rm, mv, ln -sf change a link); a copy into a folder also as each source's name in it; a
@@ -1037,11 +1038,13 @@ WRITE_WORDS = re.compile(
     r"chmod|chown|chgrp|chflags|dd|tee|curl|wget|find)(\s|$)"
 )
 # Code of an interpreter that is not Python passing pyscript's gate (_code_writes): a call that writes, renames,
-# copies or removes a file, or an open() for writing; then each of its quoted literals may be what it writes
+# copies or removes a file, or opens one; the quoted literals of its arguments may be what it writes (an open, only
+# with a mode that writes: a literal of its own, or `>` in front of the file's name, as perl has it)
 CODE_WRITES = re.compile(
-    r"(?i)(write|append|rename|unlink|remove|rm|rmdir|copy|move|mkdir|truncate|symlink|link|chmod|chown|touch|"
-    r"replace|dump|save|put)\w*\s*\(|\bopen\w*\s*\([^)]*?['\"](\+?>{1,2}|[wax]\+?b?|r\+b?)['\"]"
+    r"(?i)\b(open|write|append|rename|unlink|remove|rm|rmdir|copy|move|mkdir|truncate|symlink|link|chmod|chown|"
+    r"touch|replace|save)\w*"
 )
+OPEN_MODE = re.compile(r"\s*(\+?[<>]{1,2}|[wax]\+?b?|r\+b?)\s*")
 CODE_LITERAL = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"|`([^`\n]*)`")
 MAX_LITERAL = 4096  # a longer quoted literal is not a file name
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
@@ -1164,9 +1167,9 @@ def _walk(
 
 def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
     """The files the code an interpreter runs (RAW_INTERPRETERS: its -c/-e word, its heredoc or here-string) may
-    write, as written: for Python that passes pyscript's gate, what it writes (pyscript.writes(); one it cannot name:
-    each of its one-word literals); for other code, each quoted literal in it when it has a word that writes
-    (CODE_WRITES)."""
+    write, as written: for Python that passes pyscript's gate, what it writes (pyscript.writes(): with the literals of
+    a target it cannot name); for other code, the quoted literals of the arguments of each call that writes
+    (CODE_WRITES: up to its closing parenthesis, or to the end of the statement without one)."""
     name = PurePath(str(w[prog].value)).name if prog < len(w) and w[prog].literal else ""
     if not RAW_INTERPRETERS.fullmatch(name):
         return []
@@ -1176,10 +1179,26 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
     for text in codes:
         tree = pyscript.gate(text) if pyscript.PYTHON.fullmatch(name) else None
         if tree is not None:
-            got = pyscript.writes(tree)
-            out += got if got is not None else pyscript.words(tree)
-        elif CODE_WRITES.search(text):
-            out += [x for m in CODE_LITERAL.finditer(text) for x in m.groups() if x and len(x) <= MAX_LITERAL]
+            named, unnamed = pyscript.writes(tree)
+            out += [*named, *(unnamed or ())]
+            continue
+        for m in CODE_WRITES.finditer(text):
+            rest, depth = text[m.end() :].lstrip(), 0
+            args = re.split(r"[;\n]", rest, maxsplit=1)[0]
+            for i, c in enumerate(rest if rest[:1] == "(" else ()):  # up to its closing parenthesis
+                depth += (c == "(") - (c == ")")
+                if not depth:
+                    args = rest[: i + 1]
+                    break
+            lits = [x for g in CODE_LITERAL.finditer(args) for x in g.groups() if x and len(x) <= MAX_LITERAL]
+            if m.group(1).lower() == "open":  # open(f, "w"), open my $f, ">", "f"; open(F, ">f")
+                mode = any(OPEN_MODE.fullmatch(x) for x in lits)
+                lits = (
+                    [x for x in lits if not OPEN_MODE.fullmatch(x)]
+                    if mode
+                    else [re.sub(r"^\s*\+?[<>]{1,2}\s*", "", x) for x in lits if re.match(r"\s*\+?[<>]", x)]
+                )
+            out += lits
     return out
 
 
@@ -1193,10 +1212,11 @@ def _targets(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: 
             texts = _expand(str(t.value), t.literal, env, t.raw.startswith("~"))
             out.append(_Target(texts, here[wr.seg], wr, t.raw))
         for k, (seg, w) in enumerate(zip(segs, words_of)):
-            for path in _code_writes(seg, w, info[k].prog):
+            for path in _code_writes(seg, w, info[k].prog):  # also from HOME: Path.home() / "x", os.homedir()
                 tok = Tok("word", 0)
                 tok.value, tok.raw = path, path
-                out.append(_Target([path], here[k], Write(k, tok), path))
+                texts = _expand(path, True, env, True)
+                out.append(_Target(texts, here[k] | {str(Path.home())}, Write(k, tok), path))
 
     def unparsed(text: str) -> None:  # read as text only
         out.append(_Target([text], frozenset(), Write(-1, Tok("word", 0)), text))

@@ -374,8 +374,8 @@ class ProgramHolesTest(BashWriteCase):
             "python3 -c \"import tomllib,json,sys; json.dump(tomllib.load(open('foreman.toml','rb')), sys.stdout)\"",
             f"node -e \"console.log(fs.readFileSync('{TABLE}','utf8').replace('a','b'))\"",
             py(
-                'import json, tomllib\nfrom pathlib import Path\nx = "a"\n'
-                'Path(f"/tmp/{x}.json").write_text(json.dumps(tomllib.load(open("foreman.toml", "rb"))))'
+                'import json\nfrom pathlib import Path\nx = "a"\n'
+                'Path(f"/tmp/{x}.json").write_text(json.dumps(open("foreman.toml").read()))'
             ),
         )
         got = {cmd: self.deny(cmd) for cmd in cases}
@@ -398,8 +398,11 @@ class ProgramHolesTest(BashWriteCase):
             "python3 -c \"import sys; print(open('foreman.toml', 'rb').read(), file=sys.stderr)\"": "allow",
             py("s = open('foreman.toml').read()\nopen('notes.md', 'w').write(s)"): "allow",
             py("import json\nprint(json.dumps(open('foreman.toml').read()))", head="python3 -I -"): "allow",
-            # a file it cannot name: any of its literals may be it
-            py("import re\ns = open('foreman.toml').read()\nopen(re.sub('x', 'y', 'a'), 'w').write(s)"): "file:config",
+            # a file it cannot name: the literals of its target (and of the names in it) may be it; a name bound
+            # some other way (a loop, an argument), any of the program's (review round 1, F2, F4)
+            py("import re\nn = 'foreman.toml'\nopen(re.sub('x', 'y', n), 'w').write('')"): "file:config",
+            py("for n in ['foreman.toml']:\n    open(n + '', 'w').write('')"): "file:config",
+            py("import re\ns = open('foreman.toml').read()\nopen(re.sub('x', 'y', 'a'), 'w').write(s)"): "allow",
             'perl -e \'open(my $f, ">", "foreman.toml")\'': "file:config",
             "python3 -c \"import os; os.rename('x', 'foreman.toml')\"": "file:config",  # not through the gate
             "cd tests && node -e \"require('fs').writeFileSync('guard.tsv', '')\"": "file:table",
@@ -485,8 +488,8 @@ class ProgramGateTest(unittest.TestCase):
             with self.subTest(body=body):
                 tree = pyscript.gate(body)
                 self.assertIsNotNone(tree)
-                got = pyscript.writes(tree)
-                self.assertEqual(None if got is None else set(got), want)
+                named, unnamed = pyscript.writes(tree)
+                self.assertEqual(None if unnamed is not None else set(named), want)
 
     def test_paths_in_prose(self):
         self.assertEqual(pyscript.blank('x = "/opt/My App/a b"\n'), "x = \"\"\n\n'/opt/My'\n'App/a'")

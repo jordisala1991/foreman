@@ -227,8 +227,11 @@ free, and so is text that only mentions a write (a quoted heredoc to `cat`, `for
 refusal is `file:<class>` too, with the command around the name. A guard table's Bash rows get the same `{state}`,
 `{state_root}` and `{registry}`. The code an interpreter gets on the line (`python -c`, `node -e`, a heredoc to
 `python3` or `perl`) counts as a writer too: Python that passes the gate below by the files it writes (`open(…, "w")`,
-`Path(…).write_text`, `rename`…; one it cannot name makes each of its one-word literals a target), any other code by
-each quoted literal in it when it has a word that writes (`writeFileSync(`, `open(…, ">"`…). Reading stays free
+`Path(…).write_text`, `rename`…; for one it cannot name, the literals in it and in the values of the names it uses,
+or all of the program's when such a name is bound by a loop or an argument), any other code by the quoted literals in
+the arguments of a call that writes (`writeFileSync(…)`, `os.rename(…)`, `open(…, "w")`, perl's `open my $f, ">",
+"x"`). Each is taken from the session's folder and from the home folder (`Path.home() / "x"`), with `~` expanded.
+Reading stays free
 (`tomllib.load(open("foreman.toml", "rb"))`). Not seen: a script file that writes them (`python3 x.py`), code piped
 into an interpreter (`echo … | python3`), `git checkout` or `git restore` of them in the main checkout by the orchestrator (an
 agent's is refused: «The main checkout», below; a merge by `foreman integrate` tests them first: docs/config.md, «Seeing the

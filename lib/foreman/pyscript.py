@@ -263,10 +263,11 @@ def _path(node: ast.AST, paths: set[str], seen: frozenset[str], known: dict[str,
     return None
 
 
-def writes(tree: ast.AST) -> frozenset[str] | None:
-    """The files a program that passed the gate writes, as written (relative to its folder), or None when it may
-    write one it cannot name: `open` with a mode that writes (or one not written as a literal), a Path's method that
-    writes (WRITES_SELF, WRITES_BOTH), or either of them taken without being called."""
+def writes(tree: ast.AST) -> tuple[frozenset[str], frozenset[str] | None]:
+    """(the files a program that passed the gate writes and names, as written (relative to its folder); None when it
+    names them all, else the str literals of each target it cannot name, or all of its one-word ones when it takes a
+    writer without calling it). A write: `open` with a mode that writes (or one not written as a literal), a Path's
+    method that writes (WRITES_SELF, WRITES_BOTH)."""
     binds: dict[str, int] = {}  # how many times each name is bound, any way (an assignment, an import, a def…)
     known: dict[str, list[ast.expr]] = {}  # the values of the plain assignments to a name
     imported: dict[str, str] = {}  # a name an import binds -> what it is (pathlib.Path, pathlib)
@@ -297,11 +298,30 @@ def writes(tree: ast.AST) -> frozenset[str] | None:
     paths = {n for n, what in once.items() if what in {f"pathlib.{p}" for p in PATHS}}
     paths |= {f"{n}.{p}" for n, what in once.items() if what == "pathlib" for p in PATHS}
     out: set[str] = set()
+    unnamed: set[str] | None = None
 
-    def add(node: ast.AST) -> bool:
-        got = _path(node, paths, frozenset(), known)
+    def lits(node: ast.AST, seen: frozenset[str]) -> set[str] | None:  # None: any word of the program
+        got: set[str] = set()
+        for c in ast.walk(node):
+            if isinstance(c, ast.Constant) and isinstance(c.value, str) and c.value:
+                got.add(c.value)
+            elif isinstance(c, ast.Name) and c.id not in seen and c.id in known:  # its assigned values
+                for v in known[c.id]:
+                    more = lits(v, seen | {c.id})
+                    if more is None:
+                        return None
+                    got |= more
+            elif isinstance(c, ast.Name) and c.id in binds and c.id not in imported:  # a loop's, an argument…
+                return None
+        return got
+
+    def add(node: ast.AST | None) -> None:
+        nonlocal unnamed
+        got = None if node is None else _path(node, paths, frozenset(), known)
+        if got is None:
+            more = lits(node, frozenset()) if node is not None else None
+            unnamed = (unnamed or set()) | (set(words(tree)) if more is None else more)
         out.update(got or ())
-        return got is not None
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id == "open":  # the builtin, or what the program bound to it
@@ -312,7 +332,7 @@ def writes(tree: ast.AST) -> frozenset[str] | None:
             continue
         call = None if obj is None and "open" in binds else calls.get(id(node))
         if call is None or any(isinstance(a, ast.Starred) for a in call.args) or None in [k.arg for k in call.keywords]:
-            return None  # o = open, w = p.write_text: a writer taken to be called elsewhere; f(*a), f(**k)
+            return frozenset(out), frozenset(words(tree))  # o = open, w = p.write_text; f(*a), f(**k)
         kw = {k.arg: k.value for k in call.keywords}
         args = list(call.args)
         if obj is None:  # open(file, mode): the file is the object
@@ -325,11 +345,9 @@ def writes(tree: ast.AST) -> frozenset[str] | None:
             dest = args[0] if len(args) == 1 else (kw.get("target") if not args else None)
             if dest is None:
                 continue  # str.replace(a, b), dict.copy(), datetime.replace(year=…): not a Path's
-            if not add(dest):
-                return None
-        if obj is None or not add(obj):
-            return None
-    return frozenset(out)
+            add(dest)
+        add(obj)
+    return frozenset(out), None if unnamed is None else frozenset(unnamed)
 
 
 def _prose(text: str) -> bool:
@@ -408,4 +426,5 @@ def read(body: str) -> Program | None:
     text = blank(body) if tree is not None else None
     if tree is None or text is None:
         return None
-    return Program(text, writes(tree), frozenset(words(tree)))
+    named, unnamed = writes(tree)
+    return Program(text, named if unnamed is None else None, frozenset(words(tree)))
