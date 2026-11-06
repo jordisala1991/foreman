@@ -125,37 +125,6 @@ def home_image(project: Project, path: str) -> tuple[bytes, str, str] | None:
 # ---------- agents ----------
 
 
-def first_text(path: util.PathLike) -> str:
-    """The first message of a transcript (the agent's assignment)."""
-    try:
-        with open(path, "rb") as f:
-            c = json.loads(f.readline()).get("message", {}).get("content", "")
-        return c if isinstance(c, str) else " ".join(x.get("text", "") for x in c if isinstance(x, dict))
-    except (OSError, ValueError, AttributeError):
-        return ""
-
-
-def last_text(path: util.PathLike) -> str | None:
-    """The agent's last text message (the tail of its transcript)."""
-    try:
-        with open(path, "rb") as f:
-            f.seek(max(0, os.path.getsize(path) - 400_000))
-            lines = f.read().decode("utf-8", "ignore").splitlines()
-    except OSError:
-        return None
-    for line in reversed(lines):
-        try:
-            msg = json.loads(line).get("message") or {}
-        except (ValueError, AttributeError):
-            continue
-        if msg.get("role") != "assistant" or not isinstance(msg.get("content"), list):
-            continue
-        for c in reversed(msg["content"]):
-            if isinstance(c, dict) and c.get("type") == "text" and c.get("text", "").strip():
-                return c["text"].strip()[:600]
-    return None
-
-
 def context_tokens(path: util.PathLike) -> int | None:
     """The agent's context tokens: those of its last response, as transcripts.context defines them (an agent's
     own file is all sidechain records)."""
@@ -183,7 +152,7 @@ def agents(project: Project, lock_list: list[Status], branch_of_agent: dict[str,
             end = h.get("end") or h.get("delivered") or h.get("activity") or h.get("start")
             if (iso_age(end) or 0) > 900:
                 continue
-        task = memo(("first", path), lambda path=path: first_text(path), deps=[path])
+        task = memo(("first", path), lambda path=path: transcripts.first_prompt(path), deps=[path])
         who = identity.of(project, h, task, branch_of_agent)  # recorded first, the brief only for what is missing
         name = who["name"] or f"{h.get('type') or 'agent'} {aid[:6]}"
         short = LAUNCH_LINE.sub("", task.strip(), count=1).strip() or task
@@ -207,7 +176,9 @@ def agents(project: Project, lock_list: list[Status], branch_of_agent: dict[str,
         a["activity_ts"] = None if last is None else int(last)
         with contextlib.suppress(OSError):  # a transcript gone: no last message nor context
             os.stat(path)
-            a["last"] = memo(("last", path), lambda path=path: last_text(path), deps=[path])
+            a["last"] = memo(
+                ("last", path), lambda path=path: (transcripts.last_text(path) or "")[:600] or None, deps=[path]
+            )
             a["context"] = memo(("ctx", path), lambda path=path: context_tokens(path), deps=[path])
         a["start_ts"] = iso_ts(h.get("start"))
         a["status"] = (

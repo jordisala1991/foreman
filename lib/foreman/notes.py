@@ -1,13 +1,13 @@
 """Notes, progress lines, the owner's inbox, heartbeats and recurring tasks of a project.
 
 - Notes (forked from an earlier in-house version): `notes/YYYY-MM-DD.md`, append only, with the real time.
-- Progress (tools/progress.sh): one JSON line per update in `<state>/progress.jsonl` (keys time, agent, text;
+- Progress (`foreman progress`): one JSON line per update in `<state>/progress.jsonl` (keys time, agent, text;
   agent_id when the caller is known by it, done and outcome (ok, partial, failed) for a delivery).
-- Inbox (tools/panel/inbox.py): `<state>/inbox.json`, messages between the owner (panel, phone) and the orchestrator
+- Inbox: `<state>/inbox.json`, messages between the owner (panel, phone) and the orchestrator
   (keys id, time, from, text, read, and optionally decision / move; an answer from the panel that resolved its
   decision carries did, resolved and freed too, and free when it is the owner's own words, to interpret).
-- Heartbeats (tools/panel/heartbeat.py): `<state>/heartbeats.json`, {name: ISO time}.
-- Recurring tasks (tools/panel/recurring.json, now [[recurring]] in foreman.toml): each has sources, a heartbeat, a
+- Heartbeats: `<state>/heartbeats.json`, {name: ISO time}.
+- Recurring tasks (`[[recurring]]` in foreman.toml): each has sources, a heartbeat, a
   file glob under the home or an entry of a log page, with the maximum hours between two runs (`max_h`) or a daily
   local time (`at = "HH:MM"`: late once that time has passed with nothing done since); a `models` source is a glob of
   reviews, late when agents run on a model its newest review's `Models:` line does not name.

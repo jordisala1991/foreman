@@ -48,8 +48,6 @@ KINDS = (
     "decision",
 )
 TEXT_CHARS = 160
-# «Outgoing session: NAME (session ID)»: a line of the handover notes foreman wrote before 0.44 (old notes are read)
-OUTGOING = re.compile(r"Outgoing session: (\S+) \(session ([0-9a-f-]{8,})")
 HEADING = re.compile(r"^## (\d\d):(\d\d) (.*)$")
 SHORT_NOTE = re.compile(r"^- (\d\d):(\d\d) (.*)$")
 INTEGRATED = re.compile(r"^(Integrated|Measured) \S+?:(\S+) \(")
@@ -309,8 +307,8 @@ def day_files(project: Project, since: datetime, until: datetime) -> list[tuple[
     return out
 
 
-def from_notes(w: World, since: datetime, until: datetime, handovers: dict[str, str]) -> list[Event]:
-    """Notes headings in the window; `handovers` gets {session: name} of the outgoing orchestrators they name."""
+def from_notes(w: World, since: datetime, until: datetime) -> list[Event]:
+    """Notes headings in the window."""
     out: list[Event] = []
     for day, f in day_files(w.p, since, until):
         try:
@@ -318,8 +316,6 @@ def from_notes(w: World, since: datetime, until: datetime, handovers: dict[str, 
         except OSError:
             continue
         for n, ln in enumerate(lines, 1):
-            for name, sid in OUTGOING.findall(ln):
-                handovers[sid] = name
             m = HEADING.match(ln) or SHORT_NOTE.match(ln)
             if not m:
                 continue
@@ -476,13 +472,10 @@ def from_inbox(w: World, since: datetime, until: datetime) -> list[Event]:
     return out
 
 
-def orchestrators(project: Project, handovers: dict[str, str]) -> tuple[dict[str, str], orchestrator.Mark | None]:
-    """{session: name} of the product's orchestrators: the marked one and those handover notes name."""
-    names = dict(handovers)
+def orchestrators(project: Project) -> tuple[dict[str, str], orchestrator.Mark | None]:
+    """({session: name} of the product's orchestrator, the marked one; its mark)."""
     cur = orchestrator.current(project)
-    if cur:
-        names[cur["session"]] = cur["name"] or names.get(cur["session"]) or "orchestrator"
-    return names, cur
+    return ({cur["session"]: cur["name"] or "orchestrator"} if cur else {}), cur
 
 
 def from_orchestrators(
@@ -516,9 +509,8 @@ def from_orchestrators(
 def collect(project: Project, since: datetime, until: datetime, kinds: Collection[str]) -> tuple[World, list[Event]]:
     """The events of `kinds` within [since, until), in time order (by KINDS within the same minute)."""
     w = World(project)
-    handovers: dict[str, str] = {}
-    evs = from_notes(w, since, until, handovers)
-    names, cur = orchestrators(project, handovers)
+    evs = from_notes(w, since, until)
+    names, cur = orchestrators(project)
     w.orchestrators, w.mark = names, cur
     evs += from_orchestrators(w, since, until, names, cur)
     evs += from_launches(w, since, until)

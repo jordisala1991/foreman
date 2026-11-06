@@ -138,6 +138,7 @@ class TranscriptsTest(unittest.TestCase):
             self.assertIsNone(transcripts.model(p))
             self.assertIsNone(transcripts.cost_state(p))
             self.assertIsNone(transcripts.last_message(p))
+            self.assertIsNone(transcripts.last_text(p))
             self.assertEqual(transcripts.head(p), "")
         self.assertEqual(transcripts.subagents(None), [])
         self.assertEqual(transcripts.subagents(self.tmp / "nope.jsonl"), [])
@@ -230,13 +231,16 @@ class TranscriptsTest(unittest.TestCase):
                 json.dumps({"type": "user", "message": {"content": "hi"}}),
                 rec("a", text="one"),
                 json.dumps({"type": "user", "message": {"content": [{"type": "tool_result"}]}}),
-                rec("b", text="two"),
-                rec("c", sidechain=True, text="not me"),
+                rec("b", sidechain=True, text="two"),
+                json.dumps({"type": "user", "isSidechain": True, "message": {"content": "next"}}),
             ],
             "g.jsonl",
         )
-        lm = transcripts.last_message(g)
+        lm = transcripts.last_message(
+            g
+        )  # a subagent's own file: its records are sidechain ones; the prompt passed over
         self.assertEqual(lm["text"], "one\n\ntwo")
+        self.assertEqual(transcripts.last_text(g), "two")  # the newest text block alone (the panel's card)
         self.assertEqual(os.path.basename(transcripts.transcript_of("S1") or "x"), "x")
 
     def test_session_info_sessions_and_when_the_cost_state_was_written(self):

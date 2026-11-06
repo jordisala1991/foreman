@@ -14,7 +14,7 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
   previous?} (`interactive`: the event's `isInteractive`; `previous`: the id the module ran under until then);
   stdout {"active": false} outside an active project (the module stays inert), else {"active": true, "below": bool,
   "min": CLAUDE_CODE_MIN} plus "grants": true when the project has `[deny.grants]` groups (`grant`), "status" (the
-  owner's line, i18n `claude_min_owner`) when `claude_code` is lower than the minimum. In an active project it deletes
+  owner's line, i18n `claude_min_owner`) when `claude_code` is lower than the minimum. In an active project it records
   the session in <state root>/install/sessions.json
   (versions.record_session) with what `root` runs, the Claude Code version (`claude_code`) and the session's host
   when its environment reaches this process (`CLAUDE_CODE_ENTRYPOINT`, information only): after `/reload-plugins`
