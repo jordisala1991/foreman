@@ -30,7 +30,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from . import notes, transcripts, util
+from . import transcripts, util
 
 if TYPE_CHECKING:
     from .config import Project
@@ -333,8 +333,8 @@ def new_launch(
     if review:
         rec["review"] = True
     f = launches_file(project)
-    with notes.file_lock(f):
-        d = prune(util.read_json(f, {}), loop.agents(project))
+    with util.locked_json(f, {}) as cur:
+        d = prune(cur, loop.agents(project))
         token = new_token()
         while token in d:
             token = new_token()
@@ -346,8 +346,7 @@ def new_launch(
 def cancel(project: Project, name: str) -> list[str]:
     """Drops the pending launches of `name`; the tokens dropped."""
     f = launches_file(project)
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
+    with util.locked_json(f, {}) as d:
         hits = [t for t, r in d.items() if isinstance(r, dict) and r.get("name") == name and not r.get("agent")]
         for t in hits:
             d.pop(t)
@@ -369,8 +368,7 @@ def link(
     launch already tied to another agent alone (the transcript path: a brief may quote another agent's line).
     Whether it tied it."""
     f = launches_file(project)
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
+    with util.locked_json(f, {}) as d:
         rec = d.get(token)
         if not isinstance(rec, dict) or (not relink and rec.get("agent") not in (None, aid)):
             return False
@@ -449,8 +447,7 @@ def name_hand(project: Project, ref: str, name: str, **fields: object) -> str:
     from . import loop
 
     f = loop.agents_file(project)
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
+    with util.locked_json(f, {}) as d:
         aid = resolve_agent(d, ref)
         others = [x for x in live_with_name(project, name) if x != aid]
         if others:
@@ -614,8 +611,8 @@ def record_call(project: Project, ev: Event) -> None:
         if not calls:
             return
         f = callers_file()
-        with notes.file_lock(f):
-            d = _prune_callers(util.read_json(f, {}) or {})
+        with util.locked_json(f, {}) as cur:
+            d = _prune_callers(cur or {})
             caller: Caller = {
                 "at": time.time(),
                 "session": session,
@@ -641,8 +638,8 @@ def drop_call(ev: Event) -> None:
         f = callers_file()
         if not f.exists():
             return
-        with notes.file_lock(f):
-            d = util.read_json(f, {}) or {}
+        with util.locked_json(f, {}) as cur:
+            d = cur or {}
             e = d.get(tid)
             if not isinstance(e, dict) or e.get("background"):
                 return

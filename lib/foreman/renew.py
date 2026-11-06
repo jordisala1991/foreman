@@ -146,7 +146,7 @@ def _append(project: Project, rec: dict[str, Any]) -> None:
     f = renewals_file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
     cut = (util.now() - timedelta(days=RETAIN_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
-    with notes.file_lock(f):
+    with util.file_lock(f):
         try:
             old = f.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:

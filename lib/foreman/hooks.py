@@ -107,7 +107,6 @@ from . import (
     i18n,
     identity,
     loop,
-    notes,
     orchestrator,
     pause,
     transcripts,
@@ -199,8 +198,7 @@ def hook_agents(project: Project, ev: Event) -> None:
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
     warning: str | None = None
     entry: Agent | None = None
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
+    with util.locked_json(f, {}) as d:
         if launch_tool:  # the launcher's call (orchestrator or a subagent): the new agent's identity
             warning = identity.launched(project, d, ev)[1]
         if aid:
@@ -208,8 +206,7 @@ def hook_agents(project: Project, ev: Event) -> None:
             if name == "SubagentStop" and aid in d and wants_check(project, d[aid], ev):
                 entry = dict(d[aid])
         cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 86400))
-        d = {k: v for k, v in d.items() if v.get("end", "9") > cutoff}
-        util.write_json(f, d)
+        util.write_json(f, {k: v for k, v in d.items() if v.get("end", "9") > cutoff})
     if warning:
         emit("PostToolUse", warning)
     if entry is not None and aid:  # outside the lock: the check runs git
@@ -232,8 +229,7 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
         return
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
     block: str | None = None
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
+    with util.locked_json(f, {}) as d:
         a = d.get(aid)
         if not isinstance(a, dict):
             return
@@ -353,9 +349,8 @@ def notified(project: Project, fname: str, key: str, value: str) -> bool:
     """Whether `key` already has `value` in <state>/fname (a once-per-case marker); records it if not. The file keeps
     the last 50 keys."""
     f = project.state / fname
-    with notes.file_lock(f):
-        d = util.read_json(f, {})
-        d = d if isinstance(d, dict) else {}
+    with util.locked_json(f, {}) as raw:
+        d = raw if isinstance(raw, dict) else {}
         if d.get(key) == value:
             return True
         d.pop(key, None)

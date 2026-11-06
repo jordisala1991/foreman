@@ -889,7 +889,7 @@ def change_answer(p: Project, ref: str, option: str, free: bool = False) -> Obj:
     mark = {"free": True} if free else {}
     b, f = Backlog(p), notes.inbox_path(p)
     by = f"{p.owner}, {stamp()} (panel)"
-    with notes.file_lock(f):
+    with util.file_lock(f):
         msgs = util.read_json(f, [])
         try:
             with b.mutate(timeout=DECIDE_LOCK_S) as data:

@@ -67,7 +67,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import install, notes, util
+from . import install, util
 
 if TYPE_CHECKING:
     from .config import Project
@@ -289,7 +289,7 @@ def record_session(
     e = read_sessions().get(session)
     if _updated(e, me, project, cwd, now, claude_code, entrypoint) is None:
         return e
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read_sessions()
         new = _updated(d.get(session), me, project, cwd, now, claude_code, entrypoint)
         if new is None:
@@ -303,7 +303,7 @@ def mark_told(session: str, key: str, now: float | None = None) -> None:
     """Remember that `session` was told about the installed version `key`."""
     now = time.time() if now is None else now
     f = sessions_file()
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = read_sessions()
         e = d.get(session)
         if not e or e.get("told") == key:
@@ -533,7 +533,7 @@ def orphan_told(root: str, version: str, env: Mapping[str, str] | None = None, n
     now = time.time() if now is None else now
     session = env.get("CLAUDE_CODE_SESSION_ID") or None
     f = orphan_told_file()
-    with notes.file_lock(f):
+    with util.file_lock(f):
         d = util.read_json(f, {})
         d = d if isinstance(d, dict) else {}
         e = d.get(root)
