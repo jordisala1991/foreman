@@ -187,6 +187,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -335,6 +336,26 @@ def read_measure(project: Project, session: object) -> dict[str, Any] | None:
     if not isinstance(d, dict):
         return None
     return {k: d.get(k) for k in MEASURE_KEYS}
+
+
+def quota(projects: Iterable[Project], now: float | None = None) -> list[dict[str, Any]]:
+    """The account's usage-limit windows as Claude Code last reported them in any session of `projects`
+    (the newest measure that has some): [{kind, percent_used, resets_at}] with the windows not yet renewed;
+    [] when no measure has them. It is Claude Code's own figure, not an estimate."""
+    now = now or time.time()
+    best: tuple[str, list[dict[str, Any]]] = ("", [])
+    for p in projects:
+        for f in measure_dir(p).glob("*.json"):
+            d = util.read_json(f, None)
+            lim = d.get("rate_limits") if isinstance(d, dict) else None
+            if lim and isinstance(d.get("at"), str) and d["at"] > best[0]:
+                best = (d["at"], lim)
+    out = []
+    for x in best[1]:
+        t = util.iso_epoch(x.get("resets_at")) if isinstance(x, dict) else None
+        if isinstance(x.get("percent_used"), (int, float)) and (t is None or t > now):
+            out.append(x)
+    return out
 
 
 def context_text(m: dict[str, Any] | None, limit: int | None = None) -> str:

@@ -452,6 +452,7 @@ function renderChips(d){
     ...d.locks.map(l => chip('', `${esc(lockName(l.name))} <b>${esc(holder(l) || t('lock_free_lc'))}</b>`, 'now')),
     chip(alive.some(a => a.status==='maybe stuck') ? 'bad' : '', `${t('chip_agents')} <b>${alive.length}</b>`, 'work'),
     prs.some(r => r.prs.length) ? chip(prs.some(r => r.prs.some(x => x.checks.fail)) ? 'bad' : '', `${t('chip_prs')} <b>${prs.reduce((n, r) => n + r.prs.length, 0)}</b>`, 'work') : '',
+    ...((OVER || {}).quota || []).map(q => chip(q.percent_used>=95?'bad':q.percent_used>=80?'warn':'', `${t(q.kind==='five_hour'?'chip_quota5':'chip_quota7')} <b>${Math.round(q.percent_used)} %</b>`, 'system')),
     chip(memU>=80?'bad':memU>=65?'warn':'', `${t('chip_memory')} <b>${memU ?? '?'} %</b>`, 'system'),
     chip(mm.disk_free_gb<50?'bad':mm.disk_free_gb<100?'warn':'', `${t('chip_disk')} <b>${mm.disk_free_gb ?? '?'} GB</b>`, 'system'),
   ].join('');

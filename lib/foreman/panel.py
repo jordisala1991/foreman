@@ -59,6 +59,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from . import (
     config,
     heartbeat,
+    hooks_mod,
     i18n,
     identity,
     install,
@@ -996,6 +997,7 @@ class Handler(BaseHTTPRequestHandler):
                     "projects": overview(lock_list),
                     "locks": lock_list,
                     "mac": mac_stats(),
+                    "quota": hooks_mod.quota(REG.projects.values()),
                     "errors": REG.errors,
                     "language": REG.language(),
                     "version": page_version(),
