@@ -203,7 +203,7 @@ scripts behind `lock`, `time-limit` and `hung-shells`). `tests/test_docs_tied.py
 | `timeline.py`, `transcripts.py` | the product's history (events in time order, what `foreman catchup` reads); the one reader of Claude Code's transcripts |
 | `start.py`, `plain.py`, `catchup.py`, `permissions.py` | the new orchestrator's start summary; the check of texts for the owner; `foreman catchup`, what the owner missed in four parts; `foreman permissions`, the permissions in bands and a candidate `foreman.toml` tested against the guard table and the orchestrator's lifeline, and `apply`, which puts it in place |
 | `init.py` | `foreman init`: a new project's home (minimal `foreman.toml`, starting rules, backlog) and its registry entry, appended |
-| `panel.py`, `panel_cache.py`, `panel_cards.py`, `panel_locks.py`, `panel_registry.py`, `panel_wiki.py`, `sources.py` | the web panel: server and routes, cache, backlog cards, locks, registry, wiki, and what it reads of a product's state |
+| `panel.py`, `panel_cache.py`, `panel_cards.py`, `panel_locks.py`, `panel_registry.py`, `panel_wiki.py` | the web panel: server and routes, cache, backlog cards, locks, registry, wiki |
 | `install.py`, `release.py`, `selftest.py`, `quality.py`, `cover.py`, `mods.py` | where foreman is installed and the panel service; version and release checks; the static checks and the test runner; the code quality checks (ruff, pyright); the coverage run; the hooks module's check (claude plugin validate/test) the selftest runs |
 | `i18n/` | the texts a person reads, `en.json` and `es.json` (same keys in both: a static check) |
 

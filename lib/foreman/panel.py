@@ -66,7 +66,7 @@ from . import (
     loop,
     notes,
     orchestrator,
-    sources,
+    pause,
     transcripts,
     util,
     versions,
@@ -79,7 +79,7 @@ from .panel_registry import REG
 from .panel_wiki import wiki_dir, wiki_get, wiki_list, wiki_search
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Callable, Collection
 
     from .config import Project, Table
     from .lock import Status
@@ -165,16 +165,14 @@ def context_tokens(path: util.PathLike) -> int | None:
 LAUNCH_LINE = re.compile(r"^\[foreman launch [a-z2-7]{10}\][^\n]*\n?")
 
 
-def agents(
-    project: Project, src: sources.ProjectState, lock_list: list[Status], branch_of_agent: dict[str, str]
-) -> list[Obj]:
+def agents(project: Project, lock_list: list[Status], branch_of_agent: dict[str, str]) -> list[Obj]:
     """Agents running, waiting for their own background task, or finished (delivered or stopped) in the last 15 min;
     the state is loop.agent_state, the same one the loop pass and `foreman agents` use. Name, issue and branch are
     identity.of: what was recorded at launch (or by hand) first, then the brief («Issue: ID», «Branch `y`») and
     `branch_of_agent` (the backlog's sub-issue with the agent's name) for what is missing."""
     holders, waiting = lock.people(lock_list)
     out = []
-    for aid, h in src.agents().items():
+    for aid, h in loop.agents(project).items():
         path = h.get("transcript")
         if not path:  # internal subagents (no transcript): not the orchestrator's agents
             continue
@@ -459,11 +457,9 @@ def foreman_sessions() -> Obj:
 
 def project_summary(p: Project) -> Obj:
     panel = p.section("panel")
-    src = sources.ProjectState(p)
-    orch = src.orchestrator()
     return {
         "name": p.name,
-        "orchestrator": orch,
+        "orchestrator": orchestrator.current(p),
         "orchestrator_health": orchestrator_health(p),
         "mode": p.mode,
         "writable": True,
@@ -478,8 +474,23 @@ def project_summary(p: Project) -> Obj:
     }
 
 
+def paused(project: Project) -> str | None:
+    """«paused at HH:MM» while the product is paused (pause.since), else None."""
+    at = pause.since(project)
+    return f"paused at {at}" if at else None
+
+
+def report(project: Project) -> Obj | None:
+    """<state>/report.md: its text and when it was written (not its age: the polled state keeps its ETag while
+    nothing changes), or None."""
+    f = project.state / "report.md"
+    try:
+        return {"text": f.read_text(encoding="utf-8", errors="replace"), "ts": int(f.stat().st_mtime)}
+    except OSError:
+        return None
+
+
 def project_state(project: Project, lock_list: list[Status]) -> Obj:
-    src = sources.ProjectState(project)
     bl = backlog_cards(project)  # shared and cached: read only (the cards themselves go in /api/backlog)
     bl = {**bl, "issues": bl.get("issues", [])}
     branch_of_agent = {
@@ -489,7 +500,7 @@ def project_state(project: Project, lock_list: list[Status]) -> Obj:
         for s in c["subs"]
         if s.get("agent") and s.get("branch") and s.get("status") == "in progress"
     }
-    agent_list = agents(project, src, lock_list, branch_of_agent)
+    agent_list = agents(project, lock_list, branch_of_agent)
     live_branches = {a["branch"] for a in agent_list if a["branch"] and not a["end"]}
     repos = [repo_view(project, k, live_branches) for k in project.repos]
     live = issue_live(bl, agent_list, {b["branch"] for r in repos for b in r["branches"]})
@@ -500,23 +511,24 @@ def project_state(project: Project, lock_list: list[Status]) -> Obj:
             a["worktree"] = wt
             a["commit"] = git(wt, "log", "-1", "--format=%h %s").strip()[:140]
             a["uncommitted"] = len(git(wt, "status", "--short").splitlines())
-    inbox = src.inbox()
+    inbox = notes.inbox(project)
+    activity = [m for m in inbox if m.get("move")][::-1]
     return {
         **project_summary(project),
         "home": str(project.home),
         "resources": sorted(project.resources),
-        "paused": src.paused(),
-        "report": src.report(),
+        "paused": paused(project),
+        "report": report(project),
         "agents": agent_list,
         "issue_live": live,
         "backlog_error": bl.get("error"),
         "decisions": decisions_with_answers(bl, inbox),
         "messages": [m for m in inbox if not m.get("decision") and not m.get("move")][-10:],
-        "moves": [m for m in inbox if m.get("move")][-5:][::-1],
-        "activity": [m for m in inbox if m.get("move")][::-1],
-        "progress": src.progress(30),
+        "moves": activity[:5],
+        "activity": activity,
+        "progress": util.read_jsonl(project.state / "progress.jsonl", tail=30)[::-1],
         "notes": notes_last_hour(project),
-        "recurring": recurring(project, src),
+        "recurring": recurring(project),
         "grants": grant_requests(project),
         "repos": repos,
         "targets": {k: project.section("agents").get(k) for k in ("production_slots", "ready_target")},
@@ -602,9 +614,9 @@ def grant_approve(p: Project, group: str) -> Obj:
     return {"granted": group, "until": g["until"]}
 
 
-def recurring(project: Project, src: sources.ProjectState) -> list[Obj]:
+def recurring(project: Project) -> list[Obj]:
     """The recurring tasks of a product; an inactive one (set up, its orchestrator not started) has nothing late."""
-    out = notes.recurring(project, src.heartbeats())
+    out = notes.recurring(project, notes.heartbeats(project))
     for t in out:  # when, not how long ago (the ETag): the page counts the hours
         for part in t.get("parts", []):
             part.pop("hours", None)
@@ -623,18 +635,17 @@ def recurring(project: Project, src: sources.ProjectState) -> list[Obj]:
 def overview(lock_list: list[Status]) -> list[Obj]:
     out = []
     for p in REG.projects.values():
-        src = sources.ProjectState(p)
         bl = backlog_cards(p)
-        live = [a for a in src.agents().values() if a.get("transcript") and loop.agent_state(a) in loop.LIVE_STATES]
+        live = [a for a in loop.agents(p).values() if a.get("transcript") and loop.agent_state(a) in loop.LIVE_STATES]
         out.append(
             {
                 **project_summary(p),
                 "agents": len(live),
                 "counts": bl.get("counts", {}),
                 "decisions": len(bl.get("decisions", [])),
-                "paused": src.paused(),
-                "unread": sum(1 for m in src.inbox() if m.get("from") == "orchestrator" and not m.get("read")),
-                "late": [t["name"] for t in recurring(p, src) if t["late"]],
+                "paused": paused(p),
+                "unread": sum(1 for m in notes.inbox(p) if m.get("from") == "orchestrator" and not m.get("read")),
+                "late": [t["name"] for t in recurring(p) if t["late"]],
             }
         )
     # a product that does not load stays in the picker, marked, with its error (it has no data views)
@@ -717,12 +728,11 @@ def act(path: str, q: Query, body: str) -> Obj:
         repo, branch = arg("repo"), arg("branch")
         if repo not in p.repos or not branch:
             raise ValueError("repo and branch are required")
-        when = datetime.now().strftime("%Y-%m-%d %H:%M")
         return notes.inbox_add(
             p,
             f"approved {repo}:{branch}" + (f" (PR #{arg('pr')})" if arg("pr") else ""),
             sender="owner",
-            approve={"repo": repo, "branch": branch, "pr": arg("pr"), "approved": f"{p.owner}, {when} (panel)"},
+            approve={"repo": repo, "branch": branch, "pr": arg("pr"), "approved": f"{p.owner}, {stamp()} (panel)"},
         )
     if path == "/api/move" and arg("kind") == "project":
         pid, pos = arg("id"), int(arg("a") or 0)
@@ -739,7 +749,6 @@ def act(path: str, q: Query, body: str) -> Obj:
         return {"sentence": sentence}
     if path == "/api/move":
         iid, where = arg("id"), arg("a")
-        b = Backlog(p)
 
         def dest(k: int, n: int) -> int:
             if where == "up":
@@ -750,16 +759,16 @@ def act(path: str, q: Query, body: str) -> Obj:
                 return 0
             return int(where)
 
+        def rank(b: Backlog, data: Any) -> Any:
+            moved = b.rank_issue(data, iid, dest)
+            if moved is None:
+                raise _NoChange
+            return moved
+
         try:
-            with b.mutate() as data:
-                moved = b.rank_issue(data, iid, dest)
-                if moved is None:
-                    raise _NoChange
+            pid, k, d, order = mutate_or_400(p, rank)
         except _NoChange:
             return {"sentence": None}
-        except BacklogError as e:
-            raise ValueError(str(e)) from e
-        pid, k, d, order = moved
         sentence = f"{iid}: {k + 1} -> {d + 1} in {pid}" + (f" (before {order[d + 1]})" if d + 1 < len(order) else "")
         notes.inbox_add(p, sentence, sender="owner", move=iid)
         return {"sentence": sentence}
@@ -767,12 +776,7 @@ def act(path: str, q: Query, body: str) -> Obj:
         iid, on = arg("id"), arg("on") == "1"
         if not p.active:
             raise Refused(f"{p.name} is {p.mode}: no orchestrator to take the issue in")
-        b = Backlog(p)
-        try:
-            with b.mutate() as data:
-                b.want(data, iid, on, datetime.now().strftime("%Y-%m-%d %H:%M"))
-        except BacklogError as e:
-            raise ValueError(str(e)) from e
+        mutate_or_400(p, lambda b, data: b.want(data, iid, on, stamp()))
         sentence = (
             f"{iid}: the owner wants it (triage): take it in — ready if its brief is the plan, else refining and a "
             "planner"
@@ -785,12 +789,7 @@ def act(path: str, q: Query, body: str) -> Obj:
         iid = arg("id")
         if not p.active:
             raise Refused(f"{p.name} is {p.mode}: no orchestrator to tell")
-        b = Backlog(p)
-        try:
-            with b.mutate() as data:
-                b.reject(data, iid, i18n.panel_strings(REG.language())["reject_reason"])
-        except BacklogError as e:
-            raise ValueError(str(e)) from e
+        mutate_or_400(p, lambda b, data: b.reject(data, iid, i18n.panel_strings(REG.language())["reject_reason"]))
         sentence = f"{iid}: the owner discarded it (triage): canceled from the panel"
         notes.inbox_add(p, sentence, sender="owner", move=iid, want="reject")
         return {"canceled": True, "sentence": sentence}
@@ -800,11 +799,35 @@ def act(path: str, q: Query, body: str) -> Obj:
             raise Refused(f"{p.name} is {p.mode}: its loop is not running, there is nothing to pause")
         if arg("on") == "1":
             f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(f"paused at {datetime.now():%H:%M}\n")
+            f.write_text(f"paused at {stamp('%H:%M')}\n")
         elif f.exists():
             f.unlink()
         return {"paused": f.exists()}
     raise ValueError(f"no endpoint {path}")
+
+
+def stamp(fmt: str = "%Y-%m-%d %H:%M") -> str:
+    """Now (util.now: the inbox's clock too) for the marks the panel writes."""
+    return util.now().strftime(fmt)
+
+
+def mutate_or_400(p: Project, fn: Callable[[Backlog, Any], Any]) -> Any:
+    """fn(backlog, data) inside the backlog's mutate, and what it returns; a BacklogError (nothing saved) is the
+    caller's mistake: 400."""
+    b = Backlog(p)
+    try:
+        with b.mutate() as data:
+            out = fn(b, data)
+    except BacklogError as e:
+        raise ValueError(str(e)) from e
+    return out
+
+
+def card_of(b: Backlog, data: Any, ref: str) -> tuple[str, str]:
+    """(decision id, «ID, title» of its card) of a decision reference; the card is `ref` when it is not pending."""
+    did = b.decision_ref(data, ref)
+    d = next((x for x in data["decisions"] if x["id"] == did), None)
+    return did, clean(f"{did}, {d['title']}") if d else ref
 
 
 class _NoChange(Exception):
@@ -836,23 +859,18 @@ def decide(p: Project, ref: str, option: str, free: bool = False) -> Obj:
         raise ValueError("id and op are required")
     mark = {"free": True} if free else {}
     b = Backlog(p)
-    by = f"{p.owner}, {datetime.now():%Y-%m-%d %H:%M} (panel)"
+    by = f"{p.owner}, {stamp()} (panel)"
     did, card, freed = ref, ref, []
     try:
         with b.mutate(timeout=DECIDE_LOCK_S) as data:
-            did = b.decision_ref(data, ref)
-            d = next((x for x in data["decisions"] if x["id"] == did), None)
-            card = clean(f"{did}, {d['title']}") if d else ref
+            did, card = card_of(b, data, ref)
             try:
                 freed = b.answer_decision(data, did, option, by, free=free)
             except BacklogError as e:  # the caller's mistake: 400, and nothing is saved
                 raise ValueError(str(e)) from e
     except BacklogError as e:  # not saved: the owner's answer still reaches the orchestrator
         with contextlib.suppress(BacklogError, OSError, ValueError):  # its card title, read without the lock
-            data = b.load()
-            did = b.decision_ref(data, ref)
-            d = next((x for x in data["decisions"] if x["id"] == did), None)
-            card = clean(f"{did}, {d['title']}") if d else ref
+            did, card = card_of(b, b.load(), ref)
         m = notes.inbox_add(p, option, sender="owner", decision=card, **mark)
         return Accepted(m, note=f"recorded; the orchestrator will resolve it ({e})")
     notes.inbox_add(p, option, sender="owner", decision=card, did=did, resolved=True, freed=freed, **mark)
@@ -870,7 +888,7 @@ def change_answer(p: Project, ref: str, option: str, free: bool = False) -> Obj:
         raise ValueError("empty answer" if not option else f"answer too long: at most {FREE_ANSWER_MAX} characters")
     mark = {"free": True} if free else {}
     b, f = Backlog(p), notes.inbox_path(p)
-    by = f"{p.owner}, {datetime.now():%Y-%m-%d %H:%M} (panel)"
+    by = f"{p.owner}, {stamp()} (panel)"
     with notes.file_lock(f):
         msgs = util.read_json(f, [])
         try:
@@ -888,7 +906,7 @@ def change_answer(p: Project, ref: str, option: str, free: bool = False) -> Obj:
             {
                 **new,
                 "id": max(m["id"] for m in msgs) + 1,
-                "time": util.now().strftime("%Y-%m-%d %H:%M"),
+                "time": stamp(),
                 "text": option,
                 "read": False,
                 "changed_from": was,
