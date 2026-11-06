@@ -213,9 +213,9 @@ class ReviewState(ReviewCase):
             st.problems, ["reviews/old/2026-11-04-review-bad.md (header: Branch, Tip SHA, Round N, Open: H n, M n)"]
         )
         self.assertIn("unreadable: reviews/old/2026-11-04-review-bad.md", st.line())
-        self.assertIsNone(review.latest(self.project, "app", "ab1"))
+        self.assertIsNone(review.reviews(self.project, "app", "ab1")[0][-1:] or None)
         good = self.write_review(tip)
-        self.assertEqual(review.latest(self.project, "app", "ab1").path, str(good.relative_to(self.home)))
+        self.assertEqual(review.reviews(self.project, "app", "ab1")[0][-1].path, str(good.relative_to(self.home)))
         self.assertEqual(review.parse("Branch: a:b\nbranch: c:d\nTip: 1\n"), {"branch": "a:b", "tip": "1"})
 
 

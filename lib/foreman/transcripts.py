@@ -364,13 +364,6 @@ def final_chars(path: PathLike) -> int | None:
     return len(m["text"]) if m else None
 
 
-def cost_state(path: PathLike) -> Record | None:
-    """The last `cost-state` record of a session's transcript (Claude Code's own accumulated figures for the whole
-    session, subagents included: `modelUsage[model]` with `inputTokens`, `outputTokens`, `cacheReadInputTokens`,
-    `cacheCreationInputTokens`, `costUSD`…), or None. Never raises."""
-    return cost_state_at(path)[0]
-
-
 _TIMESTAMP = re.compile(rb'"timestamp":\s*"([^"]+)"')
 
 

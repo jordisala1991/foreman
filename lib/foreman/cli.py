@@ -231,15 +231,6 @@ def command_table(ap: argparse.ArgumentParser | None = None) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
-# Commands folded into others: for one version the old name only says which command replaces it (exit 2).
-REPLACED = {
-    "heartbeat": "recurring done NAME",
-    "sessions": "session --all",
-    "projects": "config --projects",
-    "grants": "permissions grants",
-}
-
-
 # Commands that act (write state, take a lock, merge, mark): run from a replaced plugin folder they say so on stderr.
 ACTING = {
     "lock",
@@ -1243,9 +1234,6 @@ def main(argv: list[str] | None = None) -> int:
     if argv == ["--version"]:
         print(f"foreman {__version__}")
         return 0
-    if argv[:1] and argv[0] in REPLACED:
-        print(f"foreman {argv[0]}: replaced by `foreman {REPLACED[argv[0]]}`", file=sys.stderr)
-        return 2
     if argv[:2] == ["hook", "mod"]:
         from . import hooks_mod
 

@@ -53,7 +53,7 @@ error". So `install` waits until `launchctl print` no longer finds the label (at
 tries `bootstrap` BOOTSTRAP_TRIES times with a pause, and if it still fails says how to load it by hand.
 FOREMAN_LAUNCHD_WAIT and FOREMAN_LAUNCHD_PAUSE replace the wait limit and the pause (tests).
 
-The unit's PATH is the installer's, cleaned (see service_env): the panel runs git, gh, bash, a Python 3.11+ and the
+The unit's PATH is the installer's, cleaned (see service_env): the panel runs git, gh, bash, a Python and the
 projects' `busy` commands, which may live anywhere (Homebrew, mise, asdf, nix…), while launchd and systemd
 start services with only the system folders.
 """

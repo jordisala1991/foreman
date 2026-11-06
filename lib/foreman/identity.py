@@ -518,9 +518,6 @@ def of(project: Project, h: Agent, head: str | None = None, branch_of: Mapping[s
 def cites_path(text: str | None, path: util.PathLike | None) -> bool:
     """Whether `text` names the folder `path` (as itself, not as the prefix of a longer name; `~` expanded; also as
     its resolved path and without macOS's `/private` in front, since git lists /private/var/… for /var/…)."""
-    import os
-    from pathlib import Path
-
     if not path:
         return False
     text = (text or "").replace("~", str(Path.home()))
@@ -651,8 +648,6 @@ def drop_call(ev: Event) -> None:
 
 def agent_name(state: util.PathLike, aid: str) -> str:
     """The name of agent `aid` in the agents.json under `state` (agent-<id6> for one without a name)."""
-    from pathlib import Path
-
     h = (util.read_json(Path(state) / "agents.json", {}) or {}).get(aid) or {}
     return h.get("name") or f"agent-{aid[:6]}"
 

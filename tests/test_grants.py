@@ -18,7 +18,7 @@ from pathlib import Path
 from unittest import mock
 
 import helpers
-from helpers import FakePs, ProjectCase
+from helpers import FakePs, ProjectCase, config_problems
 
 from foreman import approved, config, grants, guard, hooks_mod, loop, orchestrator, selftest, toml_reader, util
 
@@ -139,7 +139,7 @@ class GrantCase(FakePs, ProjectCase):
 class ConfigTest(GrantCase):
     def test_valid_and_defaults(self):
         raw = toml_reader.loads(TOML)
-        self.assertEqual(config.validate(raw), [])
+        self.assertEqual(config_problems(raw), [])
         self.assertEqual(
             grants.groups(self.project), {"deploy": ["make deploy", "prod-api"], "stores": ["fastlane release"]}
         )
@@ -156,17 +156,17 @@ class ConfigTest(GrantCase):
             ('[deny.grants]\nd = ["(unclosed"]\n', "[deny.grants] d"),
         ):
             raw = toml_reader.loads(BASE + "\n" + bad)
-            self.assertTrue(any(words in e for e in config.validate(raw)), (bad, config.validate(raw)))
+            self.assertTrue(any(words in e for e in config_problems(raw)), (bad, config_problems(raw)))
         for key, val in (("grant_minutes", 0), ("ask_minutes", -1), ("grant_minutes", "30"), ("ask_minutes", True)):
             raw = toml_reader.loads(BASE)
             raw["deny"][key] = val
-            self.assertTrue(any(key in e for e in config.validate(raw)), (key, val))
+            self.assertTrue(any(key in e for e in config_problems(raw)), (key, val))
         raw = toml_reader.loads(BASE)
         raw["deny"]["grants"] = ["x"]
-        self.assertTrue(any("must be a table" in e for e in config.validate(raw)))
+        self.assertTrue(any("must be a table" in e for e in config_problems(raw)))
         raw = toml_reader.loads(BASE)
         raw["deny"]["ask_minutes"] = 0  # 0: until the owner answers
-        self.assertEqual(config.validate(raw), [])
+        self.assertEqual(config_problems(raw), [])
         self.write_toml(TOML.replace('stores = ["fastlane', f'stores = ["{PUB}", "fastlane'))
         self.assertTrue(any("patterns win" in w and "stores" in w for w in self.project.warnings))
 
