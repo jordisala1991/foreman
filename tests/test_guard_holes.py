@@ -16,6 +16,8 @@ command without the disguise is refused), so a hole test fails for the hole and 
 Commands that name a push or a publish are only passed to guard.check as strings; nothing here runs them.
 """
 
+import os
+import sys
 import unittest
 
 from helpers import git, make_repo
@@ -260,9 +262,9 @@ class ProgramHolesTest(BashWriteCase):
 
     toml = PY_TOML
 
-    def deny(self, cmd, role="agent"):
-        """The rule or the reserved file's class that refuses cmd from the home, or "allow"."""
-        v = guard.check(self.project, cmd, guard.as_role(role, str(self.home)))
+    def deny(self, cmd, role="agent", cwd=None):
+        """The rule or the reserved file's class that refuses cmd from the home (or cwd), or "allow"."""
+        v = guard.check(self.project, cmd, guard.as_role(role, str(cwd or self.home)))
         if v is None:
             return "allow"
         return f"file:{v[1].kind}" if v[0] == "file" else v[1]
@@ -332,6 +334,62 @@ class ProgramHolesTest(BashWriteCase):
         got = {(cmd, role): self.deny(cmd, role) for cmd in cases for role in ("agent", "orchestrator")}
         self.assertEqual(got, {(cmd, role): cases[cmd] for cmd, role in got})
 
+    def test_builtins_through_a_frame(self):
+        """A generator's, coroutine's or traceback's frame reaches the builtins without `__` (review round 1, F1)."""
+        cmd = py(
+            'g = (x for x in [0])\ng.gi_frame.f_builtins["exec"]("import subprocess; subprocess.run(\''
+            + PUBLISH
+            + "', shell=True)\")"
+        )
+        self.assertEqual(self.deny(cmd), PUBLISH)
+
+    def test_a_reserved_file_named_from_home(self):
+        """A target named from the home folder (`~`, Path.home(), os.homedir()) or one the program cannot name, from a
+        worktree (review round 1, F2)."""
+        wt = self.tmp / "wt"
+        wt.mkdir()
+        rel = os.path.relpath(self.home, self.user)  # HOME is self.user: the home as seen from it
+        cases = {
+            py(
+                f'from pathlib import Path\np = Path("~/{rel}/foreman.toml").expanduser()\np.write_text("x")'
+            ): "file:config",
+            py('from pathlib import Path\n(Path.home() / ".claude/settings.json").write_text("{}")'): "file:claude",
+            f"python3 -c \"import os; open(os.path.expanduser('~/{rel}/{TABLE}'), 'a').write('x')\"": "file:table",
+            f"node -e \"fs.writeFileSync(path.join(os.homedir(), '{rel}/foreman.toml'), s)\"": "file:config",
+        }
+        got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
+        self.assertEqual(got, cases)
+
+    def test_a_name_a_match_pattern_binds(self):
+        """A match pattern binds a name again (review round 1, F3)."""
+        cmd = py(
+            'from pathlib import Path\np = Path("notes.md")\nmatch Path("difflib.py"):\n    case p:\n'
+            f"        p.write_text(\"import os; os.system('{PUBLISH}')\")\nimport difflib"
+        )
+        self.assertEqual(self.deny(cmd), PUBLISH)
+
+    def test_code_that_only_reads(self):
+        """Reading a reserved file with code that has a writing word elsewhere passes (review round 1, F4)."""
+        cases = (
+            "python3 -c \"import tomllib,json,sys; json.dump(tomllib.load(open('foreman.toml','rb')), sys.stdout)\"",
+            f"node -e \"console.log(fs.readFileSync('{TABLE}','utf8').replace('a','b'))\"",
+            py(
+                'import json, tomllib\nfrom pathlib import Path\nx = "a"\n'
+                'Path(f"/tmp/{x}.json").write_text(json.dumps(tomllib.load(open("foreman.toml", "rb"))))'
+            ),
+        )
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(cases, "allow"))
+
+    def test_perl_opens_for_writing(self):
+        """Perl's open without parentheses, and with its mode in the file's literal (review round 1, F5)."""
+        cases = (
+            'perl -e \'open my $f, ">", "foreman.toml"; print $f "x"\'',
+            'perl -e \'open(F, ">foreman.toml"); print F "x"\'',
+        )
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(cases, "file:config"))
+
     def test_interpreters_that_read_or_write_elsewhere(self):
         """H11's rule by what the code writes: reading a reserved file passes; Python that passes the gate is judged
         by the files it names as written, other code by its quoted literals when it has a word that writes."""
@@ -376,6 +434,9 @@ class ProgramGateTest(unittest.TestCase):
             "x = 1\nx.eval('1')",  # a builtin's name as the attribute of something that is no module
             "_\uff3fimport_\uff3f('os')",  # Python reads a full-width low line as `_`
             "def f(__x): pass",
+            "g = (x for x in [0])\ng.gi_frame",  # a frame reaches the builtins and globals (review round 1, F1)
+            "def f(): pass\nf.f_globals",
+            "async def c(): pass\nc().cr_frame",
         )
         for body in ok:
             with self.subTest(body=body):
@@ -416,8 +477,11 @@ class ProgramGateTest(unittest.TestCase):
             P + "Path('a' + 'b').touch()": None,
             P + "def Path(x):\n    return x\nPath('a').touch()": None,
             "from json import JSONDecoder as Path\nPath('a').touch()": None,
+            P + "p = Path('a')\nmatch x:\n    case p:\n        p.touch()": None,  # review round 1, F3
         }
         for body, want in cases.items():
+            if "match" in body and sys.version_info < (3, 10):
+                continue  # no match statement before 3.10: such a program does not parse, so it is compared raw
             with self.subTest(body=body):
                 tree = pyscript.gate(body)
                 self.assertIsNotNone(tree)
