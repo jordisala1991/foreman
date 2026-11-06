@@ -271,7 +271,10 @@ class UnitsTest(PermissionsCase):
             subprocess.run(["git", "init", "-q", str(self.tmp / repo)], check=True)
             repos += f'\n[repos.{key}]\npath = "{self.tmp / repo}"\n'
         self.write_toml(BASE_TOML + FARO_DENY + repos)
-        table = self.tmp / "golden_guard.tsv"
+        table = (
+            self.tmp / "faro/golden_guard.tsv"
+        )  # where the golden world has it: its @../faro-app rows reach the repo
+        table.parent.mkdir()
         shutil.copy(ROOT / "tests/golden_guard.tsv", table)
         p = config.load_project(self.home)
         with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(self.tmp / "gitconfig")}):
