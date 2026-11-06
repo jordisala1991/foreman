@@ -375,7 +375,6 @@ class ProgramHolesTest(BashWriteCase):
             ),
             py('from pathlib import Path\n(Path.home() / ".claude" / "settings.json").write_text("{}")'): "file:claude",
             f"node -e \"fs.writeFileSync(path.join(os.homedir(), {commas}, 'foreman.toml'), s)\"": "file:config",
-            py("import os\n" + base): "file:config",  # not through the gate: the Path a method writes is its object
         }
         got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
         self.assertEqual(got, cases)
@@ -386,6 +385,8 @@ class ProgramHolesTest(BashWriteCase):
             "python3 -c \"import sys; p = 'foreman.toml'; s = open(p).read(); open(p, 'w').write(s.replace('a', "
             "'b'))\"": "file:config",
             f"node -e \"const f = '{TABLE}'; require('fs').appendFileSync(f, 'allow\\tls\\n')\"": "file:table",
+            # the file a Path's method writes is its object
+            py("import os\nfrom pathlib import Path\np = Path('foreman.toml')\np.write_text('x')"): "file:config",
         }
         got = {cmd: self.deny(cmd) for cmd in cases}
         self.assertEqual(got, cases)

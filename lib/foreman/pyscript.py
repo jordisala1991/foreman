@@ -32,6 +32,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import io
+import posixpath
 import re
 import tokenize
 import warnings
@@ -241,15 +242,18 @@ def _kept(node: ast.AST) -> list[str]:
 
 def _path(node: ast.AST, paths: set[str], seen: frozenset[str], known: dict[str, list[ast.expr]]) -> set[str] | None:
     """The files an expression may be, when they are known: a str literal, `Path(literals…)` (paths: the names a
-    Path class goes by), or a name the program only ever assigns such values (known); else None."""
+    Path class goes by), `Path.home()` (~) and `Path.cwd()`, such pieces joined with `/`, or a name the program only
+    ever assigns such values (known); else None."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return {node.value}
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):  # Path.home() / "a" / name
+        left, right = (_path(x, paths, seen, known) for x in (node.left, node.right))
+        return None if left is None or right is None else {posixpath.join(a, b) for a in left for b in right}
     if isinstance(node, ast.Call) and not node.keywords and all(isinstance(a, ast.Constant) for a in node.args):
-        f = node.func
-        name = f.id if isinstance(f, ast.Name) else ""
-        if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
-            name = f"{f.value.id}.{f.attr}"
-        if name in paths and all(isinstance(a.value, str) for a in node.args):  # type: ignore[attr-defined]
+        name, _, attr = ast.unparse(node.func).rpartition(".")
+        if not node.args and name in paths and attr in ("home", "cwd"):
+            return {"~" if attr == "home" else "."}
+        if f"{name}.{attr}".lstrip(".") in paths and all(isinstance(a.value, str) for a in node.args):  # type: ignore[attr-defined]
             return {"/".join(a.value for a in node.args) or "."}  # type: ignore[attr-defined]
         return None
     if isinstance(node, ast.Name) and node.id in known and node.id not in seen:

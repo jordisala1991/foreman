@@ -1047,6 +1047,8 @@ CODE_WRITES = re.compile(
 OPEN_MODE = re.compile(r"\s*(\+?[<>]{1,2}|[wax]\+?b?|r\+b?)\s*")
 CODE_LITERAL = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"|`([^`\n]*)`")
 MAX_LITERAL = 4096  # a longer quoted literal is not a file name
+ADJACENT = re.compile(r"\s*([,/+])\s*")  # between two literals of one path written in pieces
+MAX_PIECES = 8
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 NOT_LITERAL = re.compile(r"[$`*?\[]")  # what is left after expanding: the path is not known, only its text
 SETTINGS_TEXT = re.compile(r"(^|/)\.claude/settings(\.local)?\.json$")
@@ -1190,16 +1192,33 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
                 if not depth:
                     args = rest[: i + 1]
                     break
-            lits = [x for g in CODE_LITERAL.finditer(args) for x in g.groups() if x and len(x) <= MAX_LITERAL]
-            if m.group(1).lower() == "open":  # open(f, "w"), open my $f, ">", "f"; open(F, ">f")
-                mode = any(OPEN_MODE.fullmatch(x) for x in lits)
-                lits = (
-                    [x for x in lits if not OPEN_MODE.fullmatch(x)]
-                    if mode
-                    else [re.sub(r"^\s*\+?[<>]{1,2}\s*", "", x) for x in lits if re.match(r"\s*\+?[<>]", x)]
-                )
-            out += lits
-    return out
+            lits = [x for g in CODE_LITERAL.finditer(args) for x in g.groups() if x]
+            if m.group(1).lower() == "open" and not any(
+                OPEN_MODE.fullmatch(x) or re.match(r"\s*\+?[<>]", x) for x in lits
+            ):
+                continue  # it reads: open(f, "w"), open my $f, ">", "f" and open(F, ">f") write
+            if (rest[:1] == "(" and re.search(r"[A-Za-z_$]", CODE_LITERAL.sub("", args))) or (
+                text[m.start() - 1 : m.start()] == "." and m.group(0) in pyscript.WRITES_SELF
+            ):
+                args = text  # a target it cannot name (a variable, an expression, a Path's object): any of the code's
+            out += [x for x in _pieces(args) if not OPEN_MODE.fullmatch(x)]
+    return list(dict.fromkeys(out))
+
+
+def _pieces(code: str) -> list[str]:
+    """The quoted literals of code (perl's `>` in front of a file dropped), and each run of literals written next to
+    each other also joined as one path, the way a path is built in pieces (`'a', 'b'` and `"a" / "b"`: a/b; `'a' +
+    'b'`: ab; runs of up to MAX_PIECES)."""
+    out: list[str] = []
+    run: list[tuple[str, str]] = []
+    last = None
+    for m in CODE_LITERAL.finditer(code):
+        lit = re.sub(r"^\s*\+?[<>]{1,2}\s*", "", next(x for x in m.groups() if x is not None))
+        gap = ADJACENT.fullmatch(code, last.end(), m.start()) if last else None
+        run, last = ([*run, ("" if gap.group(1) == "+" else "/", lit)] if gap else [("", lit)]), m
+        run = run[-MAX_PIECES:]
+        out += [run[j][1] + "".join(s + x for s, x in run[j + 1 :]) for j in range(len(run))]
+    return [x for x in out if x and len(x) <= MAX_LITERAL]
 
 
 def _targets(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int, out: list[_Target]) -> None:
