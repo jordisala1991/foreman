@@ -120,6 +120,13 @@ class DecisionFieldsTest(ProjectCase):
         b = Backlog(self.project)
         self.assertEqual(b.s["undo_no"], "sin vuelta atrás")
 
+    def test_decision_list_uses_the_product_language(self):
+        self.write_toml(BASE_TOML.replace('language = "en"', 'language = "es"'))
+        self.assertEqual(self.rich().returncode, 0)
+        lst = self.cli("backlog", "decision", "list").stdout
+        self.assertIn("se puede deshacer, con trabajo)", lst)
+        self.assertNotIn("can be undone", lst)
+
     def test_a_decision_of_before_is_written_and_shown_as_before(self):
         r = self.add("--option", "yes", "--option", "no", "--recommend", "yes, it is cheap", "--date", "2026-11-01")
         self.assertEqual(r.returncode, 0, r.stderr)
