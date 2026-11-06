@@ -1026,6 +1026,7 @@ const VIEWS = {
         [t('priority'), isActive(c) ? t('rank', {k: k+1, n: sib.length, epic: esc(ekey(c.epic))}) : `<span class="muted">${c.lane==='done' ? t('done_lc') : c.lane==='archive' ? t('archived_lc') : esc(laneName(c.lane).toLowerCase())}</span>`],
         [t('agent'), c.agent ? `${dot(scol(c.agent_status))}${agentLink(c.agent)}${c.agent_status ? ` · ${esc(sname(c.agent_status))}` : ''}` : c.no_agent ? `<span class="bad">${t('no_agent_nor_branch')}</span>` : ''],
         [t('branch'), c.branch ? branchLink(c.branch) : ''],
+        [t('cost'), c.cost ? esc(c.cost) : ''],
         [t('blocked_by'), c.blocked ? `${BLOCK_ICON()} ${storyLinks(c.blocked)}` : ''],
         [t('blocks'), by.concat((rel.blocks || []).map(id => BL.find(x => x.id===id && x.p===c.p) || {id, title: ''}).filter(x => !by.includes(x))).map(x => `<div>${storyLink(x.id)} ${esc(x.title)}</div>`).join('')],
         (rel.blocked_by || []).length && [t('blocked_by_issues'), rel.blocked_by.map(id => relLink(id, (c.blocked_rel || []).includes(id))).join('')],

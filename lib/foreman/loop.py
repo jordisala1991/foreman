@@ -1432,6 +1432,10 @@ def notices_for_pass(project: Project, session: str | None = None, mark: bool = 
     docs/orchestrator.md). mark=False (`foreman loop`) reads the markers that keep a notice from repeating without
     writing them, so looking does not use up a pass's notices. Each group of notices is one function."""
     s = Snapshot(project, session)
+    if mark:
+        from . import costs
+
+        costs.sweep(project)  # a line for each agent that stopped without delivering
     out = paused_notices(project, s.paused) + config_notices(project, mark)
     ctx_notice = context_notice(project, session, mark)  # the orchestrator's own context (`context_rotate`)
     out += [ctx_notice] if ctx_notice else []
