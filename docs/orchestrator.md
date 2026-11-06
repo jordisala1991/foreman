@@ -262,7 +262,8 @@ they disagree.
      ab1/x · worktree /…/app-zed7 · production`. foreman generates its token and the agents hook ties it to the new
      agent, so `foreman agents` knows its name, issue, sub-issue, branch and worktree whatever the language of the
      rest of the brief. Then: «Follow `<foreman>/docs/agent.md` and `<rules>`», the plan, the conditions of this
-     task. Types: `dev` (production), `planner` (plans), `reviewer` (reviews of code or of the product, read only), `mechanic` (checked code changes, cheaper model: see «Which agent type and model»). The brief
+     task. Types: `dev` (production), `planner` (plans), `reviewer` (reviews of code or of the product, read only), `mechanic` (checked code changes, cheaper model: see «Which agent type and model»). The Agent call carries the same `model` as
+     `--model` (the table). The brief
      ends with «last command: `foreman progress --done "result" --outcome ok|partial|failed --report
      reviews/<file>.md`» (the agent names its report; the pass and `foreman integrate` take it).
    - A production agent launched without the line gets you a warning right after the launch: give it its identity
@@ -471,14 +472,26 @@ board, notes) about 15 % of what is re-read. Little of it is code you needed to 
 
 ## Which agent type and model
 
-- **`mechanic` (a cheaper model: Sonnet at low effort, `effort` in its definition, because a model other than the
-  session's does not take the session's level)** for well-defined work with an objective check that does not depend on the
-  agent's judgment: moving and splitting code proven by identical outputs (the golden corpus, CONTRIBUTING.md), a
-  small fix with its test, mechanical edits, translations, inventories. It may be a production agent: with a
-  worktree, a branch and a launch line, exactly like `dev`.
-- **`dev` (the orchestrator's model)** for work that needs design judgment: a new behaviour, a structure to decide,
-  an unclear failure. **`planner`** (the orchestrator's model) for plans.
-  **`reviewer`** (the orchestrator's model, read only) when the owner or you need a review of code or of the
+Each job goes to the cheapest model that does it well. Ask for it twice, the same in both places: `foreman launch
+… --model M` (what is recorded) and the `model` parameter of the Agent call (what runs; without it the type's own
+`model` applies, and `inherit` is your model).
+
+| Job | Type | Model |
+|---|---|---|
+| Weekly page lint, inventories, counts | `mechanic` | `haiku` (short contexts: above 100K of prompt Haiku costs ×5) |
+| Mechanical edits, moving and splitting code with identical outputs, a small fix with its test, translations | `mechanic` | `sonnet` (its definition, low effort) |
+| A code change with an objective check (tests, golden) that touches no delicate path and whose design the plan fixes; measurements | `dev` | `sonnet` |
+| Product reviews; reviews of branches held for size or `partial` | `reviewer` | `sonnet` |
+| The guard and any `review_paths`/`risky_paths` path; design (a new behaviour not yet decided, an unexplained failure); plans; reviews of branches with delicate paths; the review of the texts with each new model | `dev` / `planner` / `reviewer` | `opus` (inherited) |
+
+A dearer model than the table gives only after changing the sub-issue and saying why in a note. The plan says the type
+and model of each sub-issue (agents/planner.md); use them.
+
+- **`mechanic`** (`effort` in its definition, because a model other than the session's does not take the session's
+  level): well-defined work with an objective check that does not depend on the agent's judgment (the golden corpus,
+  CONTRIBUTING.md). It may be a production agent: with a worktree, a branch and a launch line, exactly like `dev`.
+- **`dev`** for a change the plan fixes (Sonnet) or that needs design judgment (Opus). **`planner`** for plans.
+  **`reviewer`** (read only) when the owner or you need a review of code or of the
   product: the brief says what to review, why, from which point of view and what is out; the shape of the review
   is in the type, and it leaves `reviews/YYYY-MM-DD-review-<topic>.md` and returns a short conclusion. It is not a
   planner (live, it does not stop the repass asking for plans); when it lists fixes, open their issue with the
@@ -508,7 +521,7 @@ board, notes) about 15 % of what is re-read. Little of it is code you needed to 
   local ones nobody names (`loose_branches`); ask the owner before deleting a branch with work you do not recognise.
 - **Locks:** one queue per resource in arrival order; short jobs (`FOREMAN_LOCK_SHORT=1`, ≤ 5 min) may jump once;
   an explicit turn (the `next` file) only when something really blocks.
-- **Quota:** short agents with one brief, a cheaper model for mechanical work, the CI started by the orchestrator.
+- **Quota:** short agents with one brief, each job on the model the table in «Which agent type and model» gives, the CI started by the orchestrator.
 
 ## Always the owner's
 

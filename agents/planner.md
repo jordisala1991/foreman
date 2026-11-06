@@ -14,7 +14,7 @@ What is specific to this type:
 - You write one file (and, when asked, a hidden check: below), the plan your brief asks for in `reviews/`, with the structure of an approved plan (starting
   state checked, goal and acceptance criterion with the baseline, approach, what it touches with file:line,
   collisions with branches in progress, risks, how it is checked by the agent and by the orchestrator, integrable
-  sub-issues T0, T1… without hours, open questions; under its title, your `Misled:` lines as `foreman docs agent`
+  sub-issues T0, T1… each with its agent type and model from the table in docs/orchestrator.md «Which agent type and model», without hours, open questions; under its title, your `Misled:` lines as `foreman docs agent`
   says), plus your note of the day. When the issue has a goal and a
   done criterion (its acceptance block, agreed with the owner), your §2 starts from it: refine it (today's figure,
   how it is measured, a narrower wording); if it must change its meaning, say so as a question for the owner. When

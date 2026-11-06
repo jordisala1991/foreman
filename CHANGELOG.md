@@ -24,6 +24,9 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Changed
 
+- The orchestrator's instructions give a table of which job goes with which model (Haiku, Sonnet or Opus), ask for
+  the same `model` in `foreman launch` and in the Agent call, and the planner names the type and model of each
+  sub-issue.
 - A question's page is written for that question: docs/owner.md has a «Question page» template (what is happening,
   one example, a table of the options with what changes, cost, risk and whether it can be undone, the
   recommendation; about 30 lines), and `backlog decision add` warns, without blocking, of a `--page` longer than 60
