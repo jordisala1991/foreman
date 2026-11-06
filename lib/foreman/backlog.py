@@ -105,6 +105,13 @@ DECISION_OPTIONAL = ("recommended", "as_is", "blocks", "details", "unanswered", 
 DETAIL_KEYS = ("effect", "cost", "undo")  # what a decision's `details` says of one option
 UNDO = ("yes", "hard", "no")  # whether an option can be undone: yes, with work, no
 UNANSWERED_KEYS = ("waits", "by")  # what a decision's `unanswered` says: what stays stopped meanwhile, reminder date
+OPTION_MAX = 60  # characters of an option before `decision_warnings` says it is not a short choice
+POINTS_ELSEWHERE = re.compile(
+    r"detalles? en\b|más (?:información|detalle)s? en\b"
+    r"|\bver (?:el|la|los|las)\s+(?:informe|estudio|plan|documento|revisi[oó]n)"
+    r"|\bdetails? in\b|\bsee (?:the|this)\s+(?:report|study|plan|document|review)",
+    re.I,
+)
 PAGE_MAX = 400_000  # the largest page the panel shows (panel.DOC_MAX)
 # The longest page that reads as written for one question (docs/owner.md, «Question page»: about 30 lines). The
 # pages written for one question measured 11-26 lines; the studies linked as pages, 132 and 263.
@@ -1475,7 +1482,9 @@ class Backlog:
 
     def decision_warnings(self, d: Record, today: date | None = None, data: Data | None = None) -> list[str]:
         """What to fix in pending decision `d`, never blocking (`decision add` prints them on stderr): an option
-        that does not say what it changes, two questions in one, a reminder date in the past, a page that does not
+        that does not say what it changes, an option over OPTION_MAX characters, the title of another pending decision,
+        --if-no-answer with nothing to hold or remind, a text or option that sends to another document, two
+        questions in one, a reminder date in the past, a page that does not
         exist yet or that the panel cannot show (larger than PAGE_MAX), and a page not written for this question
         (`page_warnings`)."""
         today = today or date.today()
@@ -1489,12 +1498,40 @@ class Backlog:
                     f"{which} («{o}») has no --effect: say what the owner will see or do differently with it "
                     "(--effect after its --option)"
                 )
+            if len(o) > OPTION_MAX:
+                which = f"option {n}" if len(opts) > 1 else "the option"
+                out.append(
+                    f"{which} is {len(o)} characters long (over {OPTION_MAX}): an option is a short choice; put the "
+                    "detail in --effect or in the text"
+                )
         for field in ("title", "text"):
             k = self.question_count(d.get(field, ""))
             if k >= 2:
                 out.append(
                     f"the {field} asks {k} questions: split it, one decision per question, or keep only the one "
                     "the owner answers (a quoted question «…» does not count)"
+                )
+        title = (d.get("title") or "").strip().casefold()
+        twins = [
+            x["id"]
+            for x in (data or {}).get("decisions", [])
+            if x is not d and (x.get("title") or "").strip().casefold() == title
+        ]
+        if title and twins:
+            out.append(f"the title is the same as that of the pending {', '.join(twins)}: is it the same question?")
+        waits = d.get("unanswered") or {}
+        if waits.get("waits") and not d.get("blocks") and not waits.get("by"):
+            out.append(
+                "--if-no-answer without --blocks or --answer-by: nothing is held and nobody is reminded; add "
+                "what it blocks or the day to remind the owner"
+            )
+        for field, value in [("title", d.get("title", "")), ("text", d.get("text", ""))] + [
+            (f"option {n}", o) for n, o in enumerate(opts, 1)
+        ]:
+            if POINTS_ELSEWHERE.search(value or ""):
+                out.append(
+                    f"the {field} sends the owner to another document: the question must be understood by itself; "
+                    "say it here, or use --page for one page written for it"
                 )
         by = (d.get("unanswered") or {}).get("by", "")
         if by and valid_date(by) and date.fromisoformat(by) < today:
