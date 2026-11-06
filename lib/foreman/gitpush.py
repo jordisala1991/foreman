@@ -19,9 +19,9 @@ UNKNOWN, and the folder before it stays (an empty "$X" is the current folder): t
 of the project (its home and each `[repos.*] path`) with that repo's main branch as the current one, so an unknown
 folder only blocks more.
 
-What git says. For each folder, once per check (the Resolver's cache): `rev-parse --absolute-git-dir`,
-`symbolic-ref -q HEAD` and `config --list -z`, with no pager, no prompt, no optional locks, no fsmonitor, and
-TIMEOUT seconds each. None of them runs a hook or a filter. A folder that is not a repo has no remote: the text keeps
+What git says. For each folder, once per check (the Resolver's cache, which the main-checkout rule shares):
+`symbolic-ref -q HEAD` (which also says whether it is a repo) and `config --list -z`, with no pager, no prompt, no
+optional locks, no fsmonitor, and TIMEOUT seconds each. None of them runs a hook or a filter. A folder that is not a repo has no remote: the text keeps
 the remote as written (git would fail anyway); its config is the global and system one (their aliases).
 
 The remote: the first argument (or --repo), else branch.<b>.pushRemote, remote.pushDefault, branch.<b>.remote and
@@ -131,8 +131,9 @@ LOST = Changes((), True)
 
 
 class Repo:
-    """What git says of one folder: git_dir (None: not a repo), branch (None: detached or unborn) and config
-    ({key: [values]}, keys as `git config --list` writes them: section and name lowercase)."""
+    """What git says of one folder: git_dir (the git dir it was read with, else the folder; None: not a repo), branch
+    (None: detached) and config ({key: [values]}, keys as `git config --list` writes them, section and name
+    lowercase)."""
 
     __slots__ = ("git_dir", "branch", "config")
 
@@ -174,11 +175,10 @@ def read_repo(folder: str, git_dir: str | None = None) -> Repo | None:
     if not os.path.isdir(folder):
         return None
     try:
-        r = _git(folder, "rev-parse", "--absolute-git-dir", git_dir=git_dir)
-        repo = not r.returncode
-        if not repo and "not a git repository" not in r.stderr:
+        head = _git(folder, "symbolic-ref", "-q", "HEAD", git_dir=git_dir)  # 1: a repo whose HEAD is detached
+        repo = head.returncode in (0, 1)
+        if not repo and "not a git repository" not in head.stderr:
             return None
-        head = _git(folder, "symbolic-ref", "-q", "HEAD", git_dir=git_dir) if repo else r
         conf = _git(folder, "config", "--list", "-z", git_dir=git_dir)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -191,7 +191,7 @@ def read_repo(folder: str, git_dir: str | None = None) -> Repo | None:
             cfg.setdefault(key, []).append(value if "\n" in entry else "true")
     ref = head.stdout.strip() if repo and head.returncode == 0 else ""
     branch = ref[len("refs/heads/") :] if ref.startswith("refs/heads/") else None
-    return Repo(r.stdout.strip() if repo else None, branch, cfg)
+    return Repo((git_dir or folder) if repo else None, branch, cfg)
 
 
 def _expand(path: str) -> str:

@@ -395,32 +395,6 @@ def _scan(pats: Sequence[str], texts: Iterable[Text]) -> Hit | None:
     return None
 
 
-class _Kept:
-    """A generator's items kept as they come, so that each reader walks them in order and the generator runs once and
-    only as far as the furthest reader; its exception is raised again to each reader at the same place."""
-
-    def __init__(self, gen: Iterator[Text]) -> None:
-        self.gen, self.items, self.err = gen, [], None
-
-    def __iter__(self) -> Iterator[Text]:
-        k = 0
-        while k < len(self.items) or self._more():
-            yield self.items[k]
-            k += 1
-
-    def _more(self) -> bool:
-        if self.err is not None:
-            raise self.err
-        try:
-            self.items.append(next(self.gen))
-        except StopIteration:
-            return False
-        except Exception as e:
-            self.err = e
-            raise
-        return True
-
-
 def _where(w: Sequence[Tok], prog: int) -> str:
     """What a segment's own text is, for the refusal: a loop or test, a sed/awk script, inline code, a command."""
     first = w[0].value if w else ""
@@ -742,8 +716,23 @@ class _Check:
 
     def deny(self, pats: Sequence[str], resolve: bool = True) -> Hit | None:
         at = self.at if resolve else None
-        texts = self.once(("texts", at is not None), lambda: _Kept(_texts(self.cmd, 0, True, at=_start(at))))
-        return deny(pats, self.cmd, at, texts)
+        return deny(pats, self.cmd, at, self.texts(at))
+
+    def texts(self, at: gitpush.Resolver | None) -> Iterator[Text]:
+        """The command's texts (_texts), read once for each at, up to the end or to the exception that stopped the
+        reading, raised again in the same place: a list only answers what one read in order would have."""
+        if at not in self.kept:
+            items: list[Text] = []
+            try:
+                for t in _texts(self.cmd, 0, True, at=_start(at)):
+                    items.append(t)
+                self.kept[at] = (items, None)
+            except Exception as e:  # noqa: BLE001 (raised to each reader after the texts before it)
+                self.kept[at] = (items, e)
+        items, err = self.kept[at]
+        yield from items
+        if err is not None:
+            raise err
 
 
 def _why(chk: _Check, hit: Hit) -> str:
