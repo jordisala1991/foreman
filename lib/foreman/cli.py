@@ -134,7 +134,6 @@ selftest [-v] [-j N] [--python PATH] [--quality auto|require|off] [--mods auto|r
 from __future__ import annotations
 
 import argparse
-import inspect
 import json
 import os
 import re
@@ -144,7 +143,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import __version__, backlog, backlog_check, backlog_cli, config, holdout, integrate, util
+from . import __version__, config, util
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -152,7 +151,13 @@ if TYPE_CHECKING:
     from .config import Project
     from .util import PathLike
 
-DOC = inspect.cleandoc(__doc__ or "")  # the help text, the same on every Python (3.13+ dedents docstrings itself)
+
+def doc() -> str:
+    """The help text, the same on every Python (3.13+ dedents docstrings itself); inspect only loads for it."""
+    import inspect
+
+    return inspect.cleandoc(__doc__ or "")
+
 
 HERE = Path(__file__).resolve().parent
 
@@ -323,10 +328,12 @@ def orphan_line(
     left on a replaced version), for commands that act; None otherwise. One stat unless it is orphaned.
     None too during the grace after the new install (versions.settling: the session may still load it by itself).
     With `once`, None too when it was already said for this root and version (orphan_told)."""
+    if not acts(argv):
+        return None
     from . import install, versions
 
     root = str(install.ROOT if root is None else root)
-    if not acts(argv) or not versions.orphaned(root):
+    if not versions.orphaned(root):
         return None
     me = versions.own({}, root=root)
     if me["kind"] != "installed":
@@ -466,6 +473,8 @@ def launch_backlog(
     """`launch --issue/--sub`: the sub-issue ▶ with agent and branch (and `kind`, from --kind), the issue in
     progress. check_only: only that the issue and the sub-issue exist (before anything is made). Raises
     backlog.BacklogError."""
+    from . import backlog
+
     b = backlog.Backlog(p)
     if check_only:
         data = b.load()
@@ -487,6 +496,8 @@ def launch_holds(p: Project, issue: str, sub: str | None) -> tuple[list[dict[str
     """(the pending decisions that hold a production launch of `issue` / `sub`, what is launched «XX-1 T3»): those
     whose `blocks` name the issue as a whole or the sub-issue (Backlog.held_by); an answer from the panel resolves
     its decision, so it holds nothing more. Without a backlog, or an issue it does not know, nothing holds it."""
+    from . import backlog
+
     b = backlog.Backlog(p)
     if not b.exists():
         return [], ""
@@ -519,7 +530,7 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
     not be made, 2 bad arguments or a NAME already in use."""
     import re
 
-    from . import identity, worktree
+    from . import backlog, identity, worktree
 
     def fail(msg: object, rc: int = 2) -> int:
         print(f"foreman launch: {msg}", file=sys.stderr)
@@ -764,6 +775,8 @@ def check(p: Project, run_checks: bool = False) -> int:
     table = p.section("check").get("guard_table")
     if table:
         rc = max(rc, guard_table(p, p.path(table), indent="  "))
+    from . import backlog, backlog_check
+
     b = backlog.Backlog(p)
     try:
         data = b.load() if b.exists() else None
@@ -784,19 +797,30 @@ def check(p: Project, run_checks: bool = False) -> int:
     return rc
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """foreman's argument parser (COMMAND_GROUPS orders its commands for the README's table)."""
+def build_parser(only: str | None = None) -> argparse.ArgumentParser:
+    """foreman's argument parser (COMMAND_GROUPS orders its commands for the README's table). `only`: the command
+    to be run; the commands that live in their own modules are then registered by name only (nothing to parse
+    for them), so their modules stay unloaded."""
+    from importlib import import_module
+
+    def module_parser(name: str, module: str | None = None) -> None:
+        if only is None or only == name:
+            import_module(f".{module or name}", __package__).add_parser(sp)
+        else:
+            sp.add_parser(name)
+
+    d = doc()
     ap = argparse.ArgumentParser(
         prog="foreman",
-        description=DOC.split("\n\n")[0],
-        epilog=DOC.split("\n\n", 1)[1],
+        description=d.split("\n\n")[0],
+        epilog=d.split("\n\n", 1)[1],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--version", action="version", version=f"foreman {__version__}")
     sp = ap.add_subparsers(dest="cmd", required=True)
-    backlog_cli.add_parser(sp)
-    integrate.add_parser(sp)
-    holdout.add_parser(sp)
+    module_parser("backlog", "backlog_cli")
+    module_parser("integrate")
+    module_parser("holdout")
     a = sp.add_parser("note", help="append an entry to today's notes (what must last: figures, corrections)")
     a.add_argument("title")
     a.add_argument("text", nargs="*")
@@ -922,9 +946,7 @@ def build_parser() -> argparse.ArgumentParser:
     a = sp.add_parser("config", help="the resolved configuration, with the source of each value (read-only)")
     a.add_argument("--json", action="store_true", help="{foreman, api, name, home, …, config, sources, warnings}")
     a.add_argument("--projects", action="store_true", help="the registry: name, mode and home of each project")
-    from . import init
-
-    init.add_parser(sp)
+    module_parser("init")
     a = sp.add_parser(
         "panel", help="the web panel of every registered project; panel service: run it as a user service"
     )
@@ -950,11 +972,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     a.add_argument("--since", help="with --stats: 7d, 12h, 30m or a date (2026-10-31)")
     a.add_argument("--session", help="with --stats: one session id only")
-    from . import catchup, permissions, start
-
-    start.add_parser(sp)
-    catchup.add_parser(sp)
-    permissions.add_parser(sp)
+    module_parser("start")
+    module_parser("catchup")
+    module_parser("permissions")
     a = sp.add_parser("docs", help="print a page of foreman's docs (alone: the list of pages)")
     a.add_argument("name", nargs="?")
     a = sp.add_parser(
@@ -1025,6 +1045,9 @@ def main(argv: list[str] | None = None) -> int:
         line = None
     if line:
         print(line, file=sys.stderr)
+    if argv == ["--version"]:
+        print(f"foreman {__version__}")
+        return 0
     if argv[:1] and argv[0] in REPLACED:
         print(f"foreman {argv[0]}: replaced by `foreman {REPLACED[argv[0]]}`", file=sys.stderr)
         return 2
@@ -1074,9 +1097,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return waits.run(config.maybe_resolve(project_name), rest[0], rest[1:], timeout, every)
 
-    from . import init, start
-
-    ap = build_parser()
+    lazy = ("backlog", "integrate", "holdout", "init", "start", "catchup", "permissions")
+    ap = build_parser(argv[0] if argv[:1] and argv[0] in lazy else None)
     args = util.no_abbrev(ap).parse_args(argv)
     args.global_project = project_name
     c = args.cmd
@@ -1137,8 +1159,12 @@ def main(argv: list[str] | None = None) -> int:
             return plain.run_stats(config.maybe_resolve(project_name), args.since, args.session, args.json)
         return plain.run(config.maybe_resolve(project_name), args.text, args.json)
     if c == "init":
+        from . import init
+
         return init.run(args)
     if c == "backlog" and args.bcmd == "list" and args.all_products:
+        from . import backlog_cli
+
         return backlog_cli.run_list(None, args)
     p = need_project(args)
     if c == "catchup":
@@ -1146,12 +1172,20 @@ def main(argv: list[str] | None = None) -> int:
 
         return catchup.run(args, p)
     if c == "start":
+        from . import start
+
         return start.run(args, p)
     if c == "backlog":
+        from . import backlog_cli
+
         return backlog_cli.run(p, args)
     if c == "integrate":
+        from . import integrate
+
         return integrate.run(p, args)
     if c == "holdout":
+        from . import holdout
+
         return holdout.run_command(p, args)
     from . import loop, notes, notices
 
