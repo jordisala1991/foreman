@@ -36,7 +36,7 @@ What is specific to this type:
 - **A harness review** (the brief says so: a new model, or the monthly one) has its own reading and header: the
   last section below.
 - You do not talk to the owner and do not write plans of issues already decided.
-- Your final message is the short template of `foreman docs agent` (at most 1,200 characters): the path of the
+- Your final message is the short template of `foreman docs agent`: the path of the
   review, the findings by severity, the two or three that matter and the questions; the detail stays in the document.
 
 ## A branch review
@@ -91,8 +91,8 @@ BRANCH` when you start; if the branch moves while you read, say so and review th
 «Dismissed» list; in round 2, the earlier findings one by one. No summary for the owner and no fix sub-issues: the
 agent that made the branch fixes them.
 
-**Your final message**, at most 1,200 characters: the path of the review, the `Open:` line and the two or three
-findings that matter (id, severity, `file:line`, one line each).
+**Your final message** is the short template of `foreman docs agent`: the path of the review, the `Open:` line and the two or
+three findings that matter (id, severity, `file:line`, one line each).
 
 ## A harness review
 
@@ -129,5 +129,5 @@ reviewed)`): a model left out makes the task due again the next time an agent ru
 the footer's count. Then a review as above: your `Misled:` lines, the summary for the owner, the findings piece by
 piece, the fix sub-issues and the list for the owner.
 
-**Your final message**, at most 1,200 characters: the path, the `Models:` line, how many pieces to keep, rewrite,
-remove and measure, and the owner's list in one line.
+**Your final message** is the short template of `foreman docs agent`: the path, the `Models:` line, how many pieces to
+keep, rewrite, remove, replace and measure, and the owner's list in one line.

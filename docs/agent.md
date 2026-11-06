@@ -109,7 +109,7 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   `Misled:` line, and that you ran `progress --done`. If something is missing, your stop is refused with what is missing and the command to fix it: fix it, run
   `progress --done` again and stop.
 - **The final message** (what the orchestrator's context pays for, so it is short and fixed-shaped): at most
-  1,200 characters, never a recap of the report. Everything else goes in the report file, which the orchestrator reads
+  2,000 characters, never a recap of the report. Everything else goes in the report file, which the orchestrator reads
   only when it needs to. foreman records its length (`final_chars` in agents.json) at your stop; it never blocks it.
 
   ```

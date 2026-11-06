@@ -25,5 +25,4 @@ What is specific to this type:
 - Deliver: files touched, what you left untouched and why, how you checked it, and your `Misled:` lines (an unclear
   brief belongs there too); the one-line result of `foreman progress --done` is read by the owner
   (`foreman docs owner`), and its `--report PATH` names your report.
-- Your final message is the short template of `foreman docs agent` (at most 1,200 characters; for a plan, its path,
-  the summary in a few lines and the open questions); the detail goes in the report or the plan file.
+- Your final message is the short template of `foreman docs agent`; the detail goes in the report.

@@ -24,5 +24,5 @@ What is specific to this type:
 - Deliver: what is in the branch (commits), figures with their source, what you checked and what is left to the CI,
   your `Misled:` lines, and the result in one line, written for the owner (`foreman docs owner`), naming your report
   with `progress --done … --report PATH`; the rest of the delivery stays technical.
-  Your final message is the short template of `foreman docs agent` (at most 1,200 characters); the detail goes in
-  the report.
+  Your final message is the short template of `foreman docs agent`; the detail goes in the
+  report.

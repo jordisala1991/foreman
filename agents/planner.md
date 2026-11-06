@@ -33,5 +33,5 @@ What is specific to this type:
 - Deliver a summary of the plan and the open questions, separating the owner's from the orchestrator's. The plan's
   summary for the owner and the owner's questions follow `foreman docs owner` (each question stands alone, with its
   options, a recommendation and its reason); the rest of the plan stays technical.
-- Your final message is the short template of `foreman docs agent` (at most 1,200 characters; for a plan, its path,
-  the summary in a few lines and the open questions); the detail goes in the report or the plan file.
+- Your final message is the short template of `foreman docs agent` (for a plan, its path, the summary in
+  a few lines and the open questions); the detail goes in the report or the plan file.
