@@ -1,11 +1,9 @@
 """Eleven known holes of the guard, one test each (H1-H11), and the controls that must keep their verdict when they are
 closed.
 
-Each hole test asserts the verdict the guard should give; while the hole is open it is an expected failure, so the
-suite stays green and the change that closes a hole turns its test into an unexpected success (remove the decorator
-there). Every hole has a control next to it, a plain test that passes today: it proves the fixture reaches the rule
-(the same command without the disguise is refused), so an expected failure fails for the hole and not for a broken
-fixture.
+Each hole test asserts the verdict the guard gives now that the hole is closed (they were written as expected
+failures while it was open). Every hole has a control next to it: it proves the fixture reaches the rule (the same
+command without the disguise is refused), so a hole test fails for the hole and not for a broken fixture.
 
 - H1-H2 (main checkout): a `cd` to a folder that does not exist followed by `;`, and a folder the line cannot name
   (`"$WT"` may be empty: the current folder; FoldersTest.test_cd_and_lists in test_guard_main_checkout.py agrees).
@@ -18,6 +16,8 @@ fixture.
 Commands that name a push or a publish are only passed to guard.check as strings; nothing here runs them.
 """
 
+import os
+import sys
 import unittest
 
 from helpers import git, make_repo
@@ -26,7 +26,7 @@ from test_guard_files import TABLE
 from test_guard_main_checkout import MainCheckoutCase
 from test_guard_push import NOWHERE, PRIVATE, PUSH, PushCase, remote
 
-from foreman import guard
+from foreman import guard, pyscript
 
 PUBLISH = "npm " + "publish"  # built in pieces, as test_guard_push.py does with its push
 ENV = "(^|[\\s/'\"=<])\\.env($|[\\s'\"])"  # the secrets rule of a machine's [machine.deny.grants]
@@ -40,7 +40,6 @@ language = "en"
 [deny]
 patterns = ["{PUBLISH}", "{ENV_TOML}"]
 """
-hole = unittest.expectedFailure  # open today: the change that closes it removes the decorator
 
 
 def py(body, head="python3 -"):
@@ -170,6 +169,16 @@ class PushHolesTest(PushCase):
         self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; cd {self.lib} && G {PUSH[4:]}', self.own), "deny")
         self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; G {PUSH[4:]}', self.own), "allow")
 
+    def test_a_function_sees_the_config_of_its_call(self):
+        """What the line changes in git's config between a function's definition and its call counts for the call
+        (review of the git holes, round 2, F9)."""
+        cmd = f'G() {{ git "$@"; }}; git remote set-url origin {self.PUB}; G {PUSH[4:]}'
+        self.assertEqual(self.verdict(cmd, self.own), "deny")
+        cmd = f'G() {{ git "$@"; }}; git remote set-url origin {self.SAFE}; G {PUSH[4:]}'
+        self.assertEqual(self.verdict(cmd, self.own), "allow")
+        cmd = f'G() {{ git "$@"; }}; G remote set-url origin {self.PUB}; {PUSH}'  # a change the body makes
+        self.assertEqual(self.verdict(cmd, self.own), "deny")
+
 
 class SwitchControlTest(PushCase):
     """§2.2: a switch to an existing branch before a push keeps today's verdict (PRIVATE: main needs the owner)."""
@@ -187,6 +196,15 @@ class SwitchControlTest(PushCase):
         self.assertEqual(self.verdict(f"git switch feat && {PUSH}", self.wt), "allow")
         self.assertEqual(self.verdict(f"git switch feat && {PUSH} origin HEAD", self.wt), "allow")
         self.assertEqual(self.verdict(f"git switch feat; {PUSH} origin HEAD", self.wt), "deny")  # it may not have
+
+    def test_a_function_sees_the_branch_of_its_call(self):
+        """A switch between a function's definition and its call counts for the call (review round 2, F9)."""
+        git(self.wt, "switch", "-q", "feat")
+        self.assertEqual(self.verdict(f'G() {{ git "$@"; }}; G {PUSH[4:]} origin HEAD', self.wt), "allow")
+        cmd = f'G() {{ git "$@"; }}; git switch main && G {PUSH[4:]} origin HEAD'
+        self.assertEqual(self.verdict(cmd, self.wt), "deny")
+        cmd = f'G() {{ git "$@"; }}; G switch main && {PUSH} origin HEAD'  # a switch the body makes
+        self.assertEqual(self.verdict(cmd, self.wt), "deny")
 
 
 class FunctionArgsTest(PushCase):
@@ -244,9 +262,9 @@ class ProgramHolesTest(BashWriteCase):
 
     toml = PY_TOML
 
-    def deny(self, cmd, role="agent"):
-        """The rule or the reserved file's class that refuses cmd from the home, or "allow"."""
-        v = guard.check(self.project, cmd, guard.as_role(role, str(self.home)))
+    def deny(self, cmd, role="agent", cwd=None):
+        """The rule or the reserved file's class that refuses cmd from the home (or cwd), or "allow"."""
+        v = guard.check(self.project, cmd, guard.as_role(role, str(cwd or self.home)))
         if v is None:
             return "allow"
         return f"file:{v[1].kind}" if v[0] == "file" else v[1]
@@ -279,7 +297,6 @@ class ProgramHolesTest(BashWriteCase):
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.deny(cmd), want)
 
-    @hole
     def test_h7_builtins_through_a_module_or_a_full_width_underscore(self):
         cases = (
             py(
@@ -290,7 +307,6 @@ class ProgramHolesTest(BashWriteCase):
         got = {cmd: self.deny(cmd) for cmd in cases}
         self.assertEqual(got, dict.fromkeys(got, PUBLISH))
 
-    @hole
     def test_h8_a_module_written_under_a_computed_name(self):
         payload = f"import os; os.system('{PUBLISH}')"
         cases = (
@@ -300,17 +316,14 @@ class ProgramHolesTest(BashWriteCase):
         got = {cmd: self.deny(cmd) for cmd in cases}
         self.assertEqual(got, dict.fromkeys(got, PUBLISH))
 
-    @hole
     def test_h9_a_computed_file_the_line_runs(self):
         cmd = py(f'from pathlib import Path\nPath("hs.x"[::-1]).write_text("{PUBLISH}")') + "\nsh x.sh"
         self.assertEqual(self.deny(cmd), PUBLISH)
 
-    @hole
     def test_h10_a_path_with_a_space_in_a_literal(self):
         cmd = py('print(open("/opt/My App/.env").read())')
         self.assertEqual(self.deny(cmd), ENV)
 
-    @hole
     def test_h11_an_interpreter_that_writes_a_reserved_file(self):
         """Nobody writes a reserved file, whatever writes it: the agent and the orchestrator alike."""
         cases = {
@@ -320,6 +333,198 @@ class ProgramHolesTest(BashWriteCase):
         }
         got = {(cmd, role): self.deny(cmd, role) for cmd in cases for role in ("agent", "orchestrator")}
         self.assertEqual(got, {(cmd, role): cases[cmd] for cmd, role in got})
+
+    def test_builtins_through_a_frame(self):
+        """A generator's, coroutine's or traceback's frame reaches the builtins without `__` (review round 1, F1)."""
+        cmd = py(
+            'g = (x for x in [0])\ng.gi_frame.f_builtins["exec"]("import subprocess; subprocess.run(\''
+            + PUBLISH
+            + "', shell=True)\")"
+        )
+        self.assertEqual(self.deny(cmd), PUBLISH)
+
+    def test_a_reserved_file_named_from_home(self):
+        """A target named from the home folder (`~`, Path.home(), os.homedir()) or one the program cannot name, from a
+        worktree (review round 1, F2)."""
+        wt = self.tmp / "wt"
+        wt.mkdir()
+        rel = os.path.relpath(self.home, self.user)  # HOME is self.user: the home as seen from it
+        cases = {
+            py(
+                f'from pathlib import Path\np = Path("~/{rel}/foreman.toml").expanduser()\np.write_text("x")'
+            ): "file:config",
+            py('from pathlib import Path\n(Path.home() / ".claude/settings.json").write_text("{}")'): "file:claude",
+            f"python3 -c \"import os; open(os.path.expanduser('~/{rel}/{TABLE}'), 'a').write('x')\"": "file:table",
+            f"node -e \"fs.writeFileSync(path.join(os.homedir(), '{rel}/foreman.toml'), s)\"": "file:config",
+        }
+        got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
+        self.assertEqual(got, cases)
+
+    def test_a_reserved_file_named_in_pieces(self):
+        """A path from home written in several literals, the usual way (review round 2, F2)."""
+        wt = self.tmp / "wt"
+        wt.mkdir()
+        parts = os.path.relpath(self.home, self.user).split(os.sep)
+        slashes = " / ".join(f'"{p}"' for p in parts)
+        commas = ", ".join(f"'{p}'" for p in parts)
+        base = f'from pathlib import Path\nbase = Path.home() / {slashes}\n(base / "foreman.toml").write_text("x")'
+        cases = {
+            py(base): "file:config",
+            py(f'from pathlib import Path\n(Path.home() / "{"/".join(parts)}" / "foreman.toml").write_text("x")'): (
+                "file:config"
+            ),
+            py('from pathlib import Path\n(Path.home() / ".claude" / "settings.json").write_text("{}")'): "file:claude",
+            f"node -e \"fs.writeFileSync(path.join(os.homedir(), {commas}, 'foreman.toml'), s)\"": "file:config",
+        }
+        got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
+        self.assertEqual(got, cases)
+
+    def test_a_target_held_in_a_variable(self):
+        """Code that does not pass the gate and writes a file held in a variable (review round 2, F9)."""
+        cases = {
+            "python3 -c \"import sys; p = 'foreman.toml'; s = open(p).read(); open(p, 'w').write(s.replace('a', "
+            "'b'))\"": "file:config",
+            f"node -e \"const f = '{TABLE}'; require('fs').appendFileSync(f, 'allow\\tls\\n')\"": "file:table",
+            # the file a Path's method writes is its object
+            py("import os\nfrom pathlib import Path\np = Path('foreman.toml')\np.write_text('x')"): "file:config",
+        }
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, cases)
+
+    def test_a_name_a_match_pattern_binds(self):
+        """A match pattern binds a name again (review round 1, F3)."""
+        cmd = py(
+            'from pathlib import Path\np = Path("notes.md")\nmatch Path("difflib.py"):\n    case p:\n'
+            f"        p.write_text(\"import os; os.system('{PUBLISH}')\")\nimport difflib"
+        )
+        self.assertEqual(self.deny(cmd), PUBLISH)
+
+    def test_code_that_only_reads(self):
+        """Reading a reserved file with code that has a writing word elsewhere passes (review round 1, F4)."""
+        cases = (
+            "python3 -c \"import tomllib,json,sys; json.dump(tomllib.load(open('foreman.toml','rb')), sys.stdout)\"",
+            f"node -e \"console.log(fs.readFileSync('{TABLE}','utf8').replace('a','b'))\"",
+            py(
+                'import json\nfrom pathlib import Path\nx = "a"\n'
+                'Path(f"/tmp/{x}.json").write_text(json.dumps(open("foreman.toml").read()))'
+            ),
+        )
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(cases, "allow"))
+
+    def test_perl_opens_for_writing(self):
+        """Perl's open without parentheses, and with its mode in the file's literal (review round 1, F5)."""
+        cases = (
+            'perl -e \'open my $f, ">", "foreman.toml"; print $f "x"\'',
+            'perl -e \'open(F, ">foreman.toml"); print F "x"\'',
+        )
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, dict.fromkeys(cases, "file:config"))
+
+    def test_interpreters_that_read_or_write_elsewhere(self):
+        """H11's rule by what the code writes: reading a reserved file passes; Python that passes the gate is judged
+        by the files it names as written, other code by its quoted literals when it has a word that writes."""
+        cases = {
+            "node -e \"console.log(require('fs').readFileSync('foreman.toml', 'utf8'))\"": "allow",
+            "python3 -c \"import sys; print(open('foreman.toml', 'rb').read(), file=sys.stderr)\"": "allow",
+            py("s = open('foreman.toml').read()\nopen('notes.md', 'w').write(s)"): "allow",
+            py("import json\nprint(json.dumps(open('foreman.toml').read()))", head="python3 -I -"): "allow",
+            # a file it cannot name: the literals of its target (and of the names in it) may be it; a name bound
+            # some other way (a loop, an argument), any of the program's (review round 1, F2, F4)
+            py("import re\nn = 'foreman.toml'\nopen(re.sub('x', 'y', n), 'w').write('')"): "file:config",
+            py("for n in ['foreman.toml']:\n    open(n + '', 'w').write('')"): "file:config",
+            py("import re\ns = open('foreman.toml').read()\nopen(re.sub('x', 'y', 'a'), 'w').write(s)"): "allow",
+            'perl -e \'open(my $f, ">", "foreman.toml")\'': "file:config",
+            "python3 -c \"import os; os.rename('x', 'foreman.toml')\"": "file:config",  # not through the gate
+            "cd tests && node -e \"require('fs').writeFileSync('guard.tsv', '')\"": "file:table",
+            f'ruby -e \'File.write("{TABLE}", "")\'': "file:table",
+        }
+        got = {cmd: self.deny(cmd) for cmd in cases}
+        self.assertEqual(got, cases)
+
+
+class ProgramGateTest(unittest.TestCase):
+    """pyscript's rules behind H7-H10: the gate (identifiers from the tree, a module's members), the files a
+    program writes, and the words with a `/` kept from prose."""
+
+    def test_gate(self):
+        ok = (
+            "import re\nr = re.compile('x')",
+            "import collections.abc\nx = collections.abc.Mapping",
+            "from collections import Counter as C",
+            "import json as j\nj.dumps(1)",
+            "x = '__init__.py'",  # a string is not an identifier
+            "from pathlib import Path\nPath('x').read_text().replace('a', 'b')",
+        )
+        refused = (
+            "import re\nre.enum",
+            "import re\nre.enum.bltns.eval('1')",
+            "import glob\nglob.os",
+            "import json\njson.decoder",
+            "from json import decoder",
+            "from re import *",
+            "import re\nm = re\nm.enum",
+            "import re\nprint(re)",
+            "x = 1\nx.eval('1')",  # a builtin's name as the attribute of something that is no module
+            "_\uff3fimport_\uff3f('os')",  # Python reads a full-width low line as `_`
+            "def f(__x): pass",
+            "g = (x for x in [0])\ng.gi_frame",  # a frame reaches the builtins and globals (review round 1, F1)
+            "def f(): pass\nf.f_globals",
+            "async def c(): pass\nc().cr_frame",
+        )
+        for body in ok:
+            with self.subTest(body=body):
+                self.assertIsNotNone(pyscript.gate(body))
+        for body in refused:
+            with self.subTest(body=body):
+                self.assertIsNone(pyscript.gate(body))
+
+    def test_writes(self):
+        P = "from pathlib import Path\n"
+        cases = {
+            "print(open('a').read())": set(),
+            "open('a', 'rb')": set(),
+            "open('a', 'w')": {"a"},
+            "open('a', mode='a+')": {"a"},
+            "open(file='a', mode='x')": {"a"},
+            "import json\njson.dump(1, open('a', 'w'))": {"a"},
+            "with open('a', 'w') as f:\n    f.write('x')": {"a"},
+            "open('a', m)": {"a"},  # a mode it cannot read: a write
+            P + "p = Path('a')\np.write_text(p.read_text())": {"a"},
+            P + "p = q = Path('a')\nq.touch()": {"a"},
+            P + "Path('d', 'a').unlink()": {"d/a"},
+            P + "Path('a').rename('b')": {"a", "b"},
+            P + "Path('a').replace(target='b')": {"a", "b"},
+            P + "Path('a').open('w')": {"a"},
+            P + "Path('a').open()": set(),
+            "import pathlib\npathlib.Path('a').mkdir()": {"a"},
+            "s = 'a b'.replace('a', 'b')\nd = {}.copy()": set(),
+            # what it cannot name
+            "open(n, 'w')": None,
+            "o = open\no('a', 'w')": None,
+            "open(*a)": None,
+            P + "p = Path('a')\np = Path(n)\np.touch()": None,
+            P + "for p in [Path('a')]:\n    p.touch()": None,
+            P + "w = Path('a').write_text\nw('x')": None,
+            P + "Path('a').rename(**k)": None,
+            P + "Path('a').with_suffix('.py').touch()": None,
+            P + "Path('a' + 'b').touch()": None,
+            P + "def Path(x):\n    return x\nPath('a').touch()": None,
+            "from json import JSONDecoder as Path\nPath('a').touch()": None,
+            P + "p = Path('a')\nmatch x:\n    case p:\n        p.touch()": None,  # review round 1, F3
+        }
+        for body, want in cases.items():
+            if "match" in body and sys.version_info < (3, 10):
+                continue  # no match statement before 3.10: such a program does not parse, so it is compared raw
+            with self.subTest(body=body):
+                tree = pyscript.gate(body)
+                self.assertIsNotNone(tree)
+                named, unnamed = pyscript.writes(tree)
+                self.assertEqual(None if unnamed is not None else set(named), want)
+
+    def test_paths_in_prose(self):
+        self.assertEqual(pyscript.blank('x = "/opt/My App/a b"\n'), "x = \"\"\n\n'/opt/My'\n'App/a'")
+        self.assertEqual(pyscript.blank('x = "never git push"\n'), 'x = ""\n')
 
 
 if __name__ == "__main__":

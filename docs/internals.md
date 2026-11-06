@@ -225,8 +225,15 @@ a reserved path (`$X/.claude/settings.json`, `${D:-~/.local/state/foreman}/x`); 
 when it looks like a write and names one. Reading them (`cat`, `grep`, `diff`, `cp foreman.toml /tmp/cand.toml`) is
 free, and so is text that only mentions a write (a quoted heredoc to `cat`, `foreman note`, `git commit -m`). The
 refusal is `file:<class>` too, with the command around the name. A guard table's Bash rows get the same `{state}`,
-`{state_root}` and `{registry}`. Not seen: a program that writes them by itself (`python -c "open(…).write(…)"`, a
-script written earlier), `git checkout` or `git restore` of them in the main checkout by the orchestrator (an
+`{state_root}` and `{registry}`. The code an interpreter gets on the line (`python -c`, `node -e`, a heredoc to
+`python3` or `perl`) counts as a writer too: Python that passes the gate below by the files it writes (`open(…, "w")`,
+`Path(…).write_text`, `rename`…; for one it cannot name, the literals in it and in the values of the names it uses,
+or all of the program's when such a name is bound by a loop or an argument), any other code by the quoted literals in
+the arguments of a call that writes (`writeFileSync(…)`, `os.rename(…)`, `open(…, "w")`, perl's `open my $f, ">",
+"x"`). Each is taken from the session's folder and from the home folder (`Path.home() / "x"`), with `~` expanded.
+Reading stays free
+(`tomllib.load(open("foreman.toml", "rb"))`). Not seen: a script file that writes them (`python3 x.py`), code piped
+into an interpreter (`echo … | python3`), `git checkout` or `git restore` of them in the main checkout by the orchestrator (an
 agent's is refused: «The main checkout», below; a merge by `foreman integrate` tests them first: docs/config.md, «Seeing the
 permissions and testing a change»), an archive unpacked over them, `find -exec rm {}` below a folder that is not
 itself reserved, and a variable whose value comes from outside the line.
@@ -376,15 +383,20 @@ A heredoc to an interpreter that is not a shell (`python`, `perl`, `ruby`, `node
 pattern anchored with `(^|\s)` does not see `os.system("x")`. One exception: a Python program that cannot start a
 process is text. `python3` or `python3 -` (named bare or by a system path, only flags that take no value such as
 `-I`, no `PYTHON*=` in front) reading one heredoc, quoted or without `$`, backquotes and backslashes, of at most
-64 KB, that parses and passes an allow-list gate: no `__` anywhere, imports only from `re`, `pathlib`, `json`,
-`textwrap`, `difflib`, `collections`, `datetime`, `string`, `math`, `itertools`, `functools`, `glob`, `fnmatch` and
-`tomllib`, no attribute that starts with `_`, and no name such as `os`, `sys`, `subprocess`, `importlib`, `system`,
-`Popen`, `exec`, `eval`, `compile`, `getattr`, `vars`, `globals` or `input` (lib/foreman/pyscript.py has the lists).
+64 KB, that parses and passes an allow-list gate: no identifier with `__` (read from the parsed program, so a
+full-width `＿` counts as `_`), imports only from `re`, `pathlib`, `json`, `textwrap`, `difflib`, `collections`,
+`datetime`, `string`, `math`, `itertools`, `functools`, `glob`, `fnmatch` and `tomllib`, no attribute that starts
+with `_`, an attribute of an imported module (or `from M import X`) only one of its public members that is not a
+module (`re.compile`, not `re.enum` nor `json.decoder`), a module's name used only to read its attributes, and no
+name such as `os`, `sys`, `subprocess`, `importlib`, `system`, `Popen`, `exec`, `eval`, `compile`, `getattr`, `vars`,
+`globals` or `input`, nor `eval`… as an attribute of anything but a module (lib/foreman/pyscript.py has the lists).
 Its comments and its string literals that hold whitespace are blanked; a one-word literal (`".env"`, a file name)
-is still compared. It is read raw again when its output is run (`| sh`, `$(…)`), when the line writes somewhere
-that is not a plain file, writes a module the program would import instead (`re.py`), or may run a file the program
-may write (a one-word literal of it, as in `sh x.sh` or `./run`, or a runner that takes a word that is not
-literal). A file written in one call and run in a later one, or
+is still compared, and so is each word with a `/` of a literal with spaces (`"/opt/My App/.env"`). It is read raw
+again when its output is run (`| sh`, `$(…)`), when the line writes somewhere that is not a plain file, when the
+program writes a file it cannot name (`Path("x").with_suffix(".py")`, `Path("hs.x"[::-1])`; a file is named by a
+literal, `Path(literal)` or a name only ever given such a value), or one an allowed import would load instead
+(`re.py`, a folder `difflib/`), or when the line may run a file the program or the line writes (as in `sh x.sh` or
+`./run`, or a runner that takes a word that is not literal). A file written in one call and run in a later one, or
 read as code by another program by its own convention (a shell's startup file), is not seen. Any other heredoc body is
 text (`cat > f <<EOF`, `git commit -F - <<EOF`; only its substitutions run when the delimiter is unquoted), unless
 the same line runs the file a heredoc to `cat` or `tee` writes (or a copy of it: `cp`, `mv`, `ln`): named in what a

@@ -331,22 +331,30 @@ def switched(w: Sequence[Tok], prog: int) -> tuple[list[str | None], str, bool] 
 
 
 def branches(
-    segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], where: Sequence[frozenset[str]]
+    segs: Sequence[Seg],
+    words_of: Sequence[Sequence[Tok]],
+    info: Sequence[Runs],
+    where: Sequence[frozenset[str]],
+    fn: dict[int, list[tuple[int, list[Tok]]]] | None = None,
 ) -> list[dict[str, frozenset[str]]]:
     """For each segment, {folder: the branches that may be checked out there} after the line's `git switch` and
     `git checkout` before it (CURRENT: the one git says); a folder not in it has only CURRENT. A switch replaces
     the branch only when it surely ran in that one folder: outside any group or compound, followed by nothing but
-    && up to the segment (a switch can fail); elsewhere its branch is added."""
+    && up to the segment (a switch can fail); elsewhere its branch is added. fn (called()): a function's body is
+    read with each call's arguments, from the call's folders too, and only adds."""
     out: list[dict[str, frozenset[str]]] = []
     sure: dict[str, set[str]] = {}
     chain: dict[str, set[str]] | None = None
     for k, (_, pure, top) in enumerate(_lists(segs, words_of)):
         state = chain if (chain is not None and pure) else sure
         out.append({d: frozenset(b) for d, b in state.items()})
-        got = switched(words_of[k], info[k].prog)
-        if got is not None:
+        for v, j in variants(words_of[k], info[k].prog, (fn or {}).get(k)):
+            got = switched(v, info[k].prog)
+            if got is None:
+                continue
             dirs, name, certain = got
-            here = moved(where[k], dirs)
+            certain = certain and j is None
+            here = moved(where[k] if j is None else where[k] | where[j], dirs)
             plain = certain and top and segs[k].sep == "&&" and len(here) == 1
             new = {d: set(b) for d, b in state.items()}
             for d in here:
@@ -357,6 +365,7 @@ def branches(
             for d in here:
                 sure[d] = sure.get(d, {CURRENT}) | {name}
             chain = new if plain and pure else (None if chain is None else new)
+            state = chain if (chain is not None and pure) else sure
         if segs[k].sep in LIST_SEPS:
             chain = None
     return out
@@ -634,12 +643,14 @@ def changes(
     start: Changes = NONE,
     segs: Sequence[Seg] | None = None,
     where: Sequence[frozenset[str]] | None = None,
+    fn: dict[int, list[tuple[int, list[Tok]]]] | None = None,
 ) -> list[Changes]:
     """For each segment, what the line changed in git's config before it (start: before the line). A change counts
     wherever it is on the line (a group, a branch, after ||); one that may not have run keeps the config before it
     too (Changes.maybe): the folders() reading of a cd that surely ran. Each keeps the folders it ran in (where: the
     segments' folders, with its -C; UNKNOWN under --git-dir or GIT_DIR): overlay() counts it as run only for a push
-    from that one folder. Without segs, every change counts as run everywhere."""
+    from that one folder. Without segs, every change counts as run everywhere. fn (called()): a function's body is
+    read with each call's arguments, from the call's folders too, as a change that may not have run."""
     out: list[Changes] = []
     sure, chain = start, None
     lists = _lists(segs, words_of) if segs is not None else ((True, True, True) for _ in words_of)
@@ -647,11 +658,15 @@ def changes(
         w, sep = words_of[k], segs[k].sep if segs is not None else ";"
         cur = chain if (chain is not None and pure) else sure
         out.append(cur)
-        ch = changed(w, info[k].prog)
-        c = parse_git(w, info[k].prog) if ch.config and where is not None else None
-        if c is not None and where is not None:
-            other = c.git_dir != "" or env_changes(w[: info[k].prog])[1] != ""  # another repo than the folder's
-            ch = ch.ran_in(frozenset({UNKNOWN}) if other else frozenset(moved(where[k], c.dirs)))
+        ch = NONE
+        for v, j in variants(w, info[k].prog, (fn or {}).get(k)):
+            one = changed(v, info[k].prog)
+            c = parse_git(v, info[k].prog) if one.config and where is not None else None
+            if c is not None and where is not None:
+                other = c.git_dir != "" or env_changes(v[: info[k].prog])[1] != ""  # another repo than the folder's
+                dirs = where[k] if j is None else where[k] | where[j]
+                one = one.ran_in(frozenset({UNKNOWN}) if other else frozenset(moved(dirs, c.dirs)))
+            ch = ch.plus(one if j is None else one.maybe())
         plain = top and sep not in ("|", "|&", "&", "||")
         if ch == NONE:
             pass
