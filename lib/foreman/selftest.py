@@ -6,8 +6,9 @@ a fake (tests/fake_gh.py) and the remotes are bare repos in the temporary direct
 files on this machine. The static checks include the version and release checks of release.py.
 
 The tests run by class in parallel worker processes (`-j N`; by default the machine's cores divided by the selftest
-runs alive on it, at least 2: RunSlot), the golden corpus's classes and then the classes with more tests first; each
-worker has its own $TMPDIR subtree, so no two tests share a folder, a port or a lock, and the parent merges the
+runs alive on it, at least 2: RunSlot), the classes that took longest in the runs before first (past_seconds), and
+of those never timed here, the golden corpus's classes and then the classes with more tests; each worker has its
+own $TMPDIR subtree, so no two tests share a folder, a port or a lock, and the parent merges the
 results into one summary in unittest's format. `-j 1` runs everything in this process, one test after another.
 
 The golden corpus (tests/test_golden.py, tests/golden.py) compares foreman's outputs and state with tests/golden/
@@ -474,6 +475,30 @@ def held(f: Path) -> bool:
         return False
 
 
+TIMES = "times.json"  # in slots_dir(): {test class: wall seconds the last time a run on this machine ran it}
+
+
+def past_seconds() -> dict[str, float]:
+    """Each test class's wall seconds the last time a selftest on this machine ran it; {} when none did."""
+    try:
+        times = json.loads((slots_dir() / TIMES).read_text())
+    except (OSError, ValueError):
+        return {}
+    return times if isinstance(times, dict) else {}
+
+
+def save_seconds(results: list[dict[str, Any]]) -> None:
+    """Adds this run's classes to past_seconds(): the next run starts the long ones first, so none starts last."""
+    times = dict(past_seconds(), **{r["key"]: r["s"] for r in results if r.get("key") and r["run"]})
+    with contextlib.suppress(OSError):
+        d = slots_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix="times-", dir=d)
+        with os.fdopen(fd, "w") as f:
+            json.dump(times, f, indent=0, sort_keys=True)
+        os.replace(tmp, d / TIMES)
+
+
 def run_quality_only(mode: str, mods: str = "off") -> int:
     """`selftest --quality-only`: the static checks, the quality checks and the mods check (at the same time), no
     tests."""
@@ -767,9 +792,10 @@ def run_parallel(
     worker that ends a class while the run has more is stopped, and one is added when the share grows. Without it,
     `jobs` workers to the end."""
     todo, local = classes(suite)
-    # the golden corpus's classes (one long test each) and then the classes with more tests first, so a long one
-    # does not start last
-    queue = sorted(todo, key=lambda k: (not k.startswith(GOLDEN_TESTS), -len(todo[k]), k))
+    # the longest first, so a long one does not start last: those never timed here (the golden corpus's classes,
+    # one long test each, then the classes with more tests), then the others by their past seconds
+    past = past_seconds()
+    queue = sorted(todo, key=lambda k: (k in past, -past.get(k, 0), not k.startswith(GOLDEN_TESTS), -len(todo[k]), k))
     results = []
     root = tempfile.mkdtemp(prefix="foreman-selftest-")
     workers, sel = [], selectors.DefaultSelector()
@@ -855,6 +881,7 @@ def run_parallel(
             w.stop()
         sel.close()
         shutil.rmtree(root, ignore_errors=True)
+    save_seconds(results)
     if os.environ.get("FOREMAN_SELFTEST_TIMES"):  # {class: [wall s, cpu s]}, to find the costly ones
         Path(os.environ["FOREMAN_SELFTEST_TIMES"]).write_text(
             json.dumps({r["key"]: [r["s"], r.get("cpu", 0)] for r in results if r.get("key")}, indent=1, sort_keys=True)
