@@ -235,6 +235,18 @@ class FoldersTest(MainCheckoutCase):
         self.assertEqual(self.v("git log 'x"), "allow")
         self.assertEqual(self.v("git merge 'x", self.wt), "allow")
 
+    def test_an_alias_the_lexer_cannot_read(self):
+        """A `!` alias whose command the lexer cannot read is judged as text in the folder the alias runs in (the
+        line that calls it does not name the subcommand)."""
+        cfg = ["git", "-C", str(self.top), "config"]
+        subprocess.run([*cfg, "alias.up", "!git merge $'x'"], check=True)
+        subprocess.run([*cfg, "alias.lg", "!git log $'x'"], check=True)
+        self.assertEqual(self.v("git up"), "orchestrator")
+        self.assertEqual(self.v(f"git -C {self.top} up", self.wt), "orchestrator")
+        self.assertEqual(self.v(f"git -C {self.wt} up"), "allow")  # it runs in the worktree
+        self.assertEqual(self.v("git up", self.wt), "allow")
+        self.assertEqual(self.v("git lg"), "allow")  # it reads
+
 
 class WhoTest(MainCheckoutCase):
     def test_orchestrator_and_other_sessions_pass(self):
@@ -413,6 +425,13 @@ class CostTest(MainCheckoutCase):
             self.assertEqual(self.v("ls -la && cat x | wc -l"), "allow")
             self.assertEqual(self.v("git log --oneline"), "allow")  # it reads: no checkout is looked up
             m.assert_not_called()
+
+    def test_a_folder_that_is_gone(self):
+        """The process's folder is read by each rule, so its loss is that rule's failure (the text only), not a deny of
+        the whole command."""
+        with mock.patch.object(os, "getcwd", side_effect=FileNotFoundError):
+            self.assertIsNone(guard.check(self.project, "ls -la"))
+            self.assertEqual(guard.check(self.project, f"git -C {self.top} merge main")[1], guard.MAIN_CHECKOUT)
 
 
 if __name__ == "__main__":

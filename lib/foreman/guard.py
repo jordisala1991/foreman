@@ -59,9 +59,9 @@ built-in lists), and each list is compared with them (an empty list is not); eac
 (_read) for those texts and for the rules below (_walk: the command and each line nested in it as sh -c, eval, $(…),
 a heredoc or a pipe into a shell, xargs and find -exec run it, not what ssh runs; each segment with the folders it may
 run in, gitpush.folders from the event's cwd, else the process's, with the values the line gives its variables); the
-registry, who calls and what git says of a folder (the Resolver, shared by the pushes and the main-checkout rule),
-once each. A rule below that fails compares the line's text only (_either): a failure of foreman blocks only what
-that text names.
+registry, whether the caller is an agent and what git says of a folder (the Resolver, shared by the pushes and the
+main-checkout rule), once each. A rule below that fails compares the line's text only (_either): a failure of
+foreman blocks only what that text names.
 What the guard does not see: a script written to a file and run later (or read as code by another program by its
 own convention, a shell's startup file), a forbidden command built inside a program
 (python -c, `os.system("x")` in a heredoc to python, for an anchored pattern; a python program that passes the gate
@@ -686,13 +686,14 @@ def _who(project: Project, ctx: Ctx | None, process: bool = True) -> str:
 
 class _Check:
     """One check() of a Bash command: what its rules share, each read once when first asked and kept (an exception
-    too, raised again to each rule that asks): the registry, who calls, the lines the command runs (_walk), its texts
-    with and without its pushes resolved (_texts) and what git says of each folder (the Resolver)."""
+    too, raised again to each rule that asks): the registry, _who without the process, the folder it runs in, the
+    lines the command runs (_walk), its texts with and without its pushes resolved (_texts) and what git says of each
+    folder (the Resolver)."""
 
     def __init__(self, project: Project, cmd: str, ctx: Ctx | None, projects: Sequence[Project] | None) -> None:
         self.project, self.cmd, self.ctx = project, cmd, ctx
         cwd = (ctx or {}).get("cwd")
-        self.cwd = os.path.normpath(os.path.expanduser(cwd or os.getcwd()))
+        self.given = cwd
         self.git = gitpush.Resolver(project, cwd)
         self.at = self.git if ctx is not None and "cwd" in ctx else None  # without the key: the text only
         self.kept: dict[Any, tuple[Any, Exception | None]] = {}
@@ -709,6 +710,10 @@ class _Check:
         if err is not None:
             raise err
         return value
+
+    @property
+    def cwd(self) -> str:  # read by the rules (the process's folder may be gone: a rule's failure, not check()'s)
+        return self.once("cwd", lambda: os.path.normpath(os.path.expanduser(self.given or os.getcwd())))
 
     def projects(self) -> Sequence[Project]:
         return self.once("projects", lambda: _projects(self.project, None))
@@ -1685,7 +1690,7 @@ def _main_checkout(chk: _Check) -> Hit | None:
             for cfg in gitpush.overlay(repo.config if repo else {}, c.changes.config):
                 ex = gitpush.aliased(w[prog:], gitpush.Repo(None, None, cfg))
                 if isinstance(ex, str):  # a shell command, from the same folder
-                    each(_walk(ex, frozenset({folder or gitpush.UNKNOWN}), env, 1))
+                    each(_walk(ex, frozenset({folder or gitpush.UNKNOWN}), env, 1), folder or top[0])
                 elif ex is not None:  # a git command, or one the line computes, from the same folders
                     found.extend(h for h in [one(ex, 0, dirs, env, line)] if h)
             return found[0] if found else None
@@ -1694,7 +1699,7 @@ def _main_checkout(chk: _Check) -> Hit | None:
             return _git_hit(sub, top, part)
         return None
 
-    def each(lines: Iterable[Line | str]) -> None:
+    def each(lines: Iterable[Line | str], cwd: str) -> None:  # cwd: where a text the lexer cannot read runs
         for line in lines:
             if found:
                 return
@@ -1702,7 +1707,7 @@ def _main_checkout(chk: _Check) -> Hit | None:
                 if GIT_REWRITE_TEXT.search(line):
                     key = _names_top(line, tops())
                     if key is None:
-                        got = gitdir.checkout_of(chk.cwd)
+                        got = gitdir.checkout_of(cwd)
                         key = _fold(got) if got is not None and _fold(got) in tops() else None
                     if key is not None:
                         found.append(_git_hit("?", tops()[key], line))
@@ -1717,7 +1722,7 @@ def _main_checkout(chk: _Check) -> Hit | None:
                         found.append(hit)
 
     def rule() -> Hit | None:
-        each(chk.lines())
+        each(chk.lines(), chk.cwd)
         return found[0] if found else None
 
     def text_only() -> Hit | None:

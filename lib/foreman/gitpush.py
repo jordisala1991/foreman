@@ -477,11 +477,12 @@ def parse_git(w: Sequence[Tok], prog: int) -> Call | None:
         if not w[k].literal:  # an option the line computes (`--git-dir=$D`): whatever it changes is unknown
             name, eq, _ = w[k].raw.lstrip("\"'").partition("=")
             k += 2 if name in GIT_VALUE_OPTS and not eq else 1
-            if name.startswith("-C") or name == "--work-tree":
-                (c.dirs if name.startswith("-C") else c.trees).append(None)
+            if name.startswith("-C"):
+                c.dirs.append(None)
             else:
                 c.changes = c.changes.plus(LOST)
                 c.git_dir = None if name == "--git-dir" else c.git_dir
+                c.trees += [None] if name == "--work-tree" else []
             continue
         v = w[k].value
         name, eq, val = v.partition("=")

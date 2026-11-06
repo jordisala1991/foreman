@@ -570,6 +570,27 @@ class WiringTest(PushCase):
             self.assertEqual(v, ("deny", "(the guard could not check this command: Failed)"))
             self.assertIsNone(guard.check(self.project, "ls", {"cwd": str(self.home)}))
 
+    def test_an_empty_list_is_not_compared(self):
+        """With no [deny] patterns and no groups there is nothing to deny: no git is run and the resolver is never
+        asked, so its failure refuses nothing; with a pattern it still does (test_resolver_failure_is_a_deny)."""
+        self.write_toml(PUBLIC.split("[deny]")[0] + "[deny]\npatterns = []\n")
+        lib = self.tmp / "lib"
+        with (
+            mock.patch.object(gitpush, "read_repo", side_effect=AssertionError("git was run")),
+            mock.patch.object(gitpush.Resolver, "resolve", side_effect=AssertionError("resolved")),
+        ):
+            self.assertEqual(self.verdict(f"{PUSH} origin main", lib), "allow")
+            self.assertEqual(self.verdict(f"cd {lib} && {PUSH} --all", self.home), "allow")
+
+    def test_a_work_tree(self):
+        """--work-tree changes neither the repo nor its config; one the line computes makes the config unknown, as
+        any computed option (every repo of the project is tried), the same verdicts as before the reading once."""
+        tree = "git --work-tree"
+        self.assertEqual(self.verdict(f"{tree} /tmp/x {PUSH[4:]} origin feature", self.own), "allow")
+        self.assertEqual(self.verdict(f"{tree}=/tmp/x {PUSH[4:]} origin feature", self.own), "allow")
+        self.assertEqual(self.verdict(f'{tree}="$W" {PUSH[4:]} origin feature', self.own), "deny")
+        self.assertEqual(self.verdict(f"{tree} /tmp/x {PUSH[4:]} origin feature", self.tmp / "lib"), "deny")
+
 
 class SwitchTest(PushCase):
     """A branch switched earlier on the same line is the one pushed, only when the switch surely ran there."""
