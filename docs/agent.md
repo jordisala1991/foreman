@@ -48,7 +48,8 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   Integrating is the orchestrator's: `foreman integrate` is refused to you (`--check` and `--help` pass), and so is a
   git that rewrites a main checkout of a repo (merge, pull, switch or checkout of a branch, reset --hard,
   stash, restore or rm of foreman.toml or the guard table…): do it in your worktree (`git -C <worktree> …`, `cd
-  <worktree> && git …`), or limit it to the files you mean (`git stash push -- PATH`, `git checkout -- PATH`).
+  <worktree> && git …`), or limit it to the files you mean (`git stash push -- PATH`, `git checkout -- PATH`). A `git commit` or
+  `git branch` there is not refused, but it is not yours either: commit only in your worktree.
 - **What you check yourself:** what the CI does not see: tests of what you touch and the checks the plan asks for.
   The full suite and the remote checks are the orchestrator's (`foreman integrate`). A plan with a «Hidden check»
   has more cases, run at integration, that you cannot see: meet its contract and criterion, do not look for them;

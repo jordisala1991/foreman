@@ -581,34 +581,38 @@ class SwitchTest(PushCase):
         remote(self.api, "https://example.test/owner/api.git")
 
     def test_switch_then_push(self):
-        """As the orchestrator: api is the main checkout of a [repos.*] path, where an agent switches no branch."""
+        """As an agent from a worktree of api, and as the orchestrator from api itself: the main checkout of a
+        [repos.*] path, where an agent switches no branch."""
         api = self.api
+        wt = self.tmp / "wt/api-a1"
+        git(api, "worktree", "add", "-q", "--detach", str(wt))
         self.assertEqual(self.verdict(f"git switch -q -c chore/x && {PUSH} -u origin HEAD", api), "orchestrator")
-        allow = [
-            f"git switch -q -c chore/x && git commit -qm x && {PUSH} -q -u origin HEAD",
-            f"git checkout -b fix/y && {PUSH} -u origin HEAD",
-            f"git switch --create=fix/z && {PUSH}",
-            f"cd {api} && git switch -c fix/w && {PUSH} -u origin @",
-            f"git -C {api} switch -c fix/v && git -C {api} push -u origin HEAD",
-        ]
-        for cmd in allow:
-            self.assertEqual(self.verdict(cmd, api, "orchestrator"), "allow", cmd)
-        deny = [
-            f"git switch -c fix/x; {PUSH} -u origin HEAD",  # the switch may fail: main is still possible
-            f"git switch -c fix/x || true && {PUSH} -u origin HEAD",
-            f"ls || git switch -c fix/x && {PUSH} -u origin HEAD",
-            f"(git switch -c fix/x) && {PUSH} -u origin HEAD",
-            f"git checkout fix/x && {PUSH} -u origin HEAD",  # may restore a file named fix/x
-            f"git switch --detach && {PUSH} origin HEAD",
-            f'git switch -c "$B" && {PUSH} origin HEAD',
-            f"git -C {self.own} switch -c fix/x && {PUSH} origin HEAD",  # another folder
-            f"git switch -c fix/x && {PUSH} origin main",
-            f"git switch -c fix/x && git switch main && {PUSH} origin HEAD",
-        ]
-        for cmd in deny:
-            self.assertEqual(self.verdict(cmd, api, "orchestrator"), "deny", cmd)
-        self.assertEqual(self.verdict(f"git checkout -- x && {PUSH} origin HEAD", api, "orchestrator"), "deny")
-        self.assertEqual(self.verdict(f"git switch && {PUSH} origin fix/q", api, "orchestrator"), "allow")
+        for d, role in ((wt, "agent"), (api, "orchestrator")):
+            allow = [
+                f"git switch -q -c chore/x && git commit -qm x && {PUSH} -q -u origin HEAD",
+                f"git checkout -b fix/y && {PUSH} -u origin HEAD",
+                f"git switch --create=fix/z && {PUSH}",
+                f"cd {d} && git switch -c fix/w && {PUSH} -u origin @",
+                f"git -C {d} switch -c fix/v && git -C {d} push -u origin HEAD",
+            ]
+            for cmd in allow:
+                self.assertEqual(self.verdict(cmd, d, role), "allow", (role, cmd))
+            deny = [
+                f"git switch -c fix/x; {PUSH} -u origin HEAD",  # the switch may fail: main is still possible
+                f"git switch -c fix/x || true && {PUSH} -u origin HEAD",
+                f"ls || git switch -c fix/x && {PUSH} -u origin HEAD",
+                f"(git switch -c fix/x) && {PUSH} -u origin HEAD",
+                f"git checkout fix/x && {PUSH} -u origin HEAD",  # may restore a file named fix/x
+                f"git switch --detach && {PUSH} origin HEAD",
+                f'git switch -c "$B" && {PUSH} origin HEAD',
+                f"git -C {self.own} switch -c fix/x && {PUSH} origin HEAD",  # another folder
+                f"git switch -c fix/x && {PUSH} origin main",
+                f"git switch -c fix/x && git switch main && {PUSH} origin HEAD",
+            ]
+            for cmd in deny:
+                self.assertEqual(self.verdict(cmd, d, role), "deny", (role, cmd))
+            self.assertEqual(self.verdict(f"git checkout -- x && {PUSH} origin HEAD", d, role), "deny")  # files only
+            self.assertEqual(self.verdict(f"git switch && {PUSH} origin fix/q", d, role), "allow")
 
 
 class SameLineTest(PushCase):

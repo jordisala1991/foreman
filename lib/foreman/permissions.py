@@ -151,10 +151,10 @@ def rules(project: Project) -> list[dict[str, str]]:
     """Every rule of the project in band order: [{band, pattern, from, group?, resource?, only?}], band builtin,
     never, orchestrator or turn; the built-in rule of `permissions apply` (guard.PERMISSIONS_APPLY) has
     only=orchestrator: the marked orchestrator may, after the owner's yes in the chat (and his yes/no with --opens); so
-    do the three that refuse an agent only (guard.AGENT_ONLY: its git in a main checkout with a live home, its `foreman
-    integrate`, and what reaches the hidden acceptance checks, which a planner may). from: foreman for a built-in
-    rule, else machine (the registry's [machine.deny]), product (its foreman.toml) or both (written in the two):
-    config.DenyOrigin."""
+    do the three that refuse an agent only (guard.AGENT_ONLY: its git in the main checkout of a repo or a live home,
+    its `foreman integrate`, and what reaches the hidden acceptance checks, which a planner may). from: foreman for a
+    built-in rule, else machine (the registry's [machine.deny]), product (its foreman.toml) or both (written in the
+    two): config.DenyOrigin."""
     origin = project.deny_origin
     out = [{"band": "builtin", "pattern": p, "from": "foreman"} for p in guard.BUILTIN]
     out.append({"band": "builtin", "pattern": guard.PERMISSIONS_APPLY, "only": "orchestrator", "from": "foreman"})

@@ -116,11 +116,12 @@ word that is no path in that folder); and, by paths, when one reaches a live fil
 holds it, a .claude folder or settings file of the checkout; a path with a variable or a wildcard, when a live file
 lies under the folder of its literal start; a `:` pathspec): checkout -- PATHS (or TREE PATHS), restore (but
 --staged alone), rm (but --cached), mv (sources and destination), stash push -- PATHS. Everything else passes:
-reading (log, diff, show, status, stash list|show…), commit, add, branch, worktree, fetch, reset --soft and a mixed
-reset (the index only). A git alias is read in that folder's config (and the line's -c): to a git command, as that
-command; `!`, as a shell command from the same folder; a subcommand the line computes (`git $C`) rewrites. A line
-the lexer cannot read is refused when it has `git [options] SUB` with SUB one of those (GIT_REWRITE_TEXT) and names
-such a checkout or runs in one. A failure of the rule refuses only a line that has such a `git SUB` and names such a
+reading (log, diff, show, status, stash list|show…), commit (a commit on main in a main checkout is not seen: the
+projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset (the index only). A git
+alias is read in that folder's config (and the line's -c): to a git command, as that command; `!`, as a shell
+command from the same folder; a subcommand the line computes (`git $C`) rewrites. A line the lexer cannot read is
+refused when it has `git [options] SUB` with SUB one of those (GIT_REWRITE_TEXT) and names such a checkout or runs
+in one. A failure of the rule refuses only a line that has such a `git SUB` and names such a
 checkout as text. Not seen: a git command that writes the shared .git/config or .git/hooks (`git config`, `git
 remote add`; their writes by name are the git class of the reserved files, below), a
 branch moved without touching files (update-ref, branch -f: the copy is then dirty and integrate stops), patch, tar

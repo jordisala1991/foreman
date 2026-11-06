@@ -157,8 +157,8 @@ they disagree.
    ID Tn --report PATH` (one call per sub-issue); `report X not found` means that field, or the path the agent
    named, points nowhere. `foreman integrate` without `--report` takes the sub-issue's, else the delivery's.
    Integrating is yours: the guard refuses `foreman integrate` to every agent (`--check` and `--help` pass), and an
-   agent's git that rewrites a main checkout holding a live home (merge, pull, checkout of a branch, reset --hard,
-   stash…; docs/internals.md «The main checkout»); you hear of each attempt (`orchestrator_only_denied`).
+   agent's git that rewrites the main checkout of a product's repo or live home (merge, pull, checkout of a branch,
+   reset --hard, stash…; not a commit: docs/internals.md «The main checkout»); you hear of each attempt (`orchestrator_only_denied`).
    - `foreman integrate REPO BRANCH "ID Tn" --check`: the branch contains main (or can take it, below), the diff,
      the risky paths it touches, the pre-merge report and the plan's check section. Compare with the report; what
      is missing is measured first or written down as debt (`foreman backlog edit ID --append`).
