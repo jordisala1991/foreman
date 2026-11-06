@@ -221,6 +221,25 @@ def changed_mark(project: Project, name: str, value: str | None, mark: bool = Tr
     return old != value
 
 
+def read_keys(project: Project, name: str) -> list[str]:
+    """The keys of the «already notified» mark <state>/<name> (one per line), in the order stored; none when absent."""
+    try:
+        return [k for k in (project.state / name).read_text().split("\n") if k]
+    except OSError:
+        return []
+
+
+def write_keys(project: Project, name: str, keys: Iterable[str], limit: int | None = None) -> None:
+    """Store `keys` as the mark <state>/<name>, in the order given (repeats dropped): when `limit` characters are
+    exceeded, the oldest whole keys go and the newest stay."""
+    f = project.state / name
+    f.parent.mkdir(parents=True, exist_ok=True)
+    kept = list(dict.fromkeys(keys))
+    while limit and len("\n".join(kept)) > limit and len(kept) > 1:
+        kept.pop(0)
+    f.write_text("\n".join(kept))
+
+
 def idle(ns: Iterable[Notice]) -> bool:
     """True if no notice asks for action: such a pass is not sent to the model."""
     return not any(n["actionable"] for n in ns)
