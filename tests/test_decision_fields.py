@@ -3,7 +3,8 @@ undone (`--effect`, `--cost`, `--undo` after their `--option`), what stays stopp
 to remind them (`--if-no-answer`, `--answer-by`; foreman never answers for the owner) and a page that explains it
 (`--page`). `decision add` stores them only when given (a question of before is written and shown as before), checks
 them with `foreman plain`, warns without blocking (an option without effect, two questions in one, a past date, a
-missing or too large page); `show`, `decision list [--json]`, the decisions page and `foreman check` know them."""
+missing or too large page, a page not written for the question); `show`, `decision list [--json]`, the decisions
+page and `foreman check` know them."""
 
 import json
 import unittest
@@ -196,6 +197,32 @@ class DecisionFieldsTest(ProjectCase):
         (self.home / PAGE).write_text("x" * (PAGE_MAX + 1))
         r = self.add("--option", "a", "--effect", "x", "--page", PAGE)
         self.assertIn("is larger than 400 KB: the panel will not show it", r.stderr)
+
+    def page_warns(self, page, body):
+        """The warnings of a question whose page is `page` with `body`."""
+        f = self.home / page
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(body)
+        r = self.add("--option", "a", "--effect", "x", "--page", page)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return "\n".join(self.warnings(r))
+
+    def test_a_page_not_written_for_the_question_warns(self):
+        short = "# The export\n\n" + "A line.\n" * 50 + "![before](shots/before_390.png)\n"
+        self.assertEqual(self.page_warns("reviews/q1/question.md", short), "")
+        w = self.page_warns("reviews/q2/question.md", "A line.\n" * 61)
+        self.assertIn("the page reviews/q2/question.md has 61 lines: a page for one question takes about 30", w)
+        w = self.page_warns("reviews/q1/question.md", short)
+        self.assertIn("the page reviews/q1/question.md is already the page of AB-1 J1: each question", w)
+        for page in ("reviews/2026-11-05-ab-1-study.md", "reviews/q3/plan-AB-1.md"):
+            w = self.page_warns(page, "# Study\n")
+            self.assertIn(f"the page {page} is a report or a plan", w)
+        with self.b.mutate() as d:
+            self.b.issue(d, "AB-1")["subs"] = [{"id": "T1", "title": "x", "status": "done", "report": "notes/r.md"}]
+        self.assertIn("the page notes/r.md is a report or a plan", self.page_warns("notes/r.md", "# R\n"))
+        w = self.page_warns("reviews/q4/question.md", "The run_export job fails.\n")
+        self.assertIn("the page reviews/q4/question.md names without explaining: «run_export»", w)
+        self.assertEqual(len(self.b.load()["decisions"]), 7)
 
     # ---------- refused: exit 2, nothing written ----------
 

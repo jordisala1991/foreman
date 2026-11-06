@@ -108,6 +108,9 @@ DETAIL_KEYS = ("effect", "cost", "undo")  # what a decision's `details` says of 
 UNDO = ("yes", "hard", "no")  # whether an option can be undone: yes, with work, no
 UNANSWERED_KEYS = ("waits", "by")  # what a decision's `unanswered` says: what stays stopped meanwhile, reminder date
 PAGE_MAX = 400_000  # the largest page the panel shows (panel.DOC_MAX)
+# The longest page that reads as written for one question (docs/owner.md, «Question page»: about 30 lines). The
+# pages written for one question measured 11-26 lines; the studies linked as pages, 132 and 263.
+PAGE_LINES = 60
 EXTRA_ISSUE_KEYS = (
     "short",
     "result",
@@ -1499,10 +1502,11 @@ class Backlog:
         """How many questions `text` asks: the runs of «?» once what is quoted («…», “…”, "…") is taken out."""
         return len(re.findall(r"\?+", QUOTED.sub("", text or "")))
 
-    def decision_warnings(self, d: Record, today: date | None = None) -> list[str]:
+    def decision_warnings(self, d: Record, today: date | None = None, data: Data | None = None) -> list[str]:
         """What to fix in pending decision `d`, never blocking (`decision add` prints them on stderr): an option
         that does not say what it changes, two questions in one, a reminder date in the past, a page that does not
-        exist yet or that the panel cannot show (larger than PAGE_MAX)."""
+        exist yet or that the panel cannot show (larger than PAGE_MAX), and a page not written for this question
+        (`page_warnings`)."""
         today = today or date.today()
         out = []
         opts = list(d.get("options", []))
@@ -1534,6 +1538,55 @@ class Backlog:
                     f"the page {page} is larger than {PAGE_MAX // 1000} KB: the panel will not show it; "
                     "shorten it or move tables to another page"
                 )
+            else:
+                out += self.page_warnings(d, data)
+        return out
+
+    def page_warnings(self, d: Record, data: Data | None = None) -> list[str]:
+        """Why the page of decision `d` (it exists) does not read as written for this question alone (docs/owner.md,
+        «Question page»): longer than PAGE_LINES, already the page of another decision of `data`, a delivery report or
+        a plan (named as one: a dated file right in the reviews folder or a plan's name; or recorded as one in the
+        backlog), or text that fails `foreman plain` (the targets of links and images are not read)."""
+        from . import delivery, plain
+
+        page = d["page"]
+        f = self.page_path(page)
+        out = []
+        text = f.read_text(encoding="utf-8", errors="replace")
+        lines = len(text.splitlines())
+        if lines > PAGE_LINES:
+            out.append(
+                f"the page {page} has {lines} lines: a page for one question takes about 30 (what is happening, an "
+                "example, the options, the recommendation); write one for this question (docs/owner.md, "
+                "«Question page»)"
+            )
+        here = f.resolve()
+        others = [
+            x["id"]
+            for x in (data or {}).get("decisions", []) + (data or {}).get("decisions_resolved", [])
+            if x is not d and x.get("page") and self.page_path(x["page"]).resolve() == here
+        ]
+        if others:
+            out.append(
+                f"the page {page} is already the page of {', '.join(others)}: each question gets its own page, "
+                "written for it alone (docs/owner.md, «Question page»)"
+            )
+        recorded = set()
+        for _, i, _ in self.iter_issues(data or {"projects": [], "archive": []}):
+            recorded.update(p.get("path", "") for p in i.get("plan") or [])
+            recorded.update(s.get("report", "") for s in i.get("subs") or [])
+        named = f.parent.resolve() == self.project.reviews_dir.resolve() and re.match(r"\d{4}-\d{2}-\d{2}-", f.name)
+        if delivery.is_plan(f.name) or named or any(r and (self.root / r).resolve() == here for r in recorded):
+            out.append(
+                f"the page {page} is a report or a plan, written for other readers and topics: write a page for this "
+                "question alone, in its own folder with its screenshots (docs/owner.md, «Question page»)"
+            )
+        found = plain.findings(self.project, re.sub(r"\]\([^)\n]*\)", "]", text))
+        if found:
+            out.append(
+                f"the page {page} names without explaining: {plain.summary(found)}; the owner reads it too "
+                "(`foreman plain`)"
+            )
         return out
 
     def set_decision_blocks(self, data: Data, did: str, refs: Sequence[str], issue: str | None = None) -> list[str]:
