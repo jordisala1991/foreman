@@ -2,15 +2,17 @@
 
 For whoever develops foreman; **not part of the product**. No foreman command, hook, skill, agent or doc of the
 product names them, and nothing in `lib/foreman` imports them. They only read (but for `snapshot`, which writes into
-an empty folder): the registry, each product's state and Claude Code's transcripts, through lib/foreman's own readers
-(config, transcripts, identity, orchestrator, util, i18n and the history collector, `lib/foreman/timeline.py`, which
-`foreman catchup` reads).
+an empty folder, and `guard-bench`, which writes into a temporary folder of its own): the registry, each product's
+state and Claude Code's transcripts, through lib/foreman's own readers (config, transcripts, identity, orchestrator,
+util, i18n and the history collector, `lib/foreman/timeline.py`, which `foreman catchup` reads).
 
 ```sh
 dev/foreman-dev [--project P] stats …
 dev/foreman-dev [--project P] fill SESSION [--json]
 dev/foreman-dev [--project P] timeline …
 dev/foreman-dev snapshot DEST [--commit REV]
+dev/foreman-dev [--project P] guard-bench [--against DIR] [--rounds N] [--cwd DIR] [--case NAME] [--json]
+dev/foreman-dev guard-bench --lines [--against DIR]
 ```
 
 The product is found as foreman finds it (`--project P`, `FOREMAN_HOME`, or the folder it runs in), and the same
@@ -58,6 +60,17 @@ The default window is the last 24 h and the last 200 lines (`--limit 0`: all); r
 `tests/live/` and with a short CHANGELOG that starts the public history (CONTRIBUTING.md, «Cutting the public
 snapshot»). It is the one tool here that writes, and only into that folder; it never creates a remote, pushes or
 calls gh.
+
+## guard-bench: the guard's time per call and its size
+
+The time of `bin/foreman hook guard` on thirteen fixed tool calls (a bare `ls`, compound lines, Python heredocs, two
+pushes, a commit message, a `sed -i`, a Read and a Write), each sent as a PreToolUse event of a made-up agent on stdin
+from the product's first repo (`--cwd` another folder): what a session waits for, launcher and imports included. With
+`--against DIR` another checkout (main's, say) runs the same events, interleaved round by round; each case shows its
+median and p90 per checkout, the change of the median and the verdict. Nothing runs: the commands are only handed to
+the guard, with a copy of the registry and a throwaway state root (a product that sets its own state folder is
+refused). `--lines` counts the lines of the guard's four files (guard, shell, gitpush, pyscript): code, docstrings,
+comment-only and blank.
 
 ## Tests
 
