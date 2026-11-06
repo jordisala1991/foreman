@@ -247,7 +247,7 @@ def beat(project: Project, name: str) -> str:
     f = project.state / "heartbeats.json"
     with file_lock(f):
         d = util.read_json(f, {})
-        d[name] = datetime.now().isoformat(timespec="seconds")
+        d[name] = util.now().isoformat(timespec="seconds")
         util.write_json(f, d)
     return d[name]
 
@@ -324,11 +324,6 @@ def new_models(project: Project, source: Table, last: datetime | None) -> list[s
     return sorted(m for m in models_seen(project, last) if m not in known)
 
 
-def now() -> datetime:
-    """The local time the recurring tasks are judged at (a function, so tests can fix the clock)."""
-    return datetime.now()
-
-
 def last_at(at: str, when: datetime) -> datetime:
     """The last time the daily HH:MM `at` came round at or before `when` (today's if it has passed, else
     yesterday's), in local time."""
@@ -349,7 +344,7 @@ def recurring(project: Project, beats: Beats | None = None, when: datetime | Non
     not name (new_models; the part's `new` lists them), and after `max_h` hours only when `max_h` is given. Never
     run is late in every case."""
     beats = heartbeats(project) if beats is None else beats
-    when = now() if when is None else when
+    when = util.now() if when is None else when
     out: list[dict[str, Any]] = []
     for t in project.recurring:
         parts: list[dict[str, Any]] = []

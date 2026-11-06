@@ -53,6 +53,7 @@ import contextlib
 import json
 import os
 import time
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from . import heartbeat, i18n, notes, transcripts, util
@@ -70,6 +71,7 @@ WAIT_S = 10 * 60  # an attempt with no compaction after this long failed
 RAN_S = 2 * 60  # … or this long after the `/compact` call settled with no compaction
 FORCE_FACTOR = 1.5  # the context at this × context_rotate: renew with live agents, and with no request
 LOW_FACTOR = 0.8  # a renewal that leaves this × context_rotate or more freed too little
+RETAIN_DAYS = 30  # renewals.jsonl keeps this many days of attempts
 OWNER_MESSAGES = 5
 OWNER_CHARS = 1000  # each owner message in the pack, and the last answer
 PACK_MAX_CHARS = 9500  # what the hook prints
@@ -139,10 +141,32 @@ def _lines(project: Project) -> list[dict[str, Any]]:
 
 
 def _append(project: Project, rec: dict[str, Any]) -> None:
+    """Appends a record; it is one file of lines, so what util.prune_older does for files is a rewrite here: the
+    lines older than RETAIN_DAYS (by `at`) are dropped when the record is written."""
     f = renewals_file(project)
     f.parent.mkdir(parents=True, exist_ok=True)
-    with notes.file_lock(f), open(f, "a") as out:
-        out.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
+    cut = (util.now() - timedelta(days=RETAIN_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
+    with notes.file_lock(f):
+        try:
+            old = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            old = []
+        keep = [ln for ln in old if _recent(ln, cut)]
+        new = json.dumps(rec, ensure_ascii=False, sort_keys=True)
+        if len(keep) == len(old):
+            with open(f, "a") as out:
+                out.write(new + "\n")
+        else:
+            util.write_text_atomic(f, "".join(ln + "\n" for ln in [*keep, new]))
+
+
+def _recent(line: str, cut: str) -> bool:
+    """False for a readable record whose `at` is before `cut`; what cannot be read is kept (read_jsonl skips it)."""
+    try:
+        at = json.loads(line).get("at")
+    except (ValueError, AttributeError):
+        return True
+    return not (isinstance(at, str) and at < cut)
 
 
 def attempts(project: Project, session: str) -> list[Attempt]:
