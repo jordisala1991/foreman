@@ -1538,11 +1538,11 @@ def loop_pass(project: Project, session: str | None, send: bool = False) -> tupl
 
 
 def notices(project: Project, session: str | None = None, snap: Snapshot | None = None) -> list[Notice]:
-    """Between passes (UserPromptSubmit outside the loop, PostToolUse): the actionable notices whose `key` was not
-    emitted yet. It computes the cheap part of a pass (new inbox messages, locks, the session's context, pipeline,
-    idle agents, a loop with no pass (loop_stale); never the project checks, the checks of the backlog or git) and
-    remembers every actionable key it sees in <state>/notices-last, replaced on each call: a case that stays is said
-    once, one that goes away and comes back is said again.
+    """Between passes (UserPromptSubmit outside the loop, the module's tick: hooks_mod.between_notices): the
+    actionable notices whose `key` was not emitted yet. It computes the cheap part of a pass (new inbox messages,
+    locks, the session's context, pipeline, idle agents, a loop with no pass (loop_stale); never the project checks,
+    the checks of the backlog or git) and remembers every actionable key it sees in <state>/notices-last, replaced on
+    each call: a case that stays is said once, one that goes away and comes back is said again.
     Information-only notices never go out here (the pass shows them). The inbox (inbox-notified) and the locks
     (lock-notified) keep their own once-only marks, shared with the pass: a lock case said here is marked there, so
     the pass does not repeat it; one that is not actionable is left for the pass. The context (context-rotate-notified)

@@ -485,8 +485,8 @@ def collect(project: Project, since: datetime, until: datetime, since_from: str)
     """Every field of the catch-up, as `--json` gives it."""
     s = i18n.for_project(project)
     bl = Issues(project)
-    w, evs = timeline.collect(project, since, until, set(KINDS))
-    _, older = timeline.collect(project, min(since, until - LOOKBACK), until, {"integrate"})
+    w, older = timeline.collect(project, min(since, until - LOOKBACK), until, set(KINDS))  # one read, the wider window
+    evs = [e for e in older if e["t"] >= since]
     integrated = [e for e in older if e["kind"] == "integrate" and e["branch"]]
     progress = progress_lines(project)
     notices = loop.notices_for_pass(project, None, mark=False)
