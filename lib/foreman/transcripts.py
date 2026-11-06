@@ -344,6 +344,16 @@ def last_text(path: PathLike) -> str | None:
     return None
 
 
+_LIMIT = re.compile(r"hit your [\w -]*?limit\s*·\s*resets ([^\n]+?)\s*$", re.I)
+
+
+def limit_reset(path: PathLike) -> str | None:
+    """«3:30am (Europe/Madrid)»: when the usage limit renews, if a subagent's last text is Claude Code's
+    «You've hit your 5-hour limit · resets 3:30am (Europe/Madrid)» (it stopped there); None otherwise."""
+    m = _LIMIT.search(last_text(path) or "")
+    return m.group(1) if m else None
+
+
 SKIP = ("<", "Caveat:", "[Request interrupted")  # prompts no person typed (notifications, command output)
 
 

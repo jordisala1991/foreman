@@ -235,15 +235,72 @@ def stalled(project: Project | Snapshot, session: str | None = None) -> list[str
     s = project if isinstance(project, Snapshot) else Snapshot(project, session)
     holders, waiting = lock.people(s.locks.values())
     dead = s.dead if s.session else {}
+    limited = limit_stopped(s)
     out: list[str] = []
     for h in s.live:
-        if h["id"] in dead:
+        if h["id"] in dead or h["id"] in limited:
             continue
         m = quiet_minutes(s.project, h, holders | waiting)
         if m is not None:
             name = h.get("name") or Path(h.get("transcript", "")).stem[:8] or h["id"][:8]
             st = s.statuses.get(h["id"])
             out.append(f"{name} ({m} min{', ' + st if st else ''})")
+    return out
+
+
+QUOTA_WARN = 80  # percent of a usage-limit window from which `quota_high` speaks
+
+
+def limit_stopped(s: Snapshot) -> dict[str, str]:
+    """{agent id: reset time} of the live agents (not dead ones) whose last text is Claude Code's usage-limit
+    message (transcripts.limit_reset): they stopped there and wait for the renewal."""
+    from . import transcripts
+
+    dead = s.dead if s.session else {}
+    out: dict[str, str] = {}
+    for h in s.live:
+        r = h.get("transcript") and h["id"] not in dead and transcripts.limit_reset(h["transcript"])
+        if r:
+            out[h["id"]] = r
+    return out
+
+
+def quota_notices(s: Snapshot) -> list[Notice]:
+    """`quota_high`: a usage-limit window of the account (Claude Code's own figure, hooks_mod.quota) is at or above
+    QUOTA_WARN percent, and `quota_limit`: live agents stopped by the limit, each with the renewal time. Nothing
+    when usage is low and no agent stopped. Actionable: pause work (`foreman pause`) or resume after the reset."""
+    from . import hooks_mod
+
+    out: list[Notice] = []
+    high = [x for x in hooks_mod.quota([s.project]) if x["percent_used"] >= QUOTA_WARN]
+    if high:
+        names = {"five_hour": "5-hour", "seven_day": "7-day"}
+        parts = [
+            f"{names.get(x['kind'], x['kind'])} {x['percent_used']:g}%"
+            + (f" (resets {x['resets_at'][11:16]} UTC)" if x.get("resets_at") else "")
+            for x in high
+        ]
+        out.append(
+            notice(
+                "quota_high",
+                True,
+                "Claude usage limit: " + ", ".join(parts) + ": consider pausing work that can wait (`foreman pause`).",
+                "quota_high:" + ",".join(x["kind"] for x in high),
+            )
+        )
+    stopped = limit_stopped(s)
+    if stopped:
+        names = [f"{s.ids[aid]['name'] or aid[:8]} (resets {r})" for aid, r in stopped.items()]
+        out.append(
+            notice(
+                "quota_limit",
+                True,
+                "Agents stopped by the usage limit: "
+                + ", ".join(names)
+                + ": resume them (SendMessage) after the reset.",
+                "quota_limit:" + ",".join(sorted(names)),
+            )
+        )
     return out
 
 
@@ -1445,6 +1502,7 @@ def notices_for_pass(project: Project, session: str | None = None, mark: bool = 
         ctx = any(holds_production(n) for n in out)
         out += pipeline(s, rotating="context_rotate" if ctx else False)
     out += agent_notices(s, mark)
+    out += quota_notices(s)
     out += orchestrator_only_notices(project, mark)
     out += lock_notices(s, mark)
     out += lock_queues(s)

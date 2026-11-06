@@ -45,6 +45,8 @@
   "chip_agents": "Agentes",
   "chip_prs": "PR",
   "chip_memory": "Memoria",
+  "chip_quota5": "Claude 5 h",
+  "chip_quota7": "Claude 7 d",
   "chip_disk": "Disco",
   "lock_free": "Libre",
   "lock_free_lc": "libre",

@@ -41,6 +41,8 @@ KINDS = (
     "delivery_incomplete",
     "orchestrator_only_denied",
     "stalled_agents",
+    "quota_high",
+    "quota_limit",
     "nameless_agents",
     "lock_foreign",
     "lock_long",

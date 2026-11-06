@@ -93,6 +93,7 @@ $ GET /api/projects
       "writable": true
     }
   ],
+  "quota": [],
   "sessions": [],
   "version": <EPOCH>
 }
@@ -156,6 +157,8 @@ $ GET /api/strings?lang=es
   "chip_disk": "Disco",
   "chip_memory": "Memoria",
   "chip_prs": "PR",
+  "chip_quota5": "Claude 5 h",
+  "chip_quota7": "Claude 7 d",
   "chip_undo_hard": "con trabajo",
   "chip_undo_no": "sin vuelta atrás",
   "chip_undo_yes": "se puede deshacer",
@@ -588,6 +591,8 @@ $ GET /api/strings?lang=en
   "chip_disk": "Disk",
   "chip_memory": "Memory",
   "chip_prs": "PRs",
+  "chip_quota5": "Claude 5 h",
+  "chip_quota7": "Claude 7 d",
   "chip_undo_hard": "with work",
   "chip_undo_no": "no way back",
   "chip_undo_yes": "can be undone",
