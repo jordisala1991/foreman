@@ -266,7 +266,7 @@ options:
   get ID FIELD                       one field as text (title, status, blocked, plan, subs, detail, result, github)
   status ID[/Tn] VALUE [--result R] [--verdict V]
                                      issue status (triage backlog refining ready "in progress" done canceled
-                                     duplicate; idea = triage, todo = ready) or
+                                     duplicate; todo = ready) or
                                      sub-issue status (todo "in progress" done canceled moved unknown, or ▶ ✓ ✗ → ?)
   sub ID Tn [--title T] [--text T] [--status S] [--commit C] [--agent A] [--branch B] [--moved-to ID]
             [--report PATH] [--type T[/M]] [--kind measure|code] [--before Tm] [--remove]

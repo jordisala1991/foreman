@@ -17,9 +17,8 @@ acceptance criterion, verdict, result, plan, reports, branch and commit) inside 
 (no project), and *sub-issues* (T0, T1…). Triage is where an issue starts, before it is ready. No layers above the
 projects, no cycles.
 
-Schema: 5 (the model above, SCHEMA below), the only one foreman reads and writes. Every command refuses an older
-file: foreman 0.54 moves a schema 4 file to 5 (`foreman backlog migrate`), foreman 0.25 or older a schema 2 or 3 file
-to 4.
+Schema: 5 (the model above, SCHEMA below), the only one foreman reads and writes. Every command refuses any other
+schema.
 
 It is read in the panel or with `foreman backlog list|show`; foreman writes no text copy of it (since 0.60).
 Every command that writes takes the file lock and writes atomically (temp file + rename).
@@ -52,8 +51,7 @@ Issue = dict[str, Any]  # an ISSUE of SCHEMA
 Record = dict[str, Any]  # any other object of SCHEMA: a project, sub-issue, decision
 Holds = dict[str, dict[Any, list[str]]]  # {issue: {None (the whole issue) or sub-issue id: [decision ids]}}
 
-# Issue statuses: Linear's workflow states, each in one of its categories. «idea» (triage in schemas 2 and 3) is still
-# accepted as a name for triage when a status is set.
+# Issue statuses: Linear's workflow states, each in one of its categories.
 ISSUE_STATUSES = ("triage", "backlog", "refining", "ready", "in progress", "done", "canceled", "duplicate")
 STATUS_CATEGORY = {
     "triage": "triage",
@@ -69,7 +67,6 @@ STATUS_ALIASES = {
     "todo": "ready",
     "in-progress": "in progress",
     "cancelled": "canceled",
-    "idea": "triage",
 }
 CLOSED = ("done", "canceled", "duplicate")
 INACTIVE = CLOSED + ("triage",)  # not part of the rank of active issues
@@ -130,18 +127,11 @@ LISTS = ("projects", "issues", "archive", "decisions", "decisions_resolved")  # 
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 QUOTED = re.compile(r"«[^»]*»|“[^”]*”|\"[^\"]*\"")  # quoted text: a question quoted in a question is not asked
 PENDING_SUBS = ("todo", "in progress", "unknown")
-OLD_SCHEMA_HINT = {
-    4: "foreman 0.54 moves it to schema 5 (foreman backlog migrate --write), then this one reads it",
-    2: "foreman 0.25 or older moves it to schema 4, then foreman 0.54 to 5",
-    3: "foreman 0.25 or older moves it to schema 4, then foreman 0.54 to 5",
-}
 
 SCHEMA = """
 {
   "schema_version": 5,
   "updated": "YYYY-MM-DD",
-  "pages"?: {...},                         # unused since 0.60 (the text pages it headed are gone); kept as it is
-                                           # when present, because foreman 0.59 or older fails to write without it
   "projects": [{"id": "E1", "title": "...", "intro": "markdown",
      "status"?: backlog|planned|in progress|paused|completed|canceled,
      "priority"?: urgent|high|medium|low|none, "repos"?: [repo keys], "issues": [ISSUE]}],
@@ -262,8 +252,8 @@ def tidy_relations(i: Issue) -> None:
 
 
 def on_branch(s: Record, branch: str) -> bool:
-    """Whether sub-issue `s` names `branch` (in backquotes too, as an older foreman wrote it)."""
-    return bool(branch) and s.get("branch", "").strip("`") == branch
+    """Whether sub-issue `s` names `branch`."""
+    return bool(branch) and s.get("branch", "") == branch
 
 
 def find_sub(i: Issue, sid: str) -> int | None:
@@ -336,10 +326,6 @@ class Backlog:
         if raw:
             return data
         v = data.get("schema_version")
-        if v in OLD_SCHEMA_HINT:
-            raise BacklogError(
-                f"{self.rel(self.data_path)} is schema {v}, which this foreman no longer reads: {OLD_SCHEMA_HINT[v]}"
-            )
         if v != SCHEMA_VERSION:
             raise BacklogError(
                 f"{self.rel(self.data_path)} is schema {v!r}: this foreman reads schema {SCHEMA_VERSION}"
@@ -353,7 +339,7 @@ class Backlog:
 
     @staticmethod
     def norm_status(v: str | None) -> str:
-        """An issue status (idea is triage; todo is ready)."""
+        """An issue status (todo is ready)."""
         v = STATUS_ALIASES.get((v or "").strip().lower(), (v or "").strip().lower())
         if v not in ISSUE_STATUSES:
             raise BacklogError(f"bad status {v!r}: {', '.join(ISSUE_STATUSES)}")
@@ -402,12 +388,9 @@ class Backlog:
                 or k not in DECISION_OPTIONAL + ("resolved", "answer")
             }
 
-        # the old pages block, as it is: foreman 0.59 or older reads it on every write
-        pages = {"pages": data["pages"]} if data.get("pages") else {}
         return {
             "schema_version": data.get("schema_version", SCHEMA_VERSION),
             "updated": data.get("updated", ""),
-            **pages,
             "projects": [project(p) for p in data.get("projects", [])],
             "issues": [issue(i) for i in data.get("issues", [])],
             "archive": [
