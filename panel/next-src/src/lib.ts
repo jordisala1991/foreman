@@ -29,8 +29,9 @@ export async function post(path: string, body?: string): Promise<void> {
   if (body !== undefined) init.body = body;
   const r = await fetch(withKey(path), init);
   if (!r.ok) {
-    const j = (await r.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? String(r.status));
+    const j = (await r.json().catch(() => ({}))) as { error?: string; why?: string };
+    const why = `grant_why_${j.why}`; // a refused grant says why, in the panel's language
+    throw new Error(j.why && why in es ? t(why as Key) : (j.error ?? String(r.status)));
   }
 }
 

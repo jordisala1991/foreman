@@ -30,6 +30,16 @@ function useWrite(done: () => void) {
   return { busy, error, run };
 }
 
+// the screen could not read its data: say so, with a way to try again
+export const LoadFailed = ({ retry }: { retry: () => void }) => (
+  <div className="card quiet" role="alert">
+    {t("load_failed")}{" "}
+    <button type="button" className="link" onClick={retry}>
+      {t("retry")}
+    </button>
+  </div>
+);
+
 const Talk = ({ talk }: { talk?: (() => void) | undefined }) =>
   talk ? (
     <button type="button" className="talk" onClick={talk}>
@@ -62,6 +72,7 @@ export function PermissionCard({ g, product, tag, variant, reload, talk }: {
   g: Grant; product: string; tag: string | null; variant: "short" | "home" | "needs"; reload: () => void; talk?: (() => void) | undefined;
 }) {
   const w = useWrite(reload);
+  const [confirming, setConfirming] = useState(false); // approving asks first, as today's panel does
   const left = minutesLeft(g);
   const soon = left !== null && left < 10;
   const q = `g=${enc(g.group)}&p=${enc(product)}`;
@@ -82,7 +93,7 @@ export function PermissionCard({ g, product, tag, variant, reload, talk }: {
       </div>
       <div>
         <h3>{grantTitle(g)}</h3>
-        {variant !== "short" ? <p className="why">{g.orphan ? t("grant_orphan") : t("grant_why", { who })}</p> : null}
+        <p className="why">{g.orphan ? t("grant_orphan") : t(variant === "short" ? "grant_why_short" : "grant_why", { who })}</p>
       </div>
       {variant === "needs" && not_told ? (
         <div className="notice">
@@ -95,12 +106,22 @@ export function PermissionCard({ g, product, tag, variant, reload, talk }: {
           <button type="button" className="btn" disabled={w.busy} onClick={() => void w.run(`/api/grants/deny?${q}`)}>
             {t("grant_discard")}
           </button>
+        ) : confirming ? (
+          <>
+            <p className="why">{t("confirm_grant", { group: g.group, n: g.minutes ?? 30 })}</p>
+            <button type="button" className="btn" disabled={w.busy} onClick={() => setConfirming(false)}>
+              {t("cancel")}
+            </button>
+            <button type="button" className="btn primary" disabled={w.busy} onClick={() => void w.run(`/api/grants/approve?${q}`)}>
+              {t("confirm")}
+            </button>
+          </>
         ) : (
           <>
             <button type="button" className="btn" disabled={w.busy} onClick={() => void w.run(`/api/grants/deny?${q}`)}>
               {t("deny")}
             </button>
-            <button type="button" className="btn primary" disabled={w.busy} onClick={() => void w.run(`/api/grants/approve?${q}`)}>
+            <button type="button" className="btn primary" disabled={w.busy} onClick={() => setConfirming(true)}>
               {t("approve")}
             </button>
           </>

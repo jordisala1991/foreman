@@ -2,11 +2,11 @@
 // products' sum under «All») and the latest lines of the agents. On the phone a question shows its title and its
 // options only; on a wide screen it is whole, as in «Needs you».
 import { useEffect, useState, type ReactElement } from "react";
-import { PermissionCard, QuestionCard, askedSince } from "./cards";
+import { LoadFailed, PermissionCard, QuestionCard, askedSince } from "./cards";
 import { useScope } from "./data";
 import { ScreenHead } from "./head";
 import { Small } from "./icons";
-import { contextOf, summary, waiting } from "./Needs";
+import { contextOf, openGrants, openQuestions, summary, waiting } from "./Needs";
 import {
   dayWord, hhmm, minutesSince, shortDay, t, todayIso, usd, usd1, type Agent, type Metrics, type Product, type Quota,
 } from "./lib";
@@ -265,13 +265,13 @@ const SHOWN = 3;
 
 export function Home({ scope, all }: { scope: Product[]; all: boolean }) {
   const wide = useWide();
-  const { data, reload } = useScope(scope.map((p) => p.name), true);
+  const { data, failed, metricsFailed, reload } = useScope(scope.map((p) => p.name), true);
   const head = scope[0];
   if (!head) return null;
   const w = waiting(scope, data);
   const loaded = scope.every((p) => data[p.name]?.state);
   const tag = (p: Product) => (all ? p.title : null);
-  const asks = w.grants.length + w.questions.length;
+  const asks = openGrants(w) + openQuestions(w);
   const live = scope.flatMap((p) => (data[p.name]?.state?.agents ?? []).filter((a) => !a.end).map((a) => ({ a, p })));
   const stuckFirst = [...live].sort((x, y) => Number(y.a.status === "maybe stuck") - Number(x.a.status === "maybe stuck"));
   const ms = scope.map((p) => data[p.name]?.metrics);
@@ -319,7 +319,8 @@ export function Home({ scope, all }: { scope: Product[]; all: boolean }) {
               </div>
             </div>
           ) : null}
-          {!loaded ? <div className="card quiet">{t("loading")}</div> : null}
+          {!loaded && !failed ? <div className="card quiet">{t("loading")}</div> : null}
+          {failed ? <LoadFailed retry={reload} /> : null}
           {loaded && w.messages.length && !asks ? <p className="note">{summary(w)}</p> : null}
         </section>
         <section aria-label={t("working")}>
@@ -347,6 +348,8 @@ export function Home({ scope, all }: { scope: Product[]; all: boolean }) {
         </div>
         {ms.every((m) => m?.today) ? (
           all ? <SumTiles scope={scope} ms={ms} quota={quota} /> : ms[0] ? <Tiles m={ms[0]} quota={quota} /> : null
+        ) : metricsFailed ? (
+          <LoadFailed retry={reload} />
         ) : (
           <div className="card quiet">{t("loading")}</div>
         )}

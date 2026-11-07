@@ -3,7 +3,7 @@
 // minimal DOM, with fetch answered from the scenario ({hash, width, answers: {path without the key: JSON}, hang:
 // [paths that never answer], click: text of a button to press once mounted, tap: a day whose chart column to tap,
 // steps: [{click: text of a button} | {type: {id, text}: a textarea's value} …] done in order, post: [paths whose POST
-// fails with {error}], visible: [«(min-width: 900px)» media queries that match]}).
+// fail with {error, why}], why: the `why` of those failures, visible: [«(min-width: 900px)» media queries that match]}).
 // Prints one line of JSON: the text, the tabs and their badges, the sidebar, the products of the picker, the status
 // pill, each chart as drawn (columns with their segments, labels, legend, figure) and the API paths fetched.
 import fs from "node:fs";
@@ -115,12 +115,13 @@ Object.assign(globalThis, {
     if (init && init.method === "POST") {
       posts.push({ path: p, body: init.body === undefined ? null : init.body });
       const fail = (scenario.post || []).some((x) => p.startsWith(x));
-      return { ok: !fail, status: fail ? 400 : 200, json: async () => (fail ? { error: "refused" } : {}) };
+      return { ok: !fail, status: fail ? 400 : 200, json: async () => (fail ? { error: "refused", ...(scenario.why ? { why: scenario.why } : {}) } : {}) };
     }
     fetched.push(p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
     const body = scenario.answers[p];
-    return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
+    const missing = body === undefined || body === null; // null: the server fails on it
+    return { ok: !missing, status: missing ? 404 : 200, json: async () => body };
   },
 });
 document.defaultView = globalThis;

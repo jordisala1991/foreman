@@ -148,7 +148,7 @@ def inbox_add(project: Project, text: str, sender: str = "owner", **extra: Any) 
             "time": util.now().strftime("%Y-%m-%d %H:%M"),
             "from": sender,
             "text": text,
-            "read": sender != "owner",
+            "read": False,  # the orchestrator's reply waits for the owner (panel: «Mark as read»)
             **extra,
         }
         msgs.append(m)

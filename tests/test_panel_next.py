@@ -140,15 +140,15 @@ class NextServeTest(PanelCase):
     def test_the_owner_marks_a_message_of_the_orchestrator_as_read(self):
         from foreman import notes
 
+        def unread():
+            return {p["name"]: p["unread"] for p in self.req("/api/projects")[1]["projects"]}["fake"]
+
+        before = unread()  # the fixture's own reply is there, unread too
         m = notes.inbox_add(self.project, "Integrated the guard fix", sender="orchestrator")
-        data = notes.inbox(self.project)  # a message of the orchestrator is born read: mark this one unread
-        data[-1]["read"] = False
-        panel.util.write_json(notes.inbox_path(self.project), data)
-        _, d = self.req("/api/projects")
-        self.assertEqual({p["name"]: p["unread"] for p in d["projects"]}["fake"], 1)
+        self.assertFalse(m["read"])  # born unread: the owner's panel has it to mark
+        self.assertEqual(unread(), before + 1)
         self.assertEqual(self.req(f"/api/message/read?p=fake&id={m['id']}", "POST")[0], 200)
-        _, d = self.req("/api/projects")
-        self.assertEqual({p["name"]: p["unread"] for p in d["projects"]}["fake"], 0)
+        self.assertEqual(unread(), before)
         self.assertEqual(self.req("/api/message/read?p=fake&id=x", "POST")[0], 400)
 
     def test_metrics_only_for_products_with_the_new_panel(self):
@@ -519,7 +519,7 @@ class NextHomeTest(NextPageTest):
         self.assertEqual(out["sections"], ["Permisos", "Preguntas", "Mensajes del orquestador"])
 
     def test_approving_denying_and_answering_write_like_the_panel_of_today(self):
-        out = self.screen("#/needs", steps=[{"click": "Aprobar"}])
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}, {"click": "Confirmar"}])
         self.assertEqual(out["posts"], [{"path": "/api/grants/approve?g=publish&p=alpha", "body": None}])
         out = self.screen("#/needs", steps=[{"click": "Denegar"}])
         self.assertEqual(out["posts"][0]["path"], "/api/grants/deny?g=publish&p=alpha")
@@ -547,9 +547,42 @@ class NextHomeTest(NextPageTest):
         out = self.screen("#/needs", st=st, steps=[{"click": "Cambiar"}, {"click": again}])
         self.assertIn("&change=1&op=Solo%20cuando%20la%20pido", out["posts"][0]["path"])
 
+    def test_approving_a_permission_asks_first(self):
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}])
+        self.assertEqual(out["posts"], [])  # one tap writes nothing
+        self.assertIn("¿Dejas al orquestador ejecutar", out["cards"][0]["text"])
+        self.assertIn("30 minutos", out["cards"][0]["text"])
+        self.assertEqual(out["cards"][0]["buttons"][:2], ["Cancelar", "Confirmar"])
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}, {"click": "Cancelar"}])
+        self.assertEqual(out["posts"], [])
+        self.assertIn("Aprobar", out["cards"][0]["buttons"])
+        # the phone's short card asks too
+        out = self.screen("#/home", steps=[{"click": "Aprobar"}])
+        self.assertEqual(out["posts"], [])
+
     def test_a_refused_write_says_so_on_the_card(self):
-        out = self.screen("#/needs", steps=[{"click": "Aprobar"}], post=["/api/grants"])
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}, {"click": "Confirmar"}], post=["/api/grants"])
         self.assertIn("No se ha podido enviar: refused", out["cards"][0]["text"])
+
+    def test_a_refused_approval_says_why_in_the_panels_language(self):
+        out = self.screen(
+            "#/needs", steps=[{"click": "Aprobar"}, {"click": "Confirmar"}], post=["/api/grants"], why="expired"
+        )
+        self.assertIn("esa petición es demasiado antigua", out["cards"][0]["text"])
+        self.assertNotIn("refused", out["cards"][0]["text"])
+
+    def test_a_failing_metrics_still_shows_what_waits_and_says_so(self):
+        out = self.screen("#/home", answers={"/api/metrics?p=alpha&days=7": None})
+        self.assertEqual(out["cards"][0]["kind"], "permission")
+        self.assertNotIn("Cargando", out["text"])
+        self.assertIn("No se ha podido cargar", out["text"])
+        self.assertIn("Reintentar", out["text"])
+
+    def test_a_failing_state_says_so_instead_of_loading_forever(self):
+        for hash_ in ("#/home", "#/needs"):
+            out = self.screen(hash_, answers={"/api/state?p=alpha": None})
+            self.assertIn("No se ha podido cargar", out["text"], hash_)
+            self.assertNotIn("Cargando", out["text"], hash_)
 
     def test_an_orphan_request_can_only_be_discarded(self):
         orphan = {**GRANT, "pending": False, "orphan": "process"}
@@ -574,7 +607,9 @@ class NextHomeTest(NextPageTest):
         out = self.screen("#/home", st=st)
         perm, quest = out["cards"]
         self.assertEqual(perm["buttons"], ["Denegar", "Aprobar"])
-        self.assertNotIn("Lo pide", perm["text"])  # the phone's card is title, time and buttons
+        # the phone's card is title, time, one line of why (as the mockup's Main.dc.html) and buttons
+        self.assertIn("Solo se hace con tu sí.", perm["text"])
+        self.assertNotIn("caduca y no se hace", perm["text"])
         self.assertEqual(quest["buttons"], ["Desde el principio", "Solo cuando la pido"])
         self.assertNotIn("Con este cambio", quest["text"])
         self.assertIn("Qué cambia cada opción", quest["text"])
