@@ -48,7 +48,8 @@ def wiki_files(project: Project) -> dict[str, Path]:
             out.setdefault(f.stem, f)
         return out
 
-    return memo(("wikifiles", project.name), build, ttl=5)
+    # keyed by the folder, not the product name: the same name may point at another folder (another registry)
+    return memo(("wikifiles", str(d)), build, ttl=5)
 
 
 def front_matter(txt: str) -> tuple[dict[str, Any], str]:
@@ -75,7 +76,8 @@ def fold(t: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", t.lower()) if not unicodedata.combining(c))
 
 
-def wiki_page(project: Project, f: Path) -> Page:
+def wiki_page(project: Project, f: Path) -> Page | None:
+    """The page of file `f`, or None when it was deleted since wiki_files listed it (that list is kept 5 s)."""
     d = wiki_dir(project)
     assert d is not None  # `f` comes from wiki_files, which has no pages without the folder
 
@@ -100,13 +102,17 @@ def wiki_page(project: Project, f: Path) -> Page:
             "plain": fold(body),
         }
 
-    return memo(("wiki", str(f)), load, deps=[f])
+    try:
+        return memo(("wiki", str(f)), load, deps=[f])
+    except FileNotFoundError:
+        return None
 
 
 def wiki_list(project: Project) -> list[dict[str, Any]]:
     """Every page with its header (no text): the Wiki tab groups them by type."""
     keep = ("n", "path", "title", "type", "status", "tags", "updated", "kb")
-    return [{k: p[k] for k in keep} for p in (wiki_page(project, f) for f in wiki_files(project).values())]
+    pages = (wiki_page(project, f) for f in wiki_files(project).values())
+    return [{k: p[k] for k in keep} for p in pages if p]
 
 
 def wiki_get(project: Project, name: str) -> dict[str, Any] | None:
@@ -114,6 +120,8 @@ def wiki_get(project: Project, name: str) -> dict[str, Any] | None:
     if not f:
         return None
     p = wiki_page(project, f)
+    if not p:
+        return None
     refs = set(re.findall(r"\]\(([^)\s]+)\)", p["md"])) | set(re.findall(r"`([^`\s]+)`", p["md"])) | set(p["sources"])
     ix = doc_index(project)
     docs = {r: d for r in refs if (d := wiki_doc(project, r, ix))}
@@ -154,6 +162,8 @@ def wiki_search(project: Project, q: str, limit: int = 40) -> list[dict[str, Any
     out = []
     for f in wiki_files(project).values():
         p = wiki_page(project, f)
+        if not p:
+            continue
         title = fold(p["title"] + " " + p["n"])
         if not all(w in p["plain"] or w in title for w in words):
             continue

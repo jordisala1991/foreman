@@ -427,6 +427,41 @@ function normalize(d, b){
     errors: ps.filter(p => p.backlog_error).map(p => `${p.title || p.name}: ${p.backlog_error}`).concat((OVER || {}).errors || [])};
 }
 
+// What a product asks of the owner, from its facts {broken, mode, questions, grants, orch, health, paused, late}:
+// the level (bad: its orchestrator is down; acc: waits for him; warn: stopped or overdue; ok; muted: inactive) and why.
+// The product picker and the rows of «All products» in Now use it, so a product without orchestrator is never green.
+const NEED_RANK = {bad: 0, acc: 1, warn: 2, ok: 3, muted: 4};
+function productNeeds(f){
+  if(f.broken) return {level: 'bad', reasons: [t('config_broken_tag')]};
+  const hb = healthBad(f.health), why = [];
+  let level = 'ok';
+  const raise = l => { if(NEED_RANK[l] < NEED_RANK[level]) level = l; };
+  if(f.questions){ why.push(tn('need_questions', f.questions)); raise('acc'); }
+  if(f.grants){ why.push(tn('need_grants', f.grants)); raise('acc'); }
+  if(hb){ why.push(orchHealthText(hb)); raise(HEALTH_CLS[hb.verdict]==='bad' ? 'bad' : 'warn'); }
+  else if(!f.orch && f.mode!=='inactive'){ why.push(t('need_no_orch')); raise('warn'); }
+  if(f.paused){ why.push(t('need_paused')); raise('warn'); }
+  if(f.late){ why.push(tn('late_count', f.late)); raise('warn'); }
+  if(!why.length) why.push(f.mode==='inactive' ? t('need_inactive') : t('need_none'));
+  if(level==='ok' && f.mode==='inactive') level = 'muted';
+  return {level, reasons: why};
+}
+const NEED_COLOR = {bad: 'var(--bad)', acc: 'var(--acc)', warn: 'var(--warn)', ok: 'var(--ok)', muted: 'var(--muted)'};
+// «All products» in Now: one line per product, the ones that need him first; a tap opens that product
+function renderProducts(d){
+  if(!d.joint){ $('products').innerHTML = ''; return; }
+  const rows = ((OVER || {}).projects || []).map(o => {
+    const mine = o.broken ? null : d.ps.find(p => p.name===o.name);
+    const of = xs => xs.filter(x => x.p===o.name);
+    const n = productNeeds(o.broken ? {broken: true} : {mode: o.mode, orch: o.orchestrator, health: o.orchestrator_health,
+      paused: mine ? mine.paused : o.paused, questions: of(d.decisions).filter(x => !x.answer).length,
+      grants: of(d.grants).filter(x => x.pending).length, late: of(d.recurring).filter(r => r.late).length});
+    return {n, name: o.name, html: lrow({icon: dot(NEED_COLOR[n.level]), title: esc(o.title || o.name), meta: esc(n.reasons.join(' · ')),
+      cls: 'prow wrap', attrs: ` onclick="pick('${esc(o.name)}')" style="cursor:pointer"`})};
+  });
+  rows.sort((a, b) => NEED_RANK[a.n.level] - NEED_RANK[b.n.level]);
+  $('products').innerHTML = sect(t('home_title'), list(rows.map(r => r.html).join('')), rows.length);
+}
 // ---- Ahora: status headline, chips, what needs attention, the locks and the orchestrator's report
 function attention(d){
   const att = [];   // [level, text, action]
@@ -466,6 +501,7 @@ function renderNow(d){
   const alive = d.agents.filter(a => !a.end);
   const who = alive.length ? t('agents_running', {names: alive.map(a => esc(a.name)).join(', ')}) : t('no_agents');
   $('headline').innerHTML = `<div class="headline"><div class="ico" style="background:${color}">${mark}</div><div style="min-width:0"><div class="t">${headline}</div><div class="s">${who}</div></div></div>`;
+  renderProducts(d);
   renderChips(d);
   const lv = {bad: 'var(--bad)', warn: 'var(--warn)', acc: 'var(--acc)'};
   $('notices').innerHTML = att.length ? sect(t('needs_attention'), list(att.map(([n, s, b]) => lrow({icon: dot(lv[n]), title: s, meta: b, cls: 'wrap att'})).join('')), att.length) : '';
@@ -1431,6 +1467,7 @@ window.addEventListener('keydown', e => { if((e.metaKey || e.ctrlKey) && e.key.t
 // of the registry, its state in a dot and a line, and «all products» for the joint view
 function renderPicker(){
   const ps = OVER.projects, ok = ps.filter(o => !o.broken);
+  const needsOf = o => ({mode: o.mode, orch: o.orchestrator, health: o.orchestrator_health, paused: o.paused, questions: o.decisions, late: o.late.length});
   const line = o => o.broken ? (o.mode && o.mode !== 'active' ? o.mode : '') : [o.mode==='inactive' ? '' : orchLine(o.orchestrator, true), tn('agents_count', o.agents), o.decisions ? tn('decisions_count', o.decisions) : '', o.late.length ? tn('late_count', o.late.length) : ''].filter(Boolean).join(' · ');
   const row = (v, title, color, meta, tag='') => lrow({icon: dot(color), title: `${esc(title)}${tag}`, meta, cls: v===P ? 'prow on' : 'prow',
     attrs: ` onclick="pick('${esc(v)}')" style="cursor:pointer"`});
@@ -1439,9 +1476,9 @@ function renderPicker(){
   const tag = o => o.broken ? `<span class="ro bad">${t('config_broken_tag')}</span>`
     : (o.warnings || []).length ? `<span class="ro warn">${esc(tn('config_warnings_tag', o.warnings.length))}</span>` : '';
   const tags = o => langTag(o) + tag(o);
-  const html = list(ps.map(o => row(o.name, o.title, o.broken ? 'var(--bad)' : o.paused || o.late.length || (o.warnings || []).length ? 'var(--warn)' : o.decisions ? 'var(--acc)' : 'var(--ok)',
+  const html = list(ps.map(o => row(o.name, o.title, o.broken ? 'var(--bad)' : (o.warnings || []).length && productNeeds(needsOf(o)).level==='ok' ? 'var(--warn)' : NEED_COLOR[productNeeds(needsOf(o)).level],
       esc(line(o)), tags(o))).join('')
-    + (ok.length > 1 ? row('*', t('all_products'), 'var(--muted)', esc(tn('products_count', ok.length))) : ''));
+    + (ok.length > 1 ? row('*', t('all_products'), 'var(--muted)', esc(tn('products_count', ok.length) + (ps.length > ok.length ? ' · ' + tn('broken_count', ps.length - ok.length) : ''))) : ''));
   if($('plist').dataset.sig !== html){ $('plist').innerHTML = html; $('plist').dataset.sig = html; }
   const cur = ps.find(p => p.name===P);
   $('hname').textContent = P==='*' ? t('all_products') : cur ? cur.title : t('title');
@@ -1493,8 +1530,10 @@ async function load(){
       if(versionCheck(OVER.version)) return;
       if(lastData){ renderChips(lastData); renderMac(); }   // the machine's stats come with the registry
       const first = (OVER.projects.find(p => !p.broken) || OVER.projects[0] || {}).name || '';
-      if(P !== '*' && !OVER.projects.some(p => p.name===P)) P = first;
-      if(P==='*' && OVER.projects.filter(p => !p.broken).length < 2) P = first;
+      // the home is «All products» when there are several, until the owner picks one (then his choice is kept)
+      const several = OVER.projects.filter(p => !p.broken).length > 1;
+      if(P !== '*' && !OVER.projects.some(p => p.name===P)) P = several ? '*' : first;
+      if(P==='*' && !several) P = first;
     }
     const cur = OVER.projects.find(p => p.name===P);
     await loadStrings((cur && cur.language) || OVER.language || 'en');
