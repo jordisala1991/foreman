@@ -1142,7 +1142,7 @@ JOINED = re.compile(r"\b([A-Za-z_]\w*)\s*[/,+]\s*\Z")  # a literal joined onto a
 ASSIGNED = re.compile(r"(?<![\w.])\$?([A-Za-z_]\w*)\s*=(?!=)\s*([^;\n]*)")  # NAME = what (to `;` or a line's end)
 IN_LITERAL = re.compile(r"\$?\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")  # a name inside a literal: f"{base}/x", "$base/x"
 STATEMENT = re.compile(r"(^|[;{}\n])\s*\Z")  # the start of a statement, before a call
-OS_WORD = re.compile(r"\bos\b")  # os.replace, also as `import os as o` or __import__('os')
+OS_WORD = re.compile(r"\bos\b|\bimportlib\b|__import__")  # os.replace, as `import os as o` or by a built name
 MAX_PIECES = 8
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 NOT_LITERAL = re.compile(r"[$`*?\[]")  # what is left after expanding: the path is not known, only its text
