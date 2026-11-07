@@ -33,6 +33,7 @@ export function How({ product }: { product: Product }) {
           if (!live) return;
           at = new Date();
           setM(x);
+          setFailed(false);
           setOffline(null);
         })
         .catch(() => {

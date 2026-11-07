@@ -534,11 +534,23 @@ class NextPageTest(ProjectCase):
         self.assertTrue(out["dim"])
         self.assertEqual(len(out["charts"]), 8)  # the charts stay
 
+    def test_a_first_failed_read_heals_at_the_next_periodic_read(self):
+        url = "/api/metrics?p=alpha&days=7"
+        out = self.how(down=[url], tick=1, heal=[url])
+        self.assertNotIn("No se ha podido cargar", out["text"])
+        self.assertEqual(len(out["charts"]), 8)
+        self.assertEqual(out["offline"], "")
+
     def test_tapping_a_day_shows_its_detail(self):
         g1 = self.how(tap="2026-11-07")["charts"][0]
         self.assertEqual(g1["tip"], "sáb 7 · hoy Haiku $0.5 Sonnet $13.0 Opus $60.8 Total $74.3")
         g1 = self.how(tap="2026-11-03")["charts"][0]
         self.assertEqual(g1["tip"], "mar 3 sin trabajo")
+
+    def test_the_delivery_average_divides_by_the_days_with_data(self):
+        # 30 days, deliveries known since 31 Oct: 8 days (31 Oct .. 7 Nov), 256 integrated -> 32 a day, not 256/30
+        g2 = self.charts(answers={"/api/metrics?p=alpha&days=30": self.metrics(30)}, click="30 días")["g2"]
+        self.assertEqual(g2["figure"], "256 cambios en main desde el 31 oct · 32 al día · 7 medidas")
 
     def test_thirty_days(self):
         answers = {"/api/metrics?p=alpha&days=30": self.metrics(30)}

@@ -48,6 +48,9 @@ export function per(m: Metrics, since: string | null): string {
 const kindOf = (day: string, v: number, since: string | null): Col["kind"] =>
   v > 0 ? "data" : since && day >= since ? "zero" : "none";
 
+// the days of the period the series covers: from `since` on, all of them when it starts before the period
+const daysFrom = (m: Metrics, since: string | null): number => (since ? m.days.filter((d) => d >= since).length : m.days.length);
+
 // the day with the highest bar, and today, carry a figure
 function marked(m: Metrics, totals: number[]): Set<number> {
   const best = totals.reduce((b, v, i) => (v > (totals[b] ?? 0) ? i : b), 0);
@@ -163,7 +166,7 @@ export function g2(m: Metrics): Spec {
     id: "g2",
     title: t("g2_title"),
     big: String(integrated),
-    sub: t("g2_sub", { per: per(m, m.since.deliveries), avg: Math.round(integrated / m.days.length), n: measured }),
+    sub: t("g2_sub", { per: per(m, m.since.deliveries), avg: Math.round(integrated / Math.max(1, daysFrom(m, m.since.deliveries))), n: measured }),
     legend: [
       { key: "integrated", label: t("g2_integrated") },
       { key: "measured", label: t("g2_measured"), pill: "2" },

@@ -3,7 +3,7 @@
 // minimal DOM, with fetch answered from the scenario ({hash, width, answers: {path without the key: JSON}, hang:
 // [paths that never answer], click: text of a button to press once mounted, tap: a day whose chart column to tap,
 // tick: how many times the page's setInterval callbacks run once mounted, fail: paths whose answers stop before the
-// ticks (the connection drops)}).
+// ticks (the connection drops), down: paths that fail from the start, heal: paths that answer again at the ticks}).
 // Prints one line of JSON: the text, the tabs and their badges, the sidebar, the products of the picker, the status
 // pill, each chart as drawn (columns with their segments, labels, legend, figure) and the API paths fetched.
 import fs from "node:fs";
@@ -97,7 +97,7 @@ const document = {
 };
 const store = {};
 const fetched = [];
-const down = new Set();
+const down = new Set(scenario.down || []); // paths that fail from the start
 const timers = [];
 class HTMLIFrameElement {}
 Object.defineProperty(globalThis, "localStorage", {
@@ -134,6 +134,7 @@ if (scenario.click) {
 }
 if (scenario.tick) {
   (scenario.fail || []).forEach((p) => down.add(p));
+  (scenario.heal || []).forEach((p) => down.delete(p)); // the server is back at the first tick
   for (let i = 0; i < scenario.tick; i++) { timers.forEach((f) => f()); await settle(); }
 }
 if (scenario.tap) {
