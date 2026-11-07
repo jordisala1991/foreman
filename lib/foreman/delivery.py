@@ -358,6 +358,14 @@ def named_report(project: Project, path: str, wts: Iterable[PathLike | None] = (
     return rel
 
 
+def name_warning(report: str, issue: str | None) -> str | None:
+    """A warning (never a refusal) when the report's file name does not contain the issue's id as a whole word: the
+    name format is `YYYY-MM-DD-<ID>-<Tn>.md` (docs/agent.md). None when it does, or when there is no issue."""
+    if not issue or names_key(report.rsplit("/", 1)[-1], [issue]):
+        return None
+    return f"the report name {report} does not contain the issue id {issue}: name it YYYY-MM-DD-{issue}-<Tn>.md"
+
+
 def worktrees_of(project: Project, aid: str | None, name: str | None) -> list[str]:
     """The worktree recorded for the agent (agents.json, by agent id, else the newest entry with this name); [] when
     none is."""

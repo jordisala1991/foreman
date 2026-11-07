@@ -83,7 +83,7 @@ the previous review.
 8. **You only read**, as for any review: you run no tests and no builds; what needs running, you ask of the agent as
    a test (rule 3).
 
-**The document:** `reviews/YYYY-MM-DD-review-<ID>-<Tn>.md` (round N after 1: `…-<Tn>-rN.md`) in the home's
+**The document:** `reviews/YYYY-MM-DD-review-<ID>-<Tn>.md` (the issue's id as it is; round N after 1: `…-<Tn>-rN.md`) in the home's
 reviews folder (`[paths] reviews`; the name must contain `review`). Right after its title comes the header foreman
 reads, as plain lines (no bold, no list marks), within the first 15 lines:
 

@@ -71,7 +71,7 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
 - Deliver what you have at about 2 h. Before each long take of a resource, a `wip` commit.
 - Commits with the git identity already configured: never touch `user.name`, `user.email` or `GIT_AUTHOR_*` /
   `GIT_COMMITTER_*`; no `Co-Authored-By`.
-- Report in `reviews/YYYY-MM-DD-<task>.md`: what changes, how it was checked, figures, whether it meets the issue's
+- Report in `reviews/YYYY-MM-DD-<ID>-<Tn>.md` (the issue's id as it is; a plan is `…-plan-<ID>.md`; `progress --done --report` and `backlog sub --report` warn when the name lacks the id, never refuse): what changes, how it was checked, figures, whether it meets the issue's
   acceptance criterion, what fails or is missing, and every abandoned run with its reason. When the change touches
   code: the total coverage and that of the touched modules (`bin/foreman selftest --coverage`). No report, not delivered.
   It stays technical (the orchestrator and the next agent read it). You never add a question for the owner
