@@ -85,6 +85,7 @@ class ProjectCase(unittest.TestCase):
                 "FOREMAN_WHO",
                 "FOREMAN_LOCK_WHO_DEFAULT",
                 "CLAUDE_CODE_SESSION_ID",
+                "FOREMAN_LAUNCH",  # a session agent's launch token: the tests' processes are no agent
                 "FOREMAN_CLAUDE_PROJECTS",
                 "CLAUDE_PLUGIN_ROOT",
                 "CLAUDE_PLUGIN_DATA",

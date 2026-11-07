@@ -41,7 +41,8 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
 - who     (SessionStart startup|resume|compact): in every other session of the project, two or three lines on who
           orchestrates it (name and since when, from `foreman session ID --name NAME`), that this session is not the
           orchestrator, and how to coordinate (SendMessage, foreman lock); «no orchestrator now» when none is marked.
-          The orchestrator's own subagents share its session id, so they get nothing. When the marked session is
+          The orchestrator's own subagents share its session id, so they get nothing; nor does a session agent
+          (identity.session_agent: a session foreman launched as an agent). When the marked session is
           not alive (orchestrator.health with this session as the caller: `gone`), or its loop is past its limit and
           its process cannot be checked (`silent`), `who_gone` / `who_silent` instead: mark yourself if you relieve
           it, otherwise tell the owner. A live orchestrator, or an unknown one within the limit, changes
@@ -53,7 +54,8 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
           said yet (loop.notices, <state>/notices-last). Between prompts the module's tick computes the same
           notices and hands them to the model with the result of the orchestrator's next tool call; the chat
           reviewer runs in the module too (`hook mod answer`, plain.review_answer).
-          In any other session of the product (not its subagents) a prompt gets `who_gone` / `who_silent` once per
+          In any other session of the product (not its subagents, nor a session agent) a prompt gets `who_gone` /
+          `who_silent` once per
           case (sessions already open, which SessionStart never reached; from the marked session's heartbeat, which
           foreman's hooks module writes each minute, and the `loop` heartbeat); the pause changes nothing.
 - guard   (PreToolUse on every tool, with no matcher in hooks/classic.json; guard.check_call): on
@@ -73,9 +75,11 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
           thread, and the calls' words), so the CLI knows its caller without FOREMAN_WHO; the agents hook drops the
           entry on that Bash's PostToolUse (a background Bash's stays until the 2 h pruning). Only commands with
           such a call write; it never fails the call. The guard gets who calls (guard.Ctx: the event's session_id
-          and agent_id): a command of a `[deny.grants]` group passes only for the marked orchestrator's main
-          thread, from its own process, with the owner's yes; each decision on one goes into
-          <state>/approved.jsonl, and one that passes into today's notes too (approved.py). Every refusal of the
+          and agent_id, and identity.LAUNCH_ENV of this hook's environment: a session agent's main thread is an
+          agent, and its refusals are logged as an agent's): a command of a `[deny.grants]` group passes only for
+          the marked orchestrator's main thread, from its own process, with the owner's yes; each decision on one
+          goes into <state>/approved.jsonl, and one that passes into today's notes too (approved.py). Every refusal
+          of the
           guard is also a line in <state>/guard.jsonl (permissions.log_refusal: the rule, never the command's text);
           the allowed path does not import it.
 - pause-agents (PreToolUse on Agent|Task): while the product is paused, the orchestrator's session may not launch a
@@ -391,7 +395,8 @@ def gone_notice(project: Project, o: Mark, session_id: str | None) -> tuple[str,
 
 
 def who_text(project: Project, session_id: str | None) -> str:
-    """The notice for a session that is not the project's orchestrator ('' for the orchestrator itself). When the
+    """The notice for a session that is not the project's orchestrator ('' for the orchestrator itself and for a
+    session agent, is_session_agent). When the
     marked session is gone or silent, who_gone / who_silent instead of who_other (gone_notice: open_session_notice
     does not repeat it)."""
     from . import orchestrator
@@ -399,6 +404,8 @@ def who_text(project: Project, session_id: str | None) -> str:
     o = orchestrator.current(project)
     if o and session_id and session_id == o["session"]:
         return ""
+    if is_session_agent(project, session_id):
+        return ""  # its brief says who it is and whom it answers to
     s = i18n.for_project(project)
     if not o:
         return s["who_none"].format(project=project.name)
@@ -411,6 +418,12 @@ def who_text(project: Project, session_id: str | None) -> str:
     return s["who_other_unnamed"].format(project=project.name, session=o["session"][:8], since=since)
 
 
+def is_session_agent(project: Project, session_id: str | None) -> bool:
+    """Whether a session is a session agent foreman launched (identity.session_agent, with this hook's
+    LAUNCH_ENV)."""
+    return identity.session_agent(project.state, session_id, identity.launch_env()) is not None
+
+
 def open_session_notice(project: Project, session_id: str | None) -> str:
     """who_gone / who_silent for a session already open (SessionStart never reached it with that
     case), once per case and session (<state>/who-gone-notified.json {session: case}); '' otherwise. Reads the mark,
@@ -418,7 +431,7 @@ def open_session_notice(project: Project, session_id: str | None) -> str:
     from . import orchestrator
 
     o = orchestrator.current(project)
-    if not o or not session_id or session_id == o["session"]:
+    if not o or not session_id or session_id == o["session"] or is_session_agent(project, session_id):
         return ""
     text, said = gone_notice(project, o, session_id)
     return "" if said else text
@@ -523,12 +536,15 @@ def hook_guard(project: Project, ev: Event, projects: Sequence[Project] | None =
 
 
 def _guard_ctx(ev: Event) -> guard.Ctx:
+    """Who calls, for the guard: the event's session, agent and folder, and the launch token of a session agent's
+    session (identity.LAUNCH_ENV, in this hook's environment)."""
     return {
         "session": ev.get("session_id"),
         "agent": ev.get("agent_id") or None,
         "agent_type": ev.get("agent_type") or None,
         "cwd": ev.get("cwd"),
         "tool_use_id": ev.get("tool_use_id") or None,
+        "launch": identity.launch_env(),
     }
 
 
