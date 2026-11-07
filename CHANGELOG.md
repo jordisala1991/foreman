@@ -9,6 +9,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- The new panel's «Agents» screen (`/next/#/agents`): a card for each agent running (what it works on, its state and how long it has been at it, its last words, red when it may be stuck, «See conversation» for a session agent), the agents that finished today with their result, time, model and list-price cost, and, in the product picker, «All» to see the agents of every product with the new panel, each with its product's tag. It asks `/api/agents?p=NAME` (`*` for all) again every 10 s. A finished agent counts only when its issue is one of the product's, as the charts do.
+
 ## [0.66.0] - 2026-11-07
 
 ### Added
@@ -16,8 +20,6 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 - The panel shows a «See conversation» button for each session agent (in its row and its detail): it turns Remote Control on for that session only when clicked (`claude attach` on a pseudo-terminal, `/remote-control`, then Enter on the dialog it leaves open; the session is not stopped, so no turn is cut and no copy is made) and opens the claude.ai/code link of its conversation in the Claude app. It sends the owner's phone a push on that click, never at launch. A failure says why and the button can be pressed again (`POST /api/agent/watch`, same key and project rules as the other writes).
 - A new web panel is being built at `/next/` of the same server and key, for the products that set `[panel] next = true` (default `false`; the panel at `/` is unchanged). This first part has its shell (a sidebar on a wide screen, five tabs at the bottom on a phone, the product picker, light and dark) and «How it goes» with the cost per day and model of the last 7 or 30 days (`/api/metrics`), at list price and counting only the product's own issues. It loads nothing from outside the machine. It is written in React and TypeScript (`panel/next-src/`) and built with Vite into `panel/next/`, which ships in the plugin: installing foreman still needs only Python, Claude Code and a browser. Its shell follows the approved design: 44 px targets, the product picker as a pill with the product's status («Running», «Paused», «Not answering», «Resting»), the sidebar's own tone with its «MORE» group, a translucent bottom bar, the theme following the system.
 - `/api/metrics` of the new panel now gives every series of its charts for the last 7 or 30 days, empty days as 0: cost per day and model (list-price dollars, a run's cost on the day it ended), the cheap-model share of tokens, the most expensive tasks and agent types, changes integrated and measurements, how agents' deliveries ended, reviews that asked for changes and their rounds, the guard's refusals by who and the rules refusing most, the figures of today with their comparison, the first day of data of each series, and the account's quota now. A failure inside it answers 500, no longer 400.
-
-- The new panel's «Agents» screen (`/next/#/agents`): a card for each agent running (what it works on, its state and how long it has been at it, its last words, red when it may be stuck, «See conversation» for a session agent), the agents that finished today with their result, time, model and list-price cost, and, in the product picker, «All» to see the agents of every product with the new panel, each with its product's tag. It asks `/api/agents?p=NAME` (`*` for all) again every 10 s. A finished agent counts only when its issue is one of the product's, as the charts do.
 
 ### Config
 
