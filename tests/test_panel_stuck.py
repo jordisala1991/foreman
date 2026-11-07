@@ -73,6 +73,21 @@ class StuckTest(PanelCase):
         self.assertIn("Model One", out["html"])
         self.assertEqual(out["count"], "1 páginas")
 
+    def test_a_wiki_page_deleted_while_the_list_is_cached_does_not_break_the_tab(self):
+        """The file list is kept 5 s: a page deleted inside that window (or a list left by another test of the same
+        product name) made /api/wiki raise and close the connection, which the page showed as «fetch failed»."""
+        (self.ohome / "wiki/models").mkdir()
+        keep, gone = self.ohome / "wiki/models/m-one.md", self.ohome / "wiki/models/m-gone.md"
+        for f in (keep, gone):
+            f.write_text("# " + f.stem + "\n")
+        self.assertEqual(len(self.req("/api/wiki?p=other")[1]["pages"]), 2)
+        gone.unlink()
+        code, body = self.req("/api/wiki?p=other")
+        self.assertEqual(code, 200)
+        self.assertEqual([p["n"] for p in body["pages"]], ["m-one"])
+        self.assertEqual(self.req("/api/wiki/page?p=other&n=m-gone")[0], 404)
+        self.assertEqual(self.req("/api/wiki/search?p=other&q=gone")[1]["results"], [])
+
     def test_picker_rows_leave_the_product_name_room_on_a_phone(self):
         """In the product picker the line about the orchestrator goes under the name and may wrap, on a narrow
         screen; on the one line it pushed the name out of the row."""
