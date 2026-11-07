@@ -3,6 +3,7 @@
 // and a bottom bar of five tabs. The theme follows the system (app.css); there is no switch.
 import { useEffect, useState } from "react";
 import { Agents } from "./Agents";
+import { Boundary } from "./Boundary";
 import { How } from "./How";
 import { Backlog } from "./more/Backlog";
 import { System } from "./more/System";
@@ -201,7 +202,7 @@ export function Shell({ all: initial }: { all: Product[] }) {
           <Picker products={products} product={p} all={everyone} pick={pick} />
           <StatusPill product={p} all={everyone ? products : undefined} />
         </div>
-        {screen}
+        <Boundary key={`${tab}/${everyone ? "*" : p.name}`}>{screen}</Boundary>
       </main>
       <nav className="bar" aria-label={t("sections")}>
         {TABS.map((k) => (

@@ -23,6 +23,7 @@
   "none_title": "No product has the new panel",
   "none_how": "It is turned on per product, in its foreman.toml:",
   "load_failed": "Could not load.",
+  "screen_failed": "This screen failed.",
   "retry": "Retry",
   "loading": "Loading…",
   "no_data": "No data for this yet",
