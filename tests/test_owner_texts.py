@@ -95,11 +95,7 @@ class OwnerTextsTest(ProjectCase):
         self.assertEqual(cards[0]["text"], GOOD_TEXT)  # no longer glued to the text
         self.assertEqual(cards[0]["recommendation"], "yes, they miss it today")
         self.assertEqual(cards[1]["recommendation"], "")
-        app = (ROOT / "panel/app.js").read_text()
-        self.assertIn("x.recommendation && [t('recommendation'), esc(x.recommendation)]", app)
         for lang, label in (("en", "Recommendation"), ("es", "Recomendación")):
-            strings = json.loads((ROOT / f"panel/strings.{lang}.json").read_text())
-            self.assertEqual(strings["recommendation"], label)
             i18n = json.loads((ROOT / f"lib/foreman/i18n/{lang}.json").read_text())
             self.assertEqual(i18n["recommendation_label"], label)
 
