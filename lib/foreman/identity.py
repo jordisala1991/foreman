@@ -622,6 +622,23 @@ def _wrapper_calls(cmd: str, depth: int = 0) -> list[tuple[Any, ...]]:
     return out
 
 
+_REDIR = re.compile(r"^(?:\d*|&)(?:>&|<&|&>>?|>>?|<)(.*)$")
+
+
+def _without_redirections(words: list[str]) -> list[str]:
+    """The words a program gets: the redirections the lexer left in (`2>&1` comes as `2>&`, `1`; `> f` as `>`, `f`)
+    are not its arguments."""
+    out, skip = [], False
+    for w in words:
+        if skip:
+            skip = False
+        elif m := _REDIR.match(w):
+            skip = not m.group(1)  # the operator alone: the next word is its target
+        else:
+            out.append(w)
+    return out
+
+
 def calls_of(cmd: str) -> list[list[Any]]:
     """[[project or None, sub, words…]] of the foreman calls in a command line that need a caller's name."""
     from . import pause
@@ -629,7 +646,7 @@ def calls_of(cmd: str) -> list[list[Any]]:
     if "foreman" not in cmd:
         return []
     found = pause.foreman_calls(cmd) + _wrapper_calls(cmd)
-    return [[name, sub, *rest] for name, sub, rest in found if sub in WHO_SUBS]
+    return [[name, sub, *_without_redirections(rest)] for name, sub, rest in found if sub in WHO_SUBS]
 
 
 def _prune_callers(d: dict[str, Any]) -> dict[str, Any]:
@@ -713,6 +730,33 @@ def _fits(written: Any, actual: list[Any], loose: bool) -> bool:
     return all(ok(w, a) for w, a in zip(written, actual))
 
 
+def _by_worktree(open_: list[Any]) -> Any:
+    """The open call of the one agent whose worktree holds this process's working directory, or None (no agent, or
+    two, claim it: nothing is guessed). With the main thread's call also open nothing is chosen."""
+    if any(not e.get("agent") for e in open_):
+        return None  # the main thread's call is a candidate whose folder is unknown
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        return None
+    found: dict[str, Any] = {}
+    for e in open_:
+        aid = e.get("agent")
+        if not aid:
+            continue
+        wt = (util.read_json(Path(e.get("state") or "") / "agents.json", {}) or {}).get(aid, {}).get("worktree")
+        if not wt:
+            continue
+        try:
+            inside = cwd.is_relative_to(Path(wt).expanduser().resolve())
+        except (OSError, ValueError):
+            inside = False
+        if inside:
+            found.setdefault(aid, e)
+    # two agents claiming the folder are as ambiguous as two calls: only one agent, whatever its number of calls
+    return next(iter(found.values())) if len(found) == 1 else None
+
+
 def recorded_caller(sub: str, call: list[Any]) -> tuple[str | None, str | int | None]:
     """Who runs this CLI by the calls the guard wrote down: (agent id, name) for an agent, (None, None) for the
     main thread or nothing written down, or "ambiguous" with the number of open calls when it cannot tell. `call`
@@ -740,6 +784,8 @@ def recorded_caller(sub: str, call: list[Any]) -> tuple[str | None, str | int | 
             if not same:
                 same = [e for e in open_ if any(_fits(c, call, loose) for c in e.get("calls") or [])]
         hit = one(same) if same else None
+        if hit is None:
+            hit = _by_worktree(open_)
         if hit is None:
             return "ambiguous", len(open_)
     aid = hit.get("agent")
