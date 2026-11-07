@@ -124,16 +124,10 @@ def granted(project: Project, rec: dict[str, Any]) -> None:
 def refusals_since(project: Project, since: str) -> list[dict[str, Any]]:
     """The log's refusals of an agent, another session or another process when the mark had one (not the grant's,
     nor those of a mark without a process) after `since` (ISO time)."""
-    try:
-        text = log_file(project).read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
     out = []
-    for line in text.splitlines():
-        rec = _read(line)
+    for rec in util.read_jsonl(log_file(project)):
         if (
-            rec
-            and rec.get("verdict") == "deny"
+            rec.get("verdict") == "deny"
             and (rec.get("why") in ("agent", "session") or (rec.get("why") == "process" and rec.get("marked_pid")))
             and rec.get("at", "") > since
         ):

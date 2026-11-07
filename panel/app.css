@@ -419,3 +419,7 @@ body.broken .tab, body.broken #nav{display:none}
 .lrow.story.drag>.sico,.lrow.story.drag>.bico{grid-column:2}
 .lrow.story.drag .tt{grid-column:3/-1}.lrow.story.drag .id{grid-column:3}.lrow.story.drag .meta{grid-column:4}
 }
+/* the orchestrator's report on Now: a document in a card, with headings sized for a card, not a page */
+#report .wdoc{font-size:var(--fs-b);line-height:1.5;max-width:none;margin:0}
+#report .wdoc h1{font-size:19px;margin:0 0 8px}#report .wdoc h2{font-size:16.5px;margin:14px 0 6px}#report .wdoc h3,#report .wdoc h4{font-size:var(--fs-b);margin:12px 0 4px}
+.sh .sa .stale-note{font-weight:600}

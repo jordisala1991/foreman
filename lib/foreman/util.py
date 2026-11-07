@@ -35,9 +35,7 @@ import fcntl
 import json
 import os
 import re
-import shutil
 import subprocess
-import tempfile
 import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta
@@ -119,6 +117,8 @@ def write_text_atomic(path: PathLike, text: str) -> bool:
             return False
     except (OSError, ValueError):
         pass
+    import tempfile  # here: the guard imports util on every tool call and most of its calls write nothing
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
@@ -260,6 +260,8 @@ def git_run(
 ) -> subprocess.CompletedProcess[Any]:
     """git -C repo args, without hooks nor fsmonitor (GIT_QUIET): never for a push. Never raises on a status; an OSError
     or a timeout propagates."""
+    import shutil  # here: most of what imports util never runs git
+
     return subprocess.run(
         [shutil.which("git") or "git", *GIT_QUIET, "-C", str(repo), *args],
         capture_output=True,
