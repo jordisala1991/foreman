@@ -771,7 +771,7 @@ class NextPageTest(ProjectCase):
         self.assertEqual(out["fetched"], ["/api/projects", "/api/agents?p=alpha"])
 
     def test_finished_runs_the_way_the_real_state_has_them(self):
-        # FO-199 T11: the server sends outcome "stopped" (a reviewer or a plain subagent that ended without
+        # the server sends outcome "stopped" (a reviewer or a plain subagent that ended without
         # `progress --done`), None (older runs), and entries without type, family or minutes; none may blank the screen
         done = [
             self.finished(agent="r1", task="Revisión", type="reviewer", outcome="stopped"),
