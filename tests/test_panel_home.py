@@ -1,4 +1,4 @@
-"""«All products» as the panel's home (FO-191 T2): it opens there when there are several products and the owner has
+"""«All products» as the panel's home: it opens there when there are several products and the owner has
 not chosen one, and its Now tab has one line per product saying whether it needs him. app.js runs whole in node over a
 minimal DOM (tests/panel_dom.js) against a real panel server."""
 
