@@ -431,7 +431,7 @@ body.broken .tab, body.broken #nav{display:none}
 #report .wdoc h1{font-size:19px;margin:0 0 8px}#report .wdoc h2{font-size:16.5px;margin:14px 0 6px}#report .wdoc h3,#report .wdoc h4{font-size:var(--fs-b);margin:12px 0 4px}
 .sh .sa .stale-note{font-weight:600}
 
-/* ---- Desktop (FO-191 T9): from 1000 px the content keeps a readable width, centred, the tabs are a rail on the left and
+/* ---- Desktop: from 1000 px the content keeps a readable width, centred, the tabs are a rail on the left and
    the text goes up a step. Under 1000 px nothing here applies: the phone and tablet layout is the one above. */
 @media(min-width:1000px){
   :root{--fs-xs:12.5px;--fs-s:13.5px;--fs-m:14.5px;--fs-b:15px;--fs-l:16px;--fs-h:22px;--rail:152px;
