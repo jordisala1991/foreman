@@ -25,8 +25,22 @@ const api = path => `${path}${path.includes('?') ? '&' : '?'}t=${encodeURICompon
 
 // ---- Texts (strings.<language>.json): t('key', {vars}); tn() picks key_1 or key_n by the number n
 let S = {}, LANG = '';
+// the few texts an error needs before /api/strings has ever loaded (offline on opening): never a raw key on screen
+const FALLBACK = {
+  en: {no_connection: 'No connection', loading: 'Loading…', error: 'Error: {text}', wrong_key: 'Wrong key in the link',
+    dur_s: '{n} s', dur_min: '{n} min', dur_h: '{h} h {m} min', dur_d: '{n} d',
+    offline_stale: 'No connection with the panel: the data may be {dur} old. Retrying…', offline_none: 'No connection with the panel. Retrying…',
+    panel_error_stale: 'The panel answers with an error ({text}): the data may be {dur} old. Retrying…', panel_error_none: 'The panel answers with an error ({text}). Retrying…',
+    wiki_failed: 'Could not load the wiki: {text}. Retrying on its own.'},
+  es: {no_connection: 'Sin conexión', loading: 'Cargando…', error: 'Error: {text}', wrong_key: 'Clave incorrecta en el enlace',
+    dur_s: '{n} s', dur_min: '{n} min', dur_h: '{h} h {m} min', dur_d: '{n} d',
+    offline_stale: 'Sin conexión con el panel: los datos pueden ser de hace {dur}. Reintentando…', offline_none: 'Sin conexión con el panel. Reintentando…',
+    panel_error_stale: 'El panel responde con un error ({text}): los datos pueden ser de hace {dur}. Reintentando…', panel_error_none: 'El panel responde con un error ({text}). Reintentando…',
+    wiki_failed: 'No se pudo cargar la wiki: {text}. Se reintenta sola.'}};
+const fallbackLang = () => { const l = lsGet('lang', '') || (typeof navigator !== 'undefined' && navigator.language) || 'en'; return /^es/i.test(l) ? 'es' : 'en'; };
 function t(key, vars){
   let s = key.split('.').reduce((o, k) => (o || {})[k], S);
+  if(s == null) s = FALLBACK[fallbackLang()][key];
   if(s == null) s = key;
   return String(s).replace(/\{(\w+)\}/g, (m, k) => vars && vars[k] != null ? vars[k] : m);
 }
@@ -35,7 +49,7 @@ let SKEY = '';
 async function loadStrings(lang){
   if(lang === SKEY) return;
   try{ S = await (await fetch(api(`/api/strings?lang=${encodeURIComponent(lang)}`))).json(); }catch(e){ return; }
-  SKEY = lang; LANG = lang; document.documentElement.lang = lang; document.title = t('title');
+  SKEY = lang; LANG = lang; lsSet('lang', lang); document.documentElement.lang = lang; document.title = t('title');
   document.querySelectorAll('[data-s]').forEach(el => el.textContent = t(el.dataset.s));
   document.querySelectorAll('[data-sp]').forEach(el => el.placeholder = t(el.dataset.sp));
   document.querySelectorAll('[data-sa]').forEach(el => el.setAttribute('aria-label', t(el.dataset.sa)));
@@ -406,6 +420,12 @@ function withLive(bl, live){
     return {...c, ...rest, ...(status && ['backlog', 'ready'].includes(c.status) ? {status} : {})}; };
   return {...bl, projects: (bl.projects || []).map(e => ({...e, issues: e.issues.map(lay)})), issues: (bl.issues || []).map(lay)};
 }
+// a registry problem (Python's text: «name: error» when a product does not load, «… (ignored)» for a setting that
+// was not understood) as a plain sentence, with that text kept as the detail
+function problemOf(e){
+  const m = /^([\w.-]+): /.exec(e);
+  return {text: /\(ignored\)/.test(e) ? t('problem_ignored') : m && m[1] !== 'registry' ? t('problem_load', {name: m[1]}) : t('problem_config'), detail: e};
+}
 function normalize(d, b){
   const bls = Object.fromEntries(((b && (b.projects || [b.project])) || []).filter(Boolean).map(x => [x.name, x.backlog]));
   const ps = (d.projects || [d.project]).map(p => ({...p, backlog: withLive(bls[p.name] || {projects: []}, p.issue_live || {})})), joint = P==='*';
@@ -432,7 +452,8 @@ function normalize(d, b){
     moves: all('moves').sort(byTime).reverse().slice(0, 5), activity: all('activity'),
     progress: all('progress'), notes: all('notes'), recurring: all('recurring'), repos: all('repos'), backlog: cards,
     projects,
-    errors: ps.filter(p => p.backlog_error).map(p => `${p.title || p.name}: ${p.backlog_error}`).concat((OVER || {}).errors || [])};
+    errors: ps.filter(p => p.backlog_error).map(p => ({text: t('backlog_unreadable', {name: p.title || p.name}), detail: p.backlog_error}))
+      .concat(((OVER || {}).errors || []).map(problemOf))};
 }
 
 // What a product asks of the owner, from its facts {broken, mode, questions, grants, orch, health, paused, late}:
@@ -864,7 +885,7 @@ function renderSystem(d){
       ...d.progress.filter(x => hhmm(x.time) >= sinceHM && String(x.time).slice(0,10) === today).map(x => ({h: hhmm(x.time), who: x.agent || '?', t: x.text, kind: 'progress', p: x.p}))]
     .sort((a,b) => b.h.localeCompare(a.h));
   $('lasthour').innerHTML = sect(t('last_hour'), list(thread.map((x, i) => lrow({k: 'feed', key: i, id: x.h, name: ptag(x.p) + aname(x.who), title: inline(x.t)})).join('') || empty(t('nothing_last_hour'))), thread.length || null);
-  $('errs').innerHTML = d.errors.length ? sect(t('errors'), list(d.errors.map(e => lrow({cls: 'wrap bad', title: esc(e)})).join(''))) : '';
+  $('errs').innerHTML = d.errors.length ? sect(t('errors'), list(d.errors.map(e => lrow({cls: 'wrap bad', title: `${esc(e.text)}<div class="muted detail">${esc(t('detail_text', {text: e.detail}))}</div>`})).join(''))) : '';
   renderAbout();
 }
 // the foreman this panel runs (and, with --follow-installed, a new installed version it could not move to); it comes
@@ -1014,13 +1035,15 @@ function laneGroups(cards, scope){
       + (older ? lrow({icon: ico('clock'), title: esc(tn('show_older', older)), cls: 'older', attrs: ' role="button" onclick="showOlder(this)"'}) : ''), t('nothing_in_lane'));
   }).join(''));
 }
+// a backlog.json that cannot be read is not an empty backlog: its error, in plain words, with the file's own text apart
+const blBroken = d => d.ps.filter(p => p.backlog_error).map(p => card(`<div class="headline"><div class="ico" style="background:var(--bad)">!</div><div style="min-width:0"><div class="t">${esc(t('backlog_unreadable', {name: esc(p.title || p.name)}))}</div><div class="s">${esc(t('backlog_unreadable_hint'))}</div></div></div><div class="wrap muted brokenerr">${esc(t('detail_text', {text: p.backlog_error}))}</div>`)).join('');
 function renderBacklog(d){
   BL = d.backlog;
   document.querySelectorAll('#blseg button').forEach(b => b.classList.toggle('on', b.dataset.v===blView));
   const epics = epicList(), et = epics.find(([e]) => e===epic);
   if(blView==='projects'){
     $('filter').innerHTML = '';
-    $('board').innerHTML = list(epics.map(([e, ti]) => epicRow(e, ti, canWrite(epicOf(e).p) && !d.joint)).join('') || empty(t('no_backlog')), ' id="elist"')
+    $('board').innerHTML = blBroken(d) + list(epics.map(([e, ti]) => epicRow(e, ti, canWrite(epicOf(e).p) && !d.joint)).join('') || (d.ps.some(p => p.backlog_error) ? '' : empty(t('no_backlog'))), ' id="elist"')
       + (d.ps.some(p => p.writable) && !d.joint ? `<div class="hint">${t('hint_projects')}</div>` : '');
   } else {
     // the filter: a project, or «no project»
@@ -1028,7 +1051,7 @@ function renderBacklog(d){
     const chipTxt = loose ? esc(t('no_project')) : et ? `${esc(ekey(fe))} · ${esc(et[1].split(/[ (]/).slice(0,3).join(' '))}` : '';
     $('filter').innerHTML = `<button class="sec sm" onclick="openSheet()">${t('project_filter', {name: chipTxt ? '' : t('all')})} ▾</button>${chipTxt ? `<span class="el wide" onclick="showEpic('')"><i style="background:${loose ? 'var(--muted)' : ecol(fe)}"></i>${chipTxt} ✕</span>` : ''}`;
     const keep = c => !epic || (loose ? !c.eid : c.epic===fe);
-    $('board').innerHTML = BL.length ? laneGroups(BL.filter(keep), 'all') : list(empty(t('no_backlog')));
+    $('board').innerHTML = blBroken(d) + (BL.length ? laneGroups(BL.filter(keep), 'all') : d.ps.some(p => p.backlog_error) ? '' : list(empty(t('no_backlog'))));
   }
   // a move opens the issue or project it moved
   $('moves').innerHTML = (d.moves||[]).length ? sect(t('recent_moves'), list(d.moves.map(m => lrow({k: BL.some(c => c.id===m.move) ? 'h' : 'ep', key: d.joint && !BL.some(c => c.id===m.move) ? `${m.p}·${m.move}` : m.move,
@@ -1379,7 +1402,7 @@ const WSTATUS_ORDER = ['activo', 'active', 'en-prueba', 'testing', 'referencia',
 const wikiP = () => lastData && !lastData.joint && lastData.ps[0].wiki ? lastData.ps[0].name : null;
 const wfirst = () => (lastData && lastData.ps[0].wiki_first) || [];
 const W_ICON = '<svg class="sico" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 1.5h5l3 3v8h-8z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M8.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
-const wfetch = async (path) => { const r = await fetch(api(`${path}${path.includes('?') ? '&' : '?'}p=${encodeURIComponent(WIKI.p || '')}`)); if(!r.ok) throw new Error(r.status===404 ? t('not_found') : t('error', {text: r.status})); return r.json(); };
+const wfetch = async (path) => { let r; try{ r = await fetch(api(`${path}${path.includes('?') ? '&' : '?'}p=${encodeURIComponent(WIKI.p || '')}`)); }catch(e){ throw new Error(t('no_connection')); } if(!r.ok) throw new Error(r.status===404 ? t('not_found') : t('error', {text: r.status})); return r.json(); };
 const wgroupOf = p => p.type || 'overview';
 async function wikiList(){
   const p = wikiP();
@@ -1396,10 +1419,16 @@ function wikiSorted(g){
 const wrow = p => lrow({icon: W_ICON, title: `<span${WSTATUS[p.status] || !p.status ? '' : ' class="muted"'}>${esc(p.title)}</span>`,
   meta: (p.status ? `${dot(WSTATUS[p.status] || 'var(--muted)', p.status)}<span class="wst">${esc(p.status)}</span>` : ''),
   attrs: ` data-wiki="${esc(p.n)}"`, cls: 'wrow'});
+// a wiki list or page that failed is tried again on the next pass that succeeds (the poll), not only when he comes back
+function retryWiki(){
+  if(WIKI.failed && $('t-wiki').classList.contains('on')) renderWiki();
+  const v = WIKI.pageFailed;
+  if(v && MV[MV.length-1] === v) renderWikiView(v);
+}
 async function renderWiki(){
   const el = $('wtree');
-  if(!WIKI.list) el.innerHTML = list(empty(t('loading')));
-  try{ await wikiList(); }catch(e){ el.innerHTML = list(empty(t('wiki_failed', {text: esc(e.message)}))); return; }
+  if(!WIKI.list){ el.innerHTML = list(empty(t('loading'))); el.dataset.sig = ''; }
+  try{ await wikiList(); WIKI.failed = false; }catch(e){ WIKI.failed = true; el.innerHTML = list(empty(t('wiki_failed', {text: esc(e.message)}))); el.dataset.sig = ''; return; }
   const html = list(wgroups().map(g => { const ps = wikiSorted(g);
     return ps.length ? group('wiki', g, `<span>${esc(wgroupName(g))}</span><span class="n">${ps.length}</span>`, ps.map(wrow).join(''), '') : ''; }).join(''));
   if(el.dataset.sig !== html){ el.innerHTML = html; el.dataset.sig = html; }
@@ -1457,7 +1486,8 @@ async function renderWikiView(v){
   try{
     if(!WIKI.list) await wikiList();
     WIKI.pages[v.key] = await wfetch(`/api/wiki/page?n=${encodeURIComponent(v.key)}`);
-  }catch(e){ if(!WIKI.pages[v.key]){ if(MV[MV.length-1]===v) body.innerHTML = `<span class="bad">${esc(e.message)}: «${esc(v.key)}»</span>`; return; } }
+  }catch(e){ if(!WIKI.pages[v.key]){ if(MV[MV.length-1]===v){ body.innerHTML = `<span class="bad">${esc(e.message)}: «${esc(v.key)}»</span>`; WIKI.pageFailed = v; } return; } }
+  if(WIKI.pageFailed === v) WIKI.pageFailed = null;
   if(MV[MV.length-1]!==v) return;
   v.p = WIKI.p;
   const p = WIKI.pages[v.key], html = wikiPageHtml(p);
@@ -1595,13 +1625,13 @@ async function load(){
     // a product whose config does not load has no data: its error replaces the tabs until it is fixed
     document.body.classList.toggle('broken', !!(cur && cur.broken));
     $('broken').innerHTML = cur && cur.broken ? card(`<div class="headline"><div class="ico" style="background:var(--bad)">!</div><div style="min-width:0"><div class="t">${t('config_broken_title', {name: esc(cur.name)})}</div><div class="s">${t('config_broken_text')}</div></div></div><div class="wrap bad brokenerr">${esc(cur.error)}</div>`) : '';
-    if(cur && cur.broken){ lastSignature = null; lastEtag = null; lastData = null; $('err').textContent = ''; $('clock').textContent = t('updated_at', {t: clock()}); return; }
+    if(cur && cur.broken){ lastSignature = null; lastEtag = null; lastData = null; markFresh(); $('clock').textContent = t('updated_at', {t: clock()}); return; }
     // no-cache: the browser revalidates with the ETag and an unchanged answer comes back as a bodiless 304. The state
     // (live: agents, locks, progress) and the backlog (only changes with its files) are two answers
     const q = encodeURIComponent(P);
     const [r, rb] = await Promise.all([fetch(api(`/api/state?p=${q}`), {cache:'no-cache'}), fetch(api(`/api/backlog?p=${q}${ALL_CLOSED ? '' : '&closed=recent'}`), {cache:'no-cache'})]);
     for(const x of [r, rb]) if(!x.ok) throw new Error(x.status===403 ? t('wrong_key') : t('error', {text: x.status}));
-    $('err').textContent='';
+    markFresh();
     $('clock').textContent = t('updated_at', {t: clock()});
     setSkew(r);
     const etag = r.headers.get('ETag'), blEtag = rb.headers.get('ETag');
@@ -1633,8 +1663,22 @@ async function load(){
       const v = await fetch(api('/api/version'), {cache:'no-store'});
       if(v.ok && versionCheck((await v.json()).version)) return;
     }catch(e2){}
-    $('err').textContent = t('offline', {text: e.message});
+    markStale(e);
   }
+}
+// ---- A pass that failed: a banner in the panel's language says so and how old the data on screen is, that data is
+// dimmed until a pass succeeds, and the 5 s poll retries on its own
+let lastOk = 0;
+const isNet = e => !!e && (e.name === 'TypeError' || e.name === 'AbortError');   // what fetch throws when nothing answers
+function markFresh(){
+  lastOk = Date.now(); $('err').textContent = ''; document.body.classList.remove('stale');
+  retryWiki();
+}
+function markStale(e){
+  const age = lastOk ? Math.max(60, Math.round((Date.now() - lastOk) / 1000)) : null, dr = age == null ? '' : dur(Math.round(age / 60) * 60);
+  const key = (isNet(e) ? 'offline_' : 'panel_error_') + (age == null ? 'none' : 'stale');
+  $('err').textContent = t(key, {dur: dr, text: isNet(e) ? '' : (e && e.message) || ''});
+  if(lastOk) document.body.classList.add('stale');
 }
 async function decide(b){
   if(!confirm(t('confirm_answer', {op: b.dataset.op}))) return;

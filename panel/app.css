@@ -28,6 +28,9 @@ code{font:12px var(--mono);background:var(--chip);padding:1px 4px;border-radius:
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 .orchx.warn,.orchx.bad{font-weight:600}
 .err{color:var(--bad);font-weight:600}
+#err:not(:empty){position:sticky;top:0;z-index:20;margin:8px var(--sp3);padding:var(--sp2) var(--sp3);background:var(--card);border:1px solid var(--bad);border-radius:var(--r-s);font-size:var(--fs-m)}
+body.stale .tab{opacity:.5;filter:grayscale(.6);transition:opacity .2s}
+.detail{font-weight:400;font-size:var(--fs-s);margin-top:2px;overflow-wrap:anywhere}
 .pre{white-space:pre-wrap;overflow-wrap:anywhere}
 .md ul{margin:4px 0;padding-left:18px}.md li{margin:3px 0}.md p{margin:4px 0}
 button{font:inherit;font-size:var(--fs-m);font-weight:500;border:1px solid transparent;border-radius:var(--r-s);padding:7px 12px;background:var(--acc);color:#fff;cursor:pointer}
