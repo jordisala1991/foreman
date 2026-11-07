@@ -412,7 +412,8 @@ class ModTest(GrantCase):
         q = self.mod(phase="check", command=DEPLOY, tool_use_id="T1")
         self.assertEqual((q["group"], q["live"], q["ask_ms"]), ("deploy", False, 300_000))
         self.assertEqual(
-            q["question"], f"The orchestrator wants to start the deploy. Allow it for 30 min? Command: `{DEPLOY}`"
+            q["question"],
+            f"The orchestrator wants to start the deploy. {ALLOW} Command: `{DEPLOY}`",
         )
         self.assertEqual((q["yes"], q["no"], q["header"]), ("Yes, for 30 min", "No", "foreman"))
         self.assertIn("already waiting for Owner's answer", q["waiting"])
@@ -445,7 +446,7 @@ class ModTest(GrantCase):
         self.assertEqual((q["group"], q["live"]), ("deploy", False))
         self.assertEqual(
             q["question"],
-            f"The orchestrator wants to use Read on `{place}`, which needs your yes. Allow it for 30 min?",
+            f"The orchestrator wants to use Read on `{place}`, which needs your yes. {ALLOW}",
         )
         self.assertEqual(q["group"], self.mod(phase="check", command=f"cat {place}")["group"])  # the same as in Bash
         q = self.mod(phase="check", tool="Monitor", input={"command": DEPLOY, "description": "x"})
@@ -1374,6 +1375,9 @@ PUBLISH = (
     + f'publish = ["(^|\\\\s){PUSH}", "gh release create"]\n'
 )
 BRANCH = "fo191/plain-ask"
+# the question's scope (the yes opens the whole group), en and es
+ALLOW = "Allow this, and the rest of the same permission, for 30 min without asking again?"
+DEJAS = "¿Le dejas esto, y lo demás del mismo permiso, durante 30 min sin volver a preguntar?"
 
 
 class PlainWordsTest(PendCase):
@@ -1405,7 +1409,7 @@ class PlainWordsTest(PendCase):
         self.assertEqual(q["group"], "publish")
         self.assertEqual(
             q["question"],
-            f"El orquestador quiere subir la rama {BRANCH} a GitHub. ¿Le dejas durante 30 min? Orden: `{self.push}`",
+            f"El orquestador quiere subir la rama {BRANCH} a GitHub. {DEJAS} Orden: `{self.push}`",
         )
         self.assertEqual(
             q["notice"],
@@ -1439,7 +1443,7 @@ class PlainWordsTest(PendCase):
         forced = self.push.replace(" origin", " --force origin")
         self.assertEqual(
             say(forced),
-            f"The orchestrator wants to run a command that needs your yes. Allow it for 30 min? Command: `{forced}`",
+            f"The orchestrator wants to run a command that needs your yes. {ALLOW} Command: `{forced}`",
         )
         # two parts of the group in one command: no words for one of them
         both = f"{self.push} && gh release create v1"
@@ -1449,7 +1453,7 @@ class PlainWordsTest(PendCase):
         q = self.mod(phase="check", command=STORE)
         self.assertEqual(
             q["question"],
-            f"The orchestrator wants to run a command that needs your yes. Allow it for 30 min? Command: `{STORE}`",
+            f"The orchestrator wants to run a command that needs your yes. {ALLOW} Command: `{STORE}`",
         )
         self.assertEqual(
             q["notice"],
@@ -1470,16 +1474,70 @@ class PlainWordsTest(PendCase):
         self.timeout("stores", STORE, "T2")
         self.assertNotIn("summary", grants.pending(self.project)["stores"])
 
-    def test_a_cut_command_gets_no_words(self):
-        """F9: the stored command keeps approved.COMMAND_CHARS characters; past that, no words from it."""
+    def test_a_long_command_keeps_the_part_and_its_words(self):
+        """The record keeps approved.COMMAND_CHARS characters of the command, which a long compound one fills
+        before its push: the request also keeps the part that needs the yes, and its words, for the panel."""
         long = f'foreman note t "{"x" * approved.COMMAND_CHARS}" && {self.push}'
         self.timeout("publish", long, "T1")
         r = grants.pending(self.project)["publish"]
         self.assertEqual(len(r["command"]), approved.COMMAND_CHARS)
+        self.assertEqual((r["part"], r["summary"]), (self.push, f"push the branch {BRANCH} to GitHub"))
+        from foreman import panel
+
+        (row,) = [x for x in panel.grant_requests(self.project) if x["pending"]]
+        self.assertEqual((row["part"], row["say"]["kind"]), (self.push, "push"))
+
+    def test_a_cut_part_gets_no_words(self):
+        """F9: a part cut at approved.COMMAND_CHARS gets no words (its end is unknown)."""
+        git, push = PUSH.split()
+        long = f"{git} -C {self.repo} {push} origin " + " ".join(["b"] * approved.COMMAND_CHARS)
+        self.timeout("publish", long, "T1")
+        r = grants.pending(self.project)["publish"]
+        self.assertEqual(len(r["part"]), approved.COMMAND_CHARS)
         self.assertNotIn("summary", r)
         plain = f"{PUSH} origin " + "b" * approved.COMMAND_CHARS
         self.assertIsNone(grants.say(plain[: approved.COMMAND_CHARS]))
         self.assertEqual(grants.say(f"{PUSH} origin main")["kind"], "push")
+
+    def test_the_owners_own_shape_cd_then_merge_then_push(self):
+        """The command the owner saw: a note, then `cd REPO && git merge … && git push origin B`. The folder of the
+        push is the one resolving it finds (the `cd`), so the words name GitHub and the branch."""
+        git, push = PUSH.split()
+        cmd = (
+            f'foreman backlog edit AB-1 --detail "x" >/dev/null 2>&1; cd {self.repo} && {git} merge -q main -m m '
+            f"&& {git} {push} origin {BRANCH}"
+        )
+        q = self.mod(phase="check", command=cmd)
+        self.assertTrue(q["question"].startswith(f"The orchestrator wants to push the branch {BRANCH} to GitHub. "))
+        self.assertIn(f"Command: `{git} {push} origin {BRANCH}`", q["question"])
+        self.timeout("publish", cmd, "T1")
+        self.assertEqual(grants.pending(self.project)["publish"]["summary"], f"push the branch {BRANCH} to GitHub")
+
+    def test_a_push_alone_reads_the_sessions_folder(self):
+        """A push with no `cd` nor `-C` runs in the event's cwd: its remote and branch are read there."""
+        git, push = PUSH.split()
+        inside = helpers.make_repo(self.home / "app")  # a folder of the project (the hook acts only there)
+        helpers.git(inside, "branch", BRANCH)
+        helpers.git(inside, "remote", "add", "origin", "git@github.com:owner/app.git")
+        q = hooks_mod.grant(
+            {"cwd": str(inside), "session": "S1", "phase": "check", "command": f"{git} {push} origin {BRANCH}"}
+        )
+        self.assertTrue(q["question"].startswith(f"The orchestrator wants to push the branch {BRANCH} to GitHub. "))
+        # from the home (no such remote there): the remote as written, the ref as it is
+        q = self.mod(phase="check", command=f"{git} {push} origin {BRANCH}")
+        self.assertTrue(q["question"].startswith(f"The orchestrator wants to push {BRANCH} to the remote «origin». "))
+
+    def test_the_question_says_the_yes_covers_the_rest_of_the_permission(self):
+        """F4: the yes opens the whole group for grant_minutes, and the question says so in plain words."""
+        self.assertIn(
+            "and the rest of the same permission, for 30 min without asking again?",
+            self.mod(phase="check", command=self.push)["question"],
+        )
+        self.spanish()
+        self.assertIn(
+            "y lo demás del mismo permiso, durante 30 min sin volver a preguntar?",
+            self.mod(phase="check", command=STORE)["question"],
+        )
 
 
 ORCH = "S-orch"  # the session the contract's grant cases mark

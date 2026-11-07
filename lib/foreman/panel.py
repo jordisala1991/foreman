@@ -515,8 +515,8 @@ def project_state(project: Project, lock_list: list[Status]) -> Obj:
 
 def grant_requests(project: Project) -> list[Obj]:
     """The owner's grants of an active product with `[deny.grants]` (grants.py), for the You tab: each request the
-    hooks module's question left unanswered and still pending (`pending`: group, command, at, expires, orchestrator,
-    minutes, notified; the Approve button), then each orphan
+    hooks module's question left unanswered and still pending (`pending`: group, command, part (what of it needs the
+    yes), summary, at, expires, orchestrator, minutes, notified; the Approve button), then each orphan
     (`orphan`: Discard only), then each live grant (`until`, `via`)."""
     from . import grants
 
@@ -528,8 +528,9 @@ def grant_requests(project: Project) -> list[Obj]:
             "group": g,
             "pending": True,
             "command": r.get("command") or "",
+            "part": r.get("part") or "",
             "summary": r.get("summary") or "",
-            "say": grants.say(str(r.get("command") or "")),
+            "say": grants.say(str(r.get("part") or r.get("command") or "")),
             "orchestrator": r.get("orchestrator") or "",
             "at": r.get("at"),
             "expires": r["expires"],
@@ -546,8 +547,9 @@ def grant_requests(project: Project) -> list[Obj]:
             "pending": False,
             "orphan": r["why"],
             "command": r.get("command") or "",
+            "part": r.get("part") or "",
             "summary": r.get("summary") or "",
-            "say": grants.say(str(r.get("command") or "")),
+            "say": grants.say(str(r.get("part") or r.get("command") or "")),
             "orchestrator": r.get("orchestrator") or "",
             "at": r.get("at"),
             "expires": r["expires"],

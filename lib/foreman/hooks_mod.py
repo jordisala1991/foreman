@@ -153,7 +153,8 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     note; {granted: true, until, log}. A yes from another session or process grants nothing ({granted: false, deny}).
     Any other answer: {granted: false, deny} (i18n grant_denied_ANSWER) and a line (verdict deny); a no starts the
     cooldown; a timeout keeps the request pending for the panel (grants.pend, with the mark's pid and start time and
-    `summary`, the question's words, when it had some and the command fits approved.COMMAND_CHARS; the owner
+    `part`, the part of the command that runs the group, and `summary`, the question's words, when it had some and
+    that part fits approved.COMMAND_CHARS; the owner
     approves it there: grants.approve). With `late` true (the answer came after the timeout refused the call):
     a yes to the request that very question left pending (grants.take_late: the same tool_use_id, still pending and
     younger than grants.PENDING_H, the session answering is the marked one that made it, from the mark's process, and
@@ -686,8 +687,9 @@ def _words(project: Project, t: dict[str, str], group: str, cmd: str, cwd: Any) 
     instead of the command's start. `words` read from it (grants.say) only when exactly one part runs the group and
     it has a plain shape (or is foreman's own group, grants.INTERNAL), else ""; `brief` the same without the
     command's own words (refs, tags), for a system notice, else the generic grant_words_any. The push's folder is
-    its `-C` (absolute), or `cwd` when the command is that part alone; its remote is named by host when the URL is a
-    well-known one, and a single ref that is a branch there as the branch."""
+    the one resolving it finds from `cwd` (guard.push_folders: it follows `cd` and `-C`), else its absolute `-C`;
+    its remote is named by host when the URL is a well-known one, and a single ref that is a branch there as the
+    branch."""
     from . import grants, guard
 
     flat = " ".join(cmd.split())
@@ -703,11 +705,10 @@ def _words(project: Project, t: dict[str, str], group: str, cmd: str, cwd: Any) 
         return t["grant_words_release"].format(what=say["what"]), t["grant_words_release_brief"], part
     if say["kind"] == "deploy":
         return t["grant_words_deploy"], t["grant_words_deploy"], part
-    folder = say.get("in")
-    if folder is not None:
-        folder = folder if os.path.isabs(folder) else None
-    elif part == flat and isinstance(cwd, str) and os.path.isdir(cwd):
-        folder = cwd
+    folders = set(guard.push_folders(project, cmd, cwd if isinstance(cwd, str) else None))
+    folder = folders.pop() if len(folders) == 1 else None
+    if folder is None and say.get("in") and os.path.isabs(say["in"]):
+        folder = say["in"]
     host = _host(folder, say["to"])
     refs = say.get("refs") or []
     what = t["grant_words_and"].join(refs) if refs else t["grant_words_changes"]
@@ -849,8 +850,9 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
         extra["cooldown_until"] = grants.cool(project, group, session)
     if answer == "timeout":  # a no for this call; the request waits for the owner in foreman's panel
         mark = orchestrator.record(project)
-        # the question's own words, for the panel; none for another tool, or for a command cut in the record (F9)
-        words = _words(project, t, group, cmd, ev.get("cwd"))[0] if tool is None else ""
+        # the question's own words and the part of the command they come from, for the panel; none for another
+        # tool, and no words when that part does not fit the record (its end would be unknown)
+        words, _, part = _words(project, t, group, cmd, ev.get("cwd")) if tool is None else ("", "", "")
         grants.pend(
             project,
             group,
@@ -861,7 +863,8 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
                 "orchestrator": rec["orchestrator"],
                 "command": rec["command"],
                 "tool_use_id": tid,
-                **({"summary": words} if words and len(cmd) < approved.COMMAND_CHARS else {}),
+                **({"part": part[: approved.COMMAND_CHARS]} if part else {}),
+                **({"summary": words} if words and len(part) < approved.COMMAND_CHARS else {}),
                 **_notified(ev),
             },
         )

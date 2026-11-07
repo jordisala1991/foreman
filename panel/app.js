@@ -693,7 +693,7 @@ function renderGrants(d){
       `<div class="ctitle"><span>${ptag(x.p)}${say ? t('grant_req_say', {who: grantWho(x), say}) : t('grant_req_title', {group: esc(x.group), who: grantWho(x)})}</span></div>`
       + `<div class="csub">${x.orphan ? t('grant_orphan') + ' · ' : ''}${t('grant_req_when', {at: dayAt(x.at), until: dayAt(x.expires)})}${grantNotice(x) ? ` · <span class="warn">${grantNotice(x)}</span>` : ''}</div>`
       + `<div class="btns">${btns(x)}</div>`
-      + `<details class="gcmd"><summary>${t('grant_see_cmd')}</summary><div class="mono">${esc(x.command)}</div></details>`); }).join('')
+      + `<details class="gcmd"><summary>${t('grant_see_cmd')}</summary><div class="mono">${esc(x.part || x.command)}</div></details>`); }).join('')
     + (live.length ? list(live.map(x => lrow({icon: dot('var(--ok)'), name: ptag(x.p), title: t('grant_live', {group: esc(x.group), until: esc(hhmmIso(x.until))}),
         meta: esc(t(x.via === 'panel' ? 'grant_via_panel' : 'grant_via_chat'))})).join('')) : ''), asks.length || null) : '';
 }

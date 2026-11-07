@@ -14,10 +14,11 @@ Without the module (or while its side of the question is not there) no grant exi
   pid and start time: it ends when the mark moves (relief, /clear to another process) or the process restarts.
 - `cooldowns`: {group: {session, until}}: after the owner's no, COOLDOWN_S (10 min, fixed) in which the module does
   not ask again for that group in that session (a timeout or a dismissal sets none).
-- `pending`: {group: {at, session, pid, pid_start, orchestrator, command, tool_use_id, summary?, notified?}}: the last
-  request of a group that went unanswered (the question timed out), kept so the owner can answer it later (`summary`:
-  what it will do in plain words, the question's own (hooks_mod), absent when there were none or the stored command
-  was cut at approved.COMMAND_CHARS; `notified`: how the question's notice went): from foreman's panel
+- `pending`: {group: {at, session, pid, pid_start, orchestrator, command, tool_use_id, part?, summary?, notified?}}:
+  the last request of a group that went unanswered (the question timed out), kept so the owner can answer it later
+  (`part`: the part of `command` that runs the group, what the question showed; `summary`: what it will do in plain
+  words, the question's own (hooks_mod), absent when there were none or `part` was cut at approved.COMMAND_CHARS;
+  `notified`: how the question's notice went): from foreman's panel
   (approve(), deny()) or late in the chat, the question still drawn (take_late(), drop_late()). It lives PENDING_H
   (24 h, fixed) after `at`; the owner's answer, a grant of the group, a newer request of the group or `foreman
   permissions grants off [GROUP] [--pending]` clears it sooner. Only a request of the marked session and process can

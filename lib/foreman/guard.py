@@ -495,6 +495,18 @@ def parts(pats: Sequence[str], cmd: str) -> list[str]:
     return [x for x in texts if any(re.search(p, x) or re.search(p, _GIT_OPTS.sub(r"\1", x)) for p in pats)]
 
 
+def push_folders(project: Project, cmd: str, cwd: str | None) -> list[str]:
+    """The folder each `git push` of the command runs in, as resolving it finds (gitpush.py follows `cd`, `-C`,
+    pushd…), from `cwd`; [] when none is resolved or the line cannot be read."""
+    if not cwd:
+        return []
+    try:
+        at = gitpush.Resolver(project, cwd)
+        return [folder for _, where, folder, _ in _texts(cmd, 0, True, at=_start(at)) if where == "resolved" and folder]
+    except Exception:  # noqa: BLE001 (only words for a question: unreadable gives none)
+        return []
+
+
 def _start(at: gitpush.Resolver | None) -> At | None:
     return (at, at.start, gitpush.NONE) if at else None
 

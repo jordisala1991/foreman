@@ -749,7 +749,8 @@ URL, a Monitor running its command: docs/internals.md, «Any other tool»; the q
 matched), and records the answer through `foreman hook mod grant` (hooks_mod.py). The question shows wherever the owner follows
 that chat: the terminal, the desktop app, an SDK host's chat, and the phone through Remote Control (the phone does not
 notify: open the session to see it). The question says in plain words what the command will do («The orchestrator
-wants to push the branch fix/login to GitHub. Allow it for 30 min?») when it is one of a few plain shapes (a push, a
+wants to push the branch fix/login to GitHub. Allow this, and the rest of the same permission, for 30 min
+without asking again?»: the yes opens the whole group) when it is one of a few plain shapes (a push, a
 release, a deploy, a change that widens the permissions), else that it needs your yes; it never names the group,
 and shows as a detail only the part of the command that needs the yes. As it asks, the module also raises a short
 notice («the orchestrator of PROJECT wants to push changes to GitHub: answer in the chat», and that the request moves
@@ -771,7 +772,8 @@ inbox message from the owner and its next pass comes within a minute. Closing th
 waiting; when the group was approved from the panel meanwhile, a late answer says so and changes nothing.
 
 **Approving from the panel.** The panel's You tab lists each pending request (what it will do, in the question's
-words when it had some, else the group; the command; when it was asked) with an «Approve for N min» button. Approving gives exactly the grant a yes in the chat gives: the group for
+words when it had some, else read from the command, else the group; the part of the command that needs the yes;
+when it was asked) with an «Approve for N min» button. Approving gives exactly the grant a yes in the chat gives: the group for
 `grant_minutes`, to the marked session in its own Claude Code process. It is refused when that is no longer who
 asked (another session marked, another process, the process gone, or `ps` unreadable), when the group is already
 granted, and when the request is older than 24 hours (it expires: the orchestrator asks again). The `grant_minutes`
