@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 import shlex
-from collections.abc import Iterable, Sequence
+from collections.abc import Container, Iterable, Sequence
 from pathlib import PurePath
 from typing import Any
 
@@ -809,6 +809,14 @@ def written(segs: Sequence[Seg], info: Sequence[Runs]) -> list[Tok] | None:
     return [t for t in out if t.value not in SAFE_DEVICES]
 
 
+def toks_text(toks: Iterable[Tok], own: Container[Tok] = ()) -> str:
+    """Each token's raw text, value and heredoc body, but those in own: where the name of a file may appear (raw and
+    value: an escaped space, `sh a\\ b.sh`, names the file "a b.sh")."""
+    return "\n".join(
+        f"{t.raw}\n{t.value if isinstance(t.value, str) else ''}\n{t.body or ''}" for t in toks if t not in own
+    )
+
+
 def read_back(segs: Sequence[Seg], info: Sequence[Runs], files: Sequence[Tok]) -> bool:
     """True if the line may run a file it writes (files: written(), [] when it is not known where it writes): the
     name of one appears in any other word, target or heredoc body of the line (`sh x.sh`, `./x.sh`, `chmod +x x.sh`,
@@ -820,13 +828,7 @@ def read_back(segs: Sequence[Seg], info: Sequence[Runs], files: Sequence[Tok]) -
     names = {PurePath(t.value).name or t.value for t in files}
     if len(names) > MAX_WRITTEN:  # bounded work: more files than this, and the answer is yes
         return True
-    own = set(files)
-    rest = "\n".join(  # raw and value: an escaped space (sh a\ b.sh) names the file "a b.sh"
-        f"{t.raw}\n{t.value if isinstance(t.value, str) else ''}\n{t.body or ''}"
-        for seg in segs
-        for t in seg.toks
-        if t not in own
-    )
+    rest = toks_text((t for seg in segs for t in seg.toks), set(files))
     if any(n in rest for n in names):
         return True
     for j, (seg, r) in enumerate(zip(segs, info)):
@@ -910,11 +912,6 @@ def _scan(
     if len(names) > MAX_WRITTEN:  # bounded work: more files than this, and any may run
         return "shell", None
 
-    def text(toks: Iterable[Tok]) -> str:  # raw and value: an escaped space (sh a\ b.sh) names the file "a b.sh"
-        return "\n".join(
-            f"{t.raw}\n{t.value if isinstance(t.value, str) else ''}\n{t.body or ''}" for t in toks if t not in own
-        )
-
     def hit(seen: str) -> set[str]:
         return {root for n, roots in names.items() if n in seen for root in roots}
 
@@ -941,7 +938,7 @@ def _scan(
             elif t.literal and re.fullmatch(r"(-v)?[A-Za-z_]\w*", t.value):
                 setters.add(t.value.removeprefix("-v"))  # read X, for X in, export X, printf -v X, mapfile X…
     copies = [
-        (w[r.prog + 1 :], text(seg.toks))
+        (w[r.prog + 1 :], toks_text(seg.toks, own))
         for seg, r, w in zip(segs, info, words_of)
         if r.prog < len(w) and PurePath(_lit(w, r.prog) or "").name in COPIERS
     ]
@@ -1000,12 +997,12 @@ def _scan(
             continue
         if piped or any(not t.literal for t in w[r.prog + 1 :]):
             return "shell", None
-        roots = hit(text(seg.toks))
+        roots = hit(toks_text(seg.toks, own))
         if not roots:
             continue
         if r.strings and not r.cmds and name not in FILE_RUNNERS:  # sh -c S, ssh HOST S, eval S: read S again
             strung = {tok for tok, _, _ in r.strings}
-            if None not in strung and hit(text(t for t in seg.toks if t not in strung)):  # sh -c S < x.sh
+            if None not in strung and hit(toks_text((t for t in seg.toks if t not in strung), own)):  # sh -c S < x.sh
                 return "shell", None if ran is None else ran | roots
             for _tok, string, _b in r.strings:
                 try:

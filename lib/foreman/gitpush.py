@@ -90,6 +90,9 @@ LIST_SEPS = (";", "\n", "&", "")
 GIT_VALUE_OPTS = ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env",
                   "--super-prefix", "--attr-source")  # fmt: skip
 PUSH_VALUE_OPTS = ("--repo", "--push-option", "--receive-pack", "--exec", "--recurse-submodules", "--signed")
+PUSH_FLAGS = {"--force": "force", "--force-with-lease": "force", "-f": "force", "--delete": "delete", "-d": "delete",
+              "--tags": "tags", "--follow-tags": "tags", "--all": "all", "--branches": "all",
+              "--mirror": "mirror"}  # fmt: skip
 # git's own commands: an alias of the same name is never used, so none of them is looked up (and no git is run)
 BUILTINS = frozenset("""
     add am annotate apply archive backfill bisect blame branch bugreport bundle cat-file check-attr check-ignore
@@ -766,23 +769,13 @@ def push_args(w: Sequence[Tok], prog: int) -> tuple[list[str | None], Push] | No
                 k += 1
             if name == "--repo":
                 p.repo = val
-            elif name in ("--force", "--force-with-lease"):
-                p.force = True
-            elif name == "--delete":
-                p.delete = True
-            elif name in ("--tags", "--follow-tags"):
-                p.tags = True
-            elif name in ("--all", "--branches"):
-                p.all = True
-            elif name == "--mirror":
-                p.mirror = True
+            elif name in PUSH_FLAGS:
+                setattr(p, PUSH_FLAGS[name], True)
             continue
         if opts and v is not None and v.startswith("-") and len(v) > 1:
             for n, ch in enumerate(v[1:], 1):
-                if ch == "f":
-                    p.force = True
-                elif ch == "d":
-                    p.delete = True
+                if "-" + ch in PUSH_FLAGS:  # -f, -d
+                    setattr(p, PUSH_FLAGS["-" + ch], True)
                 elif ch == "o":
                     if n == len(v) - 1:
                         k += 1

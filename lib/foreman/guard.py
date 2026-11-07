@@ -158,6 +158,7 @@ from .shell import (
     segments,
     strip_heredocs,
     strip_quotes,
+    toks_text,
     unbounded,
     values,
     words,
@@ -231,6 +232,7 @@ def as_role(role: str, cwd: str | None = None) -> Ctx | None:
 CODE_WHERE = ("code", "sed", "loop", "script", "written")
 EDITORS = ("sed", "gsed", "awk", "gawk", "mawk", "nawk")
 EXPECTS = ("allow", "deny", "orchestrator")  # a table row's expectation, besides lock:RESOURCE
+ROLES = ("agent", "orchestrator")  # a table row is checked as each
 LOOPS = ("for", "select", "case", "if", "elif", "while", "until", "[", "[[", "test")
 EXCERPT = 80  # characters of the matched text the refusal quotes
 
@@ -337,12 +339,7 @@ def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequen
         return None
     names = {PurePath(x).name or x for x in paths}
     if len(segs) > 1:
-        rest = "\n".join(
-            f"{t.raw}\n{t.value if isinstance(t.value, str) else ''}\n{t.body or ''}"
-            for j, other in enumerate(segs)
-            if j != k
-            for t in other.toks
-        )
+        rest = toks_text(t for j, other in enumerate(segs) if j != k for t in other.toks)
         if may_run(segs, info, {n for n in names if n in rest}, k):
             return None
     return got.text
@@ -801,15 +798,10 @@ def _live(project: Project, projects: Sequence[Project]) -> list[tuple[str, str,
     """[(class, real path, project name)] of the config and the guard table of each project, then those of
     `project`'s own home (reserved())."""
     out: list[tuple[str, str, str]] = []
-    for p in projects:
-        out.append(("config", os.path.realpath(p.config_file or p.home / "foreman.toml"), p.name))
+    for p, config in [*((p, p.config_file or p.home / "foreman.toml") for p in projects), (project, None)]:
+        out.append(("config", os.path.realpath(config or p.home / "foreman.toml"), p.name))
         table = p.section("check").get("guard_table")
-        if table:
-            out.append(("table", os.path.realpath(p.path(table)), p.name))
-    out.append(("config", os.path.realpath(project.home / "foreman.toml"), project.name))
-    table = project.section("check").get("guard_table")
-    if table:
-        out.append(("table", os.path.realpath(project.path(table)), project.name))
+        out += [("table", os.path.realpath(p.path(table)), p.name)] if table else []
     return out
 
 
@@ -2108,13 +2100,8 @@ def row_text(project: Project, text: str) -> str:
     command)."""
     from . import config
 
-    for key, value in (
-        ("{state}", project.state),
-        ("{state_root}", config.state_root()),
-        ("{registry}", config.registry_path()),
-    ):
-        text = text.replace(key, str(value))
-    return text
+    text = text.replace("{state}", str(project.state)).replace("{state_root}", str(config.state_root()))
+    return text.replace("{registry}", str(config.registry_path()))
 
 
 def _how(where: str) -> str:
@@ -2242,16 +2229,13 @@ def table_verdicts(project: Project, path: Path, base: PathLike | None = None) -
     out: list[Row] = []
     for n, expect, cmd, folder in rows:
         cwd = folder or str(project.home)
-        if cmd.startswith("file:"):  # a reserved file (check_file): always both roles
-            f = row_path(project, cmd, cwd)
-            agent = _got(check_file(project, f, as_role("agent", cwd), projects))
-            orch = _got(check_file(project, f, as_role("orchestrator", cwd), projects))
-            out.append((n, expect, cmd, folder, agent, orch))
-            continue
-        if cmd.startswith("tool:"):  # a call of any tool (check_call): always both roles
-            name, ti = row_tool(row_text(project, cmd))
-            agent = _got(check_call(project, name, ti, as_role("agent", cwd), projects))
-            orch = _got(check_call(project, name, ti, as_role("orchestrator", cwd), projects))
+        if cmd.startswith(("file:", "tool:")):  # a reserved file (check_file) or a call of any tool (check_call)
+            if cmd.startswith("file:"):
+                f = row_path(project, cmd, cwd)
+                agent, orch = (_got(check_file(project, f, as_role(r, cwd), projects)) for r in ROLES)
+            else:
+                name, ti = row_tool(row_text(project, cmd))
+                agent, orch = (_got(check_call(project, name, ti, as_role(r, cwd), projects)) for r in ROLES)
             out.append((n, expect, cmd, folder, agent, orch))
             continue
         text = row_text(project, cmd)
