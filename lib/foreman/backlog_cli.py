@@ -629,6 +629,11 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 if "/" not in args.ref and was not in CLOSED:
                     freed = b.released(data, b.resolve(data, args.ref))
             elif c == "sub":
+                if args.report and not args.remove:
+                    from . import delivery
+
+                    if w := delivery.name_warning(args.report, args.id):
+                        advice.append(w)
                 b.set_sub(
                     data,
                     args.id,

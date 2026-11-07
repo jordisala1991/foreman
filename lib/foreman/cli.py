@@ -1011,6 +1011,9 @@ def cmd_progress(p: Project, args: argparse.Namespace) -> int:
             except ValueError as e:
                 print(f"foreman progress: --report {args.report}: {e}; nothing written", file=sys.stderr)
                 return 2
+            h = delivery.entry_of(p, aid, who)
+            if w := delivery.name_warning(report, h.get("issue") if h else None):
+                print(f"foreman progress: warning: {w}", file=sys.stderr)
         if args.done:
             agent_type, model = delivery.type_and_model(p, aid, who)
     notes.progress(

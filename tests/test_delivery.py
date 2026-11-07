@@ -412,6 +412,28 @@ class BlockTest(DeliveryCase):
         self.assertEqual(delivery.report_of(self.project, name="zed7"), "reviews/2026-10-31-zed7.md")
 
 
+class ReportNameTest(DeliveryCase):
+    """The report's file name should contain the issue's id (docs/agent.md): a warning, never a refusal."""
+
+    def named(self, name):
+        self.launch()
+        (self.home / "reviews").mkdir(exist_ok=True)
+        (self.home / "reviews" / name).write_text(REPORT)
+        return self.cli(
+            "--project", "fake", "progress", "--done", "x", "--report", f"reviews/{name}", env={"FOREMAN_WHO": "zed7"}
+        )
+
+    def test_a_name_without_the_issue_id_warns(self):
+        r = self.named("2026-11-01-result.md")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("does not contain the issue id AB-1", r.stderr)
+
+    def test_a_correct_name_does_not_warn(self):
+        r = self.named("2026-11-01-AB-1-T1.md")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("issue id", r.stderr)
+
+
 class HomeInRepoTest(DeliveryCase):
     """The home inside the repo: the report must be in the branch."""
 
