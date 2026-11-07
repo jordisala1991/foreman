@@ -19,10 +19,13 @@
   «Branch `y`», a production type or worktree path in the brief).
   `registered` says whether the entry carries an identity (named_by launch or hand).
 - Session agents: an agent launched as a Claude Code session of its own (`claude --bg`), not by the Agent tool. Its
-  hook events carry its session_id and no agent_id. Its launch has `kind: "session"` and, once known, `session_id`;
-  `link` with that session id as the agent id ties it (its agents.json entry is keyed by the session id, with
-  `kind: "session"`). Its session may also carry its launch token in LAUNCH_ENV (`--settings` env reaches its hooks
-  and its commands). `session_agent` finds it by either; the guard treats its main thread as an agent, and
+  hook events carry its session_id and no agent_id. Its session must carry its launch token in LAUNCH_ENV
+  (`--settings` env reaches its hooks and its commands, and stays in the session's saved options across a
+  `--resume` without flags): that is the lasting mark. Its launch has `kind: "session"` and, once known,
+  `session_id`; `link` with that session id as the agent id ties it (its agents.json entry is keyed by the session
+  id, with SESSION_MARK; not `kind`, the delivery's). The session id is only a complement: it marks the session
+  while its entry or launch lives, and both go with the pruning (an entry 24 h after its `end`, an untied launch
+  after 24 h). `session_agent` finds it by either; the guard treats its main thread as an agent, and
   `recorded_caller` names it. Only what foreman registered is one: any other session stays the owner's.
 """
 
@@ -45,7 +48,8 @@ TOKEN = re.compile(r"\[foreman launch ([a-z2-7]{10})\]")
 FIELDS = ("name", "issue", "sub", "repo", "branch", "worktree", "type", "production")
 PENDING_S = 86400
 AGENT_TOOLS = ("Agent", "Task")
-SESSION_KIND = "session"  # a launch or entry of a session agent (module doc)
+SESSION_KIND = "session"  # a session agent's launch `kind` (module doc)
+SESSION_MARK = "session_agent"  # true in a session agent's agents.json entry (its `kind` is the delivery's)
 LAUNCH_ENV = "FOREMAN_LAUNCH"  # a session agent's launch token, in its session's environment
 PRODUCTION_TYPES = ("dev", "foreman:dev")
 PLANNER_TYPES = ("planner", "foreman:planner")
@@ -427,7 +431,7 @@ def link(
     writes): copies the launch's fields, creates the entry if SubagentStart did not come yet. relink=False leaves a
     launch already tied to another agent alone (the transcript path: a brief may quote another agent's line).
     A session agent's launch (SESSION_KIND) is tied with its session id as `aid`: the launch keeps it as
-    `session_id` and the entry gets `kind`. Whether it tied it."""
+    `session_id` and the entry gets SESSION_MARK. Whether it tied it."""
     f = launches_file(project)
     with util.locked_json(f, {}) as d:
         rec = d.get(token)
@@ -448,7 +452,7 @@ def link(
         if rec.get("review"):
             a["review"] = True  # it reviews its branch: it holds it while live, its delivery is not the branch's
         if rec.get("kind") == SESSION_KIND:
-            a["kind"] = SESSION_KIND
+            a[SESSION_MARK] = True
             rec["session_id"] = aid
         a["launch"] = token
         a["named_by"] = how
@@ -502,9 +506,9 @@ def launch_env() -> str | None:
 def session_agent(state: util.PathLike, session: object, token: str | None = None) -> Agent | None:
     """A session agent's record (its agents.json entry or its launch, with `id`, its agents.json key), or None when
     the caller is no session agent. `token` (the session's LAUNCH_ENV) names its launch; one foreman does not know
-    is still an agent ({"id": session}): the variable only ever restricts. Without a token: the agents.json entry
-    keyed by `session` of kind SESSION_KIND, else a launch of that kind whose session_id is `session`. Reads at most
-    those two files, never raises."""
+    is still an agent ({"id": session}): the variable only ever restricts, and it is the lasting mark. Without a
+    token: the agents.json entry keyed by `session` with SESSION_MARK, else a launch of kind SESSION_KIND whose
+    session_id is `session` (both pruned in time: module doc). Reads at most those two files, never raises."""
     state = Path(state)
     if token:
         rec = util.read_json(state / "launches.json", {}).get(token)
@@ -513,7 +517,7 @@ def session_agent(state: util.PathLike, session: object, token: str | None = Non
     if not isinstance(session, str) or not session:
         return None
     h = util.read_json(state / "agents.json", {}).get(session)
-    if isinstance(h, dict) and h.get("kind") == SESSION_KIND:
+    if isinstance(h, dict) and h.get(SESSION_MARK) is True:
         return {**h, "id": session}
     for rec in util.read_json(state / "launches.json", {}).values():
         if isinstance(rec, dict) and rec.get("kind") == SESSION_KIND and rec.get("session_id") == session:

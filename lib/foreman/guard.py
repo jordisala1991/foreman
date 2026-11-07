@@ -48,9 +48,10 @@ grant, checked in that order so the owner is asked only about a call nothing els
 without a grant). A table run and `guard --as` compare no process and take every group as granted; no ctx, or one
 with only cwd, is an agent. A command that passes leaves its hit in ctx["passed"] (hit.grant: {group, via, at,
 answer} of each grant used), which the hook writes down (approved.py).
-A session agent (identity.session_agent: a session foreman launched as an agent of its own, known by its launch or
-entry of kind "session" tied to the ctx's session, or by the launch token its session carries, ctx launch) is an
-agent too, its main thread included, also when its session is the marked one: the registration only restricts.
+A session agent (identity.session_agent: a session foreman launched as an agent of its own, known by the launch
+token its session carries, ctx launch, the lasting mark, or while they live by its launch or entry tied to the ctx's
+session) is an agent too, its main thread included, also when its session is the marked one: the registration only
+restricts.
 Any other session without an agent_id is the owner's (session).
 
 Built-in rules, before `[deny] patterns` and for everyone: a Bash call that runs `foreman hook mod` (HOOK_MOD: its ops

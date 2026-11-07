@@ -95,7 +95,7 @@ class GuardTest(SessionAgentCase):
         util.write_json(self.project.state / "launches.json", {})
         self.assertIsNone(self.why(INTEGRATE))  # nothing registers it any more: the owner's session
         util.write_json(
-            self.project.state / "agents.json", {SA: {"kind": "session", "name": "zed7", "type": "foreman:dev"}}
+            self.project.state / "agents.json", {SA: {"session_agent": True, "name": "zed7", "type": "foreman:dev"}}
         )
         self.assertEqual(self.why(INTEGRATE), ("orchestrator", "agent"))
         # an entry or a launch of another kind with that key is not a session agent
@@ -118,9 +118,42 @@ class GuardTest(SessionAgentCase):
         self.assertEqual(self.why(INTEGRATE, agent="a1"), ("orchestrator", "agent"))
 
     def test_broken_state_files_never_raise(self):
+        # on purpose: unreadable files read as "no session agent" (the owner's session), not as a refusal of every
+        # main thread, the orchestrator's included; foreman writes both atomically (util.write_json), so only a hand
+        # edit breaks them, and FOREMAN_LAUNCH, the lasting mark, does not depend on them
         (self.project.state / "launches.json").write_text("{not json")
         (self.project.state / "agents.json").write_text("[1, 2]")
         self.assertEqual(guard._who(self.project, self.ctx(), process=False), "session")
+
+    def test_its_entry_stays_a_session_agent_after_a_delivery(self):
+        """Review F1: the entry's mark is not the delivery's `kind`, which a delivery without --kind drops."""
+        d = util.read_json(self.project.state / "agents.json", {})
+        ev = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": 'foreman progress --done "x"'},
+            "tool_response": {"stdout": ""},
+            "session_id": SA,
+        }
+        hooks.agent_event(self.project, d, SA, "PostToolUse", ev, "2026-11-07T13:00:00")
+        util.write_json(self.project.state / "agents.json", d)
+        util.write_json(self.project.state / "launches.json", {})
+        self.assertIsNotNone(identity.session_agent(self.project.state, SA))
+        self.assertEqual(self.why(INTEGRATE), ("orchestrator", "agent"))
+
+    def test_the_session_id_expires_with_the_pruning_the_launch_token_does_not(self):
+        """Review F2: an entry gone 24 h after its end takes its launch with it, so the session id alone stops
+        marking the session; FOREMAN_LAUNCH, kept in the session's saved options, still does."""
+        d = util.read_json(self.project.state / "agents.json", {})
+        d[SA]["end"] = "2000-01-01T00:00:00"
+        util.write_json(self.project.state / "agents.json", d)
+        start = {"hook_event_name": "SubagentStart", "agent_id": "a9", "agent_type": "foreman:dev", "session_id": "S1"}
+        self.assertEqual(self.hook("agents", start).returncode, 0)
+        self.assertNotIn(SA, util.read_json(self.project.state / "agents.json", {}))
+        identity.new_launch(self.project, "other")  # any new launch prunes launches.json
+        self.assertNotIn(self.token, util.read_json(self.project.state / "launches.json", {}))
+        self.assertEqual(guard._who(self.project, self.ctx(), process=False), "session")
+        self.assertEqual(guard._who(self.project, self.ctx(launch=self.token), process=False), "agent")
 
 
 class HookTest(SessionAgentCase):
@@ -190,7 +223,7 @@ class IdentityTest(SessionAgentCase):
         self.assertEqual((launch["kind"], launch["session_id"], launch["agent"]), ("session", SA, SA))
         entry = util.read_json(self.project.state / "agents.json", {})[SA]
         self.assertEqual(
-            (entry["kind"], entry["name"], entry["issue"], entry["launch"]), ("session", "zed7", "AB-1", self.token)
+            (entry["session_agent"], entry["name"], entry["issue"], entry["launch"]), (True, "zed7", "AB-1", self.token)
         )
         # a launch of a subagent records neither
         t2, rec2 = identity.new_launch(self.project, "kip3", agent_type="foreman:dev")
@@ -198,7 +231,7 @@ class IdentityTest(SessionAgentCase):
         self.assertNotIn("session_id", rec2)
         agents = {}
         identity.link(self.project, agents, "ag9", t2)
-        self.assertNotIn("kind", agents["ag9"])
+        self.assertNotIn("session_agent", agents["ag9"])
         self.assertNotIn("session_id", util.read_json(rec, {})[t2])
         # T2 may know the session id at launch
         _, rec3 = identity.new_launch(self.project, "lop1", kind=identity.SESSION_KIND, session_id="S9")
