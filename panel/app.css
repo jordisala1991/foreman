@@ -430,3 +430,20 @@ body.broken .tab, body.broken #nav{display:none}
 #report .wdoc{font-size:var(--fs-b);line-height:1.5;max-width:none;margin:0}
 #report .wdoc h1{font-size:19px;margin:0 0 8px}#report .wdoc h2{font-size:16.5px;margin:14px 0 6px}#report .wdoc h3,#report .wdoc h4{font-size:var(--fs-b);margin:12px 0 4px}
 .sh .sa .stale-note{font-weight:600}
+
+/* ---- Desktop: from 1000 px the content keeps a readable width, centred, the tabs are a rail on the left and
+   the text goes up a step. Under 1000 px nothing here applies: the phone and tablet layout is the one above. */
+@media(min-width:1000px){
+  :root{--fs-xs:12.5px;--fs-s:13.5px;--fs-m:14.5px;--fs-b:15px;--fs-l:16px;--fs-h:22px;--rail:152px;
+    --gut:max(var(--sp4),calc((100vw - var(--rail) - 880px) / 2 + var(--rail)))}
+  body{padding:0 max(var(--sp4),calc((100vw - var(--rail) - 880px) / 2)) 48px calc(var(--gut))}
+  header{margin-left:calc(-1 * var(--gut));margin-right:calc(-1 * max(var(--sp4),(100vw - var(--rail) - 880px) / 2));
+    padding-left:var(--gut);padding-right:max(var(--sp4),calc((100vw - var(--rail) - 880px) / 2))}
+  nav{top:57px;right:auto;bottom:0;width:var(--rail);flex-direction:column;justify-content:flex-start;padding:var(--sp3) var(--sp2);gap:2px;
+    border-top:0;border-right:1px solid var(--line)}
+  nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:var(--sp3);padding:9px var(--sp3);font-size:var(--fs-m);border-radius:var(--r)}
+  nav button:hover{background:var(--chip)}
+  nav button.on{background:var(--chip)}
+  .badge{position:static;margin:0 0 0 auto}
+  code,.mono{font-size:13px}
+}
