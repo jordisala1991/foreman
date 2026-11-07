@@ -29,6 +29,17 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Fixed
 
+- The guard sees three more ways interpreter code writes a reserved file, and stops refusing two ways it only reads.
+  A call without parentheses whose target is a variable (`File.write p, "x"` in Ruby, `open my $f, ">", $p` and
+  `unlink $p` in Perl) is read like one with them. When code writes a target it cannot name, a name it assigns a
+  path built of literals stands for that path: a piece joined onto it (`base / "foreman.toml"`,
+  `os.path.join(base, "foreman.toml")`) or written inside an f-string (`f"{base}/foreman.toml"`) makes the whole
+  path, whatever comes between. A string's `.replace(a, b)` with a variable or a regex (`s.replace(old, "b")`,
+  `.replace(/\t/g, " ")`) is no longer taken for a write in code that never names `os`, so reading a reserved file
+  with it passes; `os.replace` (also as `import os as o`) and a Path's `replace` still write. Perl's `open` with
+  `"<"` reads. A line the guard cannot read that writes to `~/…` now reads `~` as the home, as it already read
+  `$HOME`: such a write to a reserved file is refused. The three rules that find a path written as text (reserved
+  files, main checkouts, hidden checks) now read the text one way.
 - Panel: on a phone the product picker shows each product's name (what its orchestrator does goes under it); «Back», a tap outside and Escape close the confirmation of an option that cannot be undone; a panel reopened on the Wiki tab lists the pages instead of «wiki_failed».
 
 ## [0.62.0] - 2026-11-06
