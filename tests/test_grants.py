@@ -1084,6 +1084,21 @@ class LateAnswerTest(PendCase):
         self.assert_half_hour_from_now(out["until"])
         self.assertIsNone(self.why(DEPLOY))  # the command passes
 
+    def test_panel_lists_an_orphan_for_discarding_and_the_notice_that_did_not_arrive(self):
+        from foreman import panel
+
+        self.answer("timeout", group="deploy", tool_use_id="T-late", notified="no:no-surface")
+        (r,) = panel.grant_requests(self.project)
+        self.assertEqual((r["pending"], r["notified"], r.get("orphan")), (True, "no:no-surface", None))
+        self.reparent(COPY_PID)
+        orchestrator.mark(self.project, "S2", "fake-2", own_session="S2")
+        (o,) = panel.grant_requests(self.project)
+        self.assertEqual((o["pending"], o["orphan"], o["notified"]), (False, "process", "no:no-surface"))
+        self.assertEqual(panel.grant_deny(self.project, "deploy"), {"denied": "deploy", "orphan": True})
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["cooldowns"], d["grants"]), ({}, {}, {}))
+        self.assertEqual(panel.grant_requests(self.project), [])
+
     def test_row2_row13_a_day_and_a_minute_later_it_is_gone_and_nothing_is_granted(self):
         from foreman import panel
 

@@ -546,7 +546,8 @@ def grant_say(command: str) -> dict[str, Any] | None:
 def grant_requests(project: Project) -> list[Obj]:
     """The owner's grants of an active product with `[deny.grants]` (grants.py), for the You tab: each request the
     hooks module's question left unanswered and still pending (`pending`: group, command, at, expires, orchestrator,
-    minutes; the Approve button), then each live grant (`until`, `via`)."""
+    minutes, notified; the Approve button), then each orphan
+    (`orphan`: Discard only), then each live grant (`until`, `via`)."""
     from . import grants
 
     if not project.active or not grants.groups(project, True):
@@ -563,8 +564,26 @@ def grant_requests(project: Project) -> list[Obj]:
             "at": r.get("at"),
             "expires": r["expires"],
             "minutes": mins,
+            "notified": r.get("notified") or "",
         }
         for g, r in grants.pending(project).items()
+    ]
+    # a request of an orchestrator that is no longer running (or of another session): shown, never approvable, only
+    # dropped (the Discard button); `orphan` is why (process | session)
+    out += [
+        {
+            "group": g,
+            "pending": False,
+            "orphan": r["why"],
+            "command": r.get("command") or "",
+            "summary": r.get("summary") or "",
+            "say": grant_say(str(r.get("command") or "")),
+            "orchestrator": r.get("orchestrator") or "",
+            "at": r.get("at"),
+            "expires": r["expires"],
+            "notified": r.get("notified") or "",
+        }
+        for g, r in grants.orphans(project).items()
     ]
     for g in grants.groups(project, True):
         live = grants.live(project, g)
@@ -634,10 +653,17 @@ def grant_deny(p: Project, group: str) -> Obj:
         raise Refused(f"{p.name} is {p.mode}: no orchestrator to answer")
     if group not in grants.groups(p, True):
         raise ValueError(f"no [deny.grants] group {group!r}")
+    orphan = group in grants.orphans(p)
     try:
         r = grants.deny(p, group)
     except grants.NotApproved as e:
-        raise Refused(str(e), e.why) from e
+        if not (orphan and e.why == "expired"):
+            raise Refused(str(e), e.why) from e
+        # an orphan is dropped, not answered: no cooldown and nothing for the orchestrator to read
+        approved.granted(
+            p, {"verdict": "deny", "group": group, "answer": "dismissed", "surfaces": ["panel"], "via": "panel"}
+        )
+        return {"denied": group, "orphan": True}
     command = str(r.get("command") or "")
     approved.granted(
         p,
