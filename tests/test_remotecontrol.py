@@ -12,7 +12,7 @@ from unittest import mock
 import test_panel_stuck
 from test_panel import PanelCase, transcript
 
-from foreman import identity, remotecontrol
+from foreman import identity, panel, remotecontrol
 
 SID = "742e9c3b-2a44-4c55-a33d-abebf1be0bf5"
 LINK = "https://claude.ai/code/session_01UsCwUFyumbgvUKJSuJepjd"
@@ -233,6 +233,28 @@ class WatchTest(WatchCase):
         self.req("/api/projects")
         self.assertEqual(self.attached(), [])
         self.assertEqual(self.rc(), "")
+
+
+class NewPanelCardTest(WatchCase):
+    """The new panel's card opens the agent: the id and product its button sends are the ones /api/agents gave, and
+    the watch route turns Remote Control on for that session (the fake `claude` over a pseudo-terminal)."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_toml((self.home / "foreman.toml").read_text() + "\n[panel]\nnext = true\n")
+        panel.REG.__init__()
+
+    def test_the_card_of_a_session_agent_opens_its_conversation(self):
+        for choice in ("fake", "*"):  # one product, and «All» (each card says its own product)
+            code, d = self.req(f"/api/agents?p={choice}")
+            self.assertEqual(code, 200, d)
+            (card,) = [a for a in d["live"] if a["session"]]
+            self.assertEqual((card["id"], card["p"]), (SID, "fake"))
+            self.assertNotIn("link", card)  # the screen asks for the link; it does not carry a stale one
+            self.assertEqual(self.watch(card["id"], card["p"]), (200, {"link": LINK}))
+        self.assertEqual(self.rc(), "on")
+        sub = next(a for a in self.req("/api/agents?p=fake")[1]["live"] if a["id"] == "a1")
+        self.assertIs(sub["session"], False)  # a subagent: no button
 
 
 class PageTest(WatchCase):

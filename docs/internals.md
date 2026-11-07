@@ -106,8 +106,7 @@ the day it ended; `total`, `top_issues` and `by_type`; `deliveries` {day: {integ
 day with data of each series); and `quota`, the account's windows now, never cached. The rest is cached by the files
 it reads. `/api/agents?p=NAME|*` (a product with the switch on, or `*` for all of them; none is a 404, a failure a
 500; `agents_screen.py`) gives the Agents screen: `live` (each running or waiting agent of `panel.agents`: product `p`,
-`task` (its issue's short name), `issue`, `sub`, `type`, `family`, `status`, `since`, `sign`, `msg`, `session`,
-`link`), `done` (the runs of `costs.jsonl` that ended today, of the product's own issues, latest first, up to 50, not
+`task` (its issue's short name), `issue`, `sub`, `type`, `family`, `status`, `since`, `sign`, `msg`, `session`), `done` (the runs of `costs.jsonl` that ended today, of the product's own issues, latest first, up to 50, not
 those running again), `projects` and `next_pass` (the last pass plus `[loop] every_min`, for one product). Nothing in
 `panel/next/` names a URL off the machine: no fonts, no CDN.
 

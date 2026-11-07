@@ -49,16 +49,17 @@ class Node {
   focus() {}
   blur() {}
   // a click as the browser sends it: capture from the top down, then bubbling up from the target
-  click() {
+  click() { this.dispatch("click"); }
+  dispatch(type) {
     const path = [];
     for (let n = this; n; n = n.parentNode) path.push(n);
     let stopped = false;
     const e = {
-      type: "click", target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
+      type, target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
       button: 0, detail: 1, isTrusted: true, preventDefault() { this.defaultPrevented = true; },
       stopPropagation() { stopped = true; },
     };
-    const run = (n, capture) => n._on.filter((l) => l.type === "click" && l.capture === capture).forEach((l) => {
+    const run = (n, capture) => n._on.filter((l) => l.type === type && l.capture === capture).forEach((l) => {
       e.currentTarget = n;
       l.f.call(n, e);
     });
@@ -110,6 +111,7 @@ Object.assign(globalThis, {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
     fetched.push(opts && opts.method === "POST" ? "POST " + p : p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
+    if ((scenario.delay || {})[p]) await new Promise((r) => setTimeout(r, scenario.delay[p])); // a slow one
     const body = scenario.answers[(opts && opts.method === "POST" ? "POST " : "") + p];
     return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
   },
@@ -127,6 +129,12 @@ if (scenario.click) {
   if (!b) throw new Error("no button " + scenario.click);
   b.click();
   await settle();
+}
+if (scenario.pick) { // the product picker moved to another entry, then the slow answers arrive
+  const sel = one(app, (n) => n.localName === "select");
+  sel.value = scenario.pick;
+  sel.dispatch("change");
+  await new Promise((r) => setTimeout(r, scenario.wait || 300));
 }
 if (scenario.tap) {
   const g = one(app, (n) => n.localName === "g" && n.attributes["data-day"] === scenario.tap);

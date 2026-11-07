@@ -533,7 +533,7 @@ def agents_screen_data(names: list[str], lock_list: list[Status]) -> Obj:
         bl = backlog_cards(p)
         bl = {**bl, "issues": bl.get("issues", [])}
         live = agents(p, lock_list, branches_of_agents(bl))
-        model_of = lambda path: memo(("model", path), lambda: transcripts.model(path), deps=[path])  # noqa: E731
+        model_of = lambda path: memo(("model", path), lambda: transcripts.last_model(path), deps=[path])  # noqa: E731
         one = agents_screen.build(p, live, model_of, datetime.now())
         out["live"] += one["live"]
         out["done"] += one["done"]

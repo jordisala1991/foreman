@@ -114,6 +114,10 @@ function Card({ a, now, tag, one }: { a: AgentCard; now: number; tag: string | n
 const clock = (epoch: number): string =>
   new Intl.DateTimeFormat(lang(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(epoch * 1000));
 
+// the one that may need the owner goes first, whatever its product (a stable sort: the rest keeps the server's order)
+const byStuck = (a: AgentCard, b: AgentCard): number =>
+  Number(b.status === "maybe stuck") - Number(a.status === "maybe stuck");
+
 const RESULT = { ok: "res_ok", partial: "res_partial", failed: "res_failed" } as const;
 
 export function Agents({ product, titles }: { product: Product; titles: Record<string, string> }) {
@@ -122,10 +126,13 @@ export function Agents({ product, titles }: { product: Product; titles: Record<s
   const [tries, setTries] = useState(0);
   const [now, setNow] = useState(() => Date.now() / 1000);
   const all = product.name === "*";
+  // `current()` is false once the effect that asked is over (another product was chosen): its answer is dropped, so
+  // a slow answer never replaces the list of the new choice
   const load = useCallback(
-    () =>
+    (current: () => boolean) =>
       api<AgentsData>(`/api/agents?p=${encodeURIComponent(product.name)}`).then(
         (x) => {
+          if (!current()) return true;
           setFailed(false);
           setData(x);
           setNow(Date.now() / 1000);
@@ -140,7 +147,7 @@ export function Agents({ product, titles }: { product: Product; titles: Record<s
     setData(null); // never the old product's agents under the new choice
     setFailed(false);
     const again = () =>
-      void load().then((ok) => {
+      void load(() => live).then((ok) => {
         if (live && !ok) setFailed(true);
       });
     again();
@@ -185,7 +192,7 @@ export function Agents({ product, titles }: { product: Product; titles: Record<s
             </h2>
             {running ? (
               <div className="cards">
-                {data.live.map((a) => (
+                {[...data.live].sort(byStuck).map((a) => (
                   <Card key={`${a.p}/${a.id}`} a={a} now={now} tag={tag(a.p)} one={running < 5} />
                 ))}
               </div>

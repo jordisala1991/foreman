@@ -21,7 +21,8 @@ def live_card(project: Project, a: dict[str, Any], titles: dict[str, str], model
     """One running agent of panel.agents as the screen's card. `task` is the issue's short name (the agent's own name
     when it has no issue of the backlog), `status` is panel.agents' («working», «holds a lock», «waiting for a
     lock», «waiting for its task», «maybe stuck»), `since` the start and `sign` the last
-    sign of life (epoch seconds)."""
+    sign of life (epoch seconds). No `link`: the screen asks for it with the click (it only holds while Remote Control
+    stays on)."""
     issue = a.get("issue")
     return {
         "id": a["id"],
@@ -37,7 +38,6 @@ def live_card(project: Project, a: dict[str, Any], titles: dict[str, str], model
         "sign": a.get("activity_ts"),
         "msg": a.get("last"),
         "session": bool(a.get("session")),
-        "link": a.get("link"),
     }
 
 

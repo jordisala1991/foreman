@@ -93,7 +93,6 @@ export interface AgentCard {
   sign: number | null; // the last sign of life, epoch seconds
   msg: string | null;
   session: boolean; // its own Claude Code session: its conversation can be opened
-  link: string | null;
 }
 export interface DoneRun {
   agent: string;

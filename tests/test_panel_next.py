@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import ClassVar
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -20,6 +21,7 @@ from zoneinfo import ZoneInfo
 from helpers import ROOT, ProjectCase, config_problems
 from test_panel import PanelCase
 
+from foreman import agents as agents_mod
 from foreman import panel
 from foreman.panel_cache import STATIC, page_version
 
@@ -189,7 +191,7 @@ class NextAgentsApiTest(PanelCase):
         self.assertEqual(a["status"], "holds a lock")
         self.assertEqual(a["msg"], "done for now")
         self.assertFalse(a["session"])  # a subagent: no conversation to open
-        self.assertIsNone(a["link"])
+        self.assertNotIn("link", a)  # the click asks for it: Remote Control holds it only while it is on
         self.assertIsInstance(a["since"], int)
         self.assertIsInstance(a["sign"], int)  # its last sign of life: the screen says «no signs for 25 min»
 
@@ -210,6 +212,26 @@ class NextAgentsApiTest(PanelCase):
             (d2["task"], d2["issue"], d2["sub"], d2["outcome"], d2["minutes"], d2["family"], d2["usd"], d2["end"]),
             ("Issue 2", "PF-2", "T1", "partial", 8.0, "sonnet", 1.25, f"{today} 11:45"),
         )
+
+    def test_the_poll_does_not_read_a_whole_big_transcript_each_time(self):
+        """A running agent's transcript grows all the time, so its cache never holds: the screen's poll (every 10 s,
+        each open tab) must read its end only, not tens of MB of it."""
+        f = Path(agents_mod.agents(self.project)["a1"]["transcript"])
+        said = {"id": "m", "model": "claude-opus-4-7", "role": "assistant", "usage": {"input_tokens": 1},
+                "content": [{"type": "text", "text": "x" * 3000}]}  # fmt: skip
+        line = json.dumps({"type": "assistant", "message": said}) + "\n"
+        with f.open("a") as w:
+            w.write(line * 15000)  # 45 MB
+        self.assertGreater(f.stat().st_size, 40_000_000)
+        self.req("/api/agents?p=fake")
+        with f.open("a") as w:
+            w.write(line)  # the agent said one more thing: every cache of this file is stale
+        t0 = time.perf_counter()
+        code, d = self.req("/api/agents?p=fake")
+        took = time.perf_counter() - t0
+        self.assertEqual(code, 200, d)
+        self.assertEqual(d["live"][0]["family"], "opus")
+        self.assertLess(took, 0.5, f"the poll took {took:.2f} s with a 45 MB transcript")
 
     def test_only_products_with_the_new_panel_and_all_of_them_with_a_star(self):
         self.assertEqual(self.req("/api/agents?p=other")[0], 404)
@@ -474,7 +496,7 @@ class NextPageTest(ProjectCase):
         partial = self.finished(agent="d2", task="Agentes", sub="T0", type="foreman:dev", outcome="partial")
         done = [self.finished(), {**partial, "minutes": 75, "family": "sonnet", "usd": 9.1}]
         out = self.agents([self.card(), lock, stuck], done)
-        a, w, s = out["agents"]
+        s, a, w = out["agents"]  # the stuck one first, then as the server gave them
         self.assertEqual((a["avatar"], a["task"], a["id"]), ("AD", "Agentes que ves desde la app", "PF-7"))
         self.assertEqual(a["meta"], "T1 · desarrollo Opus")
         self.assertEqual(a["state"], "Trabajando · lleva 25 min")
@@ -539,6 +561,24 @@ class NextPageTest(ProjectCase):
         self.assertEqual(out["products"], ["Alpha", "Beta"])  # the charts are of one product
         self.assertEqual(out["pills"][0], ["pill running", "En marcha"])
         self.assertEqual(out["fetched"][1], "/api/metrics?p=alpha&days=7")
+
+    def test_the_stuck_agent_comes_first(self):
+        stuck = self.card(
+            id="a9", task="Atascado", status="maybe stuck", since=int(time.time() - 10 * 60), session=False
+        )
+        out = self.agents([self.card(), self.card(id="a2", task="Otro"), stuck], [])
+        self.assertEqual([a["task"] for a in out["agents"]], ["Atascado", "Agentes que ves desde la app", "Otro"])
+
+    def test_a_slow_answer_of_the_old_choice_does_not_replace_the_new_ones(self):
+        both = {"projects": [self.ALPHA, {**self.BETA, "next": True}], "language": "es"}
+        everybody = {"projects": ["alpha", "beta"], "done": [], "next_pass": None,
+                     "live": [self.card(), self.card(id="b1", p="beta", task="De beta")]}  # fmt: skip
+        mine = {"projects": ["alpha"], "live": [self.card(task="Solo de alpha")], "done": [], "next_pass": None}
+        out = self.mount({
+            "hash": "#/agents", "store": {"next-all": "1"}, "pick": "alpha", "delay": {"/api/agents?p=*": 250},
+            "answers": {"/api/projects": both, "/api/agents?p=*": everybody, "/api/agents?p=alpha": mine},
+        })  # fmt: skip
+        self.assertEqual([a["task"] for a in out["agents"]], ["Solo de alpha"])
 
     def test_see_conversation_opens_the_link_the_server_gives(self):
         post = "POST /api/agent/watch?id=a1&p=alpha"
