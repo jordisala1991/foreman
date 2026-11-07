@@ -51,7 +51,8 @@ answer} of each grant used), which the hook writes down (approved.py).
 
 Built-in rules, before `[deny] patterns` and for everyone: a Bash call that runs `foreman hook mod` (HOOK_MOD: its ops
 are the hooks module's, and `hook mod grant` could be handed an answer the owner never gave) or reaches the panel's
-endpoint that approves a grant (PANEL_GRANT). Then PERMISSIONS_APPLY: `foreman permissions apply` passes only for the
+endpoints that approve or refuse a grant (PANEL_GRANT: the refusal writes the owner's no in the record).
+Then PERMISSIONS_APPLY: `foreman permissions apply` passes only for the
 marked orchestrator's main thread in its own process, whatever the lists say. With `--opens` it is also in the
 internal group `permissions` (grants.INTERNAL), as is `foreman integrate … --opens`, so it needs the owner's yes like
 any group (compared only for a command that names them, names_internal).
@@ -139,9 +140,9 @@ if TYPE_CHECKING:
     from .util import PathLike
 
 # The built-in rules (module doc): any form of `foreman hook mod` (bin/foreman, a path, --project P, quoted words);
-# the panel's endpoint that approves a pending grant request (any URL that names it).
+# the panel's endpoints that approve or refuse a pending grant request (any URL that names them).
 HOOK_MOD = r"""(^|[\s/'"])foreman\S*['"]?\s+(--project[\s=]\S+\s+)?['"]?hook['"]?\s+['"]?mod\b"""
-PANEL_GRANT = r"api/grants/approve"
+PANEL_GRANT = r"api/grants/(approve|deny)"
 BUILTIN = {HOOK_MOD: "guard_hook_mod", PANEL_GRANT: "guard_panel_grant"}
 # The built-in rule for the orchestrator only: `foreman permissions apply` (any word order after `permissions`)
 # passes only for the marked orchestrator's main thread in its own process, with no group (module doc); the grant

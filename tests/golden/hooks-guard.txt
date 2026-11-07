@@ -1114,7 +1114,7 @@ $ foreman hook guard  # row 262: deny
 < {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"prompt": "x", "url": "http://localhost:8766/api/grants/approve"}, "tool_name": "WebFetch", "tool_use_id": "toolu_262"}
 [exit 2]
 --- stderr
-Bloqueado por el guardián de foreman: una petición pendiente de un grupo la aprueba el dueño a mano en el panel de foreman; ninguna llamada de Bash puede llegar a esa aprobación (tampoco las del orquestador). Casó en el sitio `WebFetch http://localhost:8766/api/grants/approve` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`).
+Bloqueado por el guardián de foreman: una petición pendiente de un grupo la aprueba o rechaza el dueño a mano en el panel de foreman; ninguna llamada de Bash puede llegar a esa respuesta (tampoco las del orquestador). Casó en el sitio `WebFetch http://localhost:8766/api/grants/approve` que nombra la herramienta, juzgado como una orden que lo lee (`cat SITIO`).
 $ foreman hook guard  # row 263: allow
 < {"cwd": "<TMP>/faro", "hook_event_name": "PreToolUse", "session_id": "s-guard", "tool_input": {"recap": "read ~/.ssh/config"}, "tool_name": "mcp__ccd_turn__wrap_up", "tool_use_id": "toolu_263"}
 [exit 0]
@@ -1356,7 +1356,7 @@ guard table <TMP>/faro/guard.tsv: ok (159 deny, 0 lock, 88 allow, 18 orchestrato
 {"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Monitor", "rule": "npm publish", "where": "command", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Write", "rule": "(^|[\\s/'\"=])\\.env(?!\\.(example|sample|template|dist)\\b)(\\.[A-Za-z]+)?(['\"\\s;|&)]|$)", "where": "tool", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "deny", "tool": "Edit", "rule": "\\.ssh/", "where": "tool", "who": "other"}
-{"at": "<TODAY>T<TIME>", "kind": "builtin", "tool": "WebFetch", "rule": "api/grants/approve", "where": "tool", "who": "other"}
+{"at": "<TODAY>T<TIME>", "kind": "builtin", "tool": "WebFetch", "rule": "api/grants/(approve|deny)", "where": "tool", "who": "other"}
 {"at": "<TODAY>T<TIME>", "kind": "builtin", "rule": "(^|[\\s/'\"])foreman\\S*['\"]?\\s+(--project[\\s=]\\S+\\s+)?['\"]?integrate['\"]?(?![^;&|\\n]*\\s(?P<q>['\"]?)(--help|-h|--check)(?P=q)(\\s|$))(\\s|$)", "where": "command", "who": "agent"}
 {"at": "<TODAY>T<TIME>", "kind": "lock", "rule": "make up", "resource": "widget", "where": "command", "who": "other"}
 === faro/guard.jsonl.lock

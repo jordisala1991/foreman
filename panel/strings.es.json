@@ -341,8 +341,8 @@
   "grants_allowed": "Permitido ahora",
   "grant_requests": "Esperan tu sí",
   "grant_req_title": "{who} pide ejecutar una orden de «{group}»",
-  "grant_req_when": "lo pidió a las {at} y nadie contestó en el chat · puedes aprobarlo hasta las {until}",
-  "grant_approve": "Aprobar {n} min",
+  "grant_req_when": "lo pidió a las {at} · si no contestas, caduca a las {until} y no se permite nada",
+  "grant_approve": "Sí, durante {n} min",
   "confirm_grant": "¿Dejas al orquestador ejecutar las órdenes de «{group}» durante {n} minutos?",
   "grant_live": "«{group}» permitido hasta las {until}",
   "grant_via_panel": "aprobado aquí",
@@ -443,5 +443,14 @@
   "orch_no_pass_seen": "sin pasadas vistas",
   "orch_gone_tip": "La sesión de Claude Code del orquestador no está abierta: nadie atiende este producto hasta que otra sesión lo releve y se marque como orquestador",
   "orch_no_loop_tip": "La sesión del orquestador está abierta, pero no da pasadas: la parte de foreman que la despierta no corre en esa sesión (se arregla recargando sus plugins o abriéndola de nuevo)",
-  "orch_silent_tip": "Sin pasadas del bucle, y no se puede comprobar si la sesión del orquestador sigue abierta: puede que se haya cerrado"
+  "orch_silent_tip": "Sin pasadas del bucle, y no se puede comprobar si la sesión del orquestador sigue abierta: puede que se haya cerrado",
+  "grant_req_say": "{who} quiere {say}",
+  "grant_say_push": "subir {what} al remoto «{to}»",
+  "grant_say_push_all": "subir los cambios al remoto «{to}»",
+  "grant_say_release": "publicar la versión {what} en GitHub",
+  "grant_say_deploy": "poner en marcha el despliegue",
+  "grant_wait_say": "Espera tu sí: {say}",
+  "grant_no": "No",
+  "grant_see_cmd": "ver la orden",
+  "grant_and": " y "
 }

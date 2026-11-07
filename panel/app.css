@@ -71,6 +71,7 @@ nav button.on{color:var(--acc)}
 .csub{color:var(--muted);font-size:var(--fs-s)}
 .dcode{flex:none;color:var(--muted);font-size:var(--fs-s);font-weight:400;white-space:nowrap}.stt .dcode{margin-left:var(--sp2)}
 .clead{margin-top:2px;font-size:var(--fs-m)}
+.gcmd{margin-top:10px;font-size:var(--fs-s);color:var(--muted)}.gcmd summary{cursor:pointer}.gcmd .mono{margin-top:4px;overflow-wrap:anywhere;color:var(--muted)}
 .answered{margin-top:var(--sp2);font-size:var(--fs-m)}
 .free{margin-top:var(--sp2)}.free textarea{min-height:56px}.answered.warn{margin-bottom:-4px}
 /* a question, told in order: situation, what is at stake, the options as cards of

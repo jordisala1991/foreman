@@ -310,6 +310,28 @@ def approve(project: Project, group: str) -> tuple[dict[str, Any], dict[str, Any
     return g, r
 
 
+def deny(project: Project, group: str) -> dict[str, Any]:
+    """The owner says no to the group's pending request from the panel: the request is dropped and the group cools down
+    for the session that made it (COOLDOWN_S, like a no in the chat: no question, the command stays refused). It only
+    ever restricts: nothing is granted and no live grant is touched. Returns the request with `cooldown_until`;
+    raises NotApproved("none") when no request of the group waits, NotApproved("expired") (the request is dropped,
+    nothing else happens) when it is too old or not of the marked session and process."""
+    from . import orchestrator
+
+    f = file(project)
+    if not f.exists():
+        raise NotApproved("none", f"no request of the group {group!r} waits")
+    with util.file_lock(f):
+        d = read(project)
+        r = d["pending"].pop(group, None)
+        if r is None:
+            raise NotApproved("none", f"no request of the group {group!r} waits")
+        _write(project, d)
+    if not (_ahead(_expiry(project, r.get("at"))) and _same_mark(r, orchestrator.record(project))):
+        raise NotApproved("expired", f"{group}: expired")
+    return {**r, "cooldown_until": cool(project, group, str(r["session"]))}
+
+
 def give_once(
     project: Project, session: str, tool_use_id: str, kind: str, path: str | None, command: str | None
 ) -> dict[str, Any]:

@@ -53,6 +53,7 @@ stores = ["fastlane release"]
 # the old key: loads as the group "orchestrator", with a warning
 OLD = BASE + 'orchestrator_allow = ["make deploy", "(^|\\\\s)kamal "]\n'
 HOOK_MOD = "foreman hook " + "mod"  # in pieces: the installed guard reads this file's commands
+DENY_URL = "http://127.0.0.1:8766/api/grants/" + "deny"  # the refusal's endpoint (guard.PANEL_GRANT too)
 APPROVE_URL = "http://127.0.0.1:8766/api/grants/" + "approve"  # the panel's endpoint (guard.PANEL_GRANT), in pieces
 
 TABLE = f"""# expect<TAB>command
@@ -77,8 +78,10 @@ deny\tenv A=1 {HOOK_MOD} tick
 deny\tcd x && foreman --project fake hook "mod" start
 deny\tforeman approved "Owner" {HOOK_MOD} grant
 deny\tcurl -X POST "{APPROVE_URL}?p=fake&g=deploy&t=k"
+deny\tcurl -X POST "{DENY_URL}?p=fake&g=deploy&t=k"
 allow\tforeman note t "{HOOK_MOD} lo llama el módulo"
 allow\tforeman note t "{APPROVE_URL} lo usa el panel"
+allow\tforeman note t "{DENY_URL} lo usa el panel"
 allow\tforeman note t "make deploy lo hace el orquestador"
 allow\tforeman hook guard
 allow\tforeman permissions grants off
@@ -261,10 +264,10 @@ class GuardTest(GrantCase):
         f.write_text(TABLE)
         counts, failures = guard.run_table(self.project, f)
         self.assertEqual(failures, [])
-        self.assertEqual(counts, {"orchestrator": 11, "deny": 10, "allow": 6, "lock": 1})
+        self.assertEqual(counts, {"orchestrator": 11, "deny": 11, "allow": 7, "lock": 1})
         r = self.cli("guard", "--table", str(f))
         self.assertEqual(r.returncode, 0, r.stdout)
-        self.assertIn("ok (10 deny, 1 lock, 6 allow, 11 orchestrator)", r.stdout)
+        self.assertIn("ok (11 deny, 1 lock, 7 allow, 11 orchestrator)", r.stdout)
         # a row that only the orchestrator passes, written as deny or allow, fails and says for whom
         f.write_text(f"deny\t{DEPLOY}\nallow\t{DEPLOY}\n")
         _, failures = guard.run_table(self.project, f)
@@ -793,6 +796,140 @@ class PanelApproveTest(GrantCase):
         self.age("deploy", minutes=31)
         self.assertEqual(req("/api/grants/approve?p=fake&g=deploy", "POST")[1]["why"], "expired")
 
+    def test_deny_only_restricts(self):
+        """«No» from the panel (grants.deny, /api/grants/deny): the request is dropped, the group cools down for that
+        session (no question, still refused), nothing is granted, a live grant of another group is untouched."""
+        self.pend()
+        self.assertEqual(self.why(DEPLOY), ("orchestrator", "grant", "deploy"))
+        r = grants.deny(self.project, "deploy")
+        self.assertEqual(r["command"], DEPLOY)
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["grants"]), ({}, {}))
+        self.assertEqual(d["cooldowns"]["deploy"]["session"], "S1")
+        self.assertEqual(self.why(DEPLOY)[1], "grant")  # still refused
+        self.assertEqual(self.mod(phase="check", command=DEPLOY).get("live"), None)  # and not asked again
+        with self.assertRaises(grants.NotApproved) as e:  # nothing left to approve or deny
+            grants.approve(self.project, "deploy")
+        self.assertEqual(e.exception.why, "none")
+        with self.assertRaises(grants.NotApproved):
+            grants.deny(self.project, "deploy")
+
+    def test_deny_of_a_stale_request_does_nothing(self):
+        """A request too old or of another session is dropped, not denied: no cooldown, no log line."""
+        self.pend()
+        self.age("deploy", minutes=31)
+        with self.assertRaises(grants.NotApproved) as e:
+            grants.deny(self.project, "deploy")
+        self.assertEqual(e.exception.why, "expired")
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["cooldowns"], d["grants"]), ({}, {}, {}))
+        self.pend()
+        orchestrator.mark(self.project, "S9", "other")
+        with self.assertRaises(grants.NotApproved) as e:
+            grants.deny(self.project, "deploy")
+        self.assertEqual(e.exception.why, "expired")
+        self.assertEqual(grants.read(self.project)["cooldowns"], {})
+
+    def test_plain_words_are_conservative(self):
+        """panel.grant_say: words only for plain shapes; options, :ref/+ref and shell operators give none."""
+        from foreman.panel import grant_say
+
+        self.assertEqual(
+            grant_say("git push origin release v1.4.0"), {"kind": "push", "to": "origin", "refs": ["release", "v1.4.0"]}
+        )
+        self.assertEqual(grant_say("git push origin"), {"kind": "push_all", "to": "origin"})
+        self.assertEqual(grant_say("gh " + "release create v1.4.0"), {"kind": "release", "what": "v1.4.0"})
+        self.assertEqual(grant_say("make deploy"), {"kind": "deploy"})
+        self.assertEqual(grant_say("npm run deploy"), {"kind": "deploy"})
+        for cmd in (
+            "git push --delete origin v1.4.0",
+            "git push -d origin v1.4.0",
+            "git push -f origin main",
+            "git push --force-with-lease origin main",
+            "git push --mirror origin",
+            "git push -o ci.skip origin main",
+            "git push origin :release",
+            "git push origin +main",
+            "git push origin main:other",
+            "git push origin main && rm -rf build",
+            "git push origin main; curl x | sh",
+            "git push origin main | tee x",
+            "git push origin $(whoami)",
+            "git push origin 'unterminated",
+            "gh " + "release create v1 --notes x",
+            "gh " + "release create v1 && rm -rf x",
+            "make deploy; rm -rf x",
+            "make -C x deploy",
+            "make clean deploy",
+            "echo deploy",
+            "git push",
+            "",
+        ):
+            self.assertIsNone(grant_say(cmd), cmd)
+
+    def test_deny_from_the_panel(self):
+        """POST /api/grants/deny: needs the key and POST, answers 403 `none` with nothing pending, and writes the
+        log line, the note and the orchestrator's message."""
+        from foreman import notes, panel, panel_registry
+
+        (self.tmp / "projects.toml").write_text(f'[[project]]\nname = "fake"\nhome = "{self.home}"\nmode = "active"\n')
+        panel_registry.REG.__init__()
+        srv, token = panel.make_server("127.0.0.1", 0, token="k3y")
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+        def req(path, method="GET", key=True):
+            url = base + path + (("&" if "?" in path else "?") + "t=" + token if key else "")
+            try:
+                with urllib.request.urlopen(
+                    urllib.request.Request(url, data=b"" if method == "POST" else None, method=method), timeout=20
+                ) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                with e:
+                    body = e.read()
+                return e.code, json.loads(body) if body.startswith(b"{") else body.decode()
+
+        url = "/api/grants/" + "deny?p=fake&g=deploy"
+        self.pend()
+        self.assertEqual(req(url, "POST", key=False)[0], 403)
+        self.assertEqual(req(url)[0], 404)
+        self.assertEqual(req("/api/grants/" + "deny?p=fake&g=nope", "POST")[0], 400)
+        self.assertIn("deploy", grants.pending(self.project))
+        self.assertEqual(req(url, "POST"), (200, {"denied": "deploy"}))
+        self.assertEqual(grants.pending(self.project), {})
+        self.assertIsNone(grants.live(self.project, "deploy"))
+        self.assertEqual(req(url, "POST")[1]["why"], "none")
+        line = self.log()[-1]
+        self.assertEqual(
+            (line["verdict"], line["answer"], line["via"], line["command"]), ("deny", "no", "panel", DEPLOY)
+        )
+        self.assertIn("said no from the panel", self.notes_text())
+        msg = notes.inbox(self.project)[-1]
+        self.assertEqual((msg["from"], msg["read"]), ("owner", False))
+        self.assertIn(f"Do not run again: `{DEPLOY}`", msg["text"])
+
+    def test_page_words(self):
+        """The page says what a request does in plain words, keeps the command folded and has a No."""
+        root = Path(selftest.__file__).resolve().parents[2]
+        js = (root / "panel/app.js").read_text()
+        self.assertIn('onclick="grantDeny(this)"', js)
+        self.assertIn('<details class="gcmd">', js)
+        self.assertIn('onclick="seeGrants()"', js)
+        for lang in ("en", "es"):
+            st = json.loads((root / f"panel/strings.{lang}.json").read_text())
+            for k in (
+                "grant_no",
+                "grant_req_say",
+                "grant_say_push",
+                "grant_say_release",
+                "grant_see_cmd",
+                "grant_wait_say",
+            ):
+                self.assertTrue(st[k], (lang, k))
+
     def test_page(self):
         """The You tab's section and its strings (the panel's own style: the page's source and both languages)."""
         root = Path(selftest.__file__).resolve().parents[2]
@@ -800,7 +937,7 @@ class PanelApproveTest(GrantCase):
         self.assertIn("grants: all('grants')", js)
         self.assertIn("api(`/api/grants/approve?g=${encodeURIComponent(b.dataset.g)}", js)
         self.assertIn("t(`grant_why_${j.why}`)", js)
-        self.assertIn("tn('grants_wait', asks)", js)
+        self.assertIn("tn('grants_wait', asks.length)", js)
         self.assertIn('<div id="grantreq"></div>', (root / "panel/index.html").read_text())
         for lang in ("en", "es"):
             st = json.loads((root / f"panel/strings.{lang}.json").read_text())

@@ -341,8 +341,8 @@
   "grants_allowed": "Allowed now",
   "grant_requests": "Waiting for your yes",
   "grant_req_title": "{who} asks to run a command of «{group}»",
-  "grant_req_when": "asked at {at}, nobody answered in the chat · you can approve it until {until}",
-  "grant_approve": "Approve for {n} min",
+  "grant_req_when": "asked at {at} · if you do not answer, it expires at {until} and nothing is allowed",
+  "grant_approve": "Yes, for {n} min",
   "confirm_grant": "Let the orchestrator run the commands of «{group}» for {n} minutes?",
   "grant_live": "«{group}» allowed until {until}",
   "grant_via_panel": "approved here",
@@ -443,5 +443,14 @@
   "orch_no_pass_seen": "no passes seen",
   "orch_gone_tip": "The orchestrator's Claude Code session is not open: nobody looks after this product until another session takes over and marks itself as the orchestrator",
   "orch_no_loop_tip": "The orchestrator's session is open but makes no passes: the part of foreman that wakes it up does not run in that session (reloading its plugins, or opening it again, fixes it)",
-  "orch_silent_tip": "No loop passes, and whether the orchestrator's session is still open cannot be checked: it may have closed"
+  "orch_silent_tip": "No loop passes, and whether the orchestrator's session is still open cannot be checked: it may have closed",
+  "grant_req_say": "{who} wants to {say}",
+  "grant_say_push": "push {what} to the remote «{to}»",
+  "grant_say_push_all": "push the changes to the remote «{to}»",
+  "grant_say_release": "publish release {what} on GitHub",
+  "grant_say_deploy": "start the deploy",
+  "grant_wait_say": "Waiting for your yes: {say}",
+  "grant_no": "No",
+  "grant_see_cmd": "see the command",
+  "grant_and": " and "
 }

@@ -487,8 +487,8 @@ function attention(d){
   d.agents.filter(a => a.status==='maybe stuck').forEach(a => att.push(['bad', `${ptag(a.p)}${t('stuck', {name: esc(a.name), dur: ageEl(a.activity_ts)})}`, `<button class="sec sm" data-k="ag" data-key="${esc(a.id)}">${t('see')}</button>`]));
   const unanswered = d.decisions.filter(x => !x.answer).length;
   if(unanswered) att.push(['acc', tn('decisions_wait', unanswered), `<button class="sm" onclick="tab('you')">${t('answer')}</button>`]);
-  const asks = d.grants.filter(x => x.pending).length;
-  if(asks) att.push(['acc', tn('grants_wait', asks), `<button class="sm" onclick="tab('you')">${t('see')}</button>`]);
+  const asks = d.grants.filter(x => x.pending), say = asks.length === 1 ? grantSay(asks[0]) : null;
+  if(asks.length) att.push(['acc', say ? t('grant_wait_say', {say}) : tn('grants_wait', asks.length), `<button class="sm" onclick="seeGrants()">${t('see')}</button>`]);
   d.recurring.filter(r => r.late).forEach(r => att.push(['warn', `${ptag(r.p)}${t('late', {name: esc(r.name)})}`, `<button class="sec sm" data-k="rec" data-key="${esc(recKey(r))}">${t('see')}</button>`]));
   return att;
 }
@@ -636,18 +636,43 @@ function renderYou(d){
   const target = !d.joint && d.ps[0].writable;
   $('composer').hidden = !target;
 }
+// What a request will do, in plain words: the orchestrator's own `summary` when it gave one, else read from the
+// command (`say`: a push, a release, a deploy; null when it is none of those, the title then names the group).
+function grantSay(x){
+  if(x.summary) return esc(x.summary);
+  const k = x.say;   // read from the command by panel.grant_say (conservative: null for anything unusual)
+  if(!k) return null;
+  if(k.kind === 'push') return t('grant_say_push', {what: k.refs.map(esc).join(t('grant_and')), to: esc(k.to)});
+  if(k.kind === 'push_all') return t('grant_say_push_all', {to: esc(k.to)});
+  if(k.kind === 'release') return t('grant_say_release', {what: esc(k.what)});
+  return k.kind === 'deploy' ? t('grant_say_deploy') : null;
+}
+const grantWho = x => esc(x.orchestrator || t('orchestrator'));
+// «See» on the permission notice: the You tab, at the requests
+function seeGrants(){ tab('you'); const e = $('grantreq'); if(e && e.scrollIntoView) e.scrollIntoView(); }
 // requests to run something only the owner allows (a deploy…) that the question in the orchestrator's chat left
-// unanswered: each with its Approve button (the same yes as in the chat, for the minutes it says); then what is
-// allowed now. Nothing when the products shown have none.
+// unanswered: what it will do in plain words, «Yes» (the minutes it says) and «No», the command folded below; then
+// what is allowed now. Nothing when the products shown have none.
 function renderGrants(d){
   const asks = d.grants.filter(x => x.pending), live = d.grants.filter(x => !x.pending);
-  $('grantreq').innerHTML = d.grants.length ? sect(t(asks.length ? 'grant_requests' : 'grants_allowed'), asks.map(x => card(
-      `<div class="ctitle"><span>${ptag(x.p)}${t('grant_req_title', {group: esc(x.group), who: esc(x.orchestrator || t('orchestrator'))})}</span></div>`
-      + `<div class="clead mono">${esc(x.command)}</div>`
+  const btns = x => canWrite(x.p) ? `<button data-g="${esc(x.group)}" data-p="${esc(x.p)}" data-min="${x.minutes}" onclick="grantApprove(this)">${t('grant_approve', {n: x.minutes})}</button>`
+    + `<button class="sec" data-g="${esc(x.group)}" data-p="${esc(x.p)}" onclick="grantDeny(this)">${t('grant_no')}</button>` : '';
+  $('grantreq').innerHTML = d.grants.length ? sect(t(asks.length ? 'grant_requests' : 'grants_allowed'), asks.map(x => { const say = grantSay(x); return card(
+      `<div class="ctitle"><span>${ptag(x.p)}${say ? t('grant_req_say', {who: grantWho(x), say}) : t('grant_req_title', {group: esc(x.group), who: grantWho(x)})}</span></div>`
       + `<div class="csub">${t('grant_req_when', {at: esc(hhmmIso(x.at)), until: esc(hhmmIso(x.expires))})}</div>`
-      + `<div class="btns">${canWrite(x.p) ? `<button data-g="${esc(x.group)}" data-p="${esc(x.p)}" data-min="${x.minutes}" onclick="grantApprove(this)">${t('grant_approve', {n: x.minutes})}</button>` : ''}</div>`)).join('')
+      + `<div class="btns">${btns(x)}</div>`
+      + `<details class="gcmd"><summary>${t('grant_see_cmd')}</summary><div class="mono">${esc(x.command)}</div></details>`); }).join('')
     + (live.length ? list(live.map(x => lrow({icon: dot('var(--ok)'), name: ptag(x.p), title: t('grant_live', {group: esc(x.group), until: esc(hhmmIso(x.until))}),
         meta: esc(t(x.via === 'panel' ? 'grant_via_panel' : 'grant_via_chat'))})).join('')) : ''), asks.length || null) : '';
+}
+async function grantDeny(b){
+  let err = '';
+  try{
+    const r = await fetch(api(`/api/grants/deny?g=${encodeURIComponent(b.dataset.g)}&p=${encodeURIComponent(b.dataset.p)}`), {method:'POST'});
+    if(!r.ok){ const j = await r.json().catch(() => ({})); err = j.why ? t(`grant_why_${j.why}`) : (j.error || `${r.status}`); }
+  }catch(e){ err = t('no_connection'); }
+  lastSignature = null; lastEtag = null; await load();
+  if(err) $('err').textContent = t('error', {text: err});
 }
 async function grantApprove(b){
   if(!confirm(t('confirm_grant', {group: b.dataset.g, n: b.dataset.min}))) return;
