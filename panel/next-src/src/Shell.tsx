@@ -3,9 +3,11 @@
 // and a bottom bar of five tabs. The theme follows the system (app.css); there is no switch.
 import { useEffect, useState } from "react";
 import { How } from "./How";
+import { Home } from "./Home";
+import { Needs } from "./Needs";
 import { ScreenHead, StatusPill } from "./head";
 import { Chevron, Icon } from "./icons";
-import { oldPanel, t, type Key, type Product } from "./lib";
+import { api, oldPanel, t, type Key, type Product, type Projects } from "./lib";
 
 const SECTIONS = ["home", "needs", "agents", "how"] as const;
 const MORE = ["backlog", "wiki", "system"] as const;
@@ -18,12 +20,15 @@ const route = (): Tab => {
   return isTab(r) ? r : "home";
 };
 
-function Picker({ products, product, pick }: { products: Product[]; product: Product; pick: (name: string) => void }) {
+const ALL = "*"; // the picker's «All products»
+
+function Picker({ products, product, all, pick }: { products: Product[]; product: Product; all: boolean; pick: (name: string) => void }) {
   return (
     <label className="picker">
-      <span className="name">{product.title}</span>
+      <span className="name">{all ? t("all_products") : product.title}</span>
       <Chevron />
-      <select aria-label={t("product")} value={product.name} onChange={(e) => pick(e.target.value)}>
+      <select aria-label={t("product")} value={all ? ALL : product.name} onChange={(e) => pick(e.target.value)}>
+        {products.length > 1 ? <option value={ALL}>{t("all_products")}</option> : null}
         {products.map((p) => (
           <option key={p.name} value={p.name}>
             {p.title}
@@ -36,11 +41,12 @@ function Picker({ products, product, pick }: { products: Product[]; product: Pro
 
 const Badge = ({ n, red }: { n: number; red: boolean }) => (n ? <span className={red ? "badge red" : "badge"}>{n}</span> : null);
 
-function Soon({ tab, product }: { tab: Tab; product: Product }) {
+function Soon({ tab, product, all }: { tab: Tab; product: Product; all: boolean }) {
   return (
     <div className="screen">
       <ScreenHead title={t(`tab_${tab}` as Key)} product={product} />
       <div className="card quiet">
+        {all ? `${t("pick_one")} ` : null}
         {t("soon")} <a href={oldPanel()}>{t("open_old")}</a>
       </div>
     </div>
@@ -76,39 +82,61 @@ export function None() {
 
 const KEPT = "next-product";
 
-export function Shell({ all }: { all: Product[] }) {
-  const products = all.filter((p) => p.next && !p.broken);
+const REFRESH_MS = 10_000;
+
+export function Shell({ all: initial }: { all: Product[] }) {
+  // the products and their counts, read again while the page is visible (the badges follow what waits)
+  const [every, setEvery] = useState(initial);
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      api<Projects>("/api/projects").then((d) => setEvery(d.projects)).catch(() => undefined);
+    }, REFRESH_MS);
+    return () => clearInterval(id);
+  }, []);
+  const products = every.filter((p) => p.next && !p.broken);
   const [tab, setTab] = useState<Tab>(route);
   const [name, setName] = useState<string | undefined>(() => {
     const kept = localStorage.getItem(KEPT);
-    return products.some((p) => p.name === kept) ? (kept ?? undefined) : products[0]?.name;
+    return kept === ALL || products.some((p) => p.name === kept) ? (kept ?? undefined) : products[0]?.name;
   });
   useEffect(() => {
     const go = () => setTab(route());
     addEventListener("hashchange", go);
     return () => removeEventListener("hashchange", go);
   }, []);
+  const everyone = name === ALL && products.length > 1;
   const p = products.find((x) => x.name === name) ?? products[0];
   if (!p) return <None />;
+  const scope = everyone ? products : [p];
   const pick = (n: string) => {
     localStorage.setItem(KEPT, n);
     setName(n);
   };
-  const badge: Partial<Record<Tab, number>> = { needs: (p.decisions ?? 0) + (p.unread ?? 0), agents: p.agents ?? 0 };
+  // what waits: the questions, the permissions to approve and the orchestrator's unread messages
+  const sum = (f: (x: Product) => number | undefined) => scope.reduce((n, x) => n + (f(x) ?? 0), 0);
+  const badge: Partial<Record<Tab, number>> = {
+    needs: sum((x) => x.decisions) + sum((x) => x.permissions) + sum((x) => x.unread),
+    agents: sum((x) => x.agents),
+  };
   const current = (k: Tab, bar: boolean) =>
     tab === k || (bar && k === "more" && (MORE as readonly string[]).includes(tab)) ? "page" : undefined;
   const screen =
-    tab === "how" ? (
-      <How product={p} />
+    tab === "home" ? (
+      <Home key={scope.map((x) => x.name).join()} scope={scope} all={everyone} />
+    ) : tab === "needs" ? (
+      <Needs key={scope.map((x) => x.name).join()} scope={scope} all={everyone} />
+    ) : tab === "how" ? (
+      everyone ? <Soon tab={tab} product={p} all /> : <How product={p} />
     ) : tab === "more" ? (
       <More product={p} />
     ) : (
-      <Soon tab={tab} product={p} />
+      <Soon tab={tab} product={p} all={everyone} />
     );
   return (
     <div className="shell">
       <aside className="side">
-        <Picker products={products} product={p} pick={pick} />
+        <Picker products={products} product={p} all={everyone} pick={pick} />
         <nav aria-label={t("sections")} className="navs">
           {SECTIONS.map((k) => (
             <a key={k} className="nav" href={`#/${k}`} aria-current={current(k, false)}>
@@ -129,8 +157,8 @@ export function Shell({ all }: { all: Product[] }) {
       </aside>
       <main>
         <div className="top">
-          <Picker products={products} product={p} pick={pick} />
-          <StatusPill product={p} />
+          <Picker products={products} product={p} all={everyone} pick={pick} />
+          <StatusPill product={p} all={everyone ? products : undefined} />
         </div>
         {screen}
       </main>

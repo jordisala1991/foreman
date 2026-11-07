@@ -13,7 +13,17 @@ export function productState(p: Product): State {
   return "resting";
 }
 
-export function StatusPill({ product }: { product: Product }) {
+export function StatusPill({ product, all }: { product: Product; all?: Product[] | undefined }) {
+  if (all) {
+    const running = all.filter((p) => productState(p) === "running").length;
+    const s: State = running === all.length ? "running" : running ? "silent" : "resting";
+    return (
+      <span className={`pill ${s}`}>
+        <span className="dot" />
+        {t(running === all.length ? "all_running" : "some_running", { n: running, total: all.length })}
+      </span>
+    );
+  }
   const s = productState(product);
   return (
     <span className={`pill ${s}`} title={t(`state_${s}_tip` as Key)}>
@@ -23,15 +33,19 @@ export function StatusPill({ product }: { product: Product }) {
   );
 }
 
-export function ScreenHead({ title, product, children }: { title: string; product: Product; children?: ReactNode }) {
+export function ScreenHead({ title, product, all, sub, kicker, children }: {
+  title: string; product: Product; all?: Product[] | undefined; sub?: string; kicker?: string; children?: ReactNode;
+}) {
   return (
     <div className="screenhead">
       <div className="titles">
+        {kicker ? <div className="kicker">{kicker}</div> : null}
         <h1>{title}</h1>
+        {sub ? <div className="sub">{sub}</div> : null}
         {children ? <div className="controls">{children}</div> : null}
       </div>
       <span className="wide-only">
-        <StatusPill product={product} />
+        <StatusPill product={product} all={all} />
       </span>
     </div>
   );

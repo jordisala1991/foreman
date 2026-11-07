@@ -156,12 +156,14 @@ def inbox_add(project: Project, text: str, sender: str = "owner", **extra: Any) 
     return m
 
 
-def inbox_read(project: Project, ids: Sequence[str] = ()) -> None:
+def inbox_read(project: Project, ids: Sequence[str] = (), sender: str = "owner") -> None:
+    """Marks as read the messages `from` `sender` (all of them, or those whose id is in `ids`): the owner's, for the
+    orchestrator that reads its inbox; the orchestrator's, for the owner who read them in the panel."""
     f = inbox_path(project)
     with util.file_lock(f):
         msgs = util.read_json(f, [])
         for m in msgs:
-            if m.get("from") == "owner" and (not ids or str(m["id"]) in ids):
+            if m.get("from") == sender and (not ids or str(m["id"]) in ids):
                 m["read"] = True
         util.write_json(f, msgs)
 

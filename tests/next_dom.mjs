@@ -1,7 +1,9 @@
 // node tests/next_dom.mjs PANEL_NEXT_DIR SCENARIO.json
 // Mounts the built new panel (PANEL_NEXT_DIR/app.js, one ES module with React inside: no node_modules needed) over a
 // minimal DOM, with fetch answered from the scenario ({hash, width, answers: {path without the key: JSON}, hang:
-// [paths that never answer], click: text of a button to press once mounted, tap: a day whose chart column to tap}).
+// [paths that never answer], click: text of a button to press once mounted, tap: a day whose chart column to tap,
+// steps: [{click: text of a button} | {type: {id, text}: a textarea's value} …] done in order, post: [paths whose POST
+// fails with {error}], visible: [«(min-width: 900px)» media queries that match]}).
 // Prints one line of JSON: the text, the tabs and their badges, the sidebar, the products of the picker, the status
 // pill, each chart as drawn (columns with their segments, labels, legend, figure) and the API paths fetched.
 import fs from "node:fs";
@@ -49,16 +51,17 @@ class Node {
   focus() {}
   blur() {}
   // a click as the browser sends it: capture from the top down, then bubbling up from the target
-  click() {
+  click() { this.dispatch("click"); }
+  dispatch(type) {
     const path = [];
     for (let n = this; n; n = n.parentNode) path.push(n);
     let stopped = false;
     const e = {
-      type: "click", target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
+      type, target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
       button: 0, detail: 1, isTrusted: true, preventDefault() { this.defaultPrevented = true; },
       stopPropagation() { stopped = true; },
     };
-    const run = (n, capture) => n._on.filter((l) => l.type === "click" && l.capture === capture).forEach((l) => {
+    const run = (n, capture) => n._on.filter((l) => l.type === type && l.capture === capture).forEach((l) => {
       e.currentTarget = n;
       l.f.call(n, e);
     });
@@ -86,6 +89,7 @@ app.attributes.id = "app";
 const document = {
   nodeType: 9, documentElement: html, body, title: "", activeElement: body,
   defaultView: null,
+  oninput: null, // React feature-detects the input event with `'oninput' in document`
   createElement: (n) => new Node(1, n),
   createElementNS: (ns, n) => new Node(1, n, ns),
   createTextNode: (s) => Object.assign(new Node(3, "#text"), { data: String(s) }),
@@ -93,8 +97,9 @@ const document = {
   getElementById: (id) => one(html, (n) => n.attributes.id === id),
   addEventListener() {}, removeEventListener() {},
 };
-const store = {};
+const store = { ...(scenario.store || {}) };
 const fetched = [];
+const posts = [];
 class HTMLIFrameElement {}
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
@@ -104,8 +109,14 @@ Object.assign(globalThis, {
   document, window: globalThis, HTMLIFrameElement,
   location: { search: "?t=k3y", hash: scenario.hash || "" },
   addEventListener() {}, removeEventListener() {},
-  fetch: async (url) => {
+  matchMedia: (q) => ({ matches: (scenario.visible || []).includes(q), addEventListener() {}, removeEventListener() {} }),
+  fetch: async (url, init) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
+    if (init && init.method === "POST") {
+      posts.push({ path: p, body: init.body === undefined ? null : init.body });
+      const fail = (scenario.post || []).some((x) => p.startsWith(x));
+      return { ok: !fail, status: fail ? 400 : 200, json: async () => (fail ? { error: "refused" } : {}) };
+    }
     fetched.push(p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
     const body = scenario.answers[p];
@@ -124,6 +135,19 @@ if (scenario.click) {
   const b = one(app, (n) => n.localName === "button" && words(n) === scenario.click);
   if (!b) throw new Error("no button " + scenario.click);
   b.click();
+  await settle();
+}
+for (const st of scenario.steps || []) {
+  if (st.click) {
+    const b = one(app, (n) => ["button", "a"].includes(n.localName) && words(n) === st.click);
+    if (!b) throw new Error("no button " + st.click);
+    b.click();
+  } else {
+    const ta = one(app, (n) => n.attributes.id === st.type.id);
+    if (!ta) throw new Error("no textarea " + st.type.id);
+    ta.value = st.type.text;
+    ta.dispatch("input");
+  }
   await settle();
 }
 if (scenario.tap) {
@@ -167,5 +191,16 @@ console.log(JSON.stringify({
   buttons: all(app, (n) => n.localName === "button").map(words),
   charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
   fetched,
+  posts,
+  cards: all(app, (n) => "data-kind" in n.attributes).map((n) => ({
+    kind: n.attributes["data-kind"], cls: n.attributes.class, text: words(n),
+    buttons: all(n, (b) => b.localName === "button").map(words),
+  })),
+  tiles: Object.fromEntries(all(app, (n) => "data-tile" in n.attributes).map((n) => [n.attributes["data-tile"], words(n)])),
+  agents: all(app, (n) => cls(n, "agent")).map(words),
+  messages: all(app, (n) => cls(n, "msg")).map(words),
+  sections: all(app, (n) => n.localName === "section" && "aria-label" in n.attributes).map((n) => n.attributes["aria-label"]),
+  latest: all(app, (n) => cls(n, "latest")).flatMap((n) => n.children.map(words)),
   errors,
 }));
+process.exit(0); // the screens poll: nothing else ends the process
