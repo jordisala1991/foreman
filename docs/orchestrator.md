@@ -303,7 +303,9 @@ they disagree.
      transcript): `working`, `waiting`, `delivered` or `stopped`; `delivered` once
      it ran `foreman progress --done`. Claude Code's «completed» notification is not a delivery: it also comes each
      time an agent stops to wait for a background task of its own (that one is `waiting`, and still live for 3 h at
-     most). When you stop one: `foreman agents --stop NAME`. What misled the agents: `foreman agents --misled
+     most). When you stop one: `foreman agents --stop NAME`. Never stop a production agent between its delivery and the end of its review: findings go back to it
+     with SendMessage, which costs far less than a new agent rereading the plan, the report and the code; `foreman
+     integrate` stops a session agent once its branch is in. What misled the agents: `foreman agents --misled
      [--since D] [--type T] [--model M]`, the reports' `Misled:` lines with date, agent, type and model (from the
      delivery that named the report), and a footer counting the reports with something, `none` and without the line. What they cost: `foreman agents --cost [--by issue|sub|type|model|week|day] [--since D]
      [--json]` (runs, rework, minutes, MTok, $ at API list prices, share of tokens on Sonnet or Haiku), kept in

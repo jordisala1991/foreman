@@ -9,6 +9,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Changed
+
+- The orchestrator keeps the agent that made a branch alive until its review is over, so review findings go back to it instead of to a new agent that rereads everything.
+
 ## [0.67.2] - 2026-11-07
 
 ### Fixed
