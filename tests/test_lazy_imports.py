@@ -49,6 +49,26 @@ class LazyImportsTest(unittest.TestCase):
         self.assertLessEqual(len(got), 10, got)
         self.assertFalse(got & {"install", "versions"}, got)
 
+    def test_hook_light_path(self):
+        """lib/main.py runs Claude Code's classic hooks without the CLI, and `hook guard` (every tool call) without
+        what only the other hooks use."""
+        entry = ROOT / "lib/main.py"
+        for name in ("guard", "agents", "who", "loop", "resume", "pause-agents"):
+            with self.subTest(hook=name):
+                got = modules(
+                    "import io, runpy\nsys.argv = [" + repr(str(entry)) + ", 'hook', " + repr(name) + "]\n"
+                    'sys.stdin = io.StringIO(\'{"cwd": "/nonexistent-fo"}\')\n'
+                    "try:\n    runpy.run_path(sys.argv[0], run_name='__main__')\nexcept SystemExit:\n    pass"
+                )
+                self.assertIn("hooks", got)
+                self.assertFalse(got & (HEAVY | {"cli", "orchestrator", "approved", "notes", "hooks_mod"}), got)
+        got = modules(
+            "import io, runpy\nsys.argv = [" + repr(str(entry)) + ", 'hook', 'mod', 'nothing']\n"
+            "sys.stdin = io.StringIO('{}')\n"
+            "try:\n    runpy.run_path(sys.argv[0], run_name='__main__')\nexcept BaseException:\n    pass"
+        )
+        self.assertIn("cli", got)  # `hook mod` still goes through cli.main
+
     def test_backlog_show(self):
         got = modules(
             "import foreman.cli as c\ntry:\n    c.main(['backlog', 'show', 'X'])\nexcept BaseException:\n    pass"
