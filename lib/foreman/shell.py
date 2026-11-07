@@ -251,9 +251,8 @@ class Lexer:
         if depth > MAX_DEPTH:
             raise Unparsed(f"nested deeper than {MAX_DEPTH}")
         self.s, self.n, self.depth = s, len(s), depth
-        self.pending: list[
-            tuple[str, bool, Tok]
-        ] = []  # heredocs waiting for the next newline: (delimiter, quoted, their operator token)
+        # heredocs waiting for the next newline: (delimiter, quoted, their operator token)
+        self.pending: list[tuple[str, bool, Tok]] = []
         self.body_subs: list[str] = []  # substitutions inside unquoted heredoc bodies (they run)
         self.redefines = False  # a function definition, alias, source, eval…: no exemption
 
@@ -856,12 +855,7 @@ CODE_OPTS = ("-c", "-e", "-E", "-m", "-p", "--eval", "--print")  # interpreters:
 def heredoc_writer(seg: Seg, r: Runs) -> bool:
     """True if the segment is cat or tee (also behind sudo, env…) reading a heredoc or a here-string."""
     w = _words(seg)
-    return (
-        r.prog < len(w)
-        and _lit(w, r.prog) is not None
-        and PurePath(w[r.prog].value).name in WRITERS
-        and bool(inputs(seg))
-    )
+    return _lit(w, r.prog) is not None and PurePath(w[r.prog].value).name in WRITERS and bool(inputs(seg))
 
 
 def heredoc_files(segs: Sequence[Seg], info: Sequence[Runs], k: int) -> set[str] | None:
@@ -962,9 +956,7 @@ def _scan(
         if r.prog >= len(w) or j == skip:
             continue
         prog = w[r.prog]
-        if (
-            not prog.literal
-        ):  # $(…), a glob, or a variable: what the line may set it to ($EDITOR from outside: not seen)
+        if not prog.literal:  # $(…), a glob, or a variable the line may set ($EDITOR from outside: not seen)
             m = PLAIN_PARAM.fullmatch(prog.raw)
             var = m.group(1) if m else ""
             if not m or var in setters:
@@ -1092,13 +1084,12 @@ class Runs:
     as words (xargs, find -exec); stdin: "shell" | "raw" | None, what it does with its standard input."""
 
     __slots__ = ("prog", "strings", "cmds", "stdin")
-    prog: int
-    strings: list[tuple[Tok | None, str, bool]]
-    cmds: list[Sequence[Tok]]
-    stdin: str | None
 
     def __init__(self) -> None:
-        self.prog, self.strings, self.cmds, self.stdin = 0, [], [], None
+        self.prog = 0
+        self.strings: list[tuple[Tok | None, str, bool]] = []
+        self.cmds: list[Sequence[Tok]] = []
+        self.stdin: str | None = None
 
 
 def _skip_opts(
@@ -1326,14 +1317,13 @@ class Values:
     line is read once); defined: the functions and aliases defined in the line."""
 
     __slots__ = ("names", "texts", "toks", "fed", "defined")
-    names: set[str]
-    texts: list[str]
-    toks: set[Tok]
-    fed: int
-    defined: set[str]
 
     def __init__(self) -> None:
-        self.names, self.texts, self.toks, self.fed, self.defined = set(), [], set(), 0, set()
+        self.names: set[str] = set()
+        self.texts: list[str] = []
+        self.toks: set[Tok] = set()
+        self.fed = 0
+        self.defined: set[str] = set()
 
     def add(self, toks: Sequence[Tok]) -> None:
         self.toks.update(toks)
@@ -1614,13 +1604,10 @@ def _find(k: int, w: Sequence[Tok], p: int) -> list[Write]:
 
 
 def writes(segs: Sequence[Seg], info: Sequence[Runs]) -> list[Write]:
-    """The files the line names as what it writes, each with its segment: the targets of its output redirections
-    (> >> >| &> <>, not a descriptor nor /dev/null, stdout or stderr), the operands of tee, the destination of cp, mv,
-    ln, install, rsync, ditto and scp (and the sources of mv), the files of sed -i, gsed -i and perl -i, the operands of
-    rm, rmdir, unlink, truncate, touch, shred, chmod, chown, chgrp and chflags, dd's of=, curl -o and wget -O, and the
-    starting points of a find that deletes; behind the wrappers runs() skips (env, sudo, timeout, foreman lock … run).
-    Words are given as they are, literal or not: the caller resolves them. What a command nested in a word or a string
-    writes (sh -c, $(…)) is its own line's."""
+    """The files the line names as what it writes (Write), each with its segment: the targets of its output
+    redirections (not a descriptor nor /dev/null, stdout or stderr), the operands of tee, and what each program of
+    the tables below writes (dd's of=, curl -o, wget -O, a find that deletes), behind the wrappers runs() skips. Words
+    are given as they are, literal or not; what a command nested in a word or a string writes is its own line's."""
     out: list[Write] = []
     for k, (seg, r) in enumerate(zip(segs, info)):
         toks = seg.toks

@@ -195,25 +195,16 @@ def _cd_target(w: Sequence[Tok]) -> str | None:
     """The literal target of `cd|pushd [-L|-P|-e|-@] [DIR]` (w starts at the program), "~" for none, None when it
     is not literal or is `-` / a stack entry (`+N`)."""
     k = 1
-    while k < len(w) and w[k].literal and w[k].value[:1] == "-" and w[k].value not in ("-",):
-        if w[k].value == "--":
-            k += 1
-            break
+    while k < len(w) and w[k].literal and w[k].value[:1] == "-" and w[k].value != "-":
         k += 1
+        if w[k - 1].value == "--":
+            break
     if k >= len(w):
         return "~"
     t = w[k]
     if not t.literal or t.value == "-" or t.value[:1] == "+":
         return None
     return t.value
-
-
-def _moves(w: Sequence[Tok], r: Runs) -> str | None:
-    """ "cd" when the segment changes the shell's folder (cd, pushd, popd), else None."""
-    p = r.prog
-    if p >= len(w) or not w[p].literal:
-        return None
-    return "cd" if w[p].value in ("cd", "pushd", "popd") else None
 
 
 def _lists(segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]]) -> Iterator[tuple[bool, bool, bool]]:
@@ -243,12 +234,10 @@ def moved(here: Iterable[str], dirs: Sequence[str | None], exists: bool = True) 
 
 def folders(segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], start: frozenset[str],
             exists: bool = True) -> list[frozenset[str]]:  # fmt: skip
-    """The folders each segment may run in, from start (the module doc). A `cd` replaces the set only when it
-    surely ran and surely got there: outside any group or compound, not followed by |, & or ||, and either followed
-    by nothing but && up to the segment (if it fails, nothing after it runs) or first in its list (after ; newline &
-    or the start) with a folder that exists; elsewhere its folder is added to the set. A folder the line cannot name
-    (`cd "$X"`, `cd -`, popd; with exists, one that does not exist) is UNKNOWN, besides the folders before it.
-    exists=False: a folder that does not exist (yet) is still named (the guard's reserved files: `mkdir d && cd d`)."""
+    """The folders each segment may run in, from start (module doc). A `cd` replaces the set only when it surely
+    ran and got there: outside any group or compound, not followed by |, & or ||, and either followed by nothing but
+    && up to the segment or first in its list with a folder that exists; elsewhere it adds its folder. exists=False:
+    a folder that does not exist (yet) is still named (the reserved files: `mkdir d && cd d`)."""
     out: list[frozenset[str]] = []
     sure = set(start)  # where the next list starts
     chain: set[str] | None = None  # where the rest of an all-&& list runs, after a cd inside it
@@ -256,8 +245,8 @@ def folders(segs: Sequence[Seg], words_of: Sequence[Sequence[Tok]], info: Sequen
         seg, w = segs[k], words_of[k]
         here = chain if (chain is not None and pure) else sure
         out.append(frozenset(here))
-        if _moves(w, info[k]):
-            p = info[k].prog
+        p = info[k].prog
+        if p < len(w) and w[p].literal and w[p].value in ("cd", "pushd", "popd"):  # it changes the shell's folder
             target = _cd_target(w[p:]) if w[p].value != "popd" else None
             new = {UNKNOWN} if target is None else {_join(d, target, exists) for d in here}
             new |= here if UNKNOWN in new else set()
@@ -320,10 +309,9 @@ def branches(
     fn: dict[int, list[tuple[int, list[Tok]]]] | None = None,
 ) -> list[dict[str, frozenset[str]]]:
     """For each segment, {folder: the branches that may be checked out there} after the line's `git switch` and
-    `git checkout` before it (CURRENT: the one git says); a folder not in it has only CURRENT. A switch replaces
-    the branch only when it surely ran in that one folder: outside any group or compound, followed by nothing but
-    && up to the segment (a switch can fail); elsewhere its branch is added. fn (called()): a function's body is
-    read with each call's arguments, from the call's folders too, and only adds."""
+    `git checkout` before it (CURRENT: the one git says, also for a folder not in it); a switch replaces the branch
+    as a cd replaces the folder (folders()), in that one folder. fn (called()): a function's body is read with each
+    call's arguments, from the call's folders too, and only adds."""
     out: list[dict[str, frozenset[str]]] = []
     sure: dict[str, set[str]] = {}
     chain: dict[str, set[str]] | None = None
@@ -632,12 +620,11 @@ def changes(
     where: Sequence[frozenset[str]] | None = None,
     fn: dict[int, list[tuple[int, list[Tok]]]] | None = None,
 ) -> list[Changes]:
-    """For each segment, what the line changed in git's config before it (start: before the line). A change counts
-    wherever it is on the line (a group, a branch, after ||); one that may not have run keeps the config before it
-    too (Changes.maybe): the folders() reading of a cd that surely ran. Each keeps the folders it ran in (where: the
-    segments' folders, with its -C; UNKNOWN under --git-dir or GIT_DIR): overlay() counts it as run only for a push
-    from that one folder. Without segs, every change counts as run everywhere. fn (called()): a function's body is
-    read with each call's arguments, from the call's folders too, as a change that may not have run."""
+    """For each segment, what the line changed in git's config before it (start: before the line; module doc). One
+    that may not have run (the folders() reading) keeps the config before it too (Changes.maybe); each keeps the
+    folders it ran in (where; UNKNOWN under --git-dir or GIT_DIR), and overlay() counts it as run only for a push from
+    that one folder. Without segs, every change counts as run everywhere. fn (called()): a function's body, with
+    each call's arguments, as a change that may not have run."""
     out: list[Changes] = []
     sure, chain = start, None
     lists = _lists(segs, words_of) if segs is not None else ((True, True, True) for _ in words_of)

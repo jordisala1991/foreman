@@ -52,29 +52,20 @@ MAX_LINE = 256 * 1024  # characters of a command line (or of a string run inside
 PYTHON = re.compile(r"(python|pypy)[\d.]*")
 NO_VALUE_FLAGS = re.compile(r"-[IuBEsSOqbP]+")  # python3 -I -u -: the program still comes from stdin
 ALLOWED_MODULES = frozenset(
-    (
-        *("re", "pathlib", "json", "textwrap", "difflib", "collections", "datetime", "string", "math"),
-        *("itertools", "functools", "glob", "fnmatch", "tomllib"),
-    )
+    "re pathlib json textwrap difflib collections datetime string math itertools functools glob fnmatch tomllib".split()
 )
-BUILTINS = frozenset(  # builtins that run code, reach any attribute or read the terminal (as bare names)
-    (
-        *("exec", "eval", "compile", "getattr", "setattr", "delattr", "vars", "globals", "locals"),
-        *("breakpoint", "input", "help", "license", "credits", "copyright"),
-    )
-)
+# builtins that run code, reach any attribute or read the terminal (as bare names)
+BUILTINS = frozenset("exec eval compile getattr setattr delattr vars globals locals breakpoint input help license "
+                     "credits copyright".split())  # fmt: skip
 FORBIDDEN = frozenset(  # as names, attributes and imported names
-    (
-        # modules an allowed module imports (glob.os, warnings.sys…) or that start processes or load code
-        *("os", "sys", "subprocess", "importlib", "ctypes", "posix", "nt", "pty", "shutil", "socket"),
-        *("multiprocessing", "signal", "builtins", "runpy", "code", "codeop", "pdb", "bdb", "cmd", "platform"),
-        *("types", "inspect", "gc", "threading", "asyncio", "concurrent", "webbrowser", "pydoc", "imp"),
-        *("pkgutil", "zipimport", "site", "sysconfig", "operator", "marshal", "pickle", "select", "selectors"),
-        *("fcntl", "resource", "mmap", "posixpath", "ntpath", "genericpath", "warnings", "tempfile"),
-        # calls that start a process, and the reflection that reaches an object by a string
-        *("system", "startfile", "getoutput", "getstatusoutput", "check_call", "check_output"),
-        *("get_field", "Formatter", "attrgetter", "methodcaller"),
-    )
+    # modules an allowed module imports (glob.os, warnings.sys…) or that start processes or load code
+    "os sys subprocess importlib ctypes posix nt pty shutil socket multiprocessing signal builtins runpy code codeop "
+    "pdb bdb cmd platform types inspect gc threading asyncio concurrent webbrowser pydoc imp pkgutil zipimport site "
+    "sysconfig operator marshal pickle select selectors fcntl resource mmap posixpath ntpath genericpath warnings "
+    "tempfile "
+    # calls that start a process, and the reflection that reaches an object by a string
+    "system startfile getoutput getstatusoutput check_call check_output get_field Formatter attrgetter "
+    "methodcaller".split()
 )
 FORBIDDEN_PREFIXES = ("exec", "spawn", "popen", "fork", "posix_spawn")  # execv, spawnl, Popen, forkpty… (any case)
 FRAMES = re.compile(r"(gi|cr|ag|f|tb|co)_")  # attributes of generators, coroutines, frames, tracebacks and code:
@@ -84,9 +75,7 @@ FAILS = (SyntaxError, ValueError, MemoryError, RecursionError)
 PATHS = frozenset(("Path", "PurePath", "PosixPath", "PurePosixPath", "WindowsPath", "PureWindowsPath"))
 # Methods that write the object they are called on (a Path), and those that also write their one argument: a method
 # of the same name called with another number of arguments is not a Path's (str.replace, dict.copy)
-WRITES_SELF = frozenset(
-    ("write_text", "write_bytes", "touch", "unlink", "mkdir", "rmdir", "chmod", "lchmod", "symlink_to", "hardlink_to")
-)
+WRITES_SELF = frozenset("write_text write_bytes touch unlink mkdir rmdir chmod lchmod symlink_to hardlink_to".split())
 WRITES_BOTH = frozenset(("rename", "replace", "copy", "move", "copy_into", "move_into", "link_to"))
 WRITE_MODE = re.compile(r"[wax+]")
 
@@ -222,11 +211,8 @@ def gate(body: str) -> ast.AST | None:
 
 def words(node: ast.AST) -> list[str]:
     """The one-word str literals under a node."""
-    return [
-        c.value
-        for c in ast.walk(node)
-        if isinstance(c, ast.Constant) and isinstance(c.value, str) and c.value and not re.search(r"\s", c.value)
-    ]
+    found = (c.value for c in ast.walk(node) if isinstance(c, ast.Constant) and isinstance(c.value, str))
+    return [v for v in found if v and not re.search(r"\s", v)]
 
 
 def _kept(node: ast.AST) -> list[str]:

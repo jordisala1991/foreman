@@ -184,13 +184,9 @@ def as_role(role: str, cwd: str | None = None) -> Ctx | None:
 
 # ---------- the deny check ----------
 
-# Where a pattern matched (Hit.where), each with its sentence in the refusal (i18n guard_where_*): the text of a
-# command, inline code of an interpreter (python -c, node -e), a sed or awk script, a loop or a test, the script an
-# interpreter reads (heredoc, pipe), what a shell runs from a pipe or a $(…), a value given to a variable that runs,
-# text written to a file the line then runs (a printer or a heredoc to cat|tee), the whole text when the lexer
-# cannot read it, and a `git push` as git would do it from its folder (resolved) or from a repo of the project when
-# the folder cannot be known (unknown; gitpush.py; i18n guard_how_resolved says how to name the push). The refusal
-# says how to write code apart for these (i18n guard_how_code):
+# Where a pattern matched (Hit.where: command, code, sed, loop, script, piped, variable, written, whole, resolved,
+# unknown, tool, file), each with its sentence in the refusal (i18n guard_where_*); for these the refusal says how to
+# write code apart (i18n guard_how_code):
 CODE_WHERE = ("code", "sed", "loop", "script", "written")
 EDITORS = ("sed", "gsed", "awk", "gawk", "mawk", "nawk")
 EXPECTS = ("allow", "deny", "orchestrator")  # a table row's expectation, besides lock:RESOURCE
@@ -389,14 +385,8 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
         nested += [(" ".join(t.raw for t in toks), False, False, "", sub(k, execdir)) for toks in r.cmds]
         mark = "written" if k in back else ""
         py = None  # a python program that cannot start processes (pyscript): compared with its prose blanked
-        if (
-            r.stdin == "raw"
-            and exempt
-            and k not in reach
-            and len(cmd) <= pyscript.MAX_LINE
-            and shell.filters_only(segs, k, True)
-        ):
-            py = _python(segs, info, words_of, k)
+        if r.stdin == "raw" and exempt and k not in reach and len(cmd) <= pyscript.MAX_LINE:
+            py = _python(segs, info, words_of, k) if shell.filters_only(segs, k, True) else None
         for kind, own in ((r.stdin, True), (reach.get(k), False)):
             for text in shell.inputs(seg) if kind else ():
                 if kind == "shell":
@@ -559,9 +549,8 @@ class _Check:
 
     def __init__(self, project: Project, cmd: str, ctx: Ctx | None, projects: Sequence[Project] | None) -> None:
         self.project, self.cmd, self.ctx = project, cmd, ctx
-        cwd = (ctx or {}).get("cwd")
-        self.given = cwd
-        self.git = gitpush.Resolver(project, cwd)
+        self.given = (ctx or {}).get("cwd")
+        self.git = gitpush.Resolver(project, self.given)
         self.at = self.git if ctx is not None and "cwd" in ctx else None  # without the key: the text only
         self.kept: dict[Any, tuple[Any, Exception | None]] = {}
         if projects is not None:
@@ -1420,14 +1409,12 @@ def _git_rewrites(sub: str, args: Sequence[Tok], folder: str) -> bool | list[Tok
     (_reaches decides), False when it changes no file (it reads, or touches only the index)."""
     if sub in GIT_WHOLE:
         return True
-    if sub == "bisect":
-        a = _Args(args)
-        return not (a.pos and a.pos[0].literal and a.pos[0].value in ("log", "view", "visualize"))
+    if sub in ("bisect", "sparse-checkout"):  # but those that only read
+        first = _Args(args).pos[:1]
+        reads = ("log", "view", "visualize") if sub == "bisect" else ("list",)
+        return not (first and first[0].literal and first[0].value in reads)
     if sub == "read-tree":
         return bool(_Args(args, "", ("--prefix", "--index-output")).opts & {"-u", "--reset"})
-    if sub == "sparse-checkout":
-        a = _Args(args)
-        return not (a.pos and a.pos[0].literal and a.pos[0].value == "list")
     if sub == "submodule":
         a = _Args(args)
         return any(not t.literal or t.value == "update" for t in a.pos)
@@ -1842,16 +1829,14 @@ def _holdout_tool(
         cwd = (ctx or {}).get("cwd") or os.getcwd()
         base = os.path.join(cwd, os.path.expanduser(str(tool_input.get("path") or cwd)))
         pattern = tool_input.get("pattern")
-        places = [base]  # Grep walks its folder; Glob, what its pattern reaches from it
+        place = base  # Grep walks its folder; Glob, what its pattern reaches from it
         if tool == "Glob" and isinstance(pattern, str) and pattern:
-            places = [os.path.join(base, os.path.expanduser(pattern))]
-        for place in places:
-            d = _holdout_reach(place, dirs, True)
-            if d is not None:
-                hit = _holdout_hit(d, "tool", f"{tool} {place}")
-                hit.tool, hit.call = str(tool), place
-                return hit
-        return None
+            place = os.path.join(base, os.path.expanduser(pattern))
+        d = _holdout_reach(place, dirs, True)
+        hit = _holdout_hit(d, "tool", f"{tool} {place}") if d is not None else None
+        if hit is not None:
+            hit.tool, hit.call = str(tool), place
+        return hit
     except Exception:  # noqa: BLE001 (a failure of foreman never stops a call of another tool)
         return None
 
@@ -1953,11 +1938,7 @@ def check_tool(
                 return v
             _mark_passed(ctx, before, tool, cmd)
         for place in places:
-            texts = ["cat " + shlex.quote(place)]
-            home = _home_form(place)
-            if home:
-                texts.append("cat " + home)
-            for text in texts:
+            for text in ["cat " + x for x in (shlex.quote(place), _home_form(place)) if x]:
                 v = check(project, text, ctx, projects)
                 if v is None or v[0] == "lock":
                     _mark_passed(ctx, before, tool, place, where="tool")
