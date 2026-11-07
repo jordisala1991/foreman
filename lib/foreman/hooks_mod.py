@@ -414,7 +414,7 @@ def pass_due(project: Project, o: Mark, now: float | None = None) -> bool:
     marked = util.iso_epoch(o.get("since"))
     if marked is not None and marked > last:
         return True
-    if renewed_since_pass(project, o) or owner_wrote_since(project, last):
+    if renewed_since_pass(project, o) or owner_wrote_since(project, last) or session_delivered_since(project, last):
         return True
     return now - last >= orchestrator.every_min(project) * 60 - DUE_SLACK_S
 
@@ -429,6 +429,23 @@ def owner_wrote_since(project: Project, last: float) -> bool:
         since = time.strftime("%Y-%m-%d %H:%M", time.localtime(last))
         return any(str(m.get("time") or "") >= since for m in notes.inbox_new(project))
     except Exception:  # noqa: BLE001 (an unreadable inbox never fails the tick)
+        return False
+
+
+def session_delivered_since(project: Project, last: float) -> bool:
+    """Whether a session agent (a Claude Code session of its own: nobody waits for it inside the orchestrator's chat)
+    delivered after the last pass: the pass comes at the next tick instead of at the hour. A subagent's delivery
+    already comes back to the orchestrator's chat. The pass's own time moves past the delivery, so it does not
+    repeat. Never raises."""
+    from . import agents as agents_mod
+    from . import identity
+
+    try:
+        return any(
+            isinstance(h, dict) and h.get(identity.SESSION_MARK) and (util.iso_epoch(h.get("delivered")) or 0) > last
+            for h in agents_mod.agents(project).values()
+        )
+    except Exception:  # noqa: BLE001 (an unreadable agents.json never fails the tick)
         return False
 
 

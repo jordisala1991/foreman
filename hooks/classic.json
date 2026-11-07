@@ -11,6 +11,9 @@
     "SubagentStop": [
       {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" hook agents", "timeout": 150}]}
     ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" hook agents", "timeout": 150}]}
+    ],
     "PostToolUse": [
       {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" hook agents", "timeout": 10}]}
     ],
