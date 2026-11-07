@@ -26,6 +26,40 @@ const PATHS: Record<string, ReactNode> = {
   ),
 };
 
+// the small icons of the cards (24 px grid): a clock, a speech bubble, a bell with a bar, a check, an eye, a chevron
+const SMALL: Record<string, ReactNode> = {
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  talk: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" />,
+  bell_off: (
+    <>
+      <path d="M6 9a6 6 0 0 1 9.5-4.9M18 9c0 4 1.5 6 2 7H5M10 20a2 2 0 0 0 4 0" />
+      <path d="M3 3l18 18" />
+    </>
+  ),
+  check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  go: <path d="m9 6 6 6-6 6" />,
+};
+
+export function Small({ name, size = 16 }: { name: keyof typeof SMALL; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {SMALL[name]}
+    </svg>
+  );
+}
+
 export function Icon({ name, size = 24 }: { name: string; size?: number }) {
   if (name === "more") {
     return (

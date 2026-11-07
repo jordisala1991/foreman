@@ -23,12 +23,18 @@ export async function api<T>(path: string): Promise<T> {
   return (await r.json()) as T;
 }
 
-// a POST with no body (an action the owner asks for); the server's own words when it says no
-export async function post<T>(path: string): Promise<T> {
-  const r = await fetch(withKey(path), { method: "POST" });
-  const body = ((await r.json().catch(() => null)) ?? {}) as { error?: string };
-  if (!r.ok) throw new Error(body.error ?? String(r.status));
-  return body as T;
+// a write of the panel (the same endpoints as today's panel): the answer's `error` is the message, `body` the text;
+// the answer's JSON comes back for the actions that return something
+export async function post<T = void>(path: string, body?: string): Promise<T> {
+  const init: RequestInit = { method: "POST" };
+  if (body !== undefined) init.body = body;
+  const r = await fetch(withKey(path), init);
+  const j = ((await r.json().catch(() => null)) ?? {}) as { error?: string; why?: string };
+  if (!r.ok) {
+    const why = `grant_why_${j.why}`; // a refused grant says why, in the panel's language
+    throw new Error(j.why && why in es ? t(why as Key) : (j.error ?? String(r.status)));
+  }
+  return j as T;
 }
 
 // the panel of today, at the same key (the screens not built yet send there)
@@ -57,6 +63,7 @@ export interface Product {
   decisions?: number;
   unread?: number;
   agents?: number;
+  permissions?: number; // requests to approve or deny (the «Needs you» badge counts them with the questions)
   paused?: string | null;
   pill?: string; // the status pill's own words (the «All» entry of the picker says how many are running)
   active?: boolean;
@@ -71,6 +78,16 @@ export interface Projects {
 // /api/metrics (lib/foreman/metrics.py `build`, plus the account's `quota`): the fields the charts read
 export type Family = "opus" | "sonnet" | "haiku" | "other";
 export type DayCost = Record<Family | "usd", number> & { cheap_share?: number | null };
+export interface Today {
+  cost: Record<Family | "usd", number> & { avg_before: number; spark: number[] };
+  integrated: { integrated: number; measured: number; yesterday: number; spark: number[] };
+  reviews: { back: number; total: number; yesterday_back: number; yesterday_total: number };
+}
+export interface Quota {
+  kind: string; // five_hour | seven_day
+  percent_used: number;
+  resets_at?: string | null;
+}
 export interface Delivery {
   integrated: number;
   measured: number;
@@ -89,10 +106,92 @@ export interface Metrics {
   rounds: Record<string, number>;
   guard: Record<string, { agent: number; orchestrator: number; other: number }>;
   guard_rules: { rule: string; band: string; n: number }[];
+  today?: Today;
+  quota?: Quota[];
   // the first day with data of each series (a day, or null)
   since: { cost: string | null; deliveries: string | null; reviews: string | null; guard: string | null };
-  quota?: { kind: string; percent_used: number; resets_at?: string | null }[];
 }
+
+// what /api/state says of a product that the home and «Needs you» screens read
+export interface Decision {
+  id: string;
+  title: string;
+  date?: string;
+  text?: string;
+  options: string[];
+  recommended?: string;
+  details?: Record<string, { effect?: string; cost?: string; undo?: string }>;
+  page?: string;
+  answer: string | null;
+  free?: boolean;
+  sent?: string;
+  blocks?: string[];
+}
+export interface Grant {
+  group: string;
+  pending: boolean;
+  orphan?: string;
+  command?: string;
+  part?: string;
+  summary?: string;
+  say?: { kind: string; to?: string; refs?: string[]; what?: string } | null;
+  orchestrator?: string;
+  at?: string;
+  expires?: string;
+  minutes?: number;
+  notified?: string;
+}
+export interface Message {
+  id: number;
+  time: string;
+  from: string;
+  text: string;
+  read?: boolean;
+}
+export interface Agent {
+  id: string;
+  name: string;
+  type?: string | null;
+  issue?: string | null;
+  sub?: string | null;
+  end?: string | null;
+  status: string;
+  last?: string | null;
+  start_ts?: number | null;
+  activity_ts?: number | null;
+  link?: string | null;
+}
+export interface Progress {
+  time: string;
+  agent?: string;
+  text: string;
+}
+export interface State {
+  decisions: Decision[];
+  grants: Grant[];
+  messages: Message[];
+  agents: Agent[];
+  progress: Progress[];
+}
+
+// «2026-11-07 12:28» or «2026-11-07T12:28:00» (local) as a Date
+export const localDate = (s: string): Date => new Date(s.replace(" ", "T"));
+export const hhmm = (s: string): string => s.slice(11, 16);
+export const todayIso = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+// «hoy», «ayer» or «5 nov» of a date «YYYY-MM-DD…»
+export function dayWord(s: string): string {
+  const day = s.slice(0, 10);
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}-${String(y.getDate()).padStart(2, "0")}`;
+  return day === todayIso() ? t("today") : day === yesterday ? t("yesterday") : dayMonth(day);
+}
+// whole minutes from `ts` (epoch seconds) to now, or null
+export const minutesSince = (ts: number | null | undefined): number | null =>
+  ts == null ? null : Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
 
 // «15:20»
 export const clock = (d: Date): string => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;

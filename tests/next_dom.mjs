@@ -2,6 +2,8 @@
 // Mounts the built new panel (PANEL_NEXT_DIR/app.js, one ES module with React inside: no node_modules needed) over a
 // minimal DOM, with fetch answered from the scenario ({hash, width, answers: {path without the key: JSON}, hang:
 // [paths that never answer], click: text of a button to press once mounted, tap: a day whose chart column to tap,
+// steps: [{click: text of a button} | {type: {id, text}: a textarea's value} …] done in order, post: [paths whose POST
+// fail with {error, why}], why: the `why` of those failures, visible: [«(min-width: 900px)» media queries that match]}).
 // tick: how many times the page's setInterval callbacks run once mounted, fail: paths whose answers stop before the
 // ticks (the connection drops), down: paths that fail from the start, heal: paths that answer again at the ticks}).
 // Prints one line of JSON: the text, the tabs and their badges, the sidebar, the products of the picker, the status
@@ -89,6 +91,7 @@ app.attributes.id = "app";
 const document = {
   nodeType: 9, documentElement: html, body, title: "", activeElement: body,
   defaultView: null,
+  oninput: null, // React feature-detects the input event with `'oninput' in document`
   createElement: (n) => new Node(1, n),
   createElementNS: (ns, n) => new Node(1, n, ns),
   createTextNode: (s) => Object.assign(new Node(3, "#text"), { data: String(s) }),
@@ -98,6 +101,7 @@ const document = {
 };
 const store = { ...(scenario.store || {}) };
 const fetched = [];
+const posts = [];
 const down = new Set(scenario.down || []); // paths that fail from the start
 const timers = [];
 const windows = [];
@@ -110,16 +114,31 @@ Object.assign(globalThis, {
   document, window: globalThis, HTMLIFrameElement,
   location: { search: "?t=k3y", hash: scenario.hash || "" },
   addEventListener() {}, removeEventListener() {},
+  matchMedia: (q) => ({ matches: (scenario.visible || []).includes(q), addEventListener() {}, removeEventListener() {} }),
   setInterval: (f) => { timers.push(f); return timers.length; }, clearInterval() {},
   open: (url) => { const w = { location: { href: String(url || "") }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
-  fetch: async (url, opts) => {
+  fetch: async (url, init) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
-    fetched.push(opts && opts.method === "POST" ? "POST " + p : p);
+    if (init && init.method === "POST") {
+      posts.push({ path: p, body: init.body === undefined ? null : init.body });
+      fetched.push("POST " + p);
+      const answer = scenario.answers["POST " + p];
+      // an answered POST says what the scenario says (null: the server fails); an unanswered one succeeds, except on
+      // the Agents screen, where the server not answering is a case (404)
+      if (answer !== undefined || (scenario.hash || "").startsWith("#/agents")) {
+        const missing = answer === undefined || answer === null;
+        return { ok: !missing, status: missing ? 404 : 200, json: async () => answer };
+      }
+      const fail = (scenario.post || []).some((x) => p.startsWith(x));
+      return { ok: !fail, status: fail ? 400 : 200, json: async () => (fail ? { error: "refused", ...(scenario.why ? { why: scenario.why } : {}) } : {}) };
+    }
+    fetched.push(p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
     if (down.has(p)) return { ok: false, status: 503, json: async () => ({}) };
     if ((scenario.delay || {})[p]) await new Promise((r) => setTimeout(r, scenario.delay[p])); // a slow one
-    const body = scenario.answers[(opts && opts.method === "POST" ? "POST " : "") + p];
-    return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
+    const body = scenario.answers[p];
+    const missing = body === undefined || body === null; // null: the server fails on it
+    return { ok: !missing, status: missing ? 404 : 200, json: async () => body };
   },
 });
 document.defaultView = globalThis;
@@ -134,6 +153,19 @@ if (scenario.click) {
   const b = one(app, (n) => n.localName === "button" && words(n) === scenario.click);
   if (!b) throw new Error("no button " + scenario.click);
   b.click();
+  await settle();
+}
+for (const st of scenario.steps || []) {
+  if (st.click) {
+    const b = one(app, (n) => ["button", "a"].includes(n.localName) && words(n) === st.click);
+    if (!b) throw new Error("no button " + st.click);
+    b.click();
+  } else {
+    const ta = one(app, (n) => n.attributes.id === st.type.id);
+    if (!ta) throw new Error("no textarea " + st.type.id);
+    ta.value = st.type.text;
+    ta.dispatch("input");
+  }
   await settle();
 }
 if (scenario.tick) {
@@ -187,6 +219,7 @@ const bar = all(app, (n) => n.localName === "a" && cls(n, "tab"));
 const tab = (k) => bar.find((n) => n.attributes.href === "#/" + k);
 const badge = (k) => { const b = tab(k) && one(tab(k), (n) => cls(n, "badge")); return b ? words(b) : null; };
 const side = one(app, (n) => cls(n, "side"));
+const text1 = (a, f) => words(one(a, f) || { nodeType: 3, data: "" }); // a card of the Home screen has fewer parts
 console.log(JSON.stringify({
   text: words(app),
   tabs: bar.map(words),
@@ -202,12 +235,12 @@ console.log(JSON.stringify({
   dim: !!one(app, (n) => cls(n, "dim")),
   agents: all(app, (n) => n.localName === "article" && cls(n, "agent")).map((a) => ({
     cls: a.attributes.class,
-    avatar: words(one(a, (n) => cls(n, "avatar"))),
-    task: words(one(a, (n) => n.localName === "h3")),
+    avatar: text1(a, (n) => cls(n, "avatar")),
+    task: text1(a, (n) => n.localName === "h3"),
     id: words(one(a, (n) => cls(n, "id")) || { nodeType: 3, data: "" }),
-    meta: words(one(a, (n) => cls(n, "meta"))),
-    state: words(one(a, (n) => cls(n, "state"))),
-    stateTone: one(a, (n) => cls(n, "dot")).attributes.class,
+    meta: text1(a, (n) => cls(n, "meta")),
+    state: text1(a, (n) => cls(n, "state")),
+    stateTone: one(a, (n) => cls(n, "dot"))?.attributes.class,
     msg: words(one(a, (n) => cls(n, "msg")) || { nodeType: 3, data: "" }),
     watch: !!one(a, (n) => cls(n, "watch")),
   })),
@@ -215,6 +248,16 @@ console.log(JSON.stringify({
   nobody: words(one(app, (n) => cls(n, "nobody")) || { nodeType: 3, data: "" }),
   windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,
+  posts,
+  cards: all(app, (n) => "data-kind" in n.attributes).map((n) => ({
+    kind: n.attributes["data-kind"], cls: n.attributes.class, text: words(n),
+    buttons: all(n, (b) => b.localName === "button").map(words),
+  })),
+  tiles: Object.fromEntries(all(app, (n) => "data-tile" in n.attributes).map((n) => [n.attributes["data-tile"], words(n)])),
+  agentRows: all(app, (n) => cls(n, "agent")).map(words),
+  messages: all(app, (n) => cls(n, "msg")).map(words),
+  sections: all(app, (n) => n.localName === "section" && "aria-label" in n.attributes).map((n) => n.attributes["aria-label"]),
+  latest: all(app, (n) => cls(n, "latest")).flatMap((n) => n.children.map(words)),
   errors,
 }));
 process.exit(0); // the screens poll: their timers would keep node alive

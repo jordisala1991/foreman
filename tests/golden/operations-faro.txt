@@ -1146,7 +1146,7 @@ foreman lock: unknown resource 'nope' (known: widget); declare it in foreman.tom
   "time": "<TODAY> <TIME>",
   "from": "orchestrator",
   "text": "Va bien: el lector ya está",
-  "read": true
+  "read": false
  }
 ]
 === faro/inbox.json.lock
