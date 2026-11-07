@@ -121,7 +121,11 @@ export function System({ product }: { product: MoreProduct }) {
   const ov = useApi<Overview>("/api/projects", 30000);
   const st = useApi<StateAnswer>(`/api/state?p=${q(product.name)}`, 30000);
   const head = <ScreenHead title={t("sys_title")} product={product} />;
-  if (!ov.data) return <div className="screen">{head}{ov.failed ? <Failed retry={ov.reload} /> : <Loading />}</div>;
+  // both answers before the first drawing: the overview is often kept from the shell's own read, and drawing it alone
+  // makes the part that waits for the state push everything down when it comes
+  if (!ov.data || (!st.data && !st.failed)) {
+    return <div className="screen">{head}{ov.failed && !ov.data ? <Failed retry={ov.reload} /> : <Loading />}</div>;
+  }
   const o = ov.data;
   const state = st.data?.project;
   const rec = state?.recurring ?? [];

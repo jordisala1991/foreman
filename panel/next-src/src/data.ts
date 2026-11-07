@@ -1,8 +1,9 @@
 // The data of the home and «Needs you» screens: for the products in scope, each one's state (/api/state, polled while
 // the page is visible), the short names of its issues (/api/backlog, once) and, for the home, its metrics
 // (/api/metrics, polled). `reload` asks again at once (after a write).
-import { useCallback, useEffect, useState } from "react";
-import { api, type Metrics, type State } from "./lib";
+import { useCallback, useMemo } from "react";
+import { reloadAll, useFeeds } from "./feed";
+import type { Metrics, State } from "./lib";
 
 export interface Short {
   [id: string]: string;
@@ -37,56 +38,33 @@ export interface Loaded {
   reload: () => void;
 }
 
+const NONE: Short = {};
+
+// Each product's state and figures are feeds (feed.ts): read apart, so a failing /api/metrics must not hide what waits,
+// and the object of a product stays the same until one of its answers differs.
 export function useScope(names: string[], withMetrics: boolean): Loaded {
-  const key = names.join("\n");
-  const [data, setData] = useState<Record<string, Scope>>({});
-  const [failed, setFailed] = useState(false);
-  const [metricsFailed, setMetricsFailed] = useState(false);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let live = true;
-    const list = key ? key.split("\n") : [];
-    const load = async () => {
-      let stateBad = false;
-      let metricsBad = false;
-      const got = await Promise.all(
-        list.map(async (n): Promise<[string, Partial<Scope>]> => {
-          const q = encodeURIComponent(n);
-          // the state and the figures are read apart: a failing /api/metrics must not hide what waits
-          const [s, m] = await Promise.all([
-            api<{ project: State }>(`/api/state?p=${q}`).catch(() => null),
-            withMetrics ? api<Metrics>(`/api/metrics?p=${q}&days=7`).catch(() => null) : Promise.resolve(undefined),
-          ]);
-          if (!s) stateBad = true;
-          if (m === null) metricsBad = true;
-          return [n, { ...(s ? { state: s.project } : {}), ...(m ? { metrics: m } : {}) }];
-        }),
-      );
-      if (!live) return;
-      setFailed(stateBad);
-      setMetricsFailed(metricsBad);
-      setData((old) => {
-        const next: Record<string, Scope> = {};
-        for (const g of got) next[g[0]] = { shorts: {}, ...old[g[0]], ...g[1] };
-        return next;
-      });
-    };
-    void load();
-    const loadShorts = () =>
-      list.forEach((n) => {
-        api<Backlog>(`/api/backlog?p=${encodeURIComponent(n)}&closed=recent`)
-          .then((b) => live && setData((old) => ({ ...old, [n]: { ...(old[n] ?? {}), shorts: shortsOf(b) } })))
-          .catch(() => undefined);
-      });
-    loadShorts();
-    const id = setInterval(() => {
-      if (document.visibilityState !== "hidden") void load();
-    }, POLL_MS);
-    return () => {
-      live = false;
-      clearInterval(id);
-    };
-  }, [key, withMetrics, tick]);
-  const reload = useCallback(() => setTick((x) => x + 1), []);
+  const paths = names.flatMap((n) => {
+    const q = encodeURIComponent(n);
+    return [`/api/state?p=${q}`, withMetrics ? `/api/metrics?p=${q}&days=7` : null];
+  });
+  const polled = useFeeds<unknown>(paths, POLL_MS);
+  const backlogs = useFeeds<Backlog>(
+    names.map((n) => `/api/backlog?p=${encodeURIComponent(n)}&closed=recent`),
+    0,
+  );
+  // the screens that use this are keyed by their products, so the number of snapshots never changes under a mount
+  const data = useMemo(() => {
+    const out: Record<string, Scope> = {};
+    names.forEach((n, i) => {
+      const s = polled[2 * i]?.data as { project: State } | undefined;
+      const m = polled[2 * i + 1]?.data as Metrics | undefined;
+      const b = backlogs[i]?.data;
+      out[n] = { shorts: b ? shortsOf(b) : NONE, ...(s ? { state: s.project } : {}), ...(m ? { metrics: m } : {}) };
+    });
+    return out;
+  }, [...polled, ...backlogs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const failed = names.some((_, i) => polled[2 * i]?.failed);
+  const metricsFailed = withMetrics && names.some((_, i) => polled[2 * i + 1]?.failed);
+  const reload = useCallback(() => reloadAll(paths.filter((p): p is string => p !== null)), [paths.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
   return { data, failed, metricsFailed, reload };
 }

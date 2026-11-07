@@ -2,9 +2,10 @@
 // their last words, «See conversation» for a session agent), then who finished today with result, time, model and
 // list-price cost. With «All» (several products) each entry carries its product's tag. It asks /api/agents again
 // every 10 s and the durations tick by themselves.
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useFeed, useNow } from "./feed";
 import { ScreenHead } from "./head";
-import { api, duration, lang, post, t, usd2, withKey, type AgentCard, type AgentsData, type Family, type Key, type Product } from "./lib";
+import { duration, lang, post, t, usd2, withKey, type AgentCard, type AgentsData, type Family, type Key, type Product } from "./lib";
 
 const REFRESH_MS = 10_000;
 const AVATARS = ["#9cc0ff", "#f2a9cb", "#e3c49c", "#ffb98a", "#86d4e6", "#d6b3f0", "#a8c5d9", "#c9d98f"];
@@ -121,44 +122,13 @@ const byStuck = (a: AgentCard, b: AgentCard): number =>
 const RESULT: Record<string, Key> = { ok: "res_ok", partial: "res_partial", failed: "res_failed", stopped: "res_stopped" };
 
 export function Agents({ product, titles }: { product: Product; titles: Record<string, string> }) {
-  const [data, setData] = useState<AgentsData | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [tries, setTries] = useState(0);
-  const [now, setNow] = useState(() => Date.now() / 1000);
+  // the list is a feed (feed.ts): read again every REFRESH_MS, replaced only when the answer differs, and kept on
+  // screen while it is read; «Cargando…» is only for the first answer of a product
+  const feed = useFeed<AgentsData>(`/api/agents?p=${encodeURIComponent(product.name)}`, REFRESH_MS);
+  const data = feed.data ?? null;
+  const failed = feed.failed;
+  const now = useNow();
   const all = product.name === "*";
-  // `current()` is false once the effect that asked is over (another product was chosen): its answer is dropped, so
-  // a slow answer never replaces the list of the new choice
-  const load = useCallback(
-    (current: () => boolean) =>
-      api<AgentsData>(`/api/agents?p=${encodeURIComponent(product.name)}`).then(
-        (x) => {
-          if (!current()) return true;
-          setFailed(false);
-          setData(x);
-          setNow(Date.now() / 1000);
-          return true;
-        },
-        () => false,
-      ),
-    [product.name],
-  );
-  useEffect(() => {
-    let live = true;
-    setData(null); // never the old product's agents under the new choice
-    setFailed(false);
-    const again = () =>
-      void load(() => live).then((ok) => {
-        if (live && !ok) setFailed(true);
-      });
-    again();
-    const timer = setInterval(again, REFRESH_MS);
-    const tick = setInterval(() => setNow(Date.now() / 1000), 30_000);
-    return () => {
-      live = false;
-      clearInterval(timer);
-      clearInterval(tick);
-    };
-  }, [load, tries]);
   const tag = (p: string): string | null => (all ? (titles[p] ?? p) : null);
   const running = data?.live.length ?? 0;
   const finished = data?.done.length ?? 0;
@@ -177,7 +147,7 @@ export function Agents({ product, titles }: { product: Product; titles: Record<s
       {failed && !data ? (
         <div className="card quiet">
           {t("load_failed")}{" "}
-          <button type="button" className="link" onClick={() => setTries(tries + 1)}>
+          <button type="button" className="link" onClick={feed.reload}>
             {t("retry")}
           </button>
         </div>
