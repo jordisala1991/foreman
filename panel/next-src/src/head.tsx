@@ -18,7 +18,7 @@ export function StatusPill({ product }: { product: Product }) {
   return (
     <span className={`pill ${s}`} title={t(`state_${s}_tip` as Key)}>
       <span className="dot" />
-      {t(`state_${s}` as Key)}
+      {product.pill ?? t(`state_${s}` as Key)}
     </span>
   );
 }

@@ -28,11 +28,20 @@ export async function api<T>(path: string): Promise<T> {
   return (await r.json()) as T;
 }
 
+// a POST with no body (an action the owner asks for); the server's own words when it says no
+export async function post<T>(path: string): Promise<T> {
+  const r = await fetch(withKey(path), { method: "POST" });
+  const body = ((await r.json().catch(() => null)) ?? {}) as { error?: string };
+  if (!r.ok) throw new Error(body.error ?? String(r.status));
+  return body as T;
+}
+
 // the panel of today, at the same key (the screens not built yet send there)
 export const oldPanel = (): string => withKey("/");
 
 // whole dollars ($219), or with one decimal ($60.8) where a detail is read
 export const usd = (x: number): string => "$" + Math.round(x).toString();
+export const usd2 = (x: number): string => "$" + x.toFixed(2);
 export const usd1 = (x: number): string => "$" + x.toFixed(1);
 
 const noon = (iso: string): Date => new Date(iso + "T12:00:00");
@@ -54,6 +63,7 @@ export interface Product {
   unread?: number;
   agents?: number;
   paused?: string | null;
+  pill?: string; // the status pill's own words (the «All» entry of the picker says how many are running)
   active?: boolean;
   orchestrator_health?: { verdict: string; last_pass?: string | null } | null;
 }
@@ -72,3 +82,45 @@ export interface Metrics {
   total: number;
   since: { cost: string | null } & Record<string, string | null>; // the first day with data of each series
 }
+
+// /api/agents (lib/foreman/agents_screen.py): who is running, who finished today, when the next pass is due
+export interface AgentCard {
+  id: string;
+  p: string; // the product
+  name: string;
+  task: string; // the issue's short name, else the agent's name
+  issue: string | null;
+  sub: string | null;
+  type: string | null;
+  family: Family | null;
+  status: "working" | "holds a lock" | "waiting for a lock" | "waiting for its task" | "maybe stuck";
+  since: number | null; // epoch seconds
+  sign: number | null; // the last sign of life, epoch seconds
+  msg: string | null;
+  session: boolean; // its own Claude Code session: its conversation can be opened
+}
+export interface DoneRun {
+  agent: string;
+  p: string;
+  task: string;
+  issue: string;
+  sub: string | null;
+  type: string | null;
+  outcome: "ok" | "partial" | "failed" | null;
+  minutes: number | null;
+  family: Family | null;
+  usd: number;
+  end: string; // «YYYY-MM-DD HH:MM», local
+}
+export interface AgentsData {
+  projects: string[];
+  live: AgentCard[];
+  done: DoneRun[];
+  next_pass: number | null; // epoch seconds
+}
+
+// «25 min», «1 h 5 min»
+export const duration = (minutes: number): string => {
+  const m = Math.max(0, Math.round(minutes));
+  return m < 60 ? t("min", { n: m }) : t("hour_min", { h: Math.floor(m / 60), m: m % 60 });
+};

@@ -256,6 +256,23 @@ def model(path: PathLike) -> str | None:
     return found
 
 
+def last_model(path: PathLike) -> str | None:
+    """The model of the last real response, reading only the end of the file (tail_lines: 256 KB doubling up to 8 MB):
+    what `model` answers for a transcript that is read again and again while it grows. None when the end has none."""
+    try:
+        for ln in tail_lines(path):
+            if b'"model"' not in ln:
+                continue
+            d = _record(ln)
+            m = d.get("message") if d else None
+            v = m.get("model") if isinstance(m, dict) else None
+            if isinstance(v, str) and v and not v.startswith("<"):
+                return v
+    except (OSError, TypeError, ValueError):
+        pass
+    return None
+
+
 def head(path: PathLike, size: int = 20000) -> str:
     """The first `size` characters of a transcript ('' when it cannot be read): where a subagent's brief is."""
     try:
