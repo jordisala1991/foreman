@@ -138,7 +138,6 @@
   "loading_lc": "cargando…",
   "checks": "{ok} bien, {fail} mal, {pending} pendientes",
   "draft": "borrador",
-  "no_prs": "Ningún PR abierto.",
   "mac": "El Mac",
   "mem_used": "memoria usada de {gb} GB",
   "disk_free": "libres en disco de {gb}",
@@ -176,6 +175,11 @@
     "duplicate": "Duplicado",
     "triage": "Por clasificar"
   },
+  "idle_for": "sin actividad hace {dur}",
+  "nothing_open": "nada abierto",
+  "agent_type_none": "Agente",
+  "agent_type_other": "Agente «{type}»",
+  "agent_types": {"dev": "Agente de producción", "mechanic": "Agente de cambios mecánicos", "planner": "Agente de planes", "reviewer": "Agente de revisión", "general-purpose": "Agente general", "Explore": "Agente de búsqueda"},
   "agent_status": {
     "working": "trabajando",
     "holds a lock": "con el cerrojo",

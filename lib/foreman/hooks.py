@@ -19,7 +19,7 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
           delivered. SubagentStop sets `end` (the agent delivered, or only stopped to wait for a task of its own);
           a PostToolUse of a Bash that runs `foreman progress --done` sets `delivered` (the delivery is that datum,
           by the event's agent_id); a PostToolUse with `end` set means the agent was resumed: `end` and `delivered`
-          go. loop.agent_state reads them. The identity (identity.py): the PostToolUse of an Agent/Task
+          go. agents.agent_state reads them. The identity (identity.py): the PostToolUse of an Agent/Task
           call (the orchestrator's, without agent_id, or a subagent's) whose prompt carries a launch line
           (`[foreman launch TOKEN]`, from `foreman launch`/`foreman worktree`) and whose tool_response has the new
           `agentId` ties that launch to it: name, issue, sub, repo, branch, worktree, production, launch and
@@ -188,9 +188,9 @@ def hook_agents(project: Project, ev: Event) -> None:
     launch_tool = name == "PostToolUse" and ev.get("tool_name") in identity.AGENT_TOOLS
     if not aid and not launch_tool:
         return
-    from . import loop
+    from . import agents as agents_mod
 
-    f = loop.agents_file(project)
+    f = agents_mod.agents_file(project)
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
     warning: str | None = None
     entry: Agent | None = None

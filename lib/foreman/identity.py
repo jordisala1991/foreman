@@ -290,9 +290,9 @@ def prune(launches: dict[str, Any], agents: Mapping[str, Agent]) -> dict[str, An
 
 def pending(project: Project, name: str) -> list[str]:
     """The tokens of the launches of `name` no agent took yet (within 24 h)."""
-    from . import loop
+    from . import agents as agents_mod
 
-    d = prune(util.read_json(launches_file(project), {}), loop.agents(project))
+    d = prune(util.read_json(launches_file(project), {}), agents_mod.agents(project))
     return [t for t, r in d.items() if r.get("name") == name and not r.get("agent")]
 
 
@@ -351,7 +351,7 @@ def new_launch(
     decided when the agent is tied to it (by its type). `model`: the one asked for, recorded only when given.
     `despite`: [{decision, why}] of the pending decisions that held it (`launch --despite`), recorded only when
     given. `review`: a reviewer of `repo`:`branch` with no worktree (launch --review), recorded only when true."""
-    from . import loop
+    from . import agents as agents_mod
 
     production = production_at_launch(project, production, bool(worktree), agent_type)
     rec: Launch = {
@@ -377,7 +377,7 @@ def new_launch(
         rec["planned"] = planned
     f = launches_file(project)
     with util.locked_json(f, {}) as cur:
-        d = prune(cur, loop.agents(project))
+        d = prune(cur, agents_mod.agents(project))
         token = new_token()
         while token in d:
             token = new_token()
@@ -487,9 +487,9 @@ def name_hand(project: Project, ref: str, name: str, **fields: object) -> str:
     """`foreman agents --name ID NAME [--issue --sub --repo --branch --worktree]`: the identity by hand
     (named_by=hand). Returns the agent id; IdentityError when there is no such agent or another live one has the
     name."""
-    from . import loop
+    from . import agents as agents_mod
 
-    f = loop.agents_file(project)
+    f = agents_mod.agents_file(project)
     with util.locked_json(f, {}) as d:
         aid = resolve_agent(d, ref)
         others = [x for x in live_with_name(project, name) if x != aid]

@@ -58,6 +58,9 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import (
+    agents as agents_mod,
+)
+from . import (
     config,
     costs,
     heartbeat,
@@ -66,7 +69,6 @@ from . import (
     identity,
     install,
     lock,
-    loop,
     notes,
     orchestrator,
     pause,
@@ -139,19 +141,19 @@ LAUNCH_LINE = re.compile(r"^\[foreman launch [a-z2-7]{10}\][^\n]*\n?")
 
 def agents(project: Project, lock_list: list[Status], branch_of_agent: dict[str, str]) -> list[Obj]:
     """Agents running, waiting for their own background task, or finished (delivered or stopped) in the last 15 min;
-    the state is loop.agent_state, the same one the loop pass and `foreman agents` use. Name, issue and branch are
+    the state is agents_mod.agent_state, the same one the loop pass and `foreman agents` use. Name, issue and branch are
     identity.of: what was recorded at launch (or by hand) first, then the brief («Issue: ID», «Branch `y`») and
     `branch_of_agent` (the backlog's sub-issue with the agent's name) for what is missing."""
     holders, waiting = lock.people(lock_list)
     out = []
-    for aid, h in loop.agents(project).items():
+    for aid, h in agents_mod.agents(project).items():
         path = h.get("transcript")
         if not path:  # internal subagents (no transcript): not the orchestrator's agents
             continue
-        state = loop.agent_state(h)
+        state = agents_mod.agent_state(h)
         own_wait = state == "waiting"
         end = None
-        if state not in loop.LIVE_STATES:
+        if state not in agents_mod.LIVE_STATES:
             end = h.get("end") or h.get("delivered") or h.get("activity") or h.get("start")
             if (iso_age(end) or 0) > 900:
                 continue
@@ -170,12 +172,13 @@ def agents(project: Project, lock_list: list[Status], branch_of_agent: dict[str,
             "final": h.get("final"),
             "own_wait": own_wait,
             "issue": who["issue"],
+            "sub": who["sub"],
             "branch": who["branch"],
             "task": short.strip()[:200],
             "transcript": path,
             "outcome": h.get("outcome") if state == "delivered" else None,
         }
-        last = loop.last_sign(h)
+        last = agents_mod.last_sign(h)
         a["activity_ts"] = None if last is None else int(last)
         with contextlib.suppress(OSError):  # a transcript gone: no last message nor context
             os.stat(path)
@@ -192,7 +195,7 @@ def agents(project: Project, lock_list: list[Status], branch_of_agent: dict[str,
             else "waiting for a lock"
             if name in waiting
             else "maybe stuck"
-            if loop.quiet_minutes(project, h) is not None
+            if agents_mod.quiet_minutes(project, h) is not None
             else "waiting for its task"
             if own_wait
             else "working"
@@ -681,7 +684,11 @@ def overview(lock_list: list[Status]) -> list[Obj]:
     out = []
     for p in REG.projects.values():
         bl = backlog_cards(p)
-        live = [a for a in loop.agents(p).values() if a.get("transcript") and loop.agent_state(a) in loop.LIVE_STATES]
+        live = [
+            a
+            for a in agents_mod.agents(p).values()
+            if a.get("transcript") and agents_mod.agent_state(a) in agents_mod.LIVE_STATES
+        ]
         out.append(
             {
                 **project_summary(p),

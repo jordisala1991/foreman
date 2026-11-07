@@ -1209,7 +1209,7 @@ def cmd_renew(p: Project, args: argparse.Namespace) -> int:
 
 
 def cmd_agents(p: Project, args: argparse.Namespace) -> int:
-    from . import loop
+    from . import agents as agents_mod
 
     if args.name:
         from . import identity
@@ -1240,10 +1240,10 @@ def cmd_agents(p: Project, args: argparse.Namespace) -> int:
         )
         return 2
     if args.stop:
-        hits = loop.stop_agent(p, args.stop)
+        hits = agents_mod.stop_agent(p, args.stop)
         print(f"stopped: {', '.join(hits)}" if hits else f"no agent {args.stop}")
         return 0 if hits else 1
-    print(loop.agents_json(p) if args.json else loop.agents_compact(p))
+    print(agents_mod.agents_json(p) if args.json else agents_mod.agents_compact(p))
     return 0
 
 

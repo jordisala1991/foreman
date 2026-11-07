@@ -24,10 +24,12 @@ from unittest import mock
 from helpers import BASE_TOML, ROOT, ProjectCase
 
 from foreman import (
+    agents as agents_mod,
+)
+from foreman import (
     config,
     heartbeat,
     lock,
-    loop,
     notes,
     orchestrator,
     panel,
@@ -911,10 +913,10 @@ console.log(JSON.stringify(out));
             code, d = self.req(path)
             self.assertEqual(code, 200, d)
         self.assertEqual(self.req("/api/state?p=fake")[1]["project"]["agents"], [])
-        self.assertEqual((loop.agents(self.project), notes.heartbeats(self.project)), ({}, {}))
+        self.assertEqual((agents_mod.agents(self.project), notes.heartbeats(self.project)), ({}, {}))
         self.assertEqual(notes.inbox_new(self.project), [])
-        self.assertEqual(json.loads(loop.agents_json(self.project)), {})
-        loop.agents_compact(self.project)
+        self.assertEqual(json.loads(agents_mod.agents_json(self.project)), {})
+        agents_mod.agents_compact(self.project)
         self.assertEqual(notes.inbox_add(self.project, "hi")["id"], 1)
 
     def test_registry_read_once_while_nothing_changes(self):

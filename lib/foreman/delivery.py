@@ -193,9 +193,9 @@ def last_delivery(
     when given, read once by the caller), reviewers left out (launch --review: their delivery is not the branch's);
     else, by name, its last `done` line in progress.jsonl; None when none is known."""
     if agents is None:
-        from . import loop
+        from . import agents as agents_mod
 
-        agents = loop.agents(project)
+        agents = agents_mod.agents(project)
     best = None
     for h in agents.values():
         mine = h.get("delivered") and ((branch and h.get("branch") == branch) or (name and h.get("name") == name))
@@ -252,7 +252,7 @@ def branch_kind(project: Project, branch: str, data: Data | None = None, agents:
     integrating); "measure" when its open sub-issues are all measurements (`kind = "measure"`, or their agent's last
     delivery said `--kind measure`), or, with no sub-issue naming it, when the branch's last delivery said so;
     "code" otherwise (a single open code sub-issue makes it code). AGENTS: agents.json, read here when None."""
-    from . import loop
+    from . import agents as agents_mod
     from .backlog import Backlog
 
     if data is None:
@@ -263,7 +263,7 @@ def branch_kind(project: Project, branch: str, data: Data | None = None, agents:
     open_ = [s for s in subs if s.get("status") not in SUB_CLOSED]
     if not open_:
         return "code" if any(s.get("commit") for s in subs) else "closed"
-    agents = loop.agents(project) if agents is None else agents  # once for every sub-issue
+    agents = agents_mod.agents(project) if agents is None else agents  # once for every sub-issue
     return "measure" if all(sub_is_measure(project, s, agents) for s in open_) else "code"
 
 
@@ -375,9 +375,9 @@ def worktrees_of(project: Project, aid: str | None, name: str | None) -> list[st
 
 def entry_of(project: Project, aid: str | None, name: str | None) -> Agent | None:
     """The agent's entry in agents.json: by agent id, else the newest entry with this name; None when none is."""
-    from . import loop
+    from . import agents as agents_mod
 
-    d = loop.agents(project)
+    d = agents_mod.agents(project)
     h = d.get(aid) if aid else None
     if h is None and name:
         mine = [x for x in d.values() if x.get("name") == name]
@@ -411,9 +411,9 @@ def is_plan(name: str) -> bool:
 def started(project: Project, branch: str, agents: Agents | None = None) -> float | None:
     """When the first agent of agents.json (AGENTS, read when None) with this branch started (epoch), or None when
     none is recorded."""
-    from . import loop
+    from . import agents as agents_mod
 
-    agents = loop.agents(project) if agents is None else agents
+    agents = agents_mod.agents(project) if agents is None else agents
     times = [util.iso_epoch(h.get("start")) for h in agents.values() if h.get("branch") == branch]
     known = [t for t in times if t]
     return min(known) if known else None
