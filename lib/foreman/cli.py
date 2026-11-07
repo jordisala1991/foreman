@@ -397,6 +397,7 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         except sessionlaunch.SessionError as e:
             return fail(e, 1)
     rec_repo, rec_branch = args.repo, args.branch  # what the launch records (a reviewer's: --review)
+    review_cwd: str | None = None  # where a reviewer's session starts (it has no worktree of its own)
     if args.review is not None:
         rkey, _, rbranch = args.review.partition(":")
         if args.repo or args.branch or args.base or args.kind:
@@ -413,6 +414,7 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         args.agent_type = args.agent_type or "reviewer"
         args.no_backlog = True
         rec_repo, rec_branch = rkey, rbranch
+        review_cwd = worktree.worktrees(rpath).get(rbranch) or str(rpath)
     elif args.issue and not args.repo and identity.needs_worktree(p, args.production, args.agent_type):
         return fail(
             "a production agent needs --repo REPO --branch BRANCH (its worktree); --no-production if it changes no code"
@@ -486,7 +488,7 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         line0 = identity.launch_line(token, rec)
         prompt = line0 + ("\n\n" + brief if brief else "")
         try:
-            short, sid = sessionlaunch.start(p, token, rec, prompt, str(wt or p.home))
+            short, sid = sessionlaunch.start(p, token, rec, prompt, str(wt or review_cwd or p.home))
         except sessionlaunch.SessionError as e:
             identity.cancel(p, args.name)
             return fail(f"{e}; the launch was dropped", 1)
