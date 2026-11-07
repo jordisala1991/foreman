@@ -2,7 +2,7 @@
 $ foreman --project harbor check
 [exit 0]
 harbor: <TMP>/harbor (active); state <TMP>/state/harbor
-  config schema 23 (this foreman knows 23): ok
+  config schema 24 (this foreman knows 24): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo api: <TMP>/harbor-api merge=squash
@@ -17,7 +17,7 @@ harbor	active	<TMP>/harbor
 $ foreman check
 [exit 0]
 harbor: <TMP>/harbor (active); state <TMP>/state/harbor
-  config schema 23 (this foreman knows 23): ok
+  config schema 24 (this foreman knows 24): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo api: <TMP>/harbor-api merge=squash

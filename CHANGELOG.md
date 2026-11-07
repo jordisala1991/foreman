@@ -12,6 +12,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 ### Added
 
 - The panel shows a «See conversation» button for each session agent (in its row and its detail): it turns Remote Control on for that session only when clicked (`claude attach` on a pseudo-terminal, `/remote-control`, then Enter on the dialog it leaves open; the session is not stopped, so no turn is cut and no copy is made) and opens the claude.ai/code link of its conversation in the Claude app. It sends the owner's phone a push on that click, never at launch. A failure says why and the button can be pressed again (`POST /api/agent/watch`, same key and project rules as the other writes).
+- A new web panel is being built at `/next/` of the same server and key, for the products that set `[panel] next = true` (default `false`; the panel at `/` is unchanged). This first part has its shell (a sidebar on a wide screen, five tabs at the bottom on a phone, the product picker, light and dark) and «How it goes» with the cost per day and model of the last 7 or 30 days (`/api/metrics`), at list price and counting only the product's own issues. It loads nothing from outside the machine: Preact, htm and Chart.js are copied into `panel/next/vendor/` with their versions, hashes and licences.
+
+### Config
+
+- `[panel] next` (default `false`), the product's own; `config_schema` 24.
 
 ### Fixed
 

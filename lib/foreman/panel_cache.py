@@ -23,6 +23,15 @@ def page_version() -> int:
     return int(max((STATIC / n).stat().st_mtime for n in ["index.html", "app.js", "app.css"]))
 
 
+NEXT = STATIC / "next"  # the new panel (/next/): its own files, its own version
+
+
+def next_version() -> int:
+    """The new panel's version: the newest mtime of the files under panel/next/ (0 without them). The old page's
+    version does not move with them."""
+    return int(max((f.stat().st_mtime for f in NEXT.rglob("*") if f.is_file()), default=0))
+
+
 def sh(*cmd: str, cwd: util.PathLike | None = None, timeout: float = 10, env: Mapping[str, str] | None = None) -> str:
     try:
         return subprocess.run(

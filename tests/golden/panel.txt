@@ -50,6 +50,7 @@ $ GET /api/projects
       "late": [],
       "mode": "active",
       "name": "faro",
+      "next": false,
       "orchestrator": null,
       "orchestrator_health": null,
       "owner": "Marta",
@@ -78,6 +79,7 @@ $ GET /api/projects
       ],
       "mode": "active",
       "name": "harbor",
+      "next": false,
       "orchestrator": null,
       "orchestrator_health": null,
       "owner": "Sam",
@@ -1141,6 +1143,7 @@ $ GET /api/state?p=faro
     "mode": "active",
     "moves": [],
     "name": "faro",
+    "next": false,
     "notes": [
       {
         "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
@@ -1384,6 +1387,7 @@ $ GET /api/state?p=harbor
     "mode": "active",
     "moves": [],
     "name": "harbor",
+    "next": false,
     "notes": [
       {
         "text": "The form takes 40 s end to end (measured on 5 bookings).",
@@ -1640,6 +1644,7 @@ $ GET /api/state?p=*
       "mode": "active",
       "moves": [],
       "name": "faro",
+      "next": false,
       "notes": [
         {
           "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
@@ -1736,6 +1741,7 @@ $ GET /api/state?p=*
       "mode": "active",
       "moves": [],
       "name": "harbor",
+      "next": false,
       "notes": [
         {
           "text": "The form takes 40 s end to end (measured on 5 bookings).",
@@ -2413,6 +2419,7 @@ $ GET /api/state?p=faro
       }
     ],
     "name": "faro",
+    "next": false,
     "notes": [
       {
         "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
@@ -2696,6 +2703,7 @@ $ GET /api/state?p=faro
       }
     ],
     "name": "faro",
+    "next": false,
     "notes": [
       {
         "text": "El lector tarda 0,4 s por carta (medido en 20 cartas).",
@@ -2837,6 +2845,7 @@ $ GET /api/state?p=harbor
       }
     ],
     "name": "harbor",
+    "next": false,
     "notes": [
       {
         "text": "The form takes 40 s end to end (measured on 5 bookings).",

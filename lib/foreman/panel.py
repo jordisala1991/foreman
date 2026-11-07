@@ -68,6 +68,7 @@ from . import (
     identity,
     install,
     lock,
+    metrics,
     notes,
     orchestrator,
     pause,
@@ -77,7 +78,7 @@ from . import (
     versions,
 )
 from .backlog import Backlog, BacklogError
-from .panel_cache import STATIC, iso_age, iso_ts, memo, page_version, sh
+from .panel_cache import NEXT, STATIC, iso_age, iso_ts, memo, next_version, page_version, sh
 from .panel_cards import backlog_body, backlog_cards, clean, doc_rel, find_card, home_file, issue_live
 from .panel_locks import OWNER, locks
 from .panel_registry import REG
@@ -104,7 +105,47 @@ IMAGES = {
     ".gif": ("image/gif", lambda b: b[:6] in (b"GIF87a", b"GIF89a")),
     ".webp": ("image/webp", lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"),
 }
+# the new panel's files (/next/<file>): the files under panel/next/ with one of these extensions, and nothing else
+# (index.html is served at /next/ only, filled in). Never SVG (see IMAGES) nor anything outside panel/next/
+NEXT_TYPES = {
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+}
+NEXT_URL = re.compile(r"\{\{U ([\w./-]+)\}\}")  # {{U vendor/preact.mjs}} in panel/next/index.html
+
+
+def next_files() -> dict[str, str]:
+    """{path under panel/next/: type} of the files /next/<path> serves: the allow-list, rebuilt when they change.
+    A request is served only when its path is one of these keys, as written (no `..`, no other folder)."""
+
+    def build() -> dict[str, str]:
+        return {
+            f.relative_to(NEXT).as_posix(): NEXT_TYPES[f.suffix]
+            for f in sorted(NEXT.rglob("*"))
+            if f.is_file() and f.suffix in NEXT_TYPES and not any(x.startswith(".") for x in f.relative_to(NEXT).parts)
+        }
+
+    return memo(("next_files", next_version()), build)
+
+
+def next_index(token: str) -> str:
+    """panel/next/index.html with {{LANG}} and each {{U path}} filled in: the URL of an allowed file with the page's
+    version and key (the import map too, so a module's imports carry them)."""
+    v, files = next_version(), next_files()
+
+    def url(m: re.Match[str]) -> str:
+        if m.group(1) not in files:
+            raise ValueError(f"panel/next/index.html names {m.group(1)}, which is not served")
+        return f"/next/{m.group(1)}?v={v}&t={quote(token)}"
+
+    html = (NEXT / "index.html").read_text()
+    return NEXT_URL.sub(url, html).replace("{{LANG}}", REG.language())
+
+
 # what an image answer carries besides its type: never read as another type, never run as a page
+NOSNIFF = {"X-Content-Type-Options": "nosniff"}
 FILE_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox"}
 
 
@@ -450,6 +491,7 @@ def project_summary(p: Project) -> Obj:
         "title": panel.get("title") or p.name,
         "wiki": bool(wiki_dir(p)),
         "wiki_first": panel.get("wiki_first") or [],
+        "next": bool(panel.get("next")),
         "teams": list(p.repos),
         "warnings": p.warnings,
     }
@@ -1031,16 +1073,21 @@ class Handler(BaseHTTPRequestHandler):
         etag: str | None = None,
         gzipped: bytes | None = None,
         headers: dict[str, str] | None = None,
+        compress: bool | None = None,
     ) -> None:
         """`gzipped`: the body already compressed (a cached answer, /api/backlog). `headers`: more headers (an
-        image's: never compressed, it already is)."""
+        image's: never compressed, it already is; `compress=True` compresses a body sent with headers anyway)."""
         b = body.encode() if isinstance(body, str) else body
         if etag and self.headers.get("If-None-Match") == etag:
             self.send_response(304)
             self.send_header("ETag", etag)
             self.end_headers()
             return
-        gz = not headers and len(b) > 1400 and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        gz = (
+            (not headers if compress is None else compress)
+            and len(b) > 1400
+            and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        )
         if gz:
             b = gzipped if gzipped is not None else gzip.compress(b, 5)
         self.send_response(code)
@@ -1077,6 +1124,19 @@ class Handler(BaseHTTPRequestHandler):
                 .replace("{{LANG}}", REG.language())
             )
             return self.send(200, html, "text/html; charset=utf-8")
+        if u.path == "/next":
+            return self.send(301, "", "text/plain; charset=utf-8", headers={"Location": "/next/?" + u.query})
+        if u.path == "/next/":
+            return self.send(200, next_index(self.token), "text/html; charset=utf-8")
+        if u.path.startswith("/next/"):
+            ctype = next_files().get(u.path[len("/next/") :])
+            if ctype is None:
+                return self.json({"error": "not found"}, 404)
+            f = NEXT / u.path[len("/next/") :]
+            data = memo(("next", f), f.read_bytes, deps=[f])
+            immutable = q.get("v", [""])[0] == str(next_version())
+            cache = "private, max-age=31536000, immutable" if immutable else "no-cache"
+            return self.send(200, data, ctype, cache=cache, headers=NOSNIFF, compress=True)
         if u.path in ASSETS:
             name, ctype = ASSETS[u.path]
             data = memo(("asset", name), (STATIC / name).read_bytes, deps=[STATIC / name])
@@ -1137,6 +1197,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(page) if page else self.json({"error": "not found"}, 404)
             if u.path == "/api/wiki/search":
                 return self.json({"results": wiki_search(p, q.get("q", [""])[0])})
+        if u.path == "/api/metrics":  # the new panel's charts: only for a product with [panel] next
+            p = REG.get(q.get("p", [""])[0])
+            if p is None or not p.section("panel").get("next"):
+                return self.json({"error": "not found"}, 404)
+            try:
+                days = int(q.get("days", ["7"])[0])
+                deps = [costs.file_of(p), Backlog(p).data_path]
+                out = memo(("metrics", p.name, days, datetime.now().date()), lambda: metrics.cost(p, days), deps=deps)
+            except ValueError as e:
+                return self.json({"error": str(e)}, 400)
+            return self.json(out)
         if u.path == "/api/state":
             name = q.get("p", [""])[0]
             p = REG.get(name)

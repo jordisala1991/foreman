@@ -246,7 +246,7 @@ name = "example"            # required: lowercase, digits, . _ -
 owner = "owner"             # who decides; named in decisions and guard messages
 language = "en"             # en | es: backlog texts, notes heading, guard and resume texts
 rules = "rules.md"          # the project's rules, read by the orchestrator and every agent
-config_schema = 23          # the foreman.toml schema the file is written for (below); default: this foreman's
+config_schema = 24          # the foreman.toml schema the file is written for (below); default: this foreman's
 owner_knows = []            # terms the owner knows, never flagged by those checks: ["CI", "PR"]
 
 [paths]
@@ -346,6 +346,8 @@ means = []                  # what publishing means here (for the rules and the 
 title = ""                  # the name the panel shows for this product (default: its registry name)
 wiki = ""                   # a folder of Markdown pages under the home: the panel's Wiki tab (read-only)
 wiki_first = []             # pages (file names without .md) listed first in the wiki's general group
+next = false                # the new panel (/next/ of the same server, same key) lists this product; off: it does
+                            # not, and nothing else changes (the panel at / is the same either way)
 
 [strings]                   # override any text of lib/foreman/i18n/<language>.json (an unknown key: a warning)
 
