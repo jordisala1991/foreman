@@ -23,8 +23,7 @@ WRAPPERS = ("time", "nice", "exec", "env", "command", "sudo", "nohup", "(", "{",
 # The foreman commands whose data arguments are not compared with [deny] (their values never run). "all" = every
 # argument after the subcommand that is not an option name; "after-action" = the same after the first argument (inbox
 # ACTION, backlog SUB); integrate: the values of these options and the 4th positional (the merge message); lock:
-# only the "what" of `lock RESOURCE run "what" command…` (the command after it is compared as it is). git commit and
-# tag: the values of -m / --message (also -am, -m=…, --message=…).
+# only the "what" of `lock RESOURCE run "what" command…` (the command after it is compared as it is).
 TEXT_ARGS = {
     "note": "all", "progress": "all", "guard": "all", "inbox": "after-action", "backlog": "after-action",
     "integrate": ("title", "body", "note", "result", "verdict", "approved"), "lock": "what",
@@ -88,7 +87,7 @@ NO_PATTERN = ("--files",)  # rg lists the files it would search: every operand i
 MESSAGES = {("gh", "pr"), ("gh", "issue")}
 MESSAGE_ACTIONS = ("create", "edit", "comment", "review")
 MESSAGE_OPTS = re.compile(r"--title|-t|--body|-b")
-COMMIT_OPTS = re.compile(r"--message|-[asnvqe]*m")  # git commit|tag: -m, -am…
+COMMIT_OPTS = re.compile(r"--message|-[asnvqe]*m")  # git commit|tag: -m, -am…, --message (also -m=…, --message=…)
 SYSTEM_BIN = ("/bin/", "/usr/bin/", "/usr/local/bin/", "/opt/homebrew/bin/")
 # Where a printer may write and keep its exemption: a literal path that is not a device (/dev/fd/3, /dev/tcp/…)
 # other than these, nor under /proc or inside a .git folder (its hooks and config run).
@@ -1606,7 +1605,7 @@ def _find(k: int, w: Sequence[Tok], p: int) -> list[Write]:
 def writes(segs: Sequence[Seg], info: Sequence[Runs]) -> list[Write]:
     """The files the line names as what it writes (Write), each with its segment: the targets of its output
     redirections (not a descriptor nor /dev/null, stdout or stderr), the operands of tee, and what each program of
-    the tables below writes (dd's of=, curl -o, wget -O, a find that deletes), behind the wrappers runs() skips. Words
+    the tables above writes (dd's of=, curl -o, wget -O, a find that deletes), behind the wrappers runs() skips. Words
     are given as they are, literal or not; what a command nested in a word or a string writes is its own line's."""
     out: list[Write] = []
     for k, (seg, r) in enumerate(zip(segs, info)):

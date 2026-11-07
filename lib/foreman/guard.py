@@ -33,8 +33,8 @@ and each line nested in it, not what ssh runs; each segment with the folders it 
 values the line gives its variables); the registry, the caller and what git says of a folder (the Resolver), once
 each. A rule that fails compares the line's text only (_either): a failure of foreman blocks only what it names.
 Not seen: a script written to a file and run later (or read as code by another program by its own convention), a
-command built inside a program (python -c, `os.system("x")` in a heredoc to python; a module file left in the folder
-by an earlier call), shell aliases and functions from outside the command, a variable whose value comes from outside
+command built inside a program (python -c, `os.system("x")` in a heredoc to python; a python program that passes the
+gate and reaches a process by a path it does not know, or a module file left by an earlier call), shell aliases and functions from outside the command, a variable whose value comes from outside
 the line, a command assembled from pieces (`a=gi; b="t x"; $a$b`).
 
 Who calls (Ctx). A command of a `[deny.grants]` group (and no `patterns`, which win for everyone) passes only for the
@@ -69,8 +69,8 @@ owner's other sessions pass), in every line _walk gives:
   cannot read is refused when it has `git … SUB` (GIT_REWRITE_TEXT) and names such a checkout or runs in one. Not
   seen: a write of .git/config or .git/hooks (the git class of the reserved files), update-ref, branch -f, patch, tar
   or unzip over it, git run by a program.
-- HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product, while
-  one exists), for an agent holdout_reader refuses (all but a planner, an unknown type too): `foreman holdout` but
+- HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product that
+  exists; with none, only `foreman holdout` is compared), for an agent holdout_reader refuses (all but a planner, an unknown type too): `foreman holdout` but
   --help or -h; a line that names such a folder as text; a word or a redirection's file (also `--opt=VALUE`'s value)
   that, expanded and joined to each folder its segment may run in, reaches one (_holdout_reach: a wildcard that may
   match it; for a program that walks, _walks, a folder that holds one, and given no path, the folder it runs in); a
@@ -1754,8 +1754,8 @@ def _walks(name: str, args: Sequence[str]) -> bool:
 
 
 def _holdout(chk: _Check) -> Hit | None:
-    """The HOLDOUT Hit of an agent's line (module doc), or None; only for a caller holdout_reader refuses, and only
-    while such a folder exists."""
+    """The HOLDOUT Hit of an agent's line (module doc), or None; only for a caller holdout_reader refuses (with no
+    such folder, only `foreman holdout` is compared)."""
     project, cmd = chk.project, chk.cmd
     try:
         dirs = holdout_dirs(project, chk.projects())

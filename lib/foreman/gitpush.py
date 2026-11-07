@@ -309,9 +309,10 @@ def branches(
     fn: dict[int, list[tuple[int, list[Tok]]]] | None = None,
 ) -> list[dict[str, frozenset[str]]]:
     """For each segment, {folder: the branches that may be checked out there} after the line's `git switch` and
-    `git checkout` before it (CURRENT: the one git says, also for a folder not in it); a switch replaces the branch
-    as a cd replaces the folder (folders()), in that one folder. fn (called()): a function's body is read with each
-    call's arguments, from the call's folders too, and only adds."""
+    `git checkout` before it (CURRENT: the one git says, also for a folder not in it). A switch replaces the branch
+    only when it surely ran in that one folder: outside any group, followed by nothing but && up to the segment (a
+    switch can fail, even first in its list); elsewhere its branch is added. fn (called()): a function's body is read
+    with each call's arguments, from the call's folders too, and only adds."""
     out: list[dict[str, frozenset[str]]] = []
     sure: dict[str, set[str]] = {}
     chain: dict[str, set[str]] | None = None
