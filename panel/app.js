@@ -668,6 +668,16 @@ function grantSay(x){
   if(k.kind === 'release') return t('grant_say_release', {what: esc(k.what)});
   return k.kind === 'deploy' ? t('grant_say_deploy') : null;
 }
+// A local ISO time in words with its day: «hoy a las 02:31», «mañana a las 02:31», else the date
+function dayAt(iso){
+  const m = String(iso || '').match(/^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)/);
+  if(!m) return '';
+  const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv'); };
+  const k = m[1] === day(0) ? 'day_today' : m[1] === day(-1) ? 'day_yesterday' : m[1] === day(1) ? 'day_tomorrow' : 'day_other';
+  return esc(t(k, {d: m[1], h: m[2]}));
+}
+// the notice of a request that did not arrive («notified» as hooks_mod records it: sent:*, no:*, error, unknown)
+const grantNotice = x => /^(no:|error)/.test(x.notified || '') ? t('grant_not_told') : x.notified === 'unknown' ? t('grant_told_unknown') : '';
 const grantWho = x => esc(x.orchestrator || t('orchestrator'));
 // «See» on the permission notice: the You tab, at the requests
 function seeGrants(){ tab('you'); const e = $('grantreq'); if(e && e.scrollIntoView) e.scrollIntoView(); }
@@ -675,12 +685,13 @@ function seeGrants(){ tab('you'); const e = $('grantreq'); if(e && e.scrollIntoV
 // unanswered: what it will do in plain words, «Yes» (the minutes it says) and «No», the command folded below; then
 // what is allowed now. Nothing when the products shown have none.
 function renderGrants(d){
-  const asks = d.grants.filter(x => x.pending), live = d.grants.filter(x => !x.pending);
-  const btns = x => canWrite(x.p) ? `<button data-g="${esc(x.group)}" data-p="${esc(x.p)}" data-min="${x.minutes}" onclick="grantApprove(this)">${t('grant_approve', {n: x.minutes})}</button>`
-    + `<button class="sec" data-g="${esc(x.group)}" data-p="${esc(x.p)}" onclick="grantDeny(this)">${t('grant_no')}</button>` : '';
+  const asks = d.grants.filter(x => x.pending || x.orphan), live = d.grants.filter(x => !x.pending && !x.orphan);
+  const btns = x => !canWrite(x.p) ? '' : x.orphan ? `<button class="sec" data-g="${esc(x.group)}" data-p="${esc(x.p)}" onclick="grantDeny(this)">${t('grant_discard')}</button>`
+    : `<button data-g="${esc(x.group)}" data-p="${esc(x.p)}" data-min="${x.minutes}" onclick="grantApprove(this)">${t('grant_approve', {n: x.minutes})}</button>`
+    + `<button class="sec" data-g="${esc(x.group)}" data-p="${esc(x.p)}" onclick="grantDeny(this)">${t('grant_no')}</button>`;
   $('grantreq').innerHTML = d.grants.length ? sect(t(asks.length ? 'grant_requests' : 'grants_allowed'), asks.map(x => { const say = grantSay(x); return card(
       `<div class="ctitle"><span>${ptag(x.p)}${say ? t('grant_req_say', {who: grantWho(x), say}) : t('grant_req_title', {group: esc(x.group), who: grantWho(x)})}</span></div>`
-      + `<div class="csub">${t('grant_req_when', {at: esc(hhmmIso(x.at)), until: esc(hhmmIso(x.expires))})}</div>`
+      + `<div class="csub">${x.orphan ? t('grant_orphan') + ' · ' : ''}${t('grant_req_when', {at: dayAt(x.at), until: dayAt(x.expires)})}${grantNotice(x) ? ` · <span class="warn">${grantNotice(x)}</span>` : ''}</div>`
       + `<div class="btns">${btns(x)}</div>`
       + `<details class="gcmd"><summary>${t('grant_see_cmd')}</summary><div class="mono">${esc(x.command)}</div></details>`); }).join('')
     + (live.length ? list(live.map(x => lrow({icon: dot('var(--ok)'), name: ptag(x.p), title: t('grant_live', {group: esc(x.group), until: esc(hhmmIso(x.until))}),
