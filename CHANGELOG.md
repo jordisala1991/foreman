@@ -18,6 +18,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 - `[panel] next` (default `false`), the product's own; `config_schema` 24.
 
+### Fixed
+
+- `foreman agents --stop` on a session agent gives `claude stop` the short session id (the 8 characters `claude agents --json` shows as `id`); with the whole id Claude Code answered «No job matching…» and the session kept running.
+
 ## [0.65.0] - 2026-11-07
 
 ### Added

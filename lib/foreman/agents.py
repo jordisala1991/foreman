@@ -141,12 +141,13 @@ def refresh_sessions(project: Project) -> bool:
 
 
 def stop_session(session_id: str) -> str | None:
-    """`claude stop SESSION_ID`: None when it stopped, else why not (for the one who asked)."""
+    """`claude stop`: None when it stopped, else why not (for the one who asked). Claude Code's job commands take the
+    short id (the first 8 characters, as `claude agents --json` shows it as `id`), not the whole session id."""
     exe = shutil.which("claude")
     if not exe:
         return "no `claude` command in PATH"
     try:
-        r = subprocess.run([exe, "stop", session_id], capture_output=True, text=True, timeout=30, check=False)
+        r = subprocess.run([exe, "stop", session_id[:8]], capture_output=True, text=True, timeout=30, check=False)
     except (OSError, subprocess.SubprocessError) as e:
         return str(e)
     if r.returncode:
