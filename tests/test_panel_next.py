@@ -372,7 +372,7 @@ class NextPageTest(ProjectCase):
             text=True,
             timeout=60,
             check=False,
-            env={**os.environ, "TZ": "Europe/Madrid"},
+            env={**os.environ, "TZ": PANEL_TZ},
         )
         self.assertEqual(r.returncode, 0, r.stderr)
         out = json.loads(r.stdout.strip().splitlines()[-1])
@@ -869,9 +869,14 @@ class NextPageTest(ProjectCase):
         self.assertEqual(out["charts"], [])
 
 
+PANEL_TZ = "Europe/Madrid"  # the time zone node runs in for these tests, whatever the machine's own
+
+
 def soon(minutes):
-    """A local ISO time `minutes` from now (a little over, so rounding gives `minutes`)."""
-    return (datetime.now() + timedelta(minutes=minutes, seconds=20)).strftime("%Y-%m-%dT%H:%M:%S")
+    """An ISO time `minutes` from now (a little over, so rounding gives `minutes`) on the wall clock of PANEL_TZ,
+    which is how the screen reads it: the machine's own zone (UTC on the CI) must not matter."""
+    t = datetime.now(ZoneInfo(PANEL_TZ)) + timedelta(minutes=minutes, seconds=20)
+    return t.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 QUESTION = {
