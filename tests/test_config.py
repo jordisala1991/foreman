@@ -506,7 +506,7 @@ worktree = "{{worktrees}}/{{repo}}-{{name}}"
                 not f.is_file()
                 or snapshot.excluded(rel)
                 or "__pycache__" in rel.parts
-                or "node_modules" in rel.parts
+                or rel.parts[:3] == ("panel", "next-src", "node_modules")
                 or any(d.startswith(".") for d in rel.parts[:-1])
                 or f.suffix == ".pyc"
             ):

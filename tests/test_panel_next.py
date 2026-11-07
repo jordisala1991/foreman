@@ -179,6 +179,25 @@ class NextFilesTest(PanelCase):
         for name, sha in recorded.items():
             self.assertEqual(hashlib.sha256((NEXT / name).read_bytes()).hexdigest(), sha, f"panel/next/{name}")
 
+    def test_the_wide_screen_hides_no_class_the_chart_draws(self):
+        """The wide-screen rule that hides the phone's header and bar (`display: none`) must not match what the
+        chart's SVG draws: it once hid the bar figures through the shared class `top`."""
+        css = (NEXT / "app.css").read_text()
+        wide = css[
+            css.index("@media (min-width:900px)")
+            if "@media (min-width:900px)" in css
+            else css.index("@media (min-width: 900px)") :
+        ]
+        hidden = set()
+        for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", wide):
+            if re.search(r"display:\s*none", body):
+                hidden |= set(re.findall(r"\.([\w-]+)", sel))
+        drawn = set()
+        for f in (SRC / "src/charts").glob("*.tsx"):
+            for m in re.findall(r'className="([^"]+)"', f.read_text()):
+                drawn |= set(m.split())
+        self.assertEqual(hidden & drawn, set())
+
     def test_no_request_off_the_machine(self):
         for f in ("index.html", "app.css"):
             self.assertEqual(URL.findall((NEXT / f).read_text()), [], f"panel/next/{f} names a URL")

@@ -153,7 +153,7 @@ main { display: flex; flex-direction: column; gap: 24px; padding: 12px 16px 124p
 .plot .seg.opus { fill: var(--opus); } .plot .seg.sonnet { fill: var(--sonnet); }
 .plot .seg.haiku { fill: var(--haiku); } .plot .seg.other { fill: var(--other); }
 .plot .zero { fill: var(--zero); } .plot .none { fill: var(--none); }
-.plot .top { font-size: 11px; font-weight: 600; fill: var(--text); }
+.plot .bar-figure { font-size: 11px; font-weight: 600; fill: var(--text); }
 .plot .hit { fill: transparent; cursor: pointer; }
 .tip {
   position: absolute; top: -6px; z-index: 2; min-width: 150px; padding: 10px 12px; border-radius: 10px;

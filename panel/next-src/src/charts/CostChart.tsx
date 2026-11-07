@@ -156,7 +156,7 @@ export function CostChart({ m }: { m: Metrics }) {
               });
               const tallest = Math.max(...under.map((u) => h(u.usd)));
               return (
-                <text className="top" x={left + w / 2} y={Math.max(11, PH - tallest - 5)} textAnchor="middle">
+                <text className="bar-figure" x={left + w / 2} y={Math.max(11, PH - tallest - 5)} textAnchor="middle">
                   {text}
                 </text>
               );
