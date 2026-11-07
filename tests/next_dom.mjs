@@ -208,6 +208,7 @@ const layouts = []; // per hash step: the distinct states of the screen header w
 const struct = (n) => (n.nodeType === 1 ? n.localName + "." + (n.attributes.class || "") + "[" + n.childNodes.map(struct).join(",") + "]" : "");
 const duringNav = []; // the text 20 ms after each {hash, delay} step: the new screen while its answers are on their way
 for (const st of scenario.steps || []) {
+  if (st.answers) Object.assign(scenario.answers, st.answers); // the server's answers change before this step
   if (st.hash) { // the owner moves to another screen (the hash changes) and the answers take st.delay ms
     globalThis.location.hash = st.hash;
     delayAfter = st.delay || 0;
@@ -220,7 +221,7 @@ for (const st of scenario.steps || []) {
     const seen = [];
     for (let waited = 0; waited < delayAfter + 60; waited += 10) {
       const h = one(app, (n) => cls(n, "screenhead"));
-      const s = { title: h ? words(one(h, (n) => n.localName === "h1") || { nodeType: 3, data: "" }) : "", head: h ? struct(h) : "", loading: /Cargando|Loading/.test(words(app)), skeleton: !!one(app, (n) => cls(n, "skel")), cards: all(app, (n) => cls(n, "card")).length };
+      const s = { title: h ? words(one(h, (n) => n.localName === "h1") || { nodeType: 3, data: "" }) : "", head: h ? struct(h) : "", loading: /Cargando|Loading/.test(words(app)), skeleton: !!one(app, (n) => cls(n, "skel")), cards: all(app, (n) => cls(n, "card")).length, agents: all(app, (n) => n.localName === "article" && cls(n, "agent")).length };
       if (!seen.length || JSON.stringify(seen[seen.length - 1]) !== JSON.stringify(s)) seen.push(s);
       await new Promise((r) => setTimeout(r, 10));
     }
@@ -263,6 +264,11 @@ if (scenario.pick) { // the product picker moved to another entry, then the slow
   sel.value = scenario.pick;
   sel.dispatch("change");
   await new Promise((r) => setTimeout(r, scenario.wait || 300));
+}
+if (scenario.picks) { // several picks of the picker one after the other without waiting, then the slow answers arrive
+  const sel = one(app, (n) => n.localName === "select");
+  for (const v of scenario.picks) { sel.value = v; sel.dispatch("change"); }
+  await new Promise((r) => setTimeout(r, scenario.wait || 600));
 }
 if (scenario.tap) {
   const g = one(app, (n) => n.localName === "g" && n.attributes["data-day"] === scenario.tap);
@@ -334,6 +340,7 @@ console.log(JSON.stringify({
   })),
   done: all(app, (n) => n.localName === "li" && n.parentNode && cls(n.parentNode, "done")).map(words),
   nobody: words(one(app, (n) => cls(n, "nobody")) || { nodeType: 3, data: "" }),
+  picker: (one(app, (n) => n.localName === "select") || {}).value,
   skeletons: all(app, (n) => cls(n, "skel")).length, // the blocks that stand where a screen's content is on its way
   windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,

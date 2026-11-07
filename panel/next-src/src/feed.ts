@@ -35,7 +35,7 @@ function snap<T>(q: {
   isFetching: boolean;
   dataUpdatedAt: number;
 }): Snap<T> {
-  const failed = q.isError && (q.data !== undefined || !q.isFetching);
+  const failed = q.isError;
   return { data: q.data as T | undefined, failed, since: failed && q.dataUpdatedAt ? new Date(q.dataUpdatedAt) : null };
 }
 
@@ -44,15 +44,11 @@ export function refresh<T = unknown>(path: string): Promise<T> {
   return queryClient.fetchQuery({ ...feed(path, 0), staleTime: 0 }) as Promise<T>;
 }
 
-// Has the data of `paths` in the cache before a screen opens: what is there is not waited for (the screen shows it and
-// the read behind it replaces it if it differs); what is not, is. A failure is the screen's to show.
+// Has an answer of `paths` at most a second old in the cache before a screen opens, so the screen draws once, with
+// current data (the old screen stays in view while the reads are on their way; an old cache is never painted and then
+// swapped). A failure is the screen's to show: it draws what it had.
 export function warm(paths: string[]): Promise<void> {
-  const waits = paths.map((p) => {
-    const have = queryClient.getQueryData(["feed", p]) !== undefined;
-    const done = queryClient.prefetchQuery({ ...feed(p, 0), staleTime: 1000 });
-    return have ? undefined : done;
-  });
-  return Promise.all(waits).then(() => undefined);
+  return Promise.all(paths.map((p) => queryClient.prefetchQuery({ ...feed(p, 0), staleTime: 1000 }))).then(() => undefined);
 }
 
 // The snapshots of several paths (null: nothing to read); the array and each snapshot keep their identity until

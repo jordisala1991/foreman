@@ -68,7 +68,9 @@ const LIMIT = 3000;
 export function warmTab(tab: Tab, name?: string): Promise<void> {
   const paths = pathsOf(tab, name ?? chosen(shown()));
   if (!paths.length) return Promise.resolve();
-  return Promise.race([warm(paths), new Promise<void>((r) => setTimeout(r, LIMIT))]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<void>((r) => (timer = setTimeout(r, LIMIT)));
+  return Promise.race([warm(paths), late]).finally(() => clearTimeout(timer));
 }
 
 // the other screens' data, one screen at a time, once the page has been quiet for a moment

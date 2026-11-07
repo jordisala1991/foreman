@@ -2,7 +2,7 @@
 // four sections with their badges, the «More» group); on the phone the picker and the product's status pill on top
 // and a bottom bar of five tabs. The theme follows the system (app.css); there is no switch.
 import { Outlet, useLocation, useParams } from "@tanstack/react-router";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Agents } from "./Agents";
 import { Boundary } from "./Boundary";
 import { How } from "./How";
@@ -12,7 +12,7 @@ import { Wiki } from "./more/Wiki";
 import type { MoreProduct } from "./more/types";
 import { Home } from "./Home";
 import { Needs } from "./Needs";
-import { ScreenHead, Skel, StatusPill, productState } from "./head";
+import { ScreenHead, StatusPill, productState } from "./head";
 import { Chevron, Icon } from "./icons";
 import { useFeedPart } from "./feed";
 import { oldPanel, t, type Key, type Product, type Projects } from "./lib";
@@ -107,21 +107,6 @@ const useShell = (): Ctx => {
   return c;
 };
 
-const TITLE: Partial<Record<Tab, Key>> = { backlog: "bl_title", wiki: "wiki_title", system: "sys_title" };
-
-// What a screen shows while its data is on its way (the router shows it only after a short wait, and keeps the old
-// screen until then): its own header, final from the first frame, and a block where the content comes
-export function Pending() {
-  const { products, p, everyone } = useShell();
-  const tab = tabOf(useParams({ strict: false })._splat);
-  return (
-    <div className="screen">
-      <ScreenHead title={t(TITLE[tab] ?? (`tab_${tab}` as Key))} product={p} all={everyone && (tab === "home" || tab === "needs") ? products : undefined} sub="" />
-      <Skel h={240} />
-    </div>
-  );
-}
-
 // the screen of the route: the tab is the first part of the path, the rest is the screen's own route (#/backlog/AB-1)
 export function Screen() {
   const { products, p, everyone, pick } = useShell();
@@ -164,6 +149,7 @@ export function Shell() {
   const path = useLocation({ select: (l) => l.pathname });
   const tab = tabOf(path.replace(/^\//, ""));
   const [picked, setPicked] = useState<string | undefined>(() => chosen(products)); // what the picker shows
+  const last = useRef(0);
   const [name, setName] = useState<string | undefined>(picked); // what the screens show: it moves when their data is there
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -176,7 +162,11 @@ export function Shell() {
   const pick = (n: string) => {
     localStorage.setItem(KEPT, n);
     setPicked(n);
-    void warmTab(tab, n).then(() => setName(n));
+    const mine = ++last.current;
+    // only the last pick moves the screens, whatever order the reads come back in
+    void warmTab(tab, n).then(() => {
+      if (mine === last.current) setName(n);
+    });
   };
   // what waits: the questions, the permissions to approve and the orchestrator's unread messages
   const sum = (f: (x: Product) => number | undefined) => scope.reduce((n, x) => n + (f(x) ?? 0), 0);

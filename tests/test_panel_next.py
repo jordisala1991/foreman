@@ -353,6 +353,11 @@ class NextFilesTest(PanelCase):
             "d3-scale",
             "@tanstack/react-query",
             "@tanstack/react-router",
+            "@tanstack/query-core",
+            "@tanstack/router-core",
+            "@tanstack/history",
+            "@tanstack/store",
+            "@tanstack/react-store",
         ):
             self.assertRegex(text, rf"(?m)^{re.escape(package)} \d+\.\d+\.\d+ \((MIT|ISC)\)$")
 
