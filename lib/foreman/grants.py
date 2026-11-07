@@ -14,8 +14,11 @@ Without the module (or while its side of the question is not there) no grant exi
   pid and start time: it ends when the mark moves (relief, /clear to another process) or the process restarts.
 - `cooldowns`: {group: {session, until}}: after the owner's no, COOLDOWN_S (10 min, fixed) in which the module does
   not ask again for that group in that session (a timeout or a dismissal sets none).
-- `pending`: {group: {at, session, pid, pid_start, orchestrator, command, tool_use_id}}: the last request of a group
-  that went unanswered (the question timed out), kept so the owner can answer it later: from foreman's panel
+- `pending`: {group: {at, session, pid, pid_start, orchestrator, command, tool_use_id, part?, summary?, notified?}}:
+  the last request of a group that went unanswered (the question timed out), kept so the owner can answer it later
+  (`part`: the part of `command` that runs the group, what the question showed; `summary`: what it will do in plain
+  words, the question's own (hooks_mod), absent when there were none or `part` was cut at approved.COMMAND_CHARS;
+  `notified`: how the question's notice went): from foreman's panel
   (approve(), deny()) or late in the chat, the question still drawn (take_late(), drop_late()). It lives PENDING_H
   (24 h, fixed) after `at`; the owner's answer, a grant of the group, a newer request of the group or `foreman
   permissions grants off [GROUP] [--pending]` clears it sooner. Only a request of the marked session and process can
@@ -45,6 +48,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import shlex
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
@@ -242,6 +246,46 @@ def pend(project: Project, group: str, req: dict[str, Any]) -> None:
     with _locked(project) as d:
         d["pending"][group] = {"at": _now(), **req}
         _write(project, d)
+
+
+_SHELL_CHARS = set(";&|<>`$()\n\r{}*?~!#")
+_UPSTREAM = ("-u", "--set-upstream")  # a push option that changes nothing pushed: words still say what it does
+
+
+def say(command: str) -> dict[str, Any] | None:
+    """What one command does, for plain words (the panel, the hooks module's question), or None when it is not one of
+    a few plain shapes. Conservative on purpose, as the owner's yes rests on it: any shell operator or expansion, any
+    other option, a `:ref` or `+ref` (deletes, forces), or a command of approved.COMMAND_CHARS characters or more (a
+    stored command cut there: its end is unknown) gives None.
+    `git [-C DIR] push [-u] REMOTE [REF…]` → {kind: push, to: REMOTE, refs} (push_all with no refs; `in`: DIR when
+    given); `gh release create TAG` → release; `make|npm|yarn|pnpm|just [run] deploy` → deploy."""
+    from . import approved
+
+    if not command or len(command) >= approved.COMMAND_CHARS or _SHELL_CHARS & set(command):
+        return None
+    try:
+        w = shlex.split(command)
+    except ValueError:
+        return None
+    where = {}
+    if w[:2] == ["git", "-C"] and len(w) > 3 and w[3] == "push":
+        where, w = {"in": w[2]}, ["git", *w[3:]]
+    if w[:2] == ["git", "push"]:
+        w = [x for x in w if x not in _UPSTREAM]
+    if any(x.startswith("-") for x in w[1:]):
+        return None
+    if w[:2] == ["git", "push"] and len(w) >= 3:
+        refs = w[3:]
+        if any(r[:1] in (":", "+") or ":" in r for r in refs):
+            return None
+        return (
+            {"kind": "push", "to": w[2], "refs": refs, **where} if refs else {"kind": "push_all", "to": w[2], **where}
+        )
+    if w[:3] == ["gh", "release", "create"] and len(w) == 4:
+        return {"kind": "release", "what": w[3]}
+    if w[0] in ("make", "npm", "yarn", "pnpm", "just") and w[1:] in (["deploy"], ["run", "deploy"]):
+        return {"kind": "deploy"}
+    return None
 
 
 def pending(project: Project) -> dict[str, dict[str, Any]]:
