@@ -1020,6 +1020,8 @@ const activityHtml = acts => acts.length ? acts.map(m => `<div class="tline"><sp
   : `<div class="muted">${t('no_moves')}</div>`;
 const storyLink = id => `<a class="slink" data-k="h" data-key="${esc(id)}">${esc(id)}</a>`;
 const agentLink = n => { const a = lastData.agents.find(x => x.name===n); return a ? `<a class="slink" style="color:${acol(n)}" data-k="ag" data-key="${esc(a.id)}">${esc(n)}</a>` : `<b style="color:${acol(n)}">${esc(n)}</b>`; };
+// a row of an issue's «Documents»: what it is (plan, report of T1, review of T1 round 2 with its open findings…) and its file
+const docRow = d => `<a data-doc="${esc(d.doc)}"><span class="muted">${esc(t('doc_' + d.kind, {sub: d.sub || '', id: d.id || '', round: d.round || '', open: d.open ?? ''}))}${d.kind==='review' && d.open!=null ? ' · ' + esc(t('doc_open', {n: d.open})) : ''}</span> ${esc(d.doc.split('/').pop())}</a>`;
 const repDoc = r => typeof r === 'string' ? r : r.doc;
 const VIEWS = {
   ep(key){
@@ -1072,7 +1074,7 @@ const VIEWS = {
       // an issue is hypothesis + plan + reports + result, top to bottom
       + (oc && (oc.claim || oc.criterion) ? sect(t('hypothesis'), `<div class="md">${oc.claim ? `${storyLinks(oc.claim)} · ` : ''}${oc.criterion ? `<span class="muted">${t('criterion_lc')}</span> ${storyLinks(oc.criterion)}` : ''}</div>`, null, (oc.aliases || []).join(', ')) : '')
       + (plan ? sect(t('plan'), `<a class="dl" data-doc="${esc(plan)}">${esc(plan.split('/').pop())}</a><details class="sect"><summary>${t('read_here')}</summary><div id="mplan"><span class="muted">${t('loading_lc')}</span></div></details>`) : '')
-      + ((c.reports||[]).length ? sect(t('reports'), `<div class="dlist">${c.reports.map(r => `<a data-doc="${esc(repDoc(r))}">${r.sub ? `${esc(r.sub)} · ` : ''}${esc(repDoc(r))}</a>`).join('')}</div>`) : '')
+      + ((c.docs||[]).length ? sect(t('documents'), `<div class="dlist">${c.docs.map(docRow).join('')}</div>`, c.docs.length) : '')
       + (c.result || oc?.verdict ? sect(t('result'), `<div class="md">${oc?.verdict ? `<b>${esc(oc.verdict)}</b>${c.result ? ': ' : ''}` : ''}${c.result ? storyLinks(c.result) : ''}</div>`) : '')
       + ((c.subs || []).length ? sect(t('subs'), list(subRows(c)), subCount(c)) : '')
       + sect(t('description'), `<div class="md">${det}</div>`)

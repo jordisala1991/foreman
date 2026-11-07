@@ -213,7 +213,14 @@ $ GET /api/strings?lang=es
   "derived": "(de sus issues)",
   "description": "Descripción",
   "disk_free": "libres en disco de {gb}",
+  "doc_cited": "Citado",
+  "doc_decision": "Pregunta {id}",
   "doc_failed": "No se pudo cargar {path}",
+  "doc_open": "{n} abiertos",
+  "doc_plan": "Plan",
+  "doc_report": "Informe {sub}",
+  "doc_review": "Revisión {sub} · ronda {round}",
+  "documents": "Documentos",
   "done_lc": "hecho",
   "draft": "borrador",
   "drag": "Arrastrar para reordenar",
@@ -425,7 +432,6 @@ $ GET /api/strings?lang=es
   "release": "Soltar",
   "repo_missing": "No encuentro el repositorio {key}.",
   "report": "Informe del orquestador",
-  "reports": "Informes",
   "resource": "Recurso",
   "resources": "Recursos",
   "result": "Resultado",
@@ -654,7 +660,14 @@ $ GET /api/strings?lang=en
   "derived": "(from its issues)",
   "description": "Description",
   "disk_free": "free on disk of {gb}",
+  "doc_cited": "Cited",
+  "doc_decision": "Question {id}",
   "doc_failed": "Could not load {path}",
+  "doc_open": "{n} open",
+  "doc_plan": "Plan",
+  "doc_report": "Report {sub}",
+  "doc_review": "Review {sub} · round {round}",
+  "documents": "Documents",
   "done_lc": "done",
   "draft": "draft",
   "drag": "Drag to reorder",
@@ -866,7 +879,6 @@ $ GET /api/strings?lang=en
   "release": "Release",
   "repo_missing": "Repository {key} not found.",
   "report": "Orchestrator's report",
-  "reports": "Reports",
   "resource": "Resource",
   "resources": "Resources",
   "result": "Result",
@@ -1147,6 +1159,7 @@ $ GET /api/backlog?p=faro
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "FA-3",
               "outcome": {
                 "criterion": "un aviso llega en un minuto"
@@ -1166,6 +1179,7 @@ $ GET /api/backlog?p=faro
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "FA-2",
               "outcome": {
                 "criterion": "cada faro sale en el mapa"
@@ -1196,6 +1210,7 @@ $ GET /api/backlog?p=faro
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "FA-4",
               "outcome": {
                 "criterion": "notas ordenadas"
@@ -1387,6 +1402,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-3",
               "outcome": {
                 "criterion": "the feed updates hourly"
@@ -1406,6 +1422,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-2",
               "outcome": {
                 "criterion": "a card payment goes through"
@@ -1428,6 +1445,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-5",
               "plan": [],
               "project": "A1",
@@ -1447,6 +1465,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-4",
               "outcome": {
                 "criterion": "notes tidy"
@@ -1737,6 +1756,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-3",
                 "outcome": {
                   "criterion": "un aviso llega en un minuto"
@@ -1756,6 +1776,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-2",
                 "outcome": {
                   "criterion": "cada faro sale en el mapa"
@@ -1786,6 +1807,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-4",
                 "outcome": {
                   "criterion": "notas ordenadas"
@@ -1849,6 +1871,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-3",
                 "outcome": {
                   "criterion": "the feed updates hourly"
@@ -1868,6 +1891,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-2",
                 "outcome": {
                   "criterion": "a card payment goes through"
@@ -1890,6 +1914,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-5",
                 "plan": [],
                 "project": "A1",
@@ -1909,6 +1934,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-4",
                 "outcome": {
                   "criterion": "notes tidy"
@@ -1949,6 +1975,7 @@ $ GET /api/issue?p=faro&id=FA-2
   "issue": {
     "blocked": "",
     "detail": "",
+    "docs": [],
     "id": "FA-2",
     "outcome": {
       "criterion": "cada faro sale en el mapa"
@@ -1979,6 +2006,17 @@ $ GET /api/issue?p=faro&id=FA-1
     "blocked": "",
     "closed": "<TODAY>",
     "detail": "Nota añadida al detalle.",
+    "docs": [
+      {
+        "doc": "reviews/2020-01-10-plan-FA-1.md",
+        "kind": "plan"
+      },
+      {
+        "doc": "reviews/2020-01-12-fa1-t1.md",
+        "kind": "report",
+        "sub": "T1"
+      }
+    ],
     "id": "FA-1",
     "outcome": {
       "criterion": "las cartas se leen en menos de un segundo",
@@ -2818,6 +2856,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-2",
                 "outcome": {
                   "criterion": "cada faro sale en el mapa"
@@ -2840,6 +2879,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-3",
                 "outcome": {
                   "criterion": "un aviso llega en un minuto"
@@ -2867,6 +2907,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-4",
                 "outcome": {
                   "criterion": "notas ordenadas"
@@ -2930,6 +2971,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-4",
                 "outcome": {
                   "criterion": "notes tidy"
@@ -2952,6 +2994,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-3",
                 "outcome": {
                   "criterion": "the feed updates hourly"
@@ -2971,6 +3014,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-2",
                 "outcome": {
                   "criterion": "a card payment goes through"
@@ -2993,6 +3037,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-5",
                 "plan": [],
                 "project": "A1",

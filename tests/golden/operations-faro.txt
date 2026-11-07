@@ -692,6 +692,8 @@ Criterio de aceptación: cada faro sale en el mapa
 Resultado: las cartas se leen en 0,4 s
 relations: blocked by FA-1 · related FA-3
   T1 Lector de cartas ✓ ba1cd92 agente ag6, rama `fa2/t1` informe reviews/2020-01-20-fa2-t1.md
+documents:
+  report T1: reviews/2020-01-20-fa2-t1.md
 
 ######## faro: locks, waits and time limits
 $ FOREMAN_WHO=ag1 foreman --project faro lock widget acquire "a test"
