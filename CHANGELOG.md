@@ -35,8 +35,9 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   path built of literals stands for that path: a piece joined onto it (`base / "foreman.toml"`,
   `os.path.join(base, "foreman.toml")`) or written inside an f-string (`f"{base}/foreman.toml"`) makes the whole
   path, whatever comes between. A string's `.replace(a, b)` with a variable or a regex (`s.replace(old, "b")`,
-  `.replace(/\t/g, " ")`) is no longer taken for a write in code that never names `os`, so reading a reserved file
-  with it passes; `os.replace` (also as `import os as o`) and a Path's `replace` still write. Perl's `open` with
+  `.replace(/\t/g, " ")`) is no longer taken for a write in code that never names `os`, `importlib` or `__import__`,
+  so reading a reserved file with it passes; `os.replace` (also as `import os as o`, or imported by a name the code
+  builds) and a Path's `replace` still write. Perl's `open` with
   `"<"` reads. A line the guard cannot read that writes to `~/…` now reads `~` as the home, as it already read
   `$HOME`: such a write to a reserved file is refused. The three rules that find a path written as text (reserved
   files, main checkouts, hidden checks) now read the text one way.
