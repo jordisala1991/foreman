@@ -87,3 +87,37 @@ class IssueDocsTest(ProjectCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CardNewFieldsTest(IssueDocsTest):
+    """What the new panel's backlog reads from a card: its short name, the short reason of a block, what is
+    integrated and the title of each document."""
+
+    def test_short_reason_integrated_and_titles(self):
+        (self.home / "reviews/cited.md").write_text("# The cited page\n\ntext\n")
+        with self.b.mutate() as d:
+            self.b.edit(d, "AB-1", short="One short")
+            lst, k, _ = self.b.find(d, "AB-10")
+            lst[k]["blocked"] = "espera a tidepool y quayside: que confirmen"
+            self.b.set_sub(d, "AB-1", "T1", commit="abcdef1")
+            self.b.set_sub(d, "AB-1", "T3", status="in progress")
+        c = self.card()
+        self.assertEqual(c["short_name"], "One short")
+        self.assertEqual(c["integrated"], {"n": 1, "of": 3, "commits": ["abcdef1"]})
+        titles = {d["doc"]: d.get("title") for d in c["docs"]}
+        self.assertEqual(titles["reviews/cited.md"], "The cited page")
+        self.assertIsNone(titles["reviews/2026-11-03-ab-1-t1.md"])  # no heading: no title
+        ten = next(i for i in panel_cards.backlog_cards(self.project)["projects"][0]["issues"] if i["id"] == "AB-10")
+        self.assertEqual(ten["why"], "espera a tidepool y quayside")
+        self.assertNotIn("integrated", ten)
+        self.assertNotIn("short_name", ten)
+
+    def test_why_short(self):
+        why = panel_cards.why_short
+        self.assertEqual(why(""), "")
+        self.assertEqual(why("es operar tidepool en su propia sesión: cuándo y cómo lo decide Ana"), "lo decide Ana")
+        self.assertEqual(
+            why("Solo queda T4, medida tras desplegar en los cuatro productos (los otros están parados)"),
+            "Solo queda T4…",
+        )
+        self.assertLessEqual(len(why("x " * 80)), panel_cards.WHY_MAX)

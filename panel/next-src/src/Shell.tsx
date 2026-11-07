@@ -4,6 +4,10 @@
 import { useEffect, useState } from "react";
 import { Agents } from "./Agents";
 import { How } from "./How";
+import { Backlog } from "./more/Backlog";
+import { System } from "./more/System";
+import { Wiki } from "./more/Wiki";
+import type { MoreProduct } from "./more/types";
 import { Home } from "./Home";
 import { Needs } from "./Needs";
 import { ScreenHead, StatusPill, productState } from "./head";
@@ -113,12 +117,17 @@ export function Shell({ all: initial }: { all: Product[] }) {
   }, []);
   const products = every.filter((p) => p.next && !p.broken);
   const [tab, setTab] = useState<Tab>(route);
+  const [, setHash] = useState(location.hash); // a screen's own route (#/backlog/AB-1) re-renders it
   const [name, setName] = useState<string | undefined>(() => {
     const kept = localStorage.getItem(KEPT);
     return kept === ALL || products.some((p) => p.name === kept) ? (kept ?? undefined) : products[0]?.name;
   });
   useEffect(() => {
-    const go = () => setTab(route());
+    const go = () => {
+      setTab(route());
+      setHash(location.hash);
+      window.scrollTo(0, 0);
+    };
     addEventListener("hashchange", go);
     return () => removeEventListener("hashchange", go);
   }, []);
@@ -145,6 +154,16 @@ export function Shell({ all: initial }: { all: Product[] }) {
       <Needs key={scope.map((x) => x.name).join()} scope={scope} all={everyone} />
     ) : tab === "how" ? (
       everyone ? <Soon tab={tab} product={p} all /> : <How product={p} />
+    ) : tab === "backlog" || tab === "wiki" || tab === "system" ? (
+      everyone ? (
+        <Soon tab={tab} product={p} all />
+      ) : tab === "backlog" ? (
+        <Backlog product={p as MoreProduct} />
+      ) : tab === "wiki" ? (
+        <Wiki product={p as MoreProduct} products={products as MoreProduct[]} pick={pick} />
+      ) : (
+        <System product={p as MoreProduct} />
+      )
     ) : tab === "agents" ? (
       <Agents
         product={everyone ? joint(products) : p}

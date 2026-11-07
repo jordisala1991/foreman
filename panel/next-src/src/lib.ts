@@ -1,6 +1,11 @@
 // What every screen shares: the texts, the panel's API with its key, and the formats of dates and dollars.
-import en from "./strings/en.json";
-import es from "./strings/es.json";
+import enBase from "./strings/en.json";
+import esBase from "./strings/es.json";
+import enMore from "./strings/more.en.json"; // Backlog, Wiki and Sistema have their own files
+import esMore from "./strings/more.es.json";
+
+const es = { ...esBase, ...esMore };
+const en = { ...enBase, ...enMore };
 
 export type Key = keyof typeof es;
 const LANGS: Record<string, Record<Key, string>> = { es, en };
@@ -9,7 +14,7 @@ export const lang = (): string => document.documentElement.lang || "en";
 
 // a text of strings/<language>.json, its {name} placeholders filled from `vars`
 export function t(key: Key, vars?: Record<string, string | number>): string {
-  const text = (LANGS[lang()] ?? en)[key];
+  const text = (LANGS[lang()] ?? en)[key] as string | undefined ?? key; // an unknown key (a status the server adds) shows as it is, not a blank screen
   return text.replace(/\{(\w+)\}/g, (m, k: string) => (vars && k in vars ? String(vars[k]) : m));
 }
 

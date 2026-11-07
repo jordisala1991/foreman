@@ -109,6 +109,11 @@ it reads. `/api/agents?p=NAME|*` (a product with the switch on, or `*` for all o
 `task` (its issue's short name), `issue`, `sub`, `type`, `family`, `status`, `since`, `sign`, `msg`, `session`), `done` (the runs of `costs.jsonl` that ended today, of the product's own issues, latest first, up to 50, not
 those running again), `projects` and `next_pass` (the last pass plus `[loop] every_min`, for one product). Nothing in
 `panel/next/` names a URL off the machine: no fonts, no CDN.
+Its «More» screens (`panel/next-src/src/more/`: Backlog, Wiki, System, with their own strings and stylesheet) read the same
+endpoints as the page at `/` and keep their route in the hash after the screen's name (`#/backlog/ID`, `#/backlog/p/ID`,
+`#/backlog/doc/PATH`, `#/wiki/page/NAME`). The cards add `short_name`, `why` (the short reason of a block, cut from the
+free text of `blocked`), `integrated` and a `title` on each document; `/api/issue` adds the task's `cost`. Markdown is built
+as React elements (`more/md.tsx`), never injected as HTML.
 
 **Following the installed version.** Python code is loaded once, so a panel keeps running the version it started
 with. The hooks record where Claude Code runs foreman from: on each session start and prompt in an active project,

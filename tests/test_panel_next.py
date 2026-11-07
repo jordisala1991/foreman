@@ -859,7 +859,7 @@ class NextPageTest(ProjectCase):
         self.assertIn("Backlog › Wiki › Sistema ›", out["text"])
         out = self.mount({"hash": "#/wiki", "answers": {"/api/projects": self.PROJECTS}})
         self.assertEqual(out["current"], ["Más"])  # a «More» screen lights the «More» tab
-        self.assertIn("Abrir el panel de hoy", out["text"])  # not built yet: today's panel
+        self.assertIn("Alpha no tiene wiki", out["text"])
 
     def test_no_product_with_the_new_panel_says_how_to_turn_it_on(self):
         none = {**self.PROJECTS, "projects": [{**p, "next": False} for p in self.PROJECTS["projects"]]}

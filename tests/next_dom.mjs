@@ -54,7 +54,7 @@ class Node {
   blur() {}
   // a click as the browser sends it: capture from the top down, then bubbling up from the target
   click() { this.dispatch("click"); }
-  dispatch(type) {
+  dispatch(type, extra) {
     const path = [];
     for (let n = this; n; n = n.parentNode) path.push(n);
     let stopped = false;
@@ -62,6 +62,7 @@ class Node {
       type, target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
       button: 0, detail: 1, isTrusted: true, preventDefault() { this.defaultPrevented = true; },
       stopPropagation() { stopped = true; },
+      ...extra,
     };
     const run = (n, capture) => n._on.filter((l) => l.type === type && l.capture === capture).forEach((l) => {
       e.currentTarget = n;
@@ -102,6 +103,7 @@ const document = {
 const store = { ...(scenario.store || {}) };
 const fetched = [];
 const posts = [];
+const rawPosts = []; // the same URLs as sent, with the key
 const down = new Set(scenario.down || []); // paths that fail from the start
 const timers = [];
 const windows = [];
@@ -120,12 +122,14 @@ Object.assign(globalThis, {
   fetch: async (url, init) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
     if (init && init.method === "POST") {
+      rawPosts.push(String(url));
       posts.push({ path: p, body: init.body === undefined ? null : init.body });
       fetched.push("POST " + p);
       const answer = scenario.answers["POST " + p];
       // an answered POST says what the scenario says (null: the server fails); an unanswered one succeeds, except on
       // the Agents screen, where the server not answering is a case (404)
       if (answer !== undefined || (scenario.hash || "").startsWith("#/agents")) {
+        if (answer && answer.__status) return { ok: false, status: answer.__status, json: async () => answer }; // an error answer
         const missing = answer === undefined || answer === null;
         return { ok: !missing, status: missing ? 404 : 200, json: async () => answer };
       }
@@ -153,6 +157,26 @@ if (scenario.click) {
   const b = one(app, (n) => n.localName === "button" && words(n) === scenario.click);
   if (!b) throw new Error("no button " + scenario.click);
   b.click();
+  await settle();
+  if (scenario.then) { // a second button, once the first has been answered
+    const b2 = one(app, (n) => n.localName === "button" && words(n) === scenario.then);
+    if (!b2) throw new Error("no button " + scenario.then);
+    b2.click();
+    await settle();
+  }
+}
+// clicks: texts of buttons pressed in turn, each at once (the one after the other without waiting: a double click);
+// press: {nth, key} a key on the nth drag grip
+if (scenario.clicks) {
+  const bs = scenario.clicks.map((c) => one(app, (n) => n.localName === "button" && words(n) === c));
+  if (bs.includes(undefined)) throw new Error("no button in " + scenario.clicks);
+  bs.forEach((b) => b.click());
+  await settle();
+}
+if (scenario.press) {
+  const g = all(app, (n) => n.localName === "button" && cls(n, "grip"))[scenario.press.nth];
+  if (!g) throw new Error("no grip " + scenario.press.nth);
+  g.dispatch("keydown", { key: scenario.press.key });
   await settle();
 }
 for (const st of scenario.steps || []) {
@@ -231,6 +255,8 @@ console.log(JSON.stringify({
   pills: all(app, (n) => cls(n, "pill")).map((n) => [n.attributes.class, words(n)]),
   buttons: all(app, (n) => n.localName === "button").map(words),
   charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
+  links: all(app, (n) => n.localName === "a" && n.attributes.href).map((n) => [words(n), n.attributes.href]),
+  rows: all(app, (n) => cls(n, "row") || cls(n, "prow") || cls(n, "grouphead") || cls(n, "srow")).map(words),
   offline: words(one(app, (n) => cls(n, "offline")) || { nodeType: 3, data: "" }),
   dim: !!one(app, (n) => cls(n, "dim")),
   agents: all(app, (n) => n.localName === "article" && cls(n, "agent")).map((a) => ({
@@ -249,6 +275,7 @@ console.log(JSON.stringify({
   windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,
   posts,
+  rawPosts,
   cards: all(app, (n) => "data-kind" in n.attributes).map((n) => ({
     kind: n.attributes["data-kind"], cls: n.attributes.class, text: words(n),
     buttons: all(n, (b) => b.localName === "button").map(words),

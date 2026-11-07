@@ -1218,9 +1218,11 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/issue":  # the whole card of an issue: /api/backlog sends the closed ones short
             p = REG.get(q.get("p", [""])[0])
             c = find_card(backlog_cards(p), q.get("id", [""])[0]) if p else None
-            if c is None:
+            if p is None or c is None:
                 return self.json({"error": "not found"}, 404)
-            return self.json({"issue": c, "version": page_version()})
+            spent = next((r for r in costs.rows(p, "issue")["rows"] if r["key"] == c["id"]), None)
+            cost = {k: spent[k] for k in ("usd", "runs", "tokens", "cheap_share")} if spent else None
+            return self.json({"issue": c, "cost": cost, "version": page_version()})
         if u.path.startswith("/api/wiki"):
             p = REG.get(q.get("p", [""])[0])
             if p is None or not wiki_dir(p):

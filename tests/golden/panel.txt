@@ -2068,6 +2068,7 @@ $ GET /api/backlog?p=nope
 $ GET /api/issue?p=faro&id=FA-2
 [200]
 {
+  "cost": null,
   "issue": {
     "blocked": "",
     "detail": "",
@@ -2096,6 +2097,7 @@ $ GET /api/issue?p=faro&id=FA-2
 $ GET /api/issue?p=faro&id=FA-1
 [200]
 {
+  "cost": null,
   "issue": {
     "archived": true,
     "assignee": "ana",
@@ -2105,15 +2107,25 @@ $ GET /api/issue?p=faro&id=FA-1
     "docs": [
       {
         "doc": "reviews/2020-01-10-plan-FA-1.md",
-        "kind": "plan"
+        "kind": "plan",
+        "title": "Plan"
       },
       {
         "doc": "reviews/2020-01-12-fa1-t1.md",
         "kind": "report",
-        "sub": "T1"
+        "sub": "T1",
+        "title": "Report T1"
       }
     ],
     "id": "FA-1",
+    "integrated": {
+      "commits": [
+        "abc1234",
+        "def5678"
+      ],
+      "n": 2,
+      "of": 2
+    },
     "outcome": {
       "criterion": "las cartas se leen en menos de un segundo",
       "verdict": "cumplido"
@@ -2172,6 +2184,7 @@ $ GET /api/wiki?p=harbor
       "kb": 0.1,
       "n": "runbook",
       "path": "pages/runbook.md",
+      "section": "",
       "status": null,
       "tags": [],
       "title": "Runbook",
@@ -2182,6 +2195,7 @@ $ GET /api/wiki?p=harbor
       "kb": 0.2,
       "n": "wiki",
       "path": "pages/wiki.md",
+      "section": "",
       "status": null,
       "tags": [],
       "title": "Harbor wiki",
@@ -2198,6 +2212,7 @@ $ GET /api/wiki/page?p=harbor&n=wiki
   "md": "# Harbor wiki\n\nHand-written page; foreman leaves it as it is.\n\n## Open decisions\n\nIn the panel and in `foreman backlog decision list`.\n\n## Notes\n\nLeft as it is.\n",
   "n": "wiki",
   "path": "pages/wiki.md",
+  "section": "",
   "sources": [],
   "status": null,
   "tags": [],
@@ -2219,9 +2234,11 @@ $ GET /api/wiki/search?p=harbor&q=decisions
       "hits": 1,
       "in_title": 0,
       "n": "wiki",
+      "section": "",
       "status": null,
       "title": "Harbor wiki",
-      "type": "overview"
+      "type": "overview",
+      "updated": null
     }
   ]
 }

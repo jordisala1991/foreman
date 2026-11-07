@@ -491,6 +491,7 @@ class PanelTest(PanelCase):
         code, d = self.req("/api/issue?p=fake&id=PF-3")
         self.assertEqual(code, 200)
         whole = d["issue"]
+        self.assertIsNone(d["cost"])  # no runs of PF-3 in costs.jsonl: the key is there, empty
         self.assertEqual(
             whole, panel_cards.find_card(panel_cards.backlog_cards(panel_registry.REG.get("fake")), "PF-3")
         )
@@ -1400,7 +1401,10 @@ console.log(JSON.stringify(out));
                 "2026-10-30-x.md": "raw/reviews/2026-10-30-x.md",
             },
         )
-        self.assertEqual(self.req("/api/wiki/search?p=other&q=busqueda")[1]["results"][0]["n"], "m-one")
+        self.assertEqual(page["section"], "models")  # the folder: the new panel's sections and search results
+        hit = self.req("/api/wiki/search?p=other&q=busqueda")[1]["results"][0]
+        self.assertEqual((hit["n"], hit["section"]), ("m-one", "models"))
+        self.assertIn("updated", hit)
         self.assertEqual(self.req("/api/wiki/page?p=other&n=../backlog")[0], 404)
         self.assertEqual(self.req("/api/wiki?p=fake")[0], 404)
 
