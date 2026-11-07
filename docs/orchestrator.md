@@ -544,9 +544,12 @@ one, the pass says `orchestrator_only_denied`: see whether that task needs it an
 When you run a command of a group without a live grant, foreman's
 hooks module asks the owner in your chat and the command waits for the answer (`[deny] ask_minutes`, 5 by default):
 you never see the question, only the command passing or its refusal. After a no, a closed question or one left
-unanswered, do not run it again until the owner says so in the chat; while that question is still open, the
-group's commands are refused at once. A request left unanswered waits in the panel, where the owner may approve
-it (for `grant_minutes`, while it is no older than that): you then get an inbox message from the owner saying so,
-and the command may run again. `foreman permissions grants` shows what is granted and what waits; `foreman permissions
-grants off` takes it away (docs/config.md, «`[deny.grants]`»). Never run `foreman hook mod` yourself, nor reach the
+unanswered, do not run it again until the owner says so; while that question is still open, the group's commands
+are refused at once. A request left unanswered waits up to 24 hours for the owner's answer, in the panel or late in
+the chat on the question still drawn: a yes opens the group for `grant_minutes` from that yes, a no drops the
+request. Either way you get an inbox message from the owner and a pass at the next tick (an unread owner message
+newer than the last pass brings it); after a yes, run the command again. If you no longer need a request, withdraw
+it with `foreman permissions grants off GROUP --pending`. A request made before you restarted (another process) is
+never granted to you: run the command again to be asked anew. `foreman permissions grants` shows what is granted
+and what waits; `foreman permissions grants off` takes it away (docs/config.md, «`[deny.grants]`»). Never run `foreman hook mod` yourself, nor reach the
 panel's approval: the guard refuses both.

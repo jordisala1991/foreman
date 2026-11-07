@@ -15,10 +15,13 @@ Without the module (or while its side of the question is not there) no grant exi
 - `cooldowns`: {group: {session, until}}: after the owner's no, COOLDOWN_S (10 min, fixed) in which the module does
   not ask again for that group in that session (a timeout or a dismissal sets none).
 - `pending`: {group: {at, session, pid, pid_start, orchestrator, command, tool_use_id}}: the last request of a group
-  that went unanswered (the question timed out), kept so the owner can approve it later from foreman's panel
-  (approve()). It expires `grant_minutes` after `at` (the same window a yes would have opened: a request older than
-  that is stale, the orchestrator has moved on); a grant of the group, `foreman permissions grants off` or a mark of
-  another session or process clears it (pending() reads only the marked process's live ones).
+  that went unanswered (the question timed out), kept so the owner can answer it later: from foreman's panel
+  (approve(), deny()) or late in the chat, the question still drawn (take_late(), drop_late()). It lives PENDING_H
+  (24 h, fixed) after `at`; the owner's answer, a grant of the group, a newer request of the group or `foreman
+  permissions grants off [GROUP] [--pending]` clears it sooner. Only a request of the marked session and process can
+  be granted (pending()); one of another process (the orchestrator restarted) or another session is an orphan
+  (orphans()): never granted, only dropped. A /clear or an in-process resume moves the mark and its requests with it
+  (carry()).
 - `once`: {tool_use_id: {session, kind, path, command, at}}: the owner's yes to write one reserved file of a class
   in ONCE_KINDS (Claude Code's settings, the registry) in one tool call: asked by the hooks module in
   the main thread of any session of the product (`hook mod grant`, a check of a Write/Edit/MultiEdit/NotebookEdit
@@ -32,8 +35,9 @@ A grant from the panel (via "panel") carries `sig`, an HMAC of its fields with t
 key verifies it, so the hooks module lets such a grant through without asking (its memory never heard it given),
 while a grants.json written by hand is still asked again (the module's second check).
 
-`foreman permissions grants` lists them; `foreman permissions grants off [GROUP]` removes grants and pending requests
-(anyone may: it only takes away). Every decision is also a line in approved.jsonl (approved.granted).
+`foreman permissions grants` lists them; `foreman permissions grants off [GROUP]` removes grants and pending requests,
+and with `--pending` only the requests (anyone may: it only takes away). Every decision is also a line in
+approved.jsonl (approved.granted).
 """
 
 from __future__ import annotations
@@ -56,6 +60,7 @@ GROUP_NAME = r"^[a-z0-9][a-z0-9-]*$"
 COOLDOWN_S = 600  # after the owner's no, the module does not ask again for the group in that session
 ONCE_KINDS = ("registry", "claude")  # the reserved classes the owner may let one call write (guard.check_file)
 ONCE_S = 600  # a one-use grant not spent within this (its call never reached the guard) is stale
+PENDING_H = 24  # a request left unanswered waits this long for the owner's answer (fixed, not a config key)
 ANSWERS = ("yes", "no", "dismissed", "timeout", "unavailable")
 ISO = "%Y-%m-%dT%H:%M:%S"
 
@@ -152,10 +157,10 @@ def _now() -> str:
     return util.now().strftime(ISO)
 
 
-def _expiry(project: Project, at: Any) -> str | None:
-    """When a pending request made at `at` (local ISO) expires: grant_minutes later."""
+def _expiry(at: Any) -> str | None:
+    """When a pending request made at `at` (local ISO) expires: PENDING_H later."""
     try:
-        return (util.fromiso(at) + timedelta(minutes=minutes(project, "grant_minutes", 30))).strftime(ISO)
+        return (util.fromiso(at) + timedelta(hours=PENDING_H)).strftime(ISO)
     except (TypeError, ValueError, AttributeError):
         return None
 
@@ -246,9 +251,25 @@ def pending(project: Project) -> dict[str, dict[str, Any]]:
     mark = orchestrator.record(project)
     out = {}
     for g, r in read(project)["pending"].items():
-        exp = _expiry(project, r.get("at"))
+        exp = _expiry(r.get("at"))
         if g in groups(project, True) and _same_mark(r, mark) and _ahead(exp):
             out[g] = {**r, "expires": exp}
+    return out
+
+
+def orphans(project: Project) -> dict[str, dict[str, Any]]:
+    """The live pending requests (younger than PENDING_H) that are not of the marked session and process, by group,
+    each with `expires` and `why`: `process` when another process asked (the orchestrator restarted: a new process
+    never gets a grant it did not ask for) and `session` when the same process asked under another session. They
+    are never granted (approve() refuses them), only dropped (deny(), revoke())."""
+    from . import orchestrator
+
+    mark = orchestrator.record(project)
+    out = {}
+    for g, r in read(project)["pending"].items():
+        exp = _expiry(r.get("at"))
+        if g in groups(project, True) and not _same_mark(r, mark) and _ahead(exp):
+            out[g] = {**r, "expires": exp, "why": _foreign(r, mark)}
     return out
 
 
@@ -257,6 +278,42 @@ def _same_mark(r: dict[str, Any], mark: dict[str, Any]) -> bool:
     if not mark.get("session") or r.get("session") != mark["session"]:
         return False
     return (r.get("pid"), r.get("pid_start")) == (mark.get("pid"), mark.get("pid_start"))
+
+
+def _carried(r: dict[str, Any], session: str, mark: dict[str, Any]) -> bool:
+    """Whether `session` is an id the request was carried from (carry()) to the mark's session, in the mark's process:
+    the answer of a question asked before a /clear of that same process."""
+    return session in (r.get("carried_from") or []) and _same_mark(r, mark)
+
+
+def _foreign(r: dict[str, Any], mark: dict[str, Any]) -> str:
+    """Why a request is not the mark's (not _same_mark): `process` (another process, or none recorded) or `session`."""
+    proc = (r.get("pid"), r.get("pid_start"))
+    return "process" if proc != (mark.get("pid"), mark.get("pid_start")) or proc[0] is None else "session"
+
+
+def carry(project: Project, old: str, new: str) -> list[str]:
+    """The mark moved from session `old` to `new` in the same `claude` process (orchestrator.carry, after a /clear or
+    an in-process resume): the requests `old` made from that process (its pid and start time, a recorded one only)
+    move to `new`, so they stay the mark's and the owner may still answer them; each keeps the ids it was carried
+    from (`carried_from`), so a late answer that still names one (a module that asked under it) is that request's
+    (take_late, drop_late: still the same process and question). Returns the groups moved."""
+    from . import orchestrator
+
+    mark = orchestrator.record(project)
+    pid = mark.get("pid")
+    if mark.get("session") != new or not isinstance(pid, int) or not old or old == new:
+        return []
+    moved = []
+    with _locked(project) as d:
+        for g, r in d["pending"].items():
+            if r.get("session") == old and (r.get("pid"), r.get("pid_start")) == (pid, mark.get("pid_start")):
+                r["session"] = new
+                r["carried_from"] = [*(r.get("carried_from") or []), old]
+                moved.append(g)
+        if moved:
+            _write(project, d)
+    return moved
 
 
 class NotApproved(Exception):
@@ -270,10 +327,12 @@ class NotApproved(Exception):
 
 def approve(project: Project, group: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """The owner approves the group's pending request from the panel: a grant for the mark, exactly like a yes to the
-    question (grant_minutes, bound to the mark's session, pid and start time), via "panel" and signed with the panel's
-    grant key. Only when the request is there and not expired, the mark is still the session and process that made
-    it, and that process still runs (`ps` unreadable: refused). One request grants once: it is taken under the file's
-    lock. Returns (grant, request); raises NotApproved."""
+    question (grant_minutes from now, bound to the mark's session, pid and start time), via "panel" and signed with
+    the panel's grant key. Only when the request is there and not expired (PENDING_H), the mark is still the session
+    and process that made it, and that process still runs (`ps` unreadable: refused). An orphan (orphans()) is
+    refused with `process` and kept, for the owner to drop it; one of the same process under another session is
+    refused with `session` and dropped. One request grants once: it is taken under the file's lock. Returns (grant,
+    request); raises NotApproved."""
     from . import orchestrator, procs
 
     key = panel_key(create=True)
@@ -283,10 +342,10 @@ def approve(project: Project, group: str) -> tuple[dict[str, Any], dict[str, Any
             raise NotApproved("none", f"no request of the group {group!r} waits")
         mark = orchestrator.record(project)
         why = ""
-        if not _ahead(_expiry(project, r.get("at"))):
+        if not _ahead(_expiry(r.get("at"))):
             why = "expired"
         elif not _same_mark(r, mark):
-            why = "session" if r.get("session") != mark.get("session") else "process"
+            why = _foreign(r, mark)
         elif not isinstance(mark.get("pid"), int):
             why = "process"
         else:
@@ -327,9 +386,76 @@ def deny(project: Project, group: str) -> dict[str, Any]:
         if r is None:
             raise NotApproved("none", f"no request of the group {group!r} waits")
         _write(project, d)
-    if not (_ahead(_expiry(project, r.get("at"))) and _same_mark(r, orchestrator.record(project))):
+    if not (_ahead(_expiry(r.get("at"))) and _same_mark(r, orchestrator.record(project))):
         raise NotApproved("expired", f"{group}: expired")
     return {**r, "cooldown_until": cool(project, group, str(r["session"]))}
+
+
+def take_late(
+    project: Project, group: str, tool_use_id: str | None, session: str, surfaces: list[str]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The owner's yes in the chat to the group's question after its time limit refused the call (the question stays
+    drawn, `hook mod grant` with `late`): the grant a timely yes gives (grant_minutes from now, via "ask", plus `late`
+    and `asked`), but only to that very request: it waits, carries this tool_use_id and is not expired; `session`
+    (the one answering) is the marked one and made it, or the request was carried to the mark from it (carry()),
+    from the mark's process, and this call runs in that process
+    (orchestrator.runs_here; `ps` unreadable: refused); no grant of the group is live. One request grants once: it
+    is taken under the file's lock. Returns (grant, request); raises NotApproved (none | expired | session | process
+    | live; an expired request is dropped)."""
+    from . import orchestrator
+
+    with _locked(project) as d:
+        r = d["pending"].get(group)
+        if r is None or not tool_use_id or r.get("tool_use_id") != tool_use_id:
+            raise NotApproved("none", f"no request of the group {group!r} with this question waits")
+        mark = orchestrator.record(project)
+        why = ""
+        if not _ahead(_expiry(r.get("at"))):
+            why = "expired"
+        elif mark.get("session") != session and not _carried(r, session, mark):
+            why = "session"
+        elif not _same_mark(r, mark):
+            why = _foreign(r, mark)
+        elif not isinstance(mark.get("pid"), int) or not orchestrator.runs_here(project):
+            why = "process"
+        elif live(project, group):
+            why = "live"
+        if why:
+            if why == "expired":
+                d["pending"].pop(group, None)
+                _write(project, d)
+            raise NotApproved(why, f"{group}: {why}")
+        g = {**_entry(project, mark, "ask", surfaces, tool_use_id), "late": True, "asked": r.get("at")}
+        _put(d, group, g)
+        _write(project, d)
+    return g, r
+
+
+def drop_late(project: Project, group: str, tool_use_id: str | None, session: str) -> dict[str, Any]:
+    """The owner's no in the chat to the group's question after its time limit (as take_late): that very request (it
+    waits, carries this tool_use_id, `session` made it or it was carried from `session`, not expired) is dropped and
+    the group cools down for the request's session (COOLDOWN_S), as a timely no. It only ever restricts. Returns the
+    request with `cooldown_until`; raises NotApproved (none | expired; an expired request is dropped, with no
+    cooldown)."""
+    with _locked(project) as d:
+        r = d["pending"].get(group)
+        if (
+            r is None
+            or not tool_use_id
+            or r.get("tool_use_id") != tool_use_id
+            or (r.get("session") != session and session not in (r.get("carried_from") or []))
+        ):
+            raise NotApproved("none", f"no request of the group {group!r} with this question waits")
+        session = str(r.get("session"))  # the cooldown is for the session that goes on asking (carried or not)
+        d["pending"].pop(group)
+        fresh = _ahead(_expiry(r.get("at")))
+        until = (util.now() + timedelta(seconds=COOLDOWN_S)).strftime(ISO)
+        if fresh:
+            d["cooldowns"][group] = {"session": session, "until": until}
+        _write(project, d)
+    if not fresh:
+        raise NotApproved("expired", f"{group}: expired")
+    return {**r, "cooldown_until": until}
 
 
 def give_once(
@@ -421,13 +547,21 @@ def from_panel(project: Project, group: str) -> dict[str, Any] | None:
     return g if hmac.compare_digest(g["sig"], _sign(key, group, g)) else None
 
 
-def revoke(project: Project, group: str | None = None) -> list[str]:
+def revoke(project: Project, group: str | None = None, pending_only: bool = False) -> list[str]:
     """Removes the grants and pending requests of `group` (None: every group, and the one-use grants of files too).
-    Returns the groups whose grant was removed (live or not)."""
+    Returns the groups whose grant was removed (live or not). With pending_only, only the pending requests (the
+    orchestrator withdraws what it no longer needs; a live grant stays) and returns their groups."""
     f = file(project)
     if not f.exists():
         return []
     with _locked(project) as d:
+        if pending_only:
+            names = [g for g in d["pending"] if group is None or g == group]
+            for g in names:
+                del d["pending"][g]
+            if names:
+                _write(project, d)
+            return names
         names = [g for g in d["grants"] if group is None or g == group]
         for g in names:
             del d["grants"][g]
@@ -440,13 +574,15 @@ def revoke(project: Project, group: str | None = None) -> list[str]:
 
 
 def lines(project: Project) -> list[str]:
-    """`foreman permissions grants`: one line per group, its state (granted until, cooling down, pending, closed)."""
+    """`foreman permissions grants`: one line per group, its state (granted until, cooling down, pending, an orphan
+    request, closed)."""
     d = read(project)
     pend_now = pending(project)
+    orphan = orphans(project)
     out = []
     own = groups(project)
     for g in groups(project, True):
-        if g not in own and not (live(project, g) or g in pend_now or g in d["cooldowns"]):
+        if g not in own and not (live(project, g) or g in pend_now or g in orphan or g in d["cooldowns"]):
             continue  # foreman's own group, shown only while it has a state
         if live(project, g):
             e = d["grants"][g]
@@ -456,6 +592,12 @@ def lines(project: Project) -> list[str]:
         else:
             state = "closed"
         if g in pend_now:
-            state += f"; a request waits for the owner since {pend_now[g]['at'][11:16]}"
+            state += f"; a request waits for the owner since {pend_now[g]['at'][5:16].replace('T', ' ')}"
+        elif g in orphan:
+            o = orphan[g]
+            state += (
+                f"; a request of another {o['why']} since {o['at'][5:16].replace('T', ' ')}"
+                " (never granted: drop it with `foreman permissions grants off GROUP --pending`)"
+            )
         out.append(f"{g}: {state}")
     return out or ["no [deny.grants] groups in this project"]

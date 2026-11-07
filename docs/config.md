@@ -753,16 +753,24 @@ closing it (Esc, «Chat about this») refuses the call without counting as a no.
 -p`) the call is refused. The command waits while the question is open, and the orchestrator with it. No command
 gives a grant: the guard refuses any Bash call that runs `foreman hook mod`, for everyone. A no blocks that call and
 the group is not asked again in that session for 10 minutes; a question left unanswered for `ask_minutes` is a no
-for that call, and the request waits in `<state>/grants.json` for the owner to approve it later from foreman's
-panel. Claude Code cannot close a question, so it stays on screen: until the owner answers or closes it, the
-group's commands are refused at once with no new question, and an answer that comes then is written down and grants
-nothing (when the group was approved from the panel meanwhile, it says so and changes nothing).
+for that call, and the request waits in `<state>/grants.json` for the owner's answer, up to 24 hours (fixed).
+Claude Code cannot close a question, so it stays on screen: until the owner answers or closes it, the group's
+commands are refused at once with no new question. A late answer to it counts: a yes opens the group for
+`grant_minutes` from that yes, exactly as a yes in time would, but only for that very request (still waiting, the
+same question) and only when the session answering is still the marked one that asked, in the same Claude Code
+process; a no drops the request and starts the 10 minutes without a question. Either way the orchestrator gets an
+inbox message from the owner and its next pass comes within a minute. Closing the old question leaves the request
+waiting; when the group was approved from the panel meanwhile, a late answer says so and changes nothing.
 
 **Approving from the panel.** The panel's You tab lists each pending request (the group, the command, when it was
 asked) with an «Approve for N min» button. Approving gives exactly the grant a yes in the chat gives: the group for
 `grant_minutes`, to the marked session in its own Claude Code process. It is refused when that is no longer who
 asked (another session marked, another process, the process gone, or `ps` unreadable), when the group is already
-granted, and when the request is older than `grant_minutes` (a stale request expires: the orchestrator asks again).
+granted, and when the request is older than 24 hours (it expires: the orchestrator asks again). The `grant_minutes`
+count from the approval, however old the request. A /clear or a resume inside the same Claude Code process carries
+the requests to the new session id with the mark. A request of a process that is no longer the marked one (the
+orchestrator restarted) is never granted, to the new process or any other: it can only be dropped, and the new
+orchestrator asks again if it still needs the command.
 One request grants once. The approval is a line of `approved.jsonl` (`via: panel`), a note, and an inbox message
 that tells the orchestrator it may run the command again. A grant from the panel carries a signature made with the
 panel's own key (`<state root>/panel/grant.key`, mode 600), so the hooks module lets it through without asking
@@ -770,7 +778,8 @@ again, while a `grants.json` written by hand is still asked. Like every write of
 panel's key; on top of that, the guard refuses any Bash call that reaches the approval's address
 (`api/grants/approve`), for everyone, the orchestrator included: the owner approves from the page, by hand. A host that answers questions by itself (an SDK program with its own permission callback) would answer this
 one too: run the orchestrator where a person answers. The grant ends at `until`, when the mark moves to another session
-or process, or with `foreman permissions grants off [GROUP]` (anyone may run it: it only takes away). `foreman
+or process, or with `foreman permissions grants off [GROUP]` (anyone may run it: it only takes away; with
+`--pending` it removes only the requests that wait, which the orchestrator does when it no longer needs one). `foreman
 permissions grants` lists each group's state. Every answer is a line of `<state>/approved.jsonl`, and a yes a line of
 today's notes.
 
