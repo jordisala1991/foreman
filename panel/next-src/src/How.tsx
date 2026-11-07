@@ -23,7 +23,7 @@ export function How({ product }: { product: Product }) {
       live = false;
     };
   }, [product.name, days, tries]);
-  const since = m?.since && m.days[0] && m.since > m.days[0] ? m.since : null;
+  const since = m?.since.cost && m.days[0] && m.since.cost > m.days[0] ? m.since.cost : null;
   return (
     <div className="screen">
       <ScreenHead title={t("tab_how")} product={product}>
@@ -45,7 +45,7 @@ export function How({ product }: { product: Product }) {
         </div>
       ) : !m ? (
         <div className="card quiet">{t("loading")}</div>
-      ) : !m.since ? (
+      ) : !m.since.cost ? (
         <div className="card quiet">{t("no_data")}</div>
       ) : (
         <div className="charts">

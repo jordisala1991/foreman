@@ -105,15 +105,14 @@ IMAGES = {
     ".gif": ("image/gif", lambda b: b[:6] in (b"GIF87a", b"GIF89a")),
     ".webp": ("image/webp", lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"),
 }
-# the new panel's files (/next/<file>): the files under panel/next/ with one of these extensions, and nothing else
-# (index.html is served at /next/ only, filled in). Never SVG (see IMAGES) nor anything outside panel/next/
+# the new panel's files (/next/<file>): the files under panel/next/ (built from panel/next-src) with one of these
+# extensions, and nothing else (index.html is served at /next/ only, filled in; BUILD and LICENSES.txt never). Never
+# SVG (see IMAGES) nor anything outside panel/next/
 NEXT_TYPES = {
     ".js": "text/javascript; charset=utf-8",
-    ".mjs": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
 }
-NEXT_URL = re.compile(r"\{\{U ([\w./-]+)\}\}")  # {{U vendor/preact.mjs}} in panel/next/index.html
+NEXT_URL = re.compile(r"\{\{U ([\w./-]+)\}\}")  # {{U app.js}} in panel/next/index.html
 
 
 def next_files() -> dict[str, str]:
@@ -132,7 +131,7 @@ def next_files() -> dict[str, str]:
 
 def next_index(token: str) -> str:
     """panel/next/index.html with {{LANG}} and each {{U path}} filled in: the URL of an allowed file with the page's
-    version and key (the import map too, so a module's imports carry them)."""
+    version and key."""
     v, files = next_version(), next_files()
 
     def url(m: re.Match[str]) -> str:
@@ -1201,13 +1200,22 @@ class Handler(BaseHTTPRequestHandler):
             p = REG.get(q.get("p", [""])[0])
             if p is None or not p.section("panel").get("next"):
                 return self.json({"error": "not found"}, 404)
-            try:
+            try:  # only a bad `days` is the caller's fault: an error inside metrics is a 500, not a 400
                 days = int(q.get("days", ["7"])[0])
-                deps = [costs.file_of(p), Backlog(p).data_path]
-                out = memo(("metrics", p.name, days, datetime.now().date()), lambda: metrics.cost(p, days), deps=deps)
-            except ValueError as e:
-                return self.json({"error": str(e)}, 400)
-            return self.json(out)
+                if days not in metrics.PERIODS:
+                    raise ValueError
+            except ValueError:
+                return self.json({"error": f"days must be one of {metrics.PERIODS}"}, 400)
+            today = datetime.now().date()
+            try:
+                out = memo(
+                    ("metrics", p.name, days, today),
+                    lambda: metrics.build(p, days, today),
+                    deps=metrics.deps(p, days, today),
+                )
+            except Exception as e:  # noqa: BLE001 (a corrupt data file: the chart says so, the connection is not dropped)
+                return self.json({"error": f"metrics failed: {type(e).__name__}"}, 500)
+            return self.json({**out, "quota": metrics.quota(REG.projects.values())})  # the account's, live: not cached
         if u.path == "/api/state":
             name = q.get("p", [""])[0]
             p = REG.get(name)

@@ -245,7 +245,7 @@ def static_checks() -> list[str]:
     problems += py39_checks()
     problems += launcher_checks()
     problems += dev_checks()
-    for f in sorted(ROOT.rglob("*.sh")):
+    for f in sorted(f for f in ROOT.rglob("*.sh") if "node_modules" not in f.parts):  # not the panel's npm packages
         r = subprocess.run(["bash", "-n", str(f)], capture_output=True, text=True, check=False)
         if r.returncode:
             problems.append(f"bash -n {f.relative_to(ROOT)}: {r.stderr.strip()}")

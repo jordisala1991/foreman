@@ -58,12 +58,12 @@ export interface Projects {
   language?: string;
 }
 
-// /api/metrics (lib/foreman/metrics.py `cost`)
+// /api/metrics (lib/foreman/metrics.py `build`): the fields the charts built so far read
 export type Family = "opus" | "sonnet" | "haiku" | "other";
 export type DayCost = Record<Family | "usd", number>;
 export interface Metrics {
   days: string[];
   cost: Record<string, DayCost>;
   total: number;
-  since: string | null;
+  since: { cost: string | null } & Record<string, string | null>; // the first day with data of each series
 }

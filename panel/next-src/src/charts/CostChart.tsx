@@ -52,7 +52,7 @@ export function costModel(m: Metrics, width: number): Model {
   const columns: Column[] = m.days.map((d, i) => {
     const today = i === n - 1;
     const v = usdOf(d);
-    const kind = v > 0 ? "cost" : m.since && d >= m.since ? "zero" : "none";
+    const kind = v > 0 ? "cost" : m.since.cost && d >= m.since.cost ? "zero" : "none";
     const segs = kind === "cost" ? families.map((f) => ({ family: f, usd: m.cost[d]?.[f] ?? 0 })).filter((s) => s.usd > 0) : [];
     const label = (n - 1 - i) % every === 0 ? (n <= 7 ? shortDay(d) : String(Number(d.slice(8)))) : "";
     const top = v > 0 && (d === highest || today) ? usd(v) : "";
@@ -108,7 +108,7 @@ export function CostChart({ m }: { m: Metrics }) {
   const colW = (width - g.gap * (n - 1)) / n;
   const barW = Math.min(BAR, colW);
   const h = (v: number) => (v / g.max) * PH;
-  const since = m.since && m.days[0] && m.since > m.days[0] ? m.since : null;
+  const since = m.since.cost && m.days[0] && m.since.cost > m.days[0] ? m.since.cost : null;
   const per = since ? t("since_day", { day: dayMonth(since) }) : t("in_days", { n });
   const aria = t("g1_aria", {
     days: g.columns.map((c) => `${shortDay(c.day)} ${c.kind === "none" ? t("no_data_day") : usd(c.usd)}`).join(", "),

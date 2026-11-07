@@ -134,9 +134,22 @@ class NextServeTest(PanelCase):
         code, d = self.req("/api/metrics?p=fake&days=30")
         self.assertEqual(code, 200, d)
         self.assertEqual(len(d["days"]), 30)
-        self.assertEqual(d["since"], "2026-11-07")
+        self.assertEqual(d["since"]["cost"], "2026-11-07")
         self.assertEqual(self.req("/api/metrics?p=other&days=7")[0], 404)
         self.assertEqual(self.req("/api/metrics?p=fake&days=5")[0], 400)
+        self.assertEqual(self.req("/api/metrics?p=fake&days=x")[0], 400)
+        for k in ("deliveries", "reviews", "rounds", "guard", "guard_rules", "today", "top_issues", "by_type", "quota"):
+            self.assertIn(k, d)
+        self.assertEqual(d["quota"], [])
+
+    def test_an_error_inside_metrics_is_not_a_400(self):
+        from unittest import mock
+
+        from foreman import metrics
+
+        with mock.patch.object(metrics, "build", side_effect=ValueError("corrupt line")):
+            code, _ = self.req("/api/metrics?p=fake&days=7")
+        self.assertEqual(code, 500)
 
 
 class NextFilesTest(PanelCase):
@@ -236,7 +249,7 @@ class NextPageTest(ProjectCase):
         cost["2026-11-01"] = {"opus": 211.1, "sonnet": 8.1, "haiku": 0, "other": 0, "usd": 219.2}
         cost["2026-11-05"] = {"opus": 47.4, "sonnet": 0.7, "haiku": 0, "other": 0, "usd": 48.1}
         cost["2026-11-07"] = {"opus": 60.8, "sonnet": 13.0, "haiku": 0.5, "other": 0, "usd": 74.3}
-        return {"days": ds, "cost": cost, "total": 341.6, "since": "2026-11-01"}
+        return {"days": ds, "cost": cost, "total": 341.6, "since": {"cost": "2026-11-01", "deliveries": None}}
 
     def how(self, **extra):
         answers = {"/api/projects": self.PROJECTS, "/api/metrics?p=alpha&days=7": self.metrics(7)}
