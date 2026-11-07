@@ -2,7 +2,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./app.css";
-import { api, t, type Projects } from "./lib";
+import { refresh } from "./feed";
+import { t, type Projects } from "./lib";
 import { Shell } from "./Shell";
 
 async function mount(el: HTMLElement) {
@@ -10,7 +11,7 @@ async function mount(el: HTMLElement) {
   const root = createRoot(el);
   let data: Projects;
   try {
-    data = await api<Projects>("/api/projects");
+    data = await refresh<Projects>("/api/projects"); // the shell keeps reading it from the same feed
   } catch {
     root.render(<main className="none card">{t("load_failed")}</main>);
     return;

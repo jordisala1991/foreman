@@ -6,7 +6,8 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import react from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -78,7 +79,9 @@ function shipped(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), shipped()],
+  // the React Compiler (babel-plugin-react-compiler, pinned in package.json) memoises each component and hook, so a render
+  // whose inputs did not change reuses what it drew
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), shipped()],
   logLevel: "warn",
   build: {
     outDir: OUT,

@@ -100,6 +100,14 @@ const document = {
   getElementById: (id) => one(html, (n) => n.attributes.id === id),
   addEventListener() {}, removeEventListener() {},
 };
+// the commits of React, counted through the hook the devtools use (it works on the production bundle): every commit of
+// the root calls onCommitFiberRoot; the DOM writes are counted too (muts)
+let commits = 0;
+globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+  supportsFiber: true, isDisabled: false, renderers: new Map(), inject() { return 1; },
+  checkDCE() {}, onCommitFiberUnmount() {}, onCommitFiberRoot() { commits++; }, onPostCommitFiberRoot() {},
+};
+const listeners = {};
 const store = { ...(scenario.store || {}) };
 const fetched = [];
 const posts = [];
@@ -115,7 +123,8 @@ Object.defineProperty(globalThis, "localStorage", {
 Object.assign(globalThis, {
   document, window: globalThis, HTMLIFrameElement,
   location: { search: "?t=k3y", hash: scenario.hash || "" },
-  addEventListener() {}, removeEventListener() {},
+  addEventListener(t, f) { (listeners[t] = listeners[t] || []).push(f); }, removeEventListener(t, f) { listeners[t] = (listeners[t] || []).filter((x) => x !== f); },
+  scrollTo() {},
   matchMedia: (q) => ({ matches: (scenario.visible || []).includes(q), addEventListener() {}, removeEventListener() {} }),
   setInterval: (f) => { timers.push(f); return timers.length; }, clearInterval() {},
   open: (url) => { const w = { location: { href: String(url || "") }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
@@ -138,15 +147,17 @@ Object.assign(globalThis, {
     }
     fetched.push(p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
-    if (down.has(p)) return { ok: false, status: 503, json: async () => ({}) };
+    if (down.has(p)) return { ok: false, status: 503, json: async () => ({}), text: async () => "{}" };
+    if (delayAfter) await new Promise((r) => setTimeout(r, delayAfter));
     if ((scenario.delay || {})[p]) await new Promise((r) => setTimeout(r, scenario.delay[p])); // a slow one
     const body = scenario.answers[p];
     const missing = body === undefined || body === null; // null: the server fails on it
-    return { ok: !missing, status: missing ? 404 : 200, json: async () => body };
+    return { ok: !missing, status: missing ? 404 : 200, json: async () => body, text: async () => JSON.stringify(body) };
   },
 });
 document.defaultView = globalThis;
 
+let delayAfter = 0; // the milliseconds every answer takes once the ticks have begun (scenario.later.delay)
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5)); };
 const errors = [];
 const origError = console.error;
@@ -186,7 +197,18 @@ if (scenario.press) {
   g.dispatch("keydown", { key: scenario.press.key });
   await settle();
 }
+const duringNav = []; // the text 20 ms after each {hash, delay} step: the new screen while its answers are on their way
 for (const st of scenario.steps || []) {
+  if (st.hash) { // the owner moves to another screen (the hash changes) and the answers take st.delay ms
+    globalThis.location.hash = st.hash;
+    delayAfter = st.delay || 0;
+    (listeners.hashchange || []).forEach((f) => f({}));
+    await new Promise((r) => setTimeout(r, 20));
+    duringNav.push(words(app));
+    await new Promise((r) => setTimeout(r, delayAfter + 40));
+    delayAfter = 0;
+    continue;
+  }
   if (st.click) {
     const b = one(app, (n) => ["button", "a"].includes(n.localName) && words(n) === st.click);
     if (!b) throw new Error("no button " + st.click);
@@ -199,10 +221,23 @@ for (const st of scenario.steps || []) {
   }
   await settle();
 }
+let commitsInTicks = 0;
+let duringTick = null; // the text on screen while the answers of the first tick are still on their way
 if (scenario.tick) {
+  const commits0 = commits;
+  if (scenario.later) { // the answers change (and come slowly) from the first tick on
+    Object.assign(scenario.answers, scenario.later.answers || {});
+    delayAfter = scenario.later.delay || 0;
+  }
   (scenario.fail || []).forEach((p) => down.add(p));
   (scenario.heal || []).forEach((p) => down.delete(p)); // the server is back at the first tick
-  for (let i = 0; i < scenario.tick; i++) { timers.forEach((f) => f()); await settle(); }
+  for (let i = 0; i < scenario.tick; i++) {
+    timers.forEach((f) => f());
+    if (i === 0 && delayAfter) { await new Promise((r) => setTimeout(r, 20)); duringTick = words(app); }
+    await settle();
+    if (delayAfter) await new Promise((r) => setTimeout(r, delayAfter + 20));
+  }
+  commitsInTicks = commits - commits0;
 }
 if (scenario.pick) { // the product picker moved to another entry, then the slow answers arrive
   const sel = one(app, (n) => n.localName === "select");
@@ -252,6 +287,7 @@ const badge = (k) => { const b = tab(k) && one(tab(k), (n) => cls(n, "badge")); 
 const side = one(app, (n) => cls(n, "side"));
 const text1 = (a, f) => words(one(a, f) || { nodeType: 3, data: "" }); // a card of the Home screen has fewer parts
 console.log(JSON.stringify({
+  commitsInTicks, duringTick, duringNav,
   text: words(app),
   tabs: bar.map(words),
   current: bar.filter((n) => n.attributes["aria-current"] === "page").map(words),

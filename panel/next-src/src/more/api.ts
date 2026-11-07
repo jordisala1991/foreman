@@ -1,7 +1,7 @@
 // What the «More» screens share: loading an answer of the panel's API (again when asked, or every `every` ms), the
 // writes (POST with the key), and the formats of ages.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, t, withKey } from "../lib";
+import { useFeed } from "../feed";
+import { t, withKey } from "../lib";
 
 export interface Loaded<T> {
   data: T | undefined;
@@ -9,32 +9,11 @@ export interface Loaded<T> {
   reload: () => void;
 }
 
-// `path` null: nothing to load. A new path drops the old answer until the new one comes (never the old screen's data).
+// `path` null: nothing to load. The answer is kept per path (feed.ts): a new path shows its own data, or none until it
+// comes (never the old screen's); asking again every `every` ms replaces it only when the answer differs.
 export function useApi<T>(path: string | null, every = 0): Loaded<T> {
-  const [state, setState] = useState<{ path: string | null; data?: T; failed: boolean }>({ path, failed: false });
-  const seq = useRef(0);
-  const load = useCallback(() => {
-    if (path === null) return;
-    const mine = ++seq.current;
-    api<T>(path).then(
-      (data) => {
-        if (mine === seq.current) setState({ path, data, failed: false });
-      },
-      () => {
-        if (mine === seq.current) setState((s) => (s.path === path ? { ...s, failed: true } : { path, failed: true }));
-      },
-    );
-  }, [path]);
-  useEffect(() => {
-    load();
-    const timer = every > 0 ? setInterval(load, every) : undefined;
-    return () => {
-      seq.current++;
-      if (timer) clearInterval(timer);
-    };
-  }, [load, every]);
-  const current = state.path === path;
-  return { data: current ? state.data : undefined, failed: current ? state.failed : false, reload: load };
+  const f = useFeed<T>(path, every);
+  return { data: f.data, failed: f.failed, reload: f.reload };
 }
 
 export async function post(path: string): Promise<{ ok: boolean; error: string }> {

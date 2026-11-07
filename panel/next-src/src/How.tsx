@@ -1,6 +1,7 @@
 // «How it goes»: the period (7 | 30 days) and the eight charts, two columns on a wide screen. The data is read again
 // every minute; when that fails the charts stay, dimmed, under a «no connection» line with the time of the data.
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useFeed } from "./feed";
 import { QuotaChart } from "./charts/QuotaChart";
 import { Rules } from "./charts/Rules";
 import { ShareChart } from "./charts/ShareChart";
@@ -8,7 +9,7 @@ import { SpendChart } from "./charts/SpendChart";
 import { g1, g2, g3, g4, g7 } from "./charts/specs";
 import { StackChart } from "./charts/StackChart";
 import { ScreenHead } from "./head";
-import { api, clock, dayMonth, t, type Metrics, type Product } from "./lib";
+import { clock, dayMonth, t, type Metrics, type Product } from "./lib";
 import { Refresh } from "./icons";
 
 const PERIODS = [7, 30] as const;
@@ -16,38 +17,12 @@ const REFRESH_MS = 60_000;
 
 export function How({ product }: { product: Product }) {
   const [days, setDays] = useState<number>(7);
-  const [m, setM] = useState<Metrics | null>(null);
-  const [failed, setFailed] = useState(false); // the first answer did not come
-  const [offline, setOffline] = useState<Date | null>(null); // a later one did not: when the data on screen is from
-  const [tries, setTries] = useState(0);
-  useEffect(() => {
-    let live = true;
-    const path = `/api/metrics?p=${encodeURIComponent(product.name)}&days=${days}`;
-    let at = new Date();
-    setFailed(false);
-    setOffline(null);
-    setM(null); // never the old product's or period's chart under the new choice
-    const read = (first: boolean) =>
-      api<Metrics>(path)
-        .then((x) => {
-          if (!live) return;
-          at = new Date();
-          setM(x);
-          setFailed(false);
-          setOffline(null);
-        })
-        .catch(() => {
-          if (!live) return;
-          if (first) setFailed(true);
-          else setOffline(at);
-        });
-    void read(true);
-    const timer = setInterval(() => void read(false), REFRESH_MS);
-    return () => {
-      live = false;
-      clearInterval(timer);
-    };
-  }, [product.name, days, tries]);
+  const feed = useFeed<Metrics>(`/api/metrics?p=${encodeURIComponent(product.name)}&days=${days}`, REFRESH_MS);
+  // the figures stay while they are read again; a failed first read offers to retry, a later one dims what is there
+  // under «no connection» with the time of the data
+  const m = feed.data ?? null;
+  const failed = feed.failed && !m;
+  const offline = feed.failed && m ? feed.since : null;
   const since = m?.since.cost && m.days[0] && m.since.cost > m.days[0] ? m.since.cost : null;
   return (
     <div className="screen">
@@ -73,7 +48,7 @@ export function How({ product }: { product: Product }) {
       {failed ? (
         <div className="card quiet">
           {t("load_failed")}{" "}
-          <button type="button" className="link" onClick={() => setTries(tries + 1)}>
+          <button type="button" className="link" onClick={feed.reload}>
             {t("retry")}
           </button>
         </div>

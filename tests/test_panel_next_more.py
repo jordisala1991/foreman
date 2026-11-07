@@ -402,10 +402,6 @@ class SystemTest(NextMoreTest):
                 {**self.PROJECTS, "mac": calm, "quota": quota, "errors": []},
                 {"down": ["/api/state?p=alpha"]},
             ),
-            "slow state": (
-                {**self.PROJECTS, "mac": calm, "quota": quota, "errors": []},
-                {"hang": ["/api/state?p=alpha"]},
-            ),
             "no Mac": ({**self.PROJECTS, "mac": None, "quota": quota, "errors": []}, {}),
             "no quota": ({**self.PROJECTS, "mac": calm, "quota": [], "errors": []}, {}),
         }
@@ -420,6 +416,15 @@ class SystemTest(NextMoreTest):
                 )
                 self.assertNotIn("Todo bien", out["text"])
                 self.assertIn("Sin datos", out["text"])
+
+    def test_a_slow_state_keeps_the_screen_waiting_rather_than_drawing_half_of_it(self):
+        # the overview comes at once (the shell already read it); drawing it alone made the part that needs the state
+        # push everything down when the state came
+        projects = {**self.PROJECTS, "mac": self.MAC, "quota": [], "errors": []}
+        answers = {"/api/projects": projects, "/api/state?p=alpha": STATE_QUIET}
+        out = self.mount({"hash": "#/system", "answers": answers, "hang": ["/api/state?p=alpha"]})
+        self.assertIn("Cargando", out["text"])
+        self.assertNotIn("Todo bien", out["text"])
 
     def test_an_old_session_is_a_thing_to_look_at(self):
         text = self.system(

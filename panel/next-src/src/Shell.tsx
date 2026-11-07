@@ -13,7 +13,8 @@ import { Home } from "./Home";
 import { Needs } from "./Needs";
 import { ScreenHead, StatusPill, productState } from "./head";
 import { Chevron, Icon } from "./icons";
-import { api, oldPanel, t, type Key, type Product, type Projects } from "./lib";
+import { useFeedPart } from "./feed";
+import { oldPanel, t, type Key, type Product, type Projects } from "./lib";
 
 const SECTIONS = ["home", "needs", "agents", "how"] as const;
 const MORE = ["backlog", "wiki", "system"] as const;
@@ -108,14 +109,7 @@ const REFRESH_MS = 10_000;
 
 export function Shell({ all: initial }: { all: Product[] }) {
   // the products and their counts, read again while the page is visible (the badges follow what waits)
-  const [every, setEvery] = useState(initial);
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (document.visibilityState === "hidden") return;
-      api<Projects>("/api/projects").then((d) => setEvery(d.projects)).catch(() => undefined);
-    }, REFRESH_MS);
-    return () => clearInterval(id);
-  }, []);
+  const every = useFeedPart<Projects, Product[]>("/api/projects", REFRESH_MS, (d) => d.projects) ?? initial;
   const products = every.filter((p) => p.next && !p.broken);
   const [tab, setTab] = useState<Tab>(route);
   const [, setHash] = useState(location.hash); // a screen's own route (#/backlog/AB-1) re-renders it
