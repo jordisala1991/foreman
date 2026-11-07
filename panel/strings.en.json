@@ -138,7 +138,6 @@
   "loading_lc": "loading…",
   "checks": "{ok} ok, {fail} failed, {pending} pending",
   "draft": "draft",
-  "no_prs": "No open PRs.",
   "mac": "The Mac",
   "mem_used": "memory used of {gb} GB",
   "disk_free": "free on disk of {gb}",
@@ -176,6 +175,11 @@
     "duplicate": "Duplicate",
     "triage": "Triage"
   },
+  "idle_for": "no activity for {dur}",
+  "nothing_open": "nothing open",
+  "agent_type_none": "Agent",
+  "agent_type_other": "«{type}» agent",
+  "agent_types": {"dev": "Production agent", "mechanic": "Mechanical-changes agent", "planner": "Planning agent", "reviewer": "Review agent", "general-purpose": "General agent", "Explore": "Search agent"},
   "agent_status": {
     "working": "working",
     "holds a lock": "holds a lock",

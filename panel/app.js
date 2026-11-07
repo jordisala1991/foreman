@@ -50,7 +50,7 @@ const agoS = s => s==null ? '' : ago(s/3600);
 // repaints only those labels (the elements with data-at, paintAges)
 let SKEW = 0;   // the server's clock minus this one, in ms
 const sinceS = ts => ts == null ? null : Math.max(0, Math.round((Date.now() + SKEW) / 1000 - ts));
-const AGE_FMT = {dur: s => dur(s), ago: s => agoS(s), ago_dur: s => t('ago_dur', {dur: dur(s)}), waits: s => t('waits_dur', {dur: dur(s)})};
+const AGE_FMT = {dur: s => dur(s), ago: s => agoS(s), ago_dur: s => t('ago_dur', {dur: dur(s)}), idle: s => t('idle_for', {dur: dur(s)}), waits: s => t('waits_dur', {dur: dur(s)})};
 const ageText = (ts, f) => ts == null ? '' : AGE_FMT[f](sinceS(ts));
 const ageEl = (ts, f='dur') => ts == null ? '' : `<span data-at="${+ts}" data-f="${f}">${esc(ageText(ts, f))}</span>`;
 // a mark that changes once a time passes (a lock held over 3 h turns red, an agent running over 2 h gets its warning):
@@ -804,23 +804,60 @@ function freeToggle(b){
 
 // ---- Trabajo: agents, branches by column and the pull requests
 const BRANCH_COLS = [['working','col_working'],['pr','col_pr'],['ready','col_ready'],['main','col_today']];
+// the first line of what an agent last said, as plain text (no markdown marks), cut short
+const plainLine = s => { const l = String(s || '').split('\n').map(x => x.trim()).find(Boolean) || '';
+  const p = l.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/^[#>*\-\s]+/, '').replace(/[`*_]/g, '').trim();
+  return p.length > 140 ? p.slice(0, 139) + '…' : p; };
+// what an agent does, in words: the title of its sub-issue (else of its issue), never the code; one without a task says
+// what kind of agent it is
+function agentWhat(a){
+  const c = a.issue && BL.find(x => x.id===a.issue && x.p===a.p);
+  const sb = c && a.sub && (c.subs || []).find(x => x.id===a.sub);
+  const title = (sb && sb.title) || (c && c.title);
+  if(title) return {text: title, tip: c.title !== title ? `${c.title} — ${title}` : title};
+  if(a.issue) return {text: a.issue, tip: a.issue};
+  const ty0 = String(a.type || '').replace(/^[\w-]+:/, ''), k = t('agent_types.' + ty0);
+  const ty = ty0 && k !== 'agent_types.' + ty0 ? k : ty0 ? t('agent_type_other', {type: ty0}) : t('agent_type_none');
+  return {text: ty, tip: ty};
+}
+// its state in words (in the dot's colour), how long ago, and the last thing it said
+function agentState(a){
+  const when = a.end ? '' : a.status==='maybe stuck' ? ageEl(a.activity_ts, 'idle') : ageEl(a.activity_ts, 'ago_dur');
+  const last = plainLine(a.last);
+  return `<span style="color:${scol(a.status)}">${esc(sname(a.status))}</span>` + [when, last && esc(last)].filter(Boolean).map(x => ` · ${x}`).join('');
+}
+// the progress of the last hour, from the agents and the orchestrator's notes (Trabajo and Sistema show it)
+function feedThread(d){
+  const since = new Date(Date.now() - 3600e3), sinceHM = `${String(since.getHours()).padStart(2,'0')}:${String(since.getMinutes()).padStart(2,'0')}`;
+  const today = new Date().toLocaleDateString('sv');
+  return SNAP.feed = [...d.notes.map(n => ({h: n.time, who: 'orchestrator', t: n.text, kind: 'note', p: n.p})),
+      ...d.progress.filter(x => hhmm(x.time) >= sinceHM && String(x.time).slice(0,10) === today).map(x => ({h: hhmm(x.time), who: x.agent || '?', t: x.text, kind: 'progress', p: x.p}))]
+    .sort((a,b) => b.h.localeCompare(a.h));
+}
+const lastHourHtml = thread => sect(t('last_hour'), list(thread.map((x, i) => lrow({k: 'feed', key: i, id: x.h, name: ptag(x.p) + aname(x.who), title: inline(x.t)})).join('') || empty(t('nothing_last_hour'))), thread.length || null);
 function renderWork(d){
   const alive = d.agents.filter(a => !a.end).length;
-  $('agents').innerHTML = sect(t('agents'), list(d.agents.map(a => lrow({k: 'ag', key: a.id, icon: sdot(a), name: ptag(a.p) + aname(a.name),
-      title: `<span class="muted">${esc(issueLine(a) || a.task)}</span>`, meta: a.end ? t('finished_lc') : ageEl(a.activity_ts)})).join('') || empty(t('none_m'))),
+  $('agents').innerHTML = sect(t('agents'), list(d.agents.map(a => { const w = agentWhat(a);
+    return lrow({k: 'ag', key: a.id, icon: sdot(a), cls: 'two', attrs: ` title="${esc(`${a.name} · ${w.tip}`)}"`,
+      title: `<span class="what">${ptag(a.p)}${esc(w.text)}</span><span class="state muted">${agentState(a)}</span>`}); }).join('') || empty(t('none_m'))),
     alive ? t('n_running', {n: alive}) : null);
-  // one section per repository: its branches as a kanban (with an agent, with a PR, ready, in main today)
+  $('worklast').innerHTML = lastHourHtml(feedThread(d));
+  // a repository shows only what it has: branches as a kanban (with an agent, with a PR, ready, in main today) and its
+  // open PRs; the ones with nothing open are one line
+  const idle = [];
   $('branches').innerHTML = d.repos.map(r => {
     if(r.missing) return sect(t('branches'), list(empty(t('repo_missing', {key: esc(r.key)}))), null, esc(r.key));
+    if(!r.branches.length && !r.today.length && !(r.prs && r.prs.length)){ idle.push(`${ptag(r.p)}${esc(r.key)}`); return ''; }
     const rows = c => c==='main' ? r.today.map(x => lrow({k: 'commit', key: `${r.p}|${r.key}|${x.commit}`, name: `<span class="nm mono">${esc(x.commit)}</span>`, title: `<span class="muted">${esc(x.subject.replace(/^Merge \S+\s*/, ''))}</span>`, meta: esc(x.time)}))
       : r.branches.filter(b => b.col===c).map(b => lrow({k: 'branch', key: b.branch, name: `<span class="nm mono">${esc(b.branch)}</span>`, title: `<span class="muted">${esc(b.subject)}</span>`, meta: ageEl(b.committed_ts, 'ago')}));
-    return sect(t('branches'), list(BRANCH_COLS.map(([c, name]) => { const rs = rows(c);
-      return group('branches', c, `${c==='main' ? ico('merged') : ico('branch', c==='working' ? 'var(--prog)' : 'var(--muted)')}<span>${t(name)}</span><span class="n">${rs.length}</span>`, rs.join(''), t('none_f')); }).join('')),
-      r.branches.length || null, `${ptag(r.p)}${esc(r.key)}`);
-  }).join('');
-  $('prs').innerHTML = d.repos.filter(r => r.github).map(r => sect(t('prs'), list(r.prs == null ? empty(t('loading')) : r.prs.map(x => lrow({k: 'pr', key: `${r.p}|${r.key}|${x.number}`,
+    const groups = BRANCH_COLS.map(([c, name]) => [c, name, rows(c)]).filter(g => g[2].length);
+    return groups.length ? sect(t('branches'), list(groups.map(([c, name, rs]) =>
+      group('branches', c, `${c==='main' ? ico('merged') : ico('branch', c==='working' ? 'var(--prog)' : 'var(--muted)')}<span>${t(name)}</span><span class="n">${rs.length}</span>`, rs.join(''))).join('')),
+      r.branches.length || null, `${ptag(r.p)}${esc(r.key)}`) : '';
+  }).join('') + (idle.length ? `<div class="empty idle">${idle.join(', ')}: ${t('nothing_open')}</div>` : '');
+  $('prs').innerHTML = d.repos.filter(r => r.github && (r.prs == null || r.prs.length)).map(r => sect(t('prs'), list(r.prs == null ? empty(t('loading')) : r.prs.map(x => lrow({k: 'pr', key: `${r.p}|${r.key}|${x.number}`,
       icon: x.checks.fail ? dot('var(--bad)', t('checks', x.checks)) : ico(x.checks.pending ? 'clock' : 'check', x.checks.pending ? 'var(--warn)' : 'var(--ok)'),
-      id: '#' + x.number, title: `${esc(x.title)}${x.draft ? ` <span class="ro">${t('draft')}</span>` : ''}`, meta: `<span class="mono">${esc(x.branch)}</span>`})).join('') || empty(t('no_prs'))),
+      id: '#' + x.number, title: `${esc(x.title)}${x.draft ? ` <span class="ro">${t('draft')}</span>` : ''}`, meta: `<span class="mono">${esc(x.branch)}</span>`})).join('')),
     r.prs && r.prs.length || null, `${ptag(r.p)}${esc(r.github)}`)).join('');
 }
 // the issue an agent works on, «ID · title»
@@ -858,12 +895,7 @@ function renderSystem(d){
   $('recurring').innerHTML = sect(t('recurring'), list(d.recurring.map(r => lrow({k: 'rec', key: recKey(r), icon: dot(r.inactive ? 'var(--muted)' : r.late ? 'var(--bad)' : 'var(--ok)'),
       name: ptag(r.p), title: esc(r.name), meta: `<span class="${r.late ? 'bad' : ''}">${r.inactive ? `${t('inactive_product')} · ` : ''}${r.parts[0].last_ts != null ? ageEl(r.parts[0].last_ts, 'ago') : esc(t('never'))}</span>`})).join('') || empty(t('none_f'))),
     late ? `<span class="bad">${tn('late_count', late)}</span>` : null);
-  const since = new Date(Date.now() - 3600e3), sinceHM = `${String(since.getHours()).padStart(2,'0')}:${String(since.getMinutes()).padStart(2,'0')}`;
-  const today = new Date().toLocaleDateString('sv');
-  const thread = SNAP.feed = [...d.notes.map(n => ({h: n.time, who: 'orchestrator', t: n.text, kind: 'note', p: n.p})),
-      ...d.progress.filter(x => hhmm(x.time) >= sinceHM && String(x.time).slice(0,10) === today).map(x => ({h: hhmm(x.time), who: x.agent || '?', t: x.text, kind: 'progress', p: x.p}))]
-    .sort((a,b) => b.h.localeCompare(a.h));
-  $('lasthour').innerHTML = sect(t('last_hour'), list(thread.map((x, i) => lrow({k: 'feed', key: i, id: x.h, name: ptag(x.p) + aname(x.who), title: inline(x.t)})).join('') || empty(t('nothing_last_hour'))), thread.length || null);
+  $('lasthour').innerHTML = lastHourHtml(feedThread(d));
   $('errs').innerHTML = d.errors.length ? sect(t('errors'), list(d.errors.map(e => lrow({cls: 'wrap bad', title: esc(e)})).join(''))) : '';
   renderAbout();
 }
