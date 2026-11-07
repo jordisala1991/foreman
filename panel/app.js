@@ -709,17 +709,17 @@ function decideOpt(b){
   if(b.dataset.undo !== 'no') return answerOpt(b);
   const x = lastData && lastData.decisions.find(y => y.p===b.dataset.p && y.title===b.dataset.d), o = b.dataset.op;
   const d = (x && x.details && x.details[o]) || {}, l = optLetter(o) || o;
-  closeSheet();
-  document.body.insertAdjacentHTML('beforeend', `<div class="csheet" id="csheet" onclick="if(event.target===this) closeSheet()">`
+  closeConfirm();
+  document.body.insertAdjacentHTML('beforeend', `<div class="csheet" id="csheet" onclick="if(event.target===this) closeConfirm()">`
     + `<div class="cpanel" role="alertdialog" aria-modal="true" aria-labelledby="csht" aria-describedby="cshd">`
     + `<h3 id="csht"><span class="bad" aria-hidden="true">${UNDO_ICO.no}</span> ${t('dec_no_back', {l: esc(l)})}</h3>`
     + `<div id="cshd"><div><b>${esc(o)}</b></div>${d.effect ? `<p>${esc(d.effect)}</p>` : ''}${d.cost ? `<p class="muted">${esc(t('dec_cost', {text: d.cost}))}</p>` : ''}</div>`
-    + `<div class="btns"><button id="csback" onclick="closeSheet()">${t('dec_back')}</button><button id="csgo" class="sec bad">${t('dec_choose', {l: esc(l)})}</button></div></div></div>`);
-  $('csgo').onclick = () => { closeSheet(); answerOpt(b); };
+    + `<div class="btns"><button id="csback" onclick="closeConfirm()">${t('dec_back')}</button><button id="csgo" class="sec bad">${t('dec_choose', {l: esc(l)})}</button></div></div></div>`);
+  $('csgo').onclick = () => { closeConfirm(); answerOpt(b); };
   $('csback').focus();
 }
-function closeSheet(){ const s = $('csheet'); if(s) s.remove(); }
-document.addEventListener('keydown', e => { if(e.key==='Escape' && $('csheet')){ e.stopImmediatePropagation(); closeSheet(); } }, true);
+function closeConfirm(){ const s = $('csheet'); if(s) s.remove(); }   // not closeSheet: that is the backlog filter's
+document.addEventListener('keydown', e => { if(e.key==='Escape' && $('csheet')){ e.stopImmediatePropagation(); closeConfirm(); } }, true);
 const answerOpt = b => { if(b.dataset.ch) CHANGE_OPEN.delete(b.dataset.fk);
   return post(`/api/decide?id=${encodeURIComponent(b.dataset.id)}&op=${encodeURIComponent(b.dataset.op)}${b.dataset.ch ? '&change=1' : ''}`, b.dataset.p); };
 // the «other answer» boxes open and what is typed in them, by product and decision: kept across repaints
@@ -1463,7 +1463,7 @@ window.addEventListener('keydown', e => { if((e.metaKey || e.ctrlKey) && e.key.t
 function renderPicker(){
   const ps = OVER.projects, ok = ps.filter(o => !o.broken);
   const line = o => o.broken ? (o.mode && o.mode !== 'active' ? o.mode : '') : [o.mode==='inactive' ? '' : orchLine(o.orchestrator, true), tn('agents_count', o.agents), o.decisions ? tn('decisions_count', o.decisions) : '', o.late.length ? tn('late_count', o.late.length) : ''].filter(Boolean).join(' · ');
-  const row = (v, title, color, meta, tag='') => lrow({icon: dot(color), title: `${esc(title)}${tag}`, meta, cls: v===P ? 'on' : '',
+  const row = (v, title, color, meta, tag='') => lrow({icon: dot(color), title: `${esc(title)}${tag}`, meta, cls: v===P ? 'prow on' : 'prow',
     attrs: ` onclick="pick('${esc(v)}')" style="cursor:pointer"`});
   // a product whose config does not load stays here, red and tagged (its error shows when picked); one with config
   // warnings gets a tag too
@@ -1511,6 +1511,8 @@ function render(d, blSig){
   const wiki = !!wikiP();
   $('navwiki').style.display = wiki ? '' : 'none';
   if(!wiki && $('t-wiki').classList.contains('on')) tab('now');
+  // reopened on the Wiki tab: it was drawn before the data came (no product, no texts); draw it now, and again until it loads
+  else if(wiki && $('t-wiki').classList.contains('on') && (WIKI.p !== wikiP() || !WIKI.list)) renderWiki();
 }
 async function load(){
   try{
@@ -1605,7 +1607,7 @@ function tab(name){
   document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===name));
   lsSet('tab', name);
   window.scrollTo(0,0);
-  if(name==='wiki') renderWiki();
+  if(name==='wiki' && wikiP()) renderWiki();   // on opening the page there is no data yet: render() draws it then
 }
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));
 { const s = lsGet('tab', ''); if(s && $('t-'+s)) tab(s); }
