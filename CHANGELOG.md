@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-11-07
+
 ### Added
 
 - `foreman agents --cost`: what each agent run cost at API list prices (tokens by model, minutes, outcome), recorded from the transcript at `progress --done` or when the pass sees the agent stopped, kept in `costs.jsonl` beside the backlog; by issue, sub-issue, type, model, week or day, with the share of tokens on Sonnet or Haiku, as text or JSON; `--backfill DAY` records older runs. The panel's issue page shows the issue's cost.
@@ -29,6 +31,7 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ### Fixed
 
+- A message from the owner, including an approval given from the panel, brings the orchestrator's next loop pass at the next tick (within a minute) instead of at the next hourly pass.
 - The guard sees three more ways interpreter code writes a reserved file, and stops refusing two ways it only reads.
   A call without parentheses whose target is a variable (`File.write p, "x"` in Ruby, `open my $f, ">", $p` and
   `unlink $p` in Perl) is read like one with them. When code writes a target it cannot name, a name it assigns a
