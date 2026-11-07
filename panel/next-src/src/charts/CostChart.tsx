@@ -146,6 +146,21 @@ export function CostChart({ m }: { m: Metrics }) {
           ))}
           {g.columns.map((c, i) => {
             const x = i * (colW + g.gap) + (colW - barW) / 2;
+            // a figure on a bar: kept inside the plot, and above every bar it spans (narrow columns: 30 days)
+            const top = (text: string, centre: number) => {
+              const w = text.length * 6.5 + 4;
+              const left = Math.max(0, Math.min(width - w, centre - w / 2));
+              const under = g.columns.filter((_, j) => {
+                const l = j * (colW + g.gap);
+                return l < left + w && l + colW > left;
+              });
+              const tallest = Math.max(...under.map((u) => h(u.usd)));
+              return (
+                <text className="top" x={left + w / 2} y={Math.max(11, PH - tallest - 5)} textAnchor="middle">
+                  {text}
+                </text>
+              );
+            };
             let base = PH;
             const segs = c.segs.map((s, k) => {
               const sh = Math.max(STUB, h(s.usd) - (k ? SEG_GAP : 0));
@@ -160,11 +175,7 @@ export function CostChart({ m }: { m: Metrics }) {
             return (
               <g key={c.day} data-day={c.day} data-kind={c.kind}>
                 {c.kind === "cost" ? segs : <rect className={c.kind} x={x} y={PH - STUB} width={barW} height={STUB} rx={1} />}
-                {c.top ? (
-                  <text className="top" x={x + barW / 2} y={Math.max(11, base + SEG_GAP - 5)} textAnchor="middle">
-                    {c.top}
-                  </text>
-                ) : null}
+                {c.top ? top(c.top, x + barW / 2) : null}
                 <rect className="hit" x={i * (colW + g.gap)} y={0} width={colW} height={PH}
                   onPointerEnter={() => setActive(i)} onClick={() => setActive(active === i ? null : i)} />
               </g>
