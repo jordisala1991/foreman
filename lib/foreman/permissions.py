@@ -507,6 +507,27 @@ def _verdict_text(s: dict[str, Any], v: str) -> str:
     return s[f"perm_v_{kind}"].format(resource=res)
 
 
+def _rule_text(s: dict[str, Any], r: dict[str, Any]) -> str:
+    """A rule added, removed or moved between bands, in the language of `s`."""
+    if not r["before"]:
+        return s["perm_rule_added"].format(pattern=r["pattern"], band=_band_text(s, r["after"]))
+    if not r["after"]:
+        return s["perm_rule_removed"].format(pattern=r["pattern"], band=_band_text(s, r["before"]))
+    return s["perm_rule_moved"].format(
+        pattern=r["pattern"], before=_band_text(s, r["before"]), after=_band_text(s, r["after"])
+    )
+
+
+def _row_text(s: dict[str, Any], r: dict[str, Any]) -> str:
+    """A table row whose verdict changes, in the language of `s`."""
+    return s["perm_row_changed"].format(
+        line=r["line"],
+        command=_short(r["command"]),
+        before=_verdict_text(s, r["before"]),
+        after=_verdict_text(s, r["after"]),
+    )
+
+
 def render_diff(project: Project, d: dict[str, Any]) -> str:
     s = i18n.for_project(project)
     lines = [s["perm_candidate"].format(candidate=d["candidate"], config=d["config"], table=d["table"] or "-")]
@@ -517,30 +538,8 @@ def render_diff(project: Project, d: dict[str, Any]) -> str:
         lines.append(s["perm_nothing_table"] if table_moved else s["perm_nothing"])
     else:
         lines.append(s["perm_changes"])
-        for r in d["rules"]:
-            if not r["before"]:
-                lines.append("  " + s["perm_rule_added"].format(pattern=r["pattern"], band=_band_text(s, r["after"])))
-            elif not r["after"]:
-                lines.append(
-                    "  " + s["perm_rule_removed"].format(pattern=r["pattern"], band=_band_text(s, r["before"]))
-                )
-            else:
-                lines.append(
-                    "  "
-                    + s["perm_rule_moved"].format(
-                        pattern=r["pattern"], before=_band_text(s, r["before"]), after=_band_text(s, r["after"])
-                    )
-                )
-        for r in d["rows"]:
-            lines.append(
-                "  "
-                + s["perm_row_changed"].format(
-                    line=r["line"],
-                    command=_short(r["command"]),
-                    before=_verdict_text(s, r["before"]),
-                    after=_verdict_text(s, r["after"]),
-                )
-            )
+        lines += ["  " + _rule_text(s, r) for r in d["rules"]]
+        lines += ["  " + _row_text(s, r) for r in d["rows"]]
     if table_moved:
         lines.append(s["perm_table_change"].format(added=d["table_added"], removed=d["table_removed"]))
     if d["table_failures"]:
@@ -597,25 +596,10 @@ def opens(project: Project, cand: Project, d: dict[str, Any]) -> list[str]:
     for r in d["rules"]:
         lost = [b for b in r["before"] if b not in r["after"]]
         if lost and "never" not in r["after"]:
-            key, kw = (
-                ("perm_rule_removed", {"band": _band_text(s, r["before"])})
-                if not r["after"]
-                else (
-                    "perm_rule_moved",
-                    {"before": _band_text(s, r["before"]), "after": _band_text(s, r["after"])},
-                )
-            )
-            out.append(s[key].format(pattern=r["pattern"], **kw))
+            out.append(_rule_text(s, r))
     for r in d["rows"]:
         if any(_looser(a, b) for a, b in zip(_roles(r["before"]), _roles(r["after"]))):
-            out.append(
-                s["perm_row_changed"].format(
-                    line=r["line"],
-                    command=_short(r["command"]),
-                    before=_verdict_text(s, r["before"]),
-                    after=_verdict_text(s, r["after"]),
-                )
-            )
+            out.append(_row_text(s, r))
     before, after = grants.minutes(project, "grant_minutes", 30), grants.minutes(cand, "grant_minutes", 30)
     if after > before:
         out.append(s["perm_opens_minutes"].format(before=before, after=after))
@@ -763,18 +747,7 @@ def _backup(project: Project, files: list[tuple[Path, str]]) -> list[Path]:
 
 def _note(project: Project, d: dict[str, Any], opened: list[str], table: Path | None, backup: list[Path]) -> None:
     s = i18n.for_project(project)
-    lines = []
-    for r in d["rules"]:
-        if not r["before"]:
-            lines.append(s["perm_rule_added"].format(pattern=r["pattern"], band=_band_text(s, r["after"])))
-        elif not r["after"]:
-            lines.append(s["perm_rule_removed"].format(pattern=r["pattern"], band=_band_text(s, r["before"])))
-        else:
-            lines.append(
-                s["perm_rule_moved"].format(
-                    pattern=r["pattern"], before=_band_text(s, r["before"]), after=_band_text(s, r["after"])
-                )
-            )
+    lines = [_rule_text(s, r) for r in d["rules"]]
     if d["rows"]:
         lines.append(s["perm_note_rows"].format(n=len(d["rows"])))
     if d["table_added"] or d["table_removed"]:
@@ -909,7 +882,7 @@ def log_refusal(project: Project, ev: Event, verdict: guard.Verdict) -> None:
         line = json.dumps(refusal(project, ev, verdict), ensure_ascii=False) + "\n"
         f.parent.mkdir(parents=True, exist_ok=True)
         with util.file_lock(f):
-            with open(f, "a") as out:
+            with open(f, "a", encoding="utf-8") as out:
                 out.write(line)
             if f.stat().st_size > LOG_BYTES:
                 util.write_text_atomic(f, "".join(f.read_text(errors="replace").splitlines(True)[-LOG_LINES:]))
