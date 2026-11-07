@@ -19,7 +19,7 @@ export function How({ product, theme }) {
       live = false;
     };
   }, [product, days, tries]);
-  const empty = m && !m.since;
+  const empty = m && !m.since.cost;
   return html`<div class="screen">
     <div class="screenhead">
       <h1>${t("tab_how")}</h1>

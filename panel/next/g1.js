@@ -40,7 +40,7 @@ export function chartConfig(m, theme) {
   }));
   datasets.push({
     label: "",
-    data: m.days.map((d) => (m.cost[d].usd > 0 || !m.since || d < m.since ? null : 0)), // none before the data starts
+    data: m.days.map((d) => (m.cost[d].usd > 0 || !m.since.cost || d < m.since.cost ? null : 0)), // none before the data starts
     backgroundColor: ink.empty,
     minBarLength: 3,
     maxBarThickness: 28,
@@ -109,7 +109,7 @@ export function CostChart({ m, theme }) {
   const fams = Object.keys(MODELS).filter((f) => m.days.some((d) => m.cost[d][f] > 0));
   const by = (f) => m.days.reduce((a, d) => a + m.cost[d][f], 0);
   const name = (f) => (f === "other" ? t("other_models") : MODELS[f].label);
-  const since = m.since && m.since > m.days[0] ? t("data_since", { day: dayLabel(m.since, { day: "numeric", month: "short" }) }) : "";
+  const since = m.since.cost && m.since.cost > m.days[0] ? t("data_since", { day: dayLabel(m.since.cost, { day: "numeric", month: "short" }) }) : "";
   const said = t("g1_summary", { total: usd(s.total), days: m.days.length, mean: usd(s.mean) });
   return html`<section class="card chart">
     <header>
