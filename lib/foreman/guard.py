@@ -1,216 +1,119 @@
 """The command guard (Claude Code PreToolUse hook): what a session of a registered project may not run or reach.
 
-Forked from an earlier in-house version (a fixed list of build and engine commands). Two lists, both from
-foreman.toml:
-- per resource, `guard`: command prefixes that must go through `foreman lock RESOURCE run …` in the same call (or
-  match one of its `allow` regexes, e.g. a CI script that takes the lock itself);
-- `[deny] patterns`: regexes of what is never run without the owner (deploys, releases, sends to real users…);
-- `[deny.grants]`: groups of regexes of what only the marked orchestrator runs, after the owner's yes (below).
+Its lists come from foreman.toml: per resource, `guard`, command prefixes that must go through `foreman lock RESOURCE
+run …` in the same call (or match one of its `allow` regexes, e.g. a CI script that takes the lock itself); `[deny]
+patterns`, regexes of what is never run without the owner (deploys, releases, sends to real users…); `[deny.grants]`,
+groups of regexes that only the marked orchestrator runs, after the owner's yes. The built-in rules are below.
 
-How the deny regexes read a command. A lexer reads it the way bash does: words with their quotes, escapes and
-`\\`+newline, comments, redirections, heredocs, and the separators && || ; | |& & newline ( ). Every segment (one
-simple command) is compared as its raw text, quotes included (so `bash -c "x"` is still seen), and every command
-substitution ($(…), backquotes, <(…), >(…), also inside double quotes and inside an unquoted heredoc) is compared
-again as a command of its own, so an anchored regex finds the command at its start. The only text left out is the
-value of a data argument of a closed list of commands that never run their arguments (TEXT_ARGS: foreman note,
-progress, guard, inbox, backlog, the messages of integrate, the label of `lock … run`, and git commit -m; and
-data_tokens(): every argument of echo and printf but `printf -v`, the pattern of grep, egrep, fgrep, rg and git grep
-with their options in a closed list, gh pr|issue --title/--body and git tag -m), when the segment does not pipe into
-anything but a plain filter: those values are compared as "". A printer may also write to files and pipe into tee
-while every file the line writes is a literal path, not a device, /proc or .git (written()); when the line may run
-a file it writes (read_back()), what printers print is compared as a command.
-What runs inside a command is a command of its own too, read again by the same check (runs()): the string of
-`sh|bash|zsh… -c` (behind env, sudo, nice, timeout, foreman lock … run…), the words of eval, ssh
-HOST, watch, su -c and env -S, the command of xargs and of find -exec, a heredoc or here-string a shell (or eval,
-source, xargs, ssh) reads, and what a pipe feeds into one (its heredocs, and its arguments as a command: `echo "x" |
-sh`); a $(…) in the program's place or a <(…) given to a shell runs its output; so does `trap ACTION`, and a command
-inside `{ …; }`. Two cases reach past one segment (unbounded()). When the output or input of a group, a compound, a
-function or alias defined in the line, >(…) or a coprocess reaches something that reads it as a program (`{ …; } |
-sh`, `if …; fi | sh`, `echo x | if …; then sh; fi`, `{ sh; } <<< x`, `f(){ sh; }; echo x | f`), the whole line is
-read as if it went to a shell: no exemption, and every segment's arguments, inputs and assigned values are compared
-as commands. When a variable runs (in the program's place, or in sh -c, eval, xargs, a heredoc or pipe into a shell
-or a substitution, with a value the line can give it), the values the line gives its variables are compared as
-commands: assignments (also `export`, `local`, `${x:=…}`, arrays), `printf -v`, `for|select … in`, the input of
-`read|mapfile` (and what pipes into it), `set` and the arguments of a function defined in the line, and for `$_` the
-last argument of each command; their substitutions run. Data values keep their exemption there (they reach a
-variable only through `$_` or `| read`, both compared). A heredoc to an interpreter that is not a shell (python,
-perl, node…) is compared raw, except a python program read from one heredoc that cannot start a process (pyscript:
-an allow-list gate of imports and names), compared with its comments and its prose literals blanked, one-word
-literals kept; raw again when its output runs, the line writes to something else than a plain file, the program
-writes a file it cannot name or a module it would import, or the line may run a file it writes (_python()). Any
-other heredoc body is text (only its substitutions run when the delimiter is unquoted), except a heredoc to cat or
-tee writing a file the line may run (runs_written()): then it is compared as a command, or raw when only an
-interpreter that is not a shell runs it. If the lexer cannot
-read the command or a string inside it (an unclosed quote, $'…', $((…)), nesting deeper than 4, a control character)
-the whole text is compared with no exemption, raw and with quotes and parentheses turned into spaces, so a failure
-only blocks more. check() never raises: a hook that raised would let the command through.
-A `git push` is also compared as git would do it (gitpush.py): for each segment that runs one, from the folders it
-may run in (ctx cwd, then the line's cd/pushd and git -C), a text `<assignments and wrappers> git push <URL>
-<src>:<dst> [--force] [--delete]` per ref it would push, after every other text, so a command that already matched
-keeps its pattern and where; where = resolved, or unknown when the folder cannot be named (every repo of the project
-is tried: it only blocks more). Config the line changes before the push (`git -c`, `--git-dir`, GIT_DIR, an
-earlier `git config` or `git remote set-url`) and git aliases are resolved too; what cannot be read counts as an
-unknown folder; a `!` alias is compared as a command of its own. A line the lexer cannot read that has `git … push`
-is compared as a push of every branch and tag from the event's folder and every repo of the project. All three lists
-see it (deny(…, at)). A failure of the resolver is a deny. A ctx without the cwd key compares only the text; a table
-run gives each row its @DIR, else the project's home.
-One reading per check (_Check): those texts are read once with the pushes resolved and once without (for the two
-built-in lists), and each list is compared with them (an empty list is not); each line the command runs is read once
-(_read) for those texts and for the rules below (_walk: the command and each line nested in it as sh -c, eval, $(…),
-a heredoc or a pipe into a shell, xargs and find -exec run it, not what ssh runs; each segment with the folders it may
-run in, gitpush.folders from the event's cwd, else the process's, with the values the line gives its variables); the
-registry, whether the caller is an agent and what git says of a folder (the Resolver, shared by the pushes and the
-main-checkout rule), once each. A rule below that fails compares the line's text only (_either): a failure of
-foreman blocks only what that text names.
-What the guard does not see: a script written to a file and run later (or read as code by another program by its
-own convention, a shell's startup file), a forbidden command built inside a program
-(python -c, `os.system("x")` in a heredoc to python, for an anchored pattern; a python program that passes the gate
-and still reaches a process through a path the gate does not know, or a module file left in the folder by an
-earlier call), shell aliases and functions from
-outside the command, a variable whose value comes from outside the line (the environment, an earlier call) and a
-command assembled from pieces (`a=gi; b="t x"; $a$b`).
+How the deny regexes read a command (_texts). The lexer (shell.py) reads it the way bash does; each simple command is
+compared as its raw text, quotes included (so `bash -c "x"` is still seen), and so is each line nested in it, as a
+command of its own (an anchored regex finds it at its start): every command substitution ($(…), backquotes, <(…),
+>(…), also inside double quotes and an unquoted heredoc) and what a command runs (shell.runs(): sh -c, eval, ssh HOST,
+watch, su -c, env -S, xargs, find -exec, trap, `{ …; }`, a heredoc, here-string or pipe into a shell, behind env,
+sudo, timeout, foreman lock … run…). Only the data arguments of a closed list of commands that never run them
+(shell.data_tokens(): TEXT_ARGS of foreman, git commit|tag -m, gh pr|issue messages, echo and printf, a search
+pattern) are compared as "", and only while nothing that may run them reads the segment's output or a file the line
+writes (filters_only(), written(), read_back(), runs_written(): then what it prints is a command). When what runs
+reaches past one segment (shell.unbounded(): a group, compound, function or alias of the line, >(…) or a coprocess
+feeding something that reads a program), the whole line is read as if it went to a shell, with no exemption; when a
+variable runs with a value the line can give it, every value the line gives its variables (shell.values()) is
+compared as a command. A heredoc to an interpreter that is not a shell is compared raw, except a python program that
+passes pyscript's gate, compared with its prose blanked (_python()). A text the lexer cannot read (an unclosed quote,
+$'…', $((…)), nesting deeper than 4, a control character) is compared whole, with quotes and parentheses also turned
+into spaces and no exemption (_whole): a failure only blocks more. check() never raises: a hook that raised would let
+the command through.
+A `git push` is also compared as git would do it (gitpush.py): a text `<assignments and wrappers> git push <URL>
+<src>:<dst> [--force] [--delete]` per ref, from each folder it may run in (where = resolved), or from every repo of
+the project when the folder cannot be named (unknown), after every other text, so a command that already matched
+keeps its pattern; a line the lexer cannot read that has `git … push`, as a push of every branch and tag. All three
+lists see it; a failure of the resolver is a deny. A ctx without the cwd key compares only the text.
+One reading per check (_Check): the texts are read once with the pushes resolved and once without; each line the
+command runs is read once (_read) for them and for the rules below, which take every line _walk gives (the command
+and each line nested in it, not what ssh runs; each segment with the folders it may run in, gitpush.folders, and the
+values the line gives its variables); the registry, the caller and what git says of a folder (the Resolver), once
+each. A rule that fails compares the line's text only (_either): a failure of foreman blocks only what it names.
+Not seen: a script written to a file and run later (or read as code by another program by its own convention), a
+command built inside a program (python -c, `os.system("x")` in a heredoc to python; a module file left in the folder
+by an earlier call), shell aliases and functions from outside the command, a variable whose value comes from outside
+the line, a command assembled from pieces (`a=gi; b="t x"; $a$b`).
 
-Who calls (check()'s ctx, from the hook event). A command that matches a `[deny.grants]` group (and no `patterns`,
-which win for everyone) passes only for the main thread of the marked orchestrator's session (the event's session_id
-is the one in <state>/session and it carries no agent_id: never a subagent, which shares its parent's session id, nor
-another session). It must run under the marked session's own `claude` process, the one that marked itself
-(procs.py: the nearest `claude` above the hook is the mark's pid with the same start time; without a recorded
-process, or without `ps`, it does not pass): a copy started with the session's id (`claude -p --resume ID`) sends the
-same session_id and no agent_id. And it needs a live grant of its group (grants.py: the owner's own yes to the
-question foreman's hooks module asks, for that session and process, for [deny] grant_minutes); a command of two
-groups needs both.
-Otherwise the verdict is ("orchestrator", hit) with hit.why = agent | session | process | grant (checked in that
-order; the process after the session, as it runs `ps`, and the grant last, so the module asks the owner only about a
-call that nothing else refuses; hit.group names the group without a grant). A table run and `guard --as` compare no
-process and take every group as granted. No ctx, or one with only cwd (a table's agent run), is an agent. A command
-that passes leaves the hit in ctx["passed"] (hit.grant: {group, via, at, answer} of each live grant it used): the
-hook writes it down (approved.py: a line in approved.jsonl and a note).
+Who calls (Ctx). A command of a `[deny.grants]` group (and no `patterns`, which win for everyone) passes only for the
+main thread of the marked orchestrator's session (session_id is the one in <state>/session, no agent_id: never a
+subagent, nor another session), run under that session's own `claude` process (procs.py: the nearest `claude` above
+the hook is the mark's pid with the same start time; a copy started with `claude -p --resume ID` is not), with a live
+grant of each of its groups (grants.py: the owner's yes to the hooks module's question, for that session and process,
+for [deny] grant_minutes). Otherwise the verdict is ("orchestrator", hit) with hit.why = agent | session | process |
+grant, checked in that order so the owner is asked only about a call nothing else refuses (hit.group: the group
+without a grant). A table run and `guard --as` compare no process and take every group as granted; no ctx, or one
+with only cwd, is an agent. A command that passes leaves its hit in ctx["passed"] (hit.grant: {group, via, at,
+answer} of each grant used), which the hook writes down (approved.py).
 
-A built-in rule, before `[deny] patterns` and for everyone (the orchestrator included): a Bash call that runs
-`foreman hook mod` is refused (HOOK_MOD). Its ops are for foreman's hooks module, which runs them as a process the
-guard never sees; through Bash, a caller could hand `hook mod grant` an answer the owner never gave. Likewise a Bash
-call that reaches the panel's endpoint approving a pending grant request (PANEL_GRANT, `api/grants/approve` in a
-URL): the owner approves from the page, never a command.
-One built-in rule for the orchestrator only (PERMISSIONS_APPLY, after those two): `foreman permissions apply`, which
-rewrites the product's foreman.toml and guard table (permissions.py), passes only for the marked orchestrator's main
-thread in its own process (the agent, session and process checks of a group, without a grant), whatever the
-product's lists say; the owner's yes is in the chat. When it carries `--opens` (the change allows something that was
-not allowed before) it is also in the internal group `permissions` (grants.INTERNAL), so it needs the owner's own yes
-to the hooks module's question, like any group; so does `foreman integrate … --opens` (a branch that changes a live
-foreman.toml or guard table that way, integrate.py). The internal group is compared only for a command that names
-them (names_internal).
+Built-in rules, before `[deny] patterns` and for everyone: a Bash call that runs `foreman hook mod` (HOOK_MOD: its ops
+are the hooks module's, and `hook mod grant` could be handed an answer the owner never gave) or reaches the panel's
+endpoint that approves a grant (PANEL_GRANT). Then PERMISSIONS_APPLY: `foreman permissions apply` passes only for the
+marked orchestrator's main thread in its own process, whatever the lists say. With `--opens` it is also in the
+internal group `permissions` (grants.INTERNAL), as is `foreman integrate … --opens`, so it needs the owner's yes like
+any group (compared only for a command that names them, names_internal).
+For an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups, why=agent; the orchestrator and the
+owner's other sessions pass), in every line _walk gives:
+- INTEGRATE: a segment whose program is foreman (shell.foreman_call) running `integrate` without --help, -h or --check
+  as a word of its own (the regex, for a text the lexer cannot read).
+- MAIN_CHECKOUT: a git that rewrites a main checkout of any product of the registry (main_checkouts(): the checkout,
+  the nearest folder up with a `.git` entry, of each live config and guard table and of each [repos.*] path; a
+  worktree or a submodule has its own `.git` file). Its folder is its segment's with -C, --work-tree and GIT_WORK_TREE
+  applied (gitpush.moved); one the line cannot name passes unless the line names such a checkout as text
+  (_names_top). What rewrites is _git_rewrites()'s: a subcommand that changes the whole copy, or a path that reaches
+  a live file (_reaches); reading, commit, add, branch, worktree, fetch and a soft or mixed reset pass. An alias is
+  read in that folder's config (gitpush.aliased): to a git command, as that command; `!`, as a shell command from
+  the folder; a subcommand the line computes rewrites, but a function's "$@" (gitpush.called). A text the lexer
+  cannot read is refused when it has `git … SUB` (GIT_REWRITE_TEXT) and names such a checkout or runs in one. Not
+  seen: a write of .git/config or .git/hooks (the git class of the reserved files), update-ref, branch -f, patch, tar
+  or unzip over it, git run by a program.
+- HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product, while
+  one exists), for an agent holdout_reader refuses (all but a planner, an unknown type too): `foreman holdout` but
+  --help or -h; a line that names such a folder as text; a word or a redirection's file (also `--opt=VALUE`'s value)
+  that, expanded and joined to each folder its segment may run in, reaches one (_holdout_reach: a wildcard that may
+  match it; for a program that walks, _walks, a folder that holds one, and given no path, the folder it runs in); a
+  segment that runs in one; a Grep or Glob that walks one. Not seen: a path a program builds, a variable from outside
+  the line, a link to a folder above walked by a program that follows links.
 
-Three built-in rules for an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups; _agent_only), each
-("orchestrator", Hit) with why=agent; the orchestrator and the other sessions of the product (the owner's chats) pass,
-and only a caller that _who calls an agent (no process is compared) is checked. INTEGRATE: a segment whose program is
-foreman (shell.foreman_call: bare, a path, `python3 bin/foreman`, --project P, behind the wrappers runs() skips) running
-`integrate` in any line _walk gives (the regex for a text the lexer cannot read), in any folder and any product, but
-with --help, -h or --check as a word of its own (argparse takes no abbreviation; --check stops before anything is
-written); the text of a note, a commit message, a sed script or a heredoc to an interpreter is never such a call.
-MAIN_CHECKOUT: a git that rewrites a main checkout of any product of the registry: the checkout (the nearest folder up
-with a `.git` entry, a stat per level, never git) of its live config or guard table, and that of each of its [repos.*]
-paths that exists (a home outside its code repo leaves that repo in), for an agent only (main_checkouts; a worktree
-outside it, one nested in .claude/worktrees and a submodule have their own `.git` file, so they are not it). The folder
-of each git, in every line _walk gives, is its segment's with its -C applied (gitpush.moved: one the line cannot name
-keeps the one before), plus a --work-tree or GIT_WORK_TREE the line gives. Only a folder it cannot name passes unless
-the line names such a checkout as text (_names_top). What rewrites it (_git_rewrites): merge, pull, rebase, cherry-pick,
-revert, am, switch, clean, filter-branch and checkout-index always; bisect but log|view|visualize; read-tree -u|--reset;
-sparse-checkout but list; submodule update; apply but --check|--stat|--numstat|--summary|--cached; reset
---hard|--merge|--keep; stash with no subcommand, push without paths, save, pop, apply, branch; checkout of a branch or a
-commit (-b, -B, --orphan, --detach, -f alone, `X --`, one word that is no path in that folder); and, by paths, when one
-reaches a live file (_reaches: the file, a folder that holds it, a .claude folder or settings file of the checkout; a
-path with a variable or a wildcard, when a live file lies under the folder of its literal start; a `:` pathspec):
-checkout -- PATHS (or TREE PATHS), restore (but --staged alone), rm (but --cached), mv (sources and destination), stash
-push -- PATHS. Everything else passes: reading (log, diff, show, status, stash list|show…), commit (a commit on main in
-a main checkout is not seen: the projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset
-(the index only). A git alias is read in that folder's config (and the line's -c; gitpush.aliased): to a git command, as
-that command; `!`, as a shell command from the same folder; a subcommand the line computes (`git $C`) rewrites, but a
-function's "$@" (gitpush.called). A line the lexer cannot read is refused when it has `git [options] SUB` with SUB one
-of those (GIT_REWRITE_TEXT) and names such a checkout or runs in one. A failure of the rule refuses only a line that has
-such a `git SUB` and names such a checkout as text. Not seen: a git command that writes the shared .git/config or
-.git/hooks (`git config`, `git remote add`; their writes by name are the git class of the reserved files, below), a
-branch moved without touching files (update-ref, branch -f: the copy is then dirty and integrate stops), patch, tar or
-unzip over it, git run by a program or a script, a variable from outside the line.
-HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product of the
-registry that exists: none, and only `foreman holdout` is compared), for an agent holdout_reader refuses (every type
-but a planner's: the ctx's agent_type, else <state>/agents.json; an unknown one is refused). Refused: `foreman
-holdout` as INTEGRATE reads it but with --help or -h; a line that names such a folder as text (`~`, $HOME); a word
-of a segment (also a redirection's file, the value of `--opt=VALUE`, in every line _walk gives) that, expanded
-and joined to each folder the segment may run in, reaches one (_holdout_reach: the real path in or at the folder; a
-wildcard that may match it, `**` any depth; with a program that walks, _walks: WALKERS or WALK_FLAGS, a folder that
-holds it, and given no existing path, the folder it runs in); a segment that runs inside one. Any other tool: its
-places as `cat PLACE` (so a Read, Write or Edit in it), and a Grep whose path (else the call's cwd) holds one or a
-Glob whose pattern may reach one. Not seen: a path a program builds, a variable from outside the line, a link to a
-folder above walked by a program that follows links.
+For the resource prefixes quoted strings are dropped (a note that mentions `make up` is not a command), the command is
+split at && || ; | newlines and $(, and leading VAR=value, env, time, nice, exec, command, sudo and the time-limit
+wrappers are skipped (shell.words()). Exit 2 = rejected, with the reason on stderr for the agent (message()).
 
-For the resource prefixes quoted strings are dropped (a note that mentions `make up` is not a command); the
-command is split at && || ; | newlines and $(; leading VAR=value, env, time, nice, exec, command, sudo and the
-time-limit wrappers are skipped. Exit 2 = rejected, with the reason on stderr for the agent.
+Any other tool (check_tool; check_call dispatches): one rule, with no list of tools, judges what the call names
+(tool_texts()). A string under a field whose name ends in one of PLACE_WORDS (file_path, path, url, cwd, files…), or
+in a list or map under one, is a place: it gets the verdict check() gives `cat PLACE` (and `cat ~/…` for a path under
+$HOME), never a lock. A string under `command` or `cmd` gets the verdict check() gives it in Bash. Every other string
+is free text, not compared. A FILE_TOOLS call goes through check_file first, so writing a secret gets the verdict of
+reading it. A failure of check() on a place compares its raw text (_whole); any other failure lets the call through.
+Not seen: a tool that runs code under another key (script, code), a glob's `pattern`.
 
-Any other tool (check_tool, the same hook on every tool but Bash; check_call dispatches; a FILE_TOOLS call after
-check_file, so writing a secret gets the verdict of reading it, as `echo x > .env` does in Bash): one rule,
-with no list of tools, judges what the call names. tool_texts walks its input (TOOL_DEPTH levels, TOOL_STRINGS
-strings): a string under a field whose name ends, split at `_` and camelCase, in one of PLACE_WORDS (file_path,
-notebook_path, path, url, cwd, root, files, glob, targetPath…), or inside a list or map under one, is a place; a
-string under `command` or `cmd` is a command. A command gets the verdict check() gives it in Bash (the pause of the
-hook too); a place, the one check() gives `cat PLACE`, and for an absolute path under $HOME also `cat ~/…` (Read
-names absolute paths, rules are often written with `~`), never a lock (a place runs nothing). The first refusal wins;
-a place's Hit has where=tool and part `<tool> <place>`, and every Hit of such a call its tool and call. Every other
-string (content, old_string, prompt, message, query, pattern…) is free text and is not compared, as the text of a
-note is not. Reading a reserved file stays free. A failure of check() on a place compares its raw text (_whole);
-any other failure lets the call through: a failure of foreman never stops a Read. Not seen: a tool that runs code
-under another key (script, code), a glob's `pattern`.
-
-The reserved files (check_file, the same hook on Write, Edit, MultiEdit and NotebookEdit): the files no tool call
-writes, the same for every product and computed at each call (reserved()): config, the live foreman.toml of every
-project of the registry; table, the live guard table of each ([check] guard_table); state, the whole state root and
-the [paths] state of a project that lies outside it; registry, the registry file (with the default one, its whole
-folder ~/.config/foreman, which holds the lock's busy scripts); claude, Claude Code's own folder (~/.claude, and
-$CLAUDE_CONFIG_DIR) but its projects/ (transcripts and memory) and plans/, ~/.claude.json, and any settings.json or
-settings.local.json of a folder named .claude; git (AGENT_KINDS, git_entries), what git runs or reads as
-instructions in a protected repo (protected_repos: the checkout, gitdir.checkout_of, of each live config and guard
-table, and each [repos.*] path of every project), found on the disk without git (gitdir.common_dir: the `.git`
-folder, or a worktree's `.git` file and its commondir, so a worktree outside or nested reaches the same one): its
-common git directory's hooks/ and info/, config and config.worktree, every worktree's worktrees/*/config.worktree (a
-pattern, WORKTREE_CONFIG), and what those configs name (an absolute core.hooksPath, include.path and
-includeIf.*.path, followed into the included files, gitdir.config_paths); and the machine's git config:
-~/.gitconfig, $XDG_CONFIG_HOME/git/ (else ~/.config/git/) and the file each link in it reaches, $GIT_CONFIG_GLOBAL
-and $GIT_CONFIG_SYSTEM when set, /etc/gitconfig, /opt/homebrew/etc/gitconfig and /usr/local/etc/gitconfig, with what
-they name. Its files are reserved as the file they reach and as the link itself. Not objects/, refs/, logs/, HEAD,
-index or the rest of worktrees/, which a commit or `git worktree add` writes. A path is compared as the file it
-reaches: `~` expanded, joined to the ctx's cwd when relative, os.path.realpath (symbolic links, also of the folders
-of a path that does not exist yet, and `..`), case-folded on macOS (APFS ignores case); a file that exists with more
-than one hard link is also compared by (device, inode) with each reserved file. Nobody passes, the orchestrator
-neither (`foreman permissions apply` changes the config and the table, and Python writes them, which the guard does
-not see), with two exceptions: the git class refuses only an agent (_who says agent; the orchestrator and the
-owner's other sessions write it, as they run git), and the product's own board (Project.board) for the marked
-orchestrator's session and main thread (no process is compared: it is its own slate). The verdict is ("file", Hit)
-with the Hit "file:<class>", where "file", kind the class, path the file as written, name the project it belongs to
-(git: the repo's product, "" for the machine's) and why agent | session | "" (the orchestrator). If the check itself
-fails, it denies only a path that looks reserved as text (under one of the reserved folders, or named foreman.toml,
-guard.tsv, projects.toml, settings.json or settings.local.json), never one of the git class (O8: a failure of
-git_entries gives no entry): a failure of foreman never stops the agents' writes.
-A Bash command that writes one of them by name gets the same verdict (_bash_file, in check() after the built-in rules
-and PERMISSIONS_APPLY, before [deny] patterns), with hit.bash set and hit.part the command around the name: the files
-shell.writes() reads in the line (redirections, tee, the destination of cp/mv/ln/install/rsync/ditto/scp and the sources
-of mv, sed -i, gsed -i, perl -i, rm, rmdir, unlink, truncate, touch, shred, chmod, chown, chgrp, chflags, dd of=, curl
--o, wget -O, a find that deletes), behind the wrappers runs() skips, in every line _walk gives, and the files the code
-of an interpreter (python -c, node -e, a heredoc to perl…) may write (_code_writes: Python that passes pyscript's gate
-by what it writes, other code by the quoted literals in the arguments of a call that writes; from the segment's folders
-and from HOME, `~` expanded). A target is expanded (`~` when unquoted, $HOME and the line's own literal assignments) and
-joined to each folder the segment may run in, then compared as check_file does, also as the link itself (rm, mv, ln -sf
-change a link); a copy into a folder also as each source's name in it; a recursive one (rm -r, chmod -R, cp -R, rsync
--a, ditto, the source of mv) also when a reserved file or folder lies under it. A target still not known (an expansion,
-a glob, a folder the line cannot name) is reserved only when its text names a reserved path (_names); a text the lexer
-cannot read, only when it also looks like a write (WRITE_WORDS). A failure of the rule denies only such a text. Not
-seen: a script file that writes it (python x.py), code piped into an interpreter (`echo … | python3`), git checkout or
-restore in the main checkout (an agent's: MAIN_CHECKOUT above), an archive unpacked over it, `find … -exec rm {}` below
-a folder that is not itself reserved, a variable from outside the line or set by a loop.
-The owner's one-off yes: a call of the main thread (no agent_id) of any session of the product that writes
-a file of ONCE_KINDS (claude, registry) passes when grants.json holds the owner's one-use yes for that very call
-(grants.take_once: the ctx's session and tool_use_id, and the same real path, or the same command for Bash), which it
-spends. foreman's hooks module asks for it before the call (`hook mod grant`, hooks_mod.py); an agent's call is never
-asked and never passes. config and table change only through `foreman permissions apply`; state, never.
+The reserved files (reserved(); check_file, on Write, Edit, MultiEdit and NotebookEdit): what no tool call writes,
+the same for every product: config, the live foreman.toml of every project of the registry; table, the live guard
+table of each; state, the state root and a [paths] state outside it; registry, the registry file (the default one:
+its whole folder, which holds the lock's busy scripts); claude, Claude Code's folder (~/.claude, $CLAUDE_CONFIG_DIR)
+but projects/ and plans/, ~/.claude.json, and any .claude/settings.json or settings.local.json; git (git_entries()),
+what git runs or reads as instructions in a protected repo (protected_repos(), found on the disk without git: hooks/,
+info/, config, config.worktree and each worktree's config.worktree of its common git directory, and the files those
+configs name) and the machine's git config (_machine_git()). A path is compared as the file it reaches (`~` expanded,
+joined to the cwd, its real path, case-folded on macOS), as the link itself and as a hard link of one. Nobody passes,
+the orchestrator neither, with two exceptions: the git class refuses only an agent, and the product's own board
+passes for the marked orchestrator's main thread. The verdict is ("file", Hit "file:<class>"). If the check fails it
+denies only a path that looks reserved as text (LOOKS_RESERVED, a reserved folder), never one of the git class.
+A Bash command that writes one by name gets the same verdict (_bash_file, after the built-in rules and
+PERMISSIONS_APPLY, before [deny] patterns; hit.bash, hit.part the command around the name): the files shell.writes()
+reads (redirections, tee, cp, mv, ln, rsync…, sed -i, rm, chmod, dd of=, curl -o, a find that deletes) and those the
+code of an interpreter may write (_code_writes()), in every line _walk gives, expanded and joined to each folder the
+segment may run in, then compared as check_file does; a recursive write also when a reserved file lies under it. A
+target still not known (an expansion, a glob, a folder the line cannot name) is reserved only when its text names a
+reserved path (_names); a text the lexer cannot read, only when it also looks like a write (WRITE_WORDS). Not seen: a
+script file that writes it, code piped into an interpreter, an archive unpacked over it, `find … -exec rm {}` below a
+folder that is not reserved, a variable from outside the line or set by a loop.
+The owner's one-off yes: a main-thread call that writes a file of ASK_KINDS (claude, registry) passes when grants.json
+holds the owner's one-use yes for that very call (grants.take_once: its session and tool_use_id, and the same path or
+command), which it spends; the hooks module asks for it (`hook mod grant`); an agent's call never passes. config and
+table change only through `foreman permissions apply`; state, never.
 """
 
 from __future__ import annotations

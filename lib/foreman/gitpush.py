@@ -149,24 +149,9 @@ class Repo:
 def _git(folder: str, *args: str, git_dir: str | None = None) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0", GIT_PAGER="cat", PAGER="cat", LC_ALL="C")
     env.pop("LANGUAGE", None)  # git's messages in English: "not a git repository" is read
-    return subprocess.run(
-        [
-            "git",
-            "-C",
-            folder,
-            *([f"--git-dir={git_dir}"] if git_dir else []),
-            "-c",
-            "core.fsmonitor=false",
-            "--no-pager",
-            *args,
-        ],  # fmt: skip
-        capture_output=True,
-        text=True,
-        timeout=TIMEOUT,
-        env=env,
-        stdin=subprocess.DEVNULL,
-        check=False,
-    )
+    cmd = ["git", "-C", folder, *([f"--git-dir={git_dir}"] if git_dir else []), "-c", "core.fsmonitor=false"]
+    return subprocess.run([*cmd, "--no-pager", *args], capture_output=True, text=True, timeout=TIMEOUT, env=env,
+                          stdin=subprocess.DEVNULL, check=False)  # fmt: skip
 
 
 def read_repo(folder: str, git_dir: str | None = None) -> Repo | None:
