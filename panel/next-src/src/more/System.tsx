@@ -106,7 +106,13 @@ const EVERY_ES: [RegExp, string][] = [
   [/\bweekly\b/g, "cada semana"], [/\bdaily\b/g, "cada día"], [/\bhourly\b/g, "cada hora"], [/\band\b/g, "y"],
   [/\bhours?\b/g, "h"], [/\bdays?\b/g, "días"], [/\bweeks?\b/g, "semanas"],
 ];
-const every = (x: string): string => (lang() === "es" ? EVERY_ES.reduce((acc, [re, to]) => acc.replace(re, to), x) : x);
+// «every 1 days» is «every day» (singular for 1, in English too)
+const ONE_ES: Record<string, string> = { hour: "hora", day: "día", week: "semana" };
+const every = (x: string): string => {
+  const es = lang() === "es";
+  const one = x.replace(/\bevery 1 (hour|day|week)s?\b/g, (_m, u: string) => (es ? "cada " + ONE_ES[u] : "every " + u));
+  return es ? EVERY_ES.reduce((acc, [re, to]) => acc.replace(re, to), one) : one;
+};
 const short = (x: string, n = 160): string => (x.length > n ? x.slice(0, n - 1).trimEnd() + "…" : x);
 
 const PRODUCT_STATE: Record<string, Key> = { running: "sys_p_running", paused: "sys_p_paused", silent: "sys_p_silent", resting: "sys_p_resting" };

@@ -1084,7 +1084,8 @@ class NextHomeTest(NextPageTest):
         st = state(
             decisions=[QUESTION], grants=[GRANT], messages=[MESSAGE], agents=[AGENT, STUCK, done], progress=progress
         )
-        out = self.screen("#/home", st=st)
+        # a fixed «now» (the agents started 25 min before it): no margin to run out under load
+        out = self.screen("#/home", st=st, now=int(AGENT["start_ts"] * 1000) + 25 * 60 * 1000)
         perm, quest = out["cards"]
         self.assertEqual(perm["buttons"], ["Denegar", "Aprobar"])
         # the phone's card is title, time, one line of why (as the mockup's Main.dc.html) and buttons
