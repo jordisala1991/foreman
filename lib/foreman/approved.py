@@ -79,7 +79,7 @@ def decided(project: Project, ev: Event, hit: Hit, allowed: bool) -> None:
         cmd = str((ev.get("tool_input") or {}).get("command") or "")
         if hit.tool:  # another tool than Bash (guard.check_tool): the place or command it named, never its text
             cmd = hit.call
-        aid = ev.get("agent_id") or None
+        agent = identity.event_agent(project, ev)  # a subagent, or a session agent's main thread
         who = (orchestrator.current(project) or {}).get("name") or None
         _append(
             project,
@@ -88,8 +88,8 @@ def decided(project: Project, ev: Event, hit: Hit, allowed: bool) -> None:
                 "verdict": "allow" if allowed else "deny",
                 "why": None if allowed else hit.why,
                 "session": ev.get("session_id"),
-                "agent_id": aid,
-                "agent": identity.agent_name(project.state, aid) if aid else None,
+                "agent_id": agent[0] if agent else None,
+                "agent": agent[1] if agent else None,
                 "orchestrator": who,
                 "pattern": str(hit),
                 **({"tool": hit.tool} if hit.tool else {}),

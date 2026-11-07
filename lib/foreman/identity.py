@@ -18,6 +18,12 @@
   --name`); only what else the entry lacks is guessed the old way («Issue: ID», the backlog sub-issue with its name,
   «Branch `y`», a production type or worktree path in the brief).
   `registered` says whether the entry carries an identity (named_by launch or hand).
+- Session agents: an agent launched as a Claude Code session of its own (`claude --bg`), not by the Agent tool. Its
+  hook events carry its session_id and no agent_id. Its launch has `kind: "session"` and, once known, `session_id`;
+  `link` with that session id as the agent id ties it (its agents.json entry is keyed by the session id, with
+  `kind: "session"`). Its session may also carry its launch token in LAUNCH_ENV (`--settings` env reaches its hooks
+  and its commands). `session_agent` finds it by either; the guard treats its main thread as an agent, and
+  `recorded_caller` names it. Only what foreman registered is one: any other session stays the owner's.
 """
 
 from __future__ import annotations
@@ -39,6 +45,8 @@ TOKEN = re.compile(r"\[foreman launch ([a-z2-7]{10})\]")
 FIELDS = ("name", "issue", "sub", "repo", "branch", "worktree", "type", "production")
 PENDING_S = 86400
 AGENT_TOOLS = ("Agent", "Task")
+SESSION_KIND = "session"  # a launch or entry of a session agent (module doc)
+LAUNCH_ENV = "FOREMAN_LAUNCH"  # a session agent's launch token, in its session's environment
 PRODUCTION_TYPES = ("dev", "foreman:dev")
 PLANNER_TYPES = ("planner", "foreman:planner")
 MECHANIC_TYPES = ("mechanic", "foreman:mechanic")  # may be production: launched for an issue, it is unless told not
@@ -77,6 +85,8 @@ class Launch(_Launch, total=False):
     despite: list[dict[str, str]]  # [{decision, why}]: pending decisions that held it (launch --despite), when any
     review: bool  # launched to review its repo:branch (launch --review), only when so
     planned: str  # the sub-issue's `type` (TYPE[/MODEL]) when it has one: the call may not be dearer (call_too_dear)
+    kind: str  # SESSION_KIND for a session agent, only when so
+    session_id: str  # a session agent's session, once known (given at launch, or set by link)
 
 
 class Identity(TypedDict):
@@ -346,11 +356,14 @@ def new_launch(
     despite: list[dict[str, str]] | None = None,
     review: bool = False,
     planned: str | None = None,
+    kind: str | None = None,
+    session_id: str | None = None,
 ) -> tuple[str, Launch]:
     """Records a launch; (token, record). `production` None: true with a worktree or a production type, otherwise
     decided when the agent is tied to it (by its type). `model`: the one asked for, recorded only when given.
     `despite`: [{decision, why}] of the pending decisions that held it (`launch --despite`), recorded only when
-    given. `review`: a reviewer of `repo`:`branch` with no worktree (launch --review), recorded only when true."""
+    given. `review`: a reviewer of `repo`:`branch` with no worktree (launch --review), recorded only when true.
+    `kind` (SESSION_KIND for a session agent) and `session_id` (its session, when already known), only when given."""
     from . import agents as agents_mod
 
     production = production_at_launch(project, production, bool(worktree), agent_type)
@@ -375,6 +388,10 @@ def new_launch(
         rec["review"] = True
     if planned:
         rec["planned"] = planned
+    if kind:
+        rec["kind"] = kind
+    if session_id:
+        rec["session_id"] = session_id
     f = launches_file(project)
     with util.locked_json(f, {}) as cur:
         d = prune(cur, agents_mod.agents(project))
@@ -409,7 +426,8 @@ def link(
     """Ties launch `token` to agent `aid` in `agents` (the agents.json dict, which the caller holds locked and
     writes): copies the launch's fields, creates the entry if SubagentStart did not come yet. relink=False leaves a
     launch already tied to another agent alone (the transcript path: a brief may quote another agent's line).
-    Whether it tied it."""
+    A session agent's launch (SESSION_KIND) is tied with its session id as `aid`: the launch keeps it as
+    `session_id` and the entry gets `kind`. Whether it tied it."""
     f = launches_file(project)
     with util.locked_json(f, {}) as d:
         rec = d.get(token)
@@ -429,6 +447,9 @@ def link(
             a["model_asked"] = rec["model"]
         if rec.get("review"):
             a["review"] = True  # it reviews its branch: it holds it while live, its delivery is not the branch's
+        if rec.get("kind") == SESSION_KIND:
+            a["kind"] = SESSION_KIND
+            rec["session_id"] = aid
         a["launch"] = token
         a["named_by"] = how
         rec["agent"] = aid
@@ -471,6 +492,43 @@ def launched(project: Project, agents: dict[str, Agent], ev: Event) -> tuple[boo
     if not aid:
         return False, None
     return link(project, agents, aid, token, "launch", agent_type=kind or "general-purpose"), None
+
+
+def launch_env() -> str | None:
+    """The launch token in this process's environment (LAUNCH_ENV): set only in a session agent's session."""
+    return (os.environ.get(LAUNCH_ENV) or "").strip() or None
+
+
+def session_agent(state: util.PathLike, session: object, token: str | None = None) -> Agent | None:
+    """A session agent's record (its agents.json entry or its launch, with `id`, its agents.json key), or None when
+    the caller is no session agent. `token` (the session's LAUNCH_ENV) names its launch; one foreman does not know
+    is still an agent ({"id": session}): the variable only ever restricts. Without a token: the agents.json entry
+    keyed by `session` of kind SESSION_KIND, else a launch of that kind whose session_id is `session`. Reads at most
+    those two files, never raises."""
+    state = Path(state)
+    if token:
+        rec = util.read_json(state / "launches.json", {}).get(token)
+        rec = rec if isinstance(rec, dict) else {}
+        return {**rec, "id": rec.get("agent") or session}
+    if not isinstance(session, str) or not session:
+        return None
+    h = util.read_json(state / "agents.json", {}).get(session)
+    if isinstance(h, dict) and h.get("kind") == SESSION_KIND:
+        return {**h, "id": session}
+    for rec in util.read_json(state / "launches.json", {}).values():
+        if isinstance(rec, dict) and rec.get("kind") == SESSION_KIND and rec.get("session_id") == session:
+            return {**rec, "id": rec.get("agent") or session}
+    return None
+
+
+def event_agent(project: Project, ev: Event) -> tuple[str, str] | None:
+    """(agent id, name) of the agent behind a hook event: a subagent (its agent_id) or a session agent (its session
+    and this process's LAUNCH_ENV); None for a main thread that is no agent."""
+    aid = ev.get("agent_id")
+    if aid:
+        return aid, agent_name(project.state, aid)
+    sid, name = _session_caller(project.state, ev.get("session_id"))
+    return (sid, name) if sid and name else None
 
 
 def resolve_agent(agents: Mapping[str, Agent], ref: str) -> str:
@@ -757,10 +815,21 @@ def _by_worktree(open_: list[Any]) -> Any:
     return next(iter(found.values())) if len(found) == 1 else None
 
 
+def _session_caller(state: util.PathLike, session: object) -> tuple[str | None, str | None]:
+    """(agent id, name) of the session agent whose main thread calls (session_agent under `state`, with this
+    process's LAUNCH_ENV), or (None, None) when it is no session agent or the state is not known."""
+    sa = session_agent(state, session, launch_env()) if str(state) else None
+    if sa is None:
+        return None, None
+    sid = str(sa.get("id") or session or "?")
+    return sid, sa.get("name") or agent_name(state, sid)
+
+
 def recorded_caller(sub: str, call: list[Any]) -> tuple[str | None, str | int | None]:
     """Who runs this CLI by the calls the guard wrote down: (agent id, name) for an agent, (None, None) for the
     main thread or nothing written down, or "ambiguous" with the number of open calls when it cannot tell. `call`
-    is [project or None, sub, words…], the CLI's own command line."""
+    is [project or None, sub, words…], the CLI's own command line. The main thread of a session agent is that agent
+    (_session_caller)."""
     session = os.environ.get("CLAUDE_CODE_SESSION_ID")
     if not session:
         return None, None
@@ -789,7 +858,7 @@ def recorded_caller(sub: str, call: list[Any]) -> tuple[str | None, str | int | 
         if hit is None:
             return "ambiguous", len(open_)
     aid = hit.get("agent")
-    return (aid, agent_name(hit.get("state") or "", aid)) if aid else (None, None)
+    return (aid, agent_name(hit.get("state") or "", aid)) if aid else _session_caller(hit.get("state") or "", session)
 
 
 def who(

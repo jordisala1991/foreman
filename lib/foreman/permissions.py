@@ -866,7 +866,9 @@ def refusal(project: Project, ev: Event, verdict: guard.Verdict) -> dict[str, An
             rec.update(group=group, why=getattr(detail, "why", None))
         elif kind == "file":  # a reserved file (guard.check_file): its path, never what the call would write
             rec.update(file=detail.path, why=detail.why or None)
-    if ev.get("agent_id"):
+    from . import identity
+
+    if identity.event_agent(project, ev) is not None:  # a subagent, or a session agent's main thread
         rec["who"] = "agent"
     elif ev.get("session_id") and ev.get("session_id") == (orchestrator.current(project) or {}).get("session"):
         rec["who"] = "orchestrator"

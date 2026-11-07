@@ -728,7 +728,7 @@ def _words(project: Project, t: dict[str, str], group: str, cmd: str, cwd: Any) 
 
 
 def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
-    from . import grants, guard
+    from . import grants, guard, identity
 
     if ev.get("tool") in guard.FILE_TOOLS and _path(ev):
         out = _file_check(project, session, ev)
@@ -736,7 +736,7 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
             return out
     t = i18n.for_project(project)
     tool = _tool(ev)
-    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd")}
+    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd"), "launch": identity.launch_env()}
     if tool is not None:
         v, cmd = _tool_call(project, ev, ctx)
         if not cmd or (v and v[0] == "file"):
@@ -801,7 +801,7 @@ def _notified(ev: Event) -> dict[str, str]:
 
 
 def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
-    from . import approved, grants, guard, notes, orchestrator
+    from . import approved, grants, guard, identity, notes, orchestrator
 
     group, answer = ev.get("group"), ev.get("answer")
     if group not in grants_groups(project):
@@ -813,7 +813,7 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
     )
     tid = ev.get("tool_use_id") if isinstance(ev.get("tool_use_id"), str) else None
     tool = _tool(ev)
-    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd")}
+    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd"), "launch": identity.launch_env()}
     cmd = _tool_call(project, ev, ctx)[1] if tool is not None else _command(ev)
     t = i18n.for_project(project)
     o = orchestrator.current(project) or {}
@@ -953,9 +953,9 @@ def _path(ev: Event) -> str:
 def _file_verdict(project: Project, session: str, ev: Event) -> Any:
     """What the guard says of the call as the main thread of this session (no tool_use_id: nothing is spent): the
     Hit of a reserved file of guard.ASK_KINDS, or None."""
-    from . import guard
+    from . import guard, identity
 
-    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd")}
+    ctx: guard.Ctx = {"session": session, "agent": None, "cwd": ev.get("cwd"), "launch": identity.launch_env()}
     if ev.get("tool") in guard.FILE_TOOLS:
         v = guard.check_file(project, _path(ev), ctx) if _path(ev) else None
     else:

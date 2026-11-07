@@ -48,6 +48,10 @@ grant, checked in that order so the owner is asked only about a call nothing els
 without a grant). A table run and `guard --as` compare no process and take every group as granted; no ctx, or one
 with only cwd, is an agent. A command that passes leaves its hit in ctx["passed"] (hit.grant: {group, via, at,
 answer} of each grant used), which the hook writes down (approved.py).
+A session agent (identity.session_agent: a session foreman launched as an agent of its own, known by its launch or
+entry of kind "session" tied to the ctx's session, or by the launch token its session carries, ctx launch) is an
+agent too, its main thread included, also when its session is the marked one: the registration only restricts.
+Any other session without an agent_id is the owner's (session).
 
 Built-in rules, before `[deny] patterns` and for everyone: a Bash call that runs `foreman hook mod` (HOOK_MOD: its ops
 are the hooks module's, and `hook mod grant` could be handed an answer the owner never gave) or reaches the panel's
@@ -160,7 +164,8 @@ class Ctx(TypedDict, total=False):
     orchestrator's session, given only by a table run or `guard --as` (else <state>/session); cwd, the event's folder
     (with the key, each `git push` is also resolved, gitpush.py; None: unknown); passed, set by check() (the group's
     pattern a command passed); agent_type (else <state>/agents.json's); tool_use_id, given only by the hook, for the
-    owner's one-use yes (grants.take_once)."""
+    owner's one-use yes (grants.take_once); launch, the launch token in the hook's environment (identity.LAUNCH_ENV:
+    set only in a session agent's session)."""
 
     session: str | None
     agent: str | None
@@ -169,6 +174,7 @@ class Ctx(TypedDict, total=False):
     cwd: str | None
     passed: Hit
     tool_use_id: str | None
+    launch: str | None
 
 
 TABLE_SESSION = "(guard table)"
@@ -555,12 +561,23 @@ def names_internal(cmd: str) -> bool:
     return names_apply(cmd) or _mentions(cmd, "integrate", "--opens")
 
 
+def _session_agent(project: Project, ctx: Ctx) -> dict[str, Any] | None:
+    """The session agent whose main thread calls (identity.session_agent by the ctx's session and launch), or None."""
+    from . import identity
+
+    launch = ctx.get("launch")
+    return identity.session_agent(project.state, ctx.get("session"), launch if isinstance(launch, str) else None)
+
+
 def _who(project: Project, ctx: Ctx | None, process: bool = True) -> str:
     """Why the caller is not the marked orchestrator's main thread in its own process (agent | session | process),
-    or "" when it is (a table run or `guard --as` compares no process; process=False compares none either)."""
+    or "" when it is (a table run or `guard --as` compares no process; process=False compares none either). A
+    session agent's main thread is an agent (_session_agent), before the mark is compared."""
     from . import orchestrator
 
     if not ctx or not ctx.get("session") or ctx.get("agent"):
+        return "agent"
+    if _session_agent(project, ctx) is not None:
         return "agent"
     simulated = "marked" in ctx  # a table run or `guard --as`: no process to compare
     marked = ctx["marked"] if simulated else (orchestrator.current(project) or {}).get("session")
@@ -1713,7 +1730,8 @@ def holdout_dirs(project: Project, projects: Sequence[Project] | None = None) ->
 def holdout_reader(project: Project, ctx: Ctx | None) -> bool:
     """Whether the caller may reach the hidden acceptance checks: everyone _who does not call an agent (the
     orchestrator, the owner's other sessions) and an agent of a planner type (the event's agent_type, else its entry in
-    <state>/agents.json); any other agent, also one whose type is not known, may not."""
+    <state>/agents.json; a session agent's main thread, its entry's or launch's type); any other agent, also one whose
+    type is not known, may not."""
     from . import identity, util
 
     if _who(project, ctx, process=False) != "agent":
@@ -1723,6 +1741,8 @@ def holdout_reader(project: Project, ctx: Ctx | None) -> bool:
     if not kind and aid:
         entry = (util.read_json(project.state / "agents.json", {}) or {}).get(aid)
         kind = entry.get("type") if isinstance(entry, dict) else None
+    elif not kind and ctx and ctx.get("session"):
+        kind = (_session_agent(project, ctx) or {}).get("type")
     return identity.is_planner_type(project, kind)
 
 
