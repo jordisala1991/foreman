@@ -8,6 +8,11 @@ from helpers import ProjectCase
 from test_panel_next import NextPageTest
 
 
+def urls(out):
+    """The POSTs a scenario sent, as the browser sent them (with the key)."""
+    return out["rawPosts"]
+
+
 def card(cid, status, title, **kw):
     return {"id": cid, "project": "E1", "title": title, "status": status, "subs": [], "plan": [], **kw}
 
@@ -192,7 +197,7 @@ class BacklogTest(NextMoreTest):
 
     def test_want_posts_with_the_key_and_the_flag(self):
         out = self.write("#/backlog/A-4", {"POST /api/want?p=alpha&id=A-4&on=1": {"ok": True}}, click="La quiero hacer")
-        self.assertEqual(out["posts"], ["/api/want?p=alpha&id=A-4&on=1&t=k3y"])
+        self.assertEqual(urls(out), ["/api/want?p=alpha&id=A-4&on=1&t=k3y"])
         self.assertIn("Hecho", out["text"])
 
     def test_a_refused_write_shows_why(self):
@@ -203,9 +208,9 @@ class BacklogTest(NextMoreTest):
     def test_reject_asks_then_posts(self):
         answers = {"POST /api/reject?p=alpha&id=A-4": {"ok": True}}
         asked = self.write("#/backlog/A-4", answers, click="No la quiero")
-        self.assertEqual(asked["posts"], [])  # the first click only asks
+        self.assertEqual(urls(asked), [])  # the first click only asks
         out = self.write("#/backlog/A-4", answers, click="No la quiero", then="Sí, no la quiero")
-        self.assertEqual(out["posts"], ["/api/reject?p=alpha&id=A-4&t=k3y"])
+        self.assertEqual(urls(out), ["/api/reject?p=alpha&id=A-4&t=k3y"])
 
     def test_a_double_click_sends_one_post(self):
         out = self.write(
@@ -213,14 +218,14 @@ class BacklogTest(NextMoreTest):
             {"POST /api/want?p=alpha&id=A-4&on=1": {"ok": True}},
             clicks=["La quiero hacer", "La quiero hacer"],
         )
-        self.assertEqual(len(out["posts"]), 1)
+        self.assertEqual(len(urls(out)), 1)
 
     def test_arrows_on_a_grip_move_the_task(self):
         ok = {"POST /api/move?p=alpha&id=A-2&a=2": {"ok": True}, "POST /api/move?p=alpha&id=A-3&a=1": {"ok": True}}
         out = self.write("#/backlog/p/E1", ok, press={"nth": 1, "key": "ArrowDown"})
-        self.assertEqual(out["posts"], ["/api/move?p=alpha&id=A-2&a=2&t=k3y"])
+        self.assertEqual(urls(out), ["/api/move?p=alpha&id=A-2&a=2&t=k3y"])
         out = self.write("#/backlog/p/E1", ok, press={"nth": 2, "key": "ArrowUp"})
-        self.assertEqual(out["posts"], ["/api/move?p=alpha&id=A-3&a=1&t=k3y"])
+        self.assertEqual(urls(out), ["/api/move?p=alpha&id=A-3&a=1&t=k3y"])
 
     def test_arrows_on_a_project_grip_move_the_project(self):
         two = {
@@ -240,7 +245,7 @@ class BacklogTest(NextMoreTest):
             "POST /api/move?p=alpha&kind=project&id=E1&a=1": {"ok": True},
         }
         out = self.write("#/backlog/projects", answers, press={"nth": 0, "key": "ArrowDown"})
-        self.assertEqual(out["posts"], ["/api/move?p=alpha&kind=project&id=E1&a=1&t=k3y"])
+        self.assertEqual(urls(out), ["/api/move?p=alpha&kind=project&id=E1&a=1&t=k3y"])
 
     def test_a_refused_move_shows_why(self):
         refused = {"__status": 403, "error": "orchestrator not active"}

@@ -764,6 +764,7 @@ def overview(lock_list: list[Status]) -> list[Obj]:
                 "agents": len(live),
                 "counts": bl.get("counts", {}),
                 "decisions": len(bl.get("decisions", [])),
+                "permissions": sum(1 for g in grant_requests(p) if g.get("pending")),  # the ones to approve or deny
                 "paused": paused(p),
                 "unread": sum(1 for m in notes.inbox(p) if m.get("from") == "orchestrator" and not m.get("read")),
                 "late": [t["name"] for t in recurring(p) if t["late"]],
@@ -784,6 +785,7 @@ def overview(lock_list: list[Status]) -> list[Obj]:
                 "agents": 0,
                 "counts": {},
                 "decisions": 0,
+                "permissions": 0,
                 "paused": "",
                 "unread": 0,
                 "late": [],
@@ -838,6 +840,12 @@ def act(path: str, q: Query, body: str) -> Obj:
         if not text:
             raise ValueError("empty message")
         return notes.inbox_add(p, text, sender="owner")
+    if path == "/api/message/read":  # the owner has read a message of the orchestrator (the new panel's button)
+        mid = arg("id")
+        if not any(m.get("from") == "orchestrator" and str(m.get("id")) == mid for m in notes.inbox(p)):
+            raise ValueError(f"no message {mid!r} of the orchestrator")
+        notes.inbox_read(p, [mid], sender="orchestrator")
+        return {"read": mid}
     if path == "/api/decide":
         act = change_answer if arg("change") == "1" else decide  # a change of an answer the orchestrator has not read
         if arg("free") == "1":  # his own words, in the body
