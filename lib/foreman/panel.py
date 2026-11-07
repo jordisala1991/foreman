@@ -547,7 +547,7 @@ def grant_requests(project: Project) -> list[Obj]:
             "orphan": r["why"],
             "command": r.get("command") or "",
             "summary": r.get("summary") or "",
-            "say": grant_say(str(r.get("command") or "")),
+            "say": grants.say(str(r.get("command") or "")),
             "orchestrator": r.get("orchestrator") or "",
             "at": r.get("at"),
             "expires": r["expires"],
