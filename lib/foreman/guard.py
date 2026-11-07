@@ -129,42 +129,8 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from . import gitdir, gitpush, pyscript
-from .shell import (
-    ASSIGN,
-    CODE_OPTS,
-    RAW_INTERPRETERS,
-    Runs,
-    Seg,
-    Tok,
-    Unparsed,
-    Write,
-    data_tokens,
-    feeders,
-    filters_only,
-    foreman_call,
-    heredoc_files,
-    heredoc_writer,
-    inputs,
-    lex,
-    may_run,
-    piece,
-    pipelines,
-    printer,
-    quoted_segments,
-    read_back,
-    runs,
-    runs_written,
-    segments,
-    strip_heredocs,
-    strip_quotes,
-    toks_text,
-    unbounded,
-    values,
-    words,
-    writes,
-    written,
-)
+from . import gitdir, gitpush, pyscript, shell
+from .shell import Runs, Seg, Tok, Unparsed, Write
 
 if TYPE_CHECKING:
     from .config import Project, Table
@@ -304,7 +270,7 @@ def _where(w: Sequence[Tok], prog: int) -> str:
         return "loop"
     if name in EDITORS:
         return "sed"
-    if RAW_INTERPRETERS.fullmatch(name):
+    if shell.RAW_INTERPRETERS.fullmatch(name):
         return "code"
     return "command"
 
@@ -327,7 +293,7 @@ def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequen
     if not re.search(r"['\"\\]", ins[0].raw) and re.search(r"[$`\\]", body):
         return None
     got = pyscript.read(body)
-    files = written(segs, info) if got else None
+    files = shell.written(segs, info) if got else None
     if got is None or got.writes is None or files is None:
         return None
     paths = [*got.writes, *(str(t.value) for t in files)]
@@ -335,8 +301,8 @@ def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequen
         return None
     names = {PurePath(x).name or x for x in paths}
     if len(segs) > 1:
-        rest = toks_text(t for j, other in enumerate(segs) if j != k for t in other.toks)
-        if may_run(segs, info, {n for n in names if n in rest}, k):
+        rest = shell.toks_text(t for j, other in enumerate(segs) if j != k for t in other.toks)
+        if shell.may_run(segs, info, {n for n in names if n in rest}, k):
             return None
     return got.text
 
@@ -349,10 +315,10 @@ At = tuple[gitpush.Resolver, frozenset[str], gitpush.Changes]  # the resolver of
 def _read(cmd: str, depth: int) -> tuple[list[Seg], Any, list[list[Tok]], list[Runs]]:
     """(segments, the lexer, the words of each, what each runs) of a line (shell.lex, pipelines, runs): read once
     for _texts and _walk alike (nothing changes them once read). Raises Unparsed."""
-    segs, lx = lex(cmd, depth)
-    segs = pipelines(segs)
+    segs, lx = shell.lex(cmd, depth)
+    segs = shell.pipelines(segs)
     words_of = [[t for t in s.toks if t.kind == "word"] for s in segs]
-    return segs, lx, words_of, [runs(w) for w in words_of]
+    return segs, lx, words_of, [shell.runs(w) for w in words_of]
 
 
 def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | None = None) -> Generator[Text, None, str]:
@@ -376,41 +342,41 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
     reach: dict[int, str] = {}  # segment index -> what runs its output: "shell" | "raw"
     for j, r in enumerate(info):
         if r.stdin:
-            for k in feeders(segs, j):
+            for k in shell.feeders(segs, j):
                 reach[k] = max(reach.get(k, ""), r.stdin)  # "shell" wins over "raw"
-    vals = values(segs, info)
-    mode = unbounded(segs, info, vals, reach)
+    vals = shell.values(segs, info)
+    mode = shell.unbounded(segs, info, vals, reach)
     feeds = feeds or mode == "shell"  # what runs cannot be bounded: read all of it as if it went to a shell
     var = mode == "var"  # a variable runs: the values the line gives its variables are commands (a data value
     exempt = exempt and not lx.redefines and not feeds  # reaches one only through $_ or `| read`, both compared)
     if feeds:
         reach = dict.fromkeys(range(len(segs)), "shell")
-    printers = {k for k, w in enumerate(words_of) if printer(w)}
-    writers = {k for k, (s, r) in enumerate(zip(segs, info)) if heredoc_writer(s, r)}  # cat|tee <<EOF
-    files = written(segs, info) if printers or writers else []
+    printers = {k for k, w in enumerate(words_of) if shell.printer(w)}
+    writers = {k for k, (s, r) in enumerate(zip(segs, info)) if shell.heredoc_writer(s, r)}  # cat|tee <<EOF
+    files = shell.written(segs, info) if printers or writers else []
     back: set[int] = set()  # segments whose output goes to a file the line may run (where = "written")
-    if printers and (files is None or files) and read_back(segs, info, files or []):  # it may run what one prints
+    if printers and (files is None or files) and shell.read_back(segs, info, files or []):  # it may run what one prints
         back |= {k for k in printers if k not in reach}
         reach.update(dict.fromkeys(back, "shell"))
-    run_by, ran = runs_written(segs, info, files or []) if writers and (files is None or files) else (None, None)
+    run_by, ran = shell.runs_written(segs, info, files or []) if writers and (files is None or files) else (None, None)
     if run_by:  # a heredoc written to a file the line runs: its text is a command (or a script, for python…)
         for k in writers - reach.keys():
-            mine = heredoc_files(segs, info, k)
+            mine = shell.heredoc_files(segs, info, k)
             if ran is None or mine is None or mine & ran:
                 reach[k] = run_by
                 back.add(k)
     texts: list[tuple[str, str]] = []  # (text, where it comes from)
     if var:
         reach.update(dict.fromkeys(range(vals.fed), "shell"))  # `echo "x" | read v; $v`
-        texts += [(x, "variable") for v in vals.texts for x in (v, *segments(v))]
+        texts += [(x, "variable") for v in vals.texts for x in (v, *shell.segments(v))]
     nested: list[tuple[str, bool, bool, str, At | None]] = [(c, False, False, "", at) for c in lx.body_subs]
     resolved: dict[str, str] = {}  # a push as git would do it -> its folder ("?" + a repo: the folder is unknown)
     repl: list[tuple[int, int, str]] = []
     for k, seg in enumerate(segs):
         w, r = words_of[k], info[k]
         prints = k in printers  # a printer keeps its data when the line writes only to plain files (also a group's)
-        ex = exempt and k not in reach and not (prints and files is None) and filters_only(segs, k, prints)
-        data = (data_tokens(w) if ex else None) or {}
+        ex = exempt and k not in reach and not (prints and files is None) and shell.filters_only(segs, k, prints)
+        data = (shell.data_tokens(w) if ex else None) or {}
         swap: dict[Tok, str] = {}
         prog = w[r.prog] if r.prog < len(w) else None
         remote = prog is not None and prog.literal and PurePath(prog.value).name == "ssh"  # runs elsewhere
@@ -428,11 +394,11 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
             and exempt
             and k not in reach
             and len(cmd) <= pyscript.MAX_LINE
-            and filters_only(segs, k, True)
+            and shell.filters_only(segs, k, True)
         ):
             py = _python(segs, info, words_of, k)
         for kind, own in ((r.stdin, True), (reach.get(k), False)):
-            for text in inputs(seg) if kind else ():
+            for text in shell.inputs(seg) if kind else ():
                 if kind == "shell":
                     nested.append((text, ex and own, False, "" if own else mark, None if remote else sub(k)))
                 else:
@@ -440,8 +406,8 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
                     texts += [(x, ("" if own else mark) or "script") for x in (read, *read.split("\n"))]
         if k in reach:  # what it prints is run: its arguments (and every value it assigns) are commands
             run = [" ".join(t.value for t in w[r.prog + 1 :]), " ".join(t.value for t in w)]
-            run += [t.value.partition("=")[2] for t in w if ASSIGN.match(t.raw)]
-            texts += [(x, mark or "piped") for v in run for x in (v, *segments(v))]
+            run += [t.value.partition("=")[2] for t in w if shell.ASSIGN.match(t.raw)]
+            texts += [(x, mark or "piped") for v in run for x in (v, *shell.segments(v))]
         if at and prog is not None and prog.literal and PurePath(prog.value).name == "git":
             try:
                 shells: list[tuple[str, frozenset[str], gitpush.Changes]] = []
@@ -472,7 +438,8 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
     blanked = cmd
     for a, b, new in sorted(repl, reverse=True):
         blanked = blanked[:a] + new + blanked[b:]
-    texts += [(x, "command") for x in quoted_segments(strip_heredocs(blanked))]  # the old guard's texts, minus data
+    # the old guard's texts, minus data
+    texts += [(x, "command") for x in shell.quoted_segments(shell.strip_heredocs(blanked))]
     texts += [(t, "unknown" if d.startswith("?") else "resolved") for t, d in resolved.items()]  # after all of them
     yield from _items(texts, {t: d.lstrip("?") for t, d in resolved.items()})
     for content, ex, fd, mark, inner in nested:
@@ -485,10 +452,10 @@ def _whole(cmd: str) -> Iterator[Text]:
     """The texts of a command the lexer cannot read: all of it, no exemption."""
     spaced = re.sub(r"[\"'`()$\\]", " ", cmd)
     texts = [
-        *quoted_segments(strip_heredocs(cmd)),
-        *quoted_segments(cmd),
-        *segments(cmd),
-        *segments(spaced),
+        *shell.quoted_segments(shell.strip_heredocs(cmd)),
+        *shell.quoted_segments(cmd),
+        *shell.segments(cmd),
+        *shell.segments(spaced),
         *cmd.split("\n"),
         *spaced.split("\n"),
         cmd,
@@ -701,14 +668,14 @@ def check(
                 return "orchestrator", hit
             if ctx is not None:
                 ctx["passed"] = hit
-        no_heredoc = strip_heredocs(cmd)
-        plain = strip_quotes(no_heredoc)
+        no_heredoc = shell.strip_heredocs(cmd)
+        plain = shell.strip_quotes(no_heredoc)
         for name, res in project.resources.items():
             pats = res.get("guard", [])
             if not pats or uses_lock(no_heredoc, name, res):
                 continue
-            for seg in segments(plain):
-                w = words(seg)
+            for seg in shell.segments(plain):
+                w = shell.words(seg)
                 for pat in pats:
                     if matches_prefix(w, pat):
                         return "lock", (name, " ".join(w)[:80])
@@ -1083,7 +1050,7 @@ def _assigned(words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], env: dict
     for w, r in zip(words_of, info):
         decl = r.prog < len(w) and w[r.prog].literal and w[r.prog].value in DECLARERS
         for i, t in enumerate(w):
-            if not ASSIGN.match(t.raw) or not (i < r.prog or decl or r.prog >= len(w)):
+            if not shell.ASSIGN.match(t.raw) or not (i < r.prog or decl or r.prog >= len(w)):
                 continue
             name = re.split(r"[\[+=]", t.raw, maxsplit=1)[0]
             raw_value = t.raw.partition("=")[2]
@@ -1102,7 +1069,7 @@ def _cd_known(
             t = w[p + 1]
             got = _expand(str(t.value), False, env, t.raw.startswith("~"))
             if len(got) == 1 and not NOT_LITERAL.search(got[0]):
-                w[p + 1] = piece(t, got[0])
+                w[p + 1] = shell.piece(t, got[0])
                 w[p + 1].literal = True
         out.append(w)
     return out
@@ -1126,7 +1093,7 @@ def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int
     here = gitpush.folders(segs, known, info, start, exists=False)
     out: list[Line | str] = [(cmd, segs, words_of, info, here, env)]
     nested: list[tuple[str, frozenset[str]]] = [(c, start) for c in lx.body_subs]
-    printers = {k for k, w in enumerate(words_of) if printer(w)}
+    printers = {k for k, w in enumerate(words_of) if shell.printer(w)}
     for k, (seg, r) in enumerate(zip(segs, info)):
         w = words_of[k]
         name = PurePath(str(w[r.prog].value)).name if r.prog < len(w) and w[r.prog].literal else ""
@@ -1135,8 +1102,8 @@ def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int
         nested += [(" ".join(t.raw for t in toks), here[k]) for toks in r.cmds]
         nested += [(c, here[k]) for t in seg.toks for _, c in t.subs]
         if r.stdin == "shell" and name not in SKIP_STDIN:
-            nested += [(text, here[k]) for text in inputs(seg)]
-            for f in feeders(segs, k) if printers else ():  # `echo "cp a b" | sh`: a printer piped into a shell
+            nested += [(text, here[k]) for text in shell.inputs(seg)]
+            for f in shell.feeders(segs, k) if printers else ():  # `echo "cp a b" | sh`: a printer piped into a shell
                 if f in printers:  # (once: a long pipeline of shells would read it once per shell)
                     printers.discard(f)
                     fw = words_of[f]
@@ -1154,10 +1121,11 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
     hold a name (a call with parentheses, or one without them at a statement's start or after a `.`; not a string's
     `.replace(a, b)`) or it is a Path's method, every literal of the code, run on as a path's pieces (_pieces)."""
     name = PurePath(str(w[prog].value)).name if prog < len(w) and w[prog].literal else ""
-    if not RAW_INTERPRETERS.fullmatch(name):
+    if not shell.RAW_INTERPRETERS.fullmatch(name):
         return []
-    opts = (*CODE_OPTS, "-r") if name.startswith("php") else CODE_OPTS
-    codes = inputs(seg) + [str(b.value) for a, b in zip(w[prog + 1 :], w[prog + 2 :]) if a.literal and a.value in opts]
+    opts = (*shell.CODE_OPTS, "-r") if name.startswith("php") else shell.CODE_OPTS
+    codes = [str(b.value) for a, b in zip(w[prog + 1 :], w[prog + 2 :]) if a.literal and a.value in opts]
+    codes = shell.inputs(seg) + codes  # its heredoc or here-string, then its -c/-e words
     out: list[str] = []
     for text in codes:
         tree = pyscript.gate(text) if pyscript.PYTHON.fullmatch(name) else None
@@ -1235,7 +1203,7 @@ def _targets(lines: Iterable[Line | str]) -> Iterator[_Target]:
             yield _Target([line], frozenset(), Write(-1, Tok("word", 0)), line)
             continue
         _cmd, segs, words_of, info, here, env = line
-        for wr in writes(segs, info):
+        for wr in shell.writes(segs, info):
             t = wr.tok
             yield _Target(_expand(str(t.value), t.literal, env, t.raw.startswith("~")), here[wr.seg], wr, t.raw)
         for k, (seg, w) in enumerate(zip(segs, words_of)):
@@ -1688,7 +1656,7 @@ def _integrates(chk: _Check) -> Hit | None:
                     return whole(line)
                 continue
             for w, r in zip(line[2], line[3]):
-                got = foreman_call([str(t.value) for t in w[r.prog :]]) if r.prog < len(w) else None
+                got = shell.foreman_call([str(t.value) for t in w[r.prog :]]) if r.prog < len(w) else None
                 if got and got[1] == "integrate" and not set(got[2]) & set(INTEGRATE_FREE):
                     return Hit(INTEGRATE, "command", " ".join(t.raw for t in w))
         return None
@@ -1814,7 +1782,7 @@ def _holdout(chk: _Check) -> Hit | None:
     def line_hit(segs: list[Seg], words_of: list[list[Tok]], info: list[Runs], here: Any, env: Any) -> Hit | None:
         for k, (seg, w, r) in enumerate(zip(segs, words_of, info)):
             values = [str(t.value) for t in w[r.prog :]]
-            got = foreman_call(values) if r.prog < len(w) else None
+            got = shell.foreman_call(values) if r.prog < len(w) else None
             if got and got[1] == "holdout" and not set(got[2]) & set(HOLDOUT_FREE):
                 return _holdout_hit(("", "", project.name), "command", " ".join(t.raw for t in w))
             if not dirs:
