@@ -9,6 +9,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- The new panel (`/next/`) has Backlog, Wiki and System, under «More» (a list of three on the phone, a group in the sidebar on a wide screen). Backlog: the tasks grouped by status as in the panel at `/` (goal of each group in words, short names, the short reason of a block beside the name), the Projects view and a project's page (both reorder by dragging a grip or with the arrow keys), and a task's page (what it is for, its parts, documents grouped by type, what has been said, what the owner did, its data; a task in triage asks «Do you want it done?» first). Wiki: search always in view, what changed lately, pages to start with, sections with how their pages stand, a page with its index and its sources, and search in the same tab; a product without a wiki says so and leads to one that has it. System: a line saying whether something needs a look and what to do, the Mac in four figures, the Claude quota, recurring tasks, the latest timeline lines, the products and, folded, the technical details. They use the panel's existing endpoints.
+- The cards of `/api/backlog` and `/api/issue` give a short reason for a block (`why`), the short name (`short_name`), what is integrated per task (`integrated`, from the commits of its done parts) and the title of each document; `/api/issue` also gives the task's cost; wiki pages and search results give their `section`.
+
 ## [0.66.0] - 2026-11-07
 
 ### Added

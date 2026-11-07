@@ -166,6 +166,9 @@ console.log(JSON.stringify({
   pills: all(app, (n) => cls(n, "pill")).map((n) => [n.attributes.class, words(n)]),
   buttons: all(app, (n) => n.localName === "button").map(words),
   charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
+  links: all(app, (n) => n.localName === "a" && n.attributes.href).map((n) => [words(n), n.attributes.href]),
+  rows: all(app, (n) => cls(n, "row") || cls(n, "prow") || cls(n, "grouphead") || cls(n, "srow")).map(words),
   fetched,
   errors,
 }));
+process.exit(0); // the screens poll: their timers must not keep the process alive

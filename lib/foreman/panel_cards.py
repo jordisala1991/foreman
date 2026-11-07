@@ -77,6 +77,56 @@ def recommended_option(options: Iterable[str], recommendation: str) -> str:
     return best[0] if len(best) == 1 else ""
 
 
+_WAITS = re.compile(r"^(?:espera|waiting|waits|wait|blocked by|bloquead[ao] por)\b", re.I)
+_DECIDES = re.compile(
+    r"\b(?:lo decid\w+|decid\w+ (?:el dueño|tú|jordi)|(?:it is|it's) (?:up to|for) \w+ to decide)\b[^,;:.()]*", re.I
+)
+WHY_MAX = 44
+
+
+def why_short(blocked: str | None) -> str:
+    """A short reason (up to WHY_MAX characters) from the free text of `blocked`, for the row of a blocked issue: its
+    first clause when it says what it waits for («espera a copets e ingot: …»), the phrase that says who decides
+    («lo decide Jordi») when there is one, else its first clause; cut at a word, with «…». «» for no text."""
+    t = clean(blocked)
+    if not t:
+        return ""
+    first = re.split(r"\s+[—–-]\s+|[:;(]|\.\s", t, maxsplit=1)[0].strip(" ,.")
+    m = _DECIDES.search(t)
+    out = first if _WAITS.match(first) or not m else m.group(0).strip(" ,.")
+    if len(out) > WHY_MAX:
+        out = out[: WHY_MAX - 1].rsplit(" ", 1)[0].rstrip(" ,.") + "…"
+    return out
+
+
+def integrated(subs: Iterable[Record]) -> dict[str, Any]:
+    """What of an issue is in main: the sub-issues done with a commit ({n, of, commits}: `of` counts the ones still
+    to count, not canceled or moved). {} when none is."""
+    live = [s for s in subs if s.get("status") not in ("canceled", "moved")]
+    commits = [
+        s["commit"] for s in live if s.get("status") == "done" and re.fullmatch(r"[0-9a-f]{7,12}", s.get("commit", ""))
+    ]
+    return {"n": len(commits), "of": len(live), "commits": commits} if commits else {}
+
+
+def doc_title(project: Project, rel: str) -> str:
+    """The first heading of the document `rel` (cached by its mtime), «» when it has none or cannot be read."""
+    f = project.home / rel
+
+    def read() -> str:
+        try:
+            with f.open(errors="replace") as fh:
+                for line in fh:
+                    m = re.match(r"#\s+(.+)", line)
+                    if m:
+                        return clean(m.group(1))[:120]
+        except OSError:
+            pass
+        return ""
+
+    return memo(("doctitle", str(f)), read, deps=[f])
+
+
 def doc_roots(project: Project) -> list[Path]:
     return [project.reviews_dir, project.notes_dir] + [
         project.home / x for x in project.section("ids").get("report_prefixes", [])
@@ -211,8 +261,17 @@ def backlog_cards(project: Project) -> Cards:
                 "subs": [sub(s) for s in i.get("subs", [])],
                 "plan": plan,
                 "reports": reports(i, plan),
-                "docs": issue_docs.issue_docs(project, data, i, rev_files, lambda p: doc_ref(project, p, ix)),
+                "docs": [
+                    {**d, **({"title": t} if (t := doc_title(project, d["doc"])) else {})}
+                    for d in issue_docs.issue_docs(project, data, i, rev_files, lambda p: doc_ref(project, p, ix))
+                ],
             }
+            if i.get("short"):
+                out["short_name"] = clean(i["short"])
+            if i.get("blocked"):
+                out["why"] = why_short(i["blocked"])
+            if done := integrated(i.get("subs", [])):
+                out["integrated"] = done
             h = i.get("acceptance")
             if h:
                 out["outcome"] = {
@@ -376,7 +435,8 @@ def short_card(c: Card) -> Card:
     card comes back as it is."""
     if c["status"] not in CLOSED and not c.get("archived"):
         return c
-    out = {k: c[k] for k in ("id", "project", "title", "status", "blocked", "priority", "archived") if c.get(k)}
+    keep = ("id", "project", "title", "short_name", "status", "blocked", "why", "priority", "archived")
+    out = {k: c[k] for k in keep if c.get(k)}
     out["plan"] = c["plan"]
     out["subs"] = [{k: s[k] for k in SHORT_SUB if s.get(k)} for s in c["subs"]]
     aliases = (c.get("outcome") or {}).get("aliases")

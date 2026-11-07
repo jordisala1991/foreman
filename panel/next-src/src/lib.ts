@@ -1,6 +1,11 @@
 // What every screen shares: the texts, the panel's API with its key, and the formats of dates and dollars.
-import en from "./strings/en.json";
-import es from "./strings/es.json";
+import enBase from "./strings/en.json";
+import esBase from "./strings/es.json";
+import enMore from "./strings/more.en.json"; // Backlog, Wiki and Sistema have their own files
+import esMore from "./strings/more.es.json";
+
+const es = { ...esBase, ...esMore };
+const en = { ...enBase, ...enMore };
 
 export type Key = keyof typeof es;
 const LANGS: Record<string, Record<Key, string>> = { es, en };

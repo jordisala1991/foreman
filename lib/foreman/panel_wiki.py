@@ -92,6 +92,7 @@ def wiki_page(project: Project, f: Path) -> Page | None:
             "n": f.stem,
             "path": str(f.relative_to(project.home.resolve())),
             "title": h1.group(1).strip() if h1 else f.stem,
+            "section": folder,
             "type": meta.get("type") or (folder[:-1] if folder.endswith("s") else folder) or "overview",
             "status": meta.get("status"),
             "tags": lst("tags"),
@@ -110,7 +111,7 @@ def wiki_page(project: Project, f: Path) -> Page | None:
 
 def wiki_list(project: Project) -> list[dict[str, Any]]:
     """Every page with its header (no text): the Wiki tab groups them by type."""
-    keep = ("n", "path", "title", "type", "status", "tags", "updated", "kb")
+    keep = ("n", "path", "title", "section", "type", "status", "tags", "updated", "kb")
     pages = (wiki_page(project, f) for f in wiki_files(project).values())
     return [{k: p[k] for k in keep} for p in pages if p]
 
@@ -177,7 +178,9 @@ def wiki_search(project: Project, q: str, limit: int = 40) -> list[dict[str, Any
                 "n": p["n"],
                 "title": p["title"],
                 "type": p["type"],
+                "section": p["section"],
                 "status": p["status"],
+                "updated": p["updated"],
                 "in_title": sum(w in title for w in words),
                 "hits": sum(p["plain"].count(w) for w in words),
                 "excerpt": snip,

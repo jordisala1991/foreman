@@ -106,6 +106,11 @@ the day it ended; `total`, `top_issues` and `by_type`; `deliveries` {day: {integ
 day with data of each series); and `quota`, the account's windows now, never cached. The rest is cached by the files
 it reads. Nothing in
 `panel/next/` names a URL off the machine: no fonts, no CDN.
+Its «More» screens (`panel/next-src/src/more/`: Backlog, Wiki, System, with their own strings and stylesheet) read the same
+endpoints as the page at `/` and keep their route in the hash after the screen's name (`#/backlog/ID`, `#/backlog/p/ID`,
+`#/backlog/doc/PATH`, `#/wiki/page/NAME`). The cards add `short_name`, `why` (the short reason of a block, cut from the
+free text of `blocked`), `integrated` and a `title` on each document; `/api/issue` adds the task's `cost`. Markdown is built
+as React elements (`more/md.tsx`), never injected as HTML.
 
 **Following the installed version.** Python code is loaded once, so a panel keeps running the version it started
 with. The hooks record where Claude Code runs foreman from: on each session start and prompt in an active project,

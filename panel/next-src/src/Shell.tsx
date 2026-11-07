@@ -3,6 +3,10 @@
 // and a bottom bar of five tabs. The theme follows the system (app.css); there is no switch.
 import { useEffect, useState } from "react";
 import { How } from "./How";
+import { Backlog } from "./more/Backlog";
+import { System } from "./more/System";
+import { Wiki } from "./more/Wiki";
+import type { MoreProduct } from "./more/types";
 import { ScreenHead, StatusPill } from "./head";
 import { Chevron, Icon } from "./icons";
 import { oldPanel, t, type Key, type Product } from "./lib";
@@ -79,12 +83,17 @@ const KEPT = "next-product";
 export function Shell({ all }: { all: Product[] }) {
   const products = all.filter((p) => p.next && !p.broken);
   const [tab, setTab] = useState<Tab>(route);
+  const [, setHash] = useState(location.hash); // a screen's own route (#/backlog/FO-1) re-renders it
   const [name, setName] = useState<string | undefined>(() => {
     const kept = localStorage.getItem(KEPT);
     return products.some((p) => p.name === kept) ? (kept ?? undefined) : products[0]?.name;
   });
   useEffect(() => {
-    const go = () => setTab(route());
+    const go = () => {
+      setTab(route());
+      setHash(location.hash);
+      window.scrollTo(0, 0);
+    };
     addEventListener("hashchange", go);
     return () => removeEventListener("hashchange", go);
   }, []);
@@ -100,6 +109,12 @@ export function Shell({ all }: { all: Product[] }) {
   const screen =
     tab === "how" ? (
       <How product={p} />
+    ) : tab === "backlog" ? (
+      <Backlog product={p as MoreProduct} />
+    ) : tab === "wiki" ? (
+      <Wiki product={p as MoreProduct} products={products as MoreProduct[]} pick={pick} />
+    ) : tab === "system" ? (
+      <System product={p as MoreProduct} />
     ) : tab === "more" ? (
       <More product={p} />
     ) : (
