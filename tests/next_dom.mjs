@@ -4,6 +4,8 @@
 // [paths that never answer], click: text of a button to press once mounted, tap: a day whose chart column to tap,
 // steps: [{click: text of a button} | {type: {id, text}: a textarea's value} …] done in order, post: [paths whose POST
 // fail with {error, why}], why: the `why` of those failures, visible: [«(min-width: 900px)» media queries that match]}).
+// tick: how many times the page's setInterval callbacks run once mounted, fail: paths whose answers stop before the
+// ticks (the connection drops), down: paths that fail from the start, heal: paths that answer again at the ticks}).
 // Prints one line of JSON: the text, the tabs and their badges, the sidebar, the products of the picker, the status
 // pill, each chart as drawn (columns with their segments, labels, legend, figure) and the API paths fetched.
 import fs from "node:fs";
@@ -100,6 +102,8 @@ const document = {
 const store = { ...(scenario.store || {}) };
 const fetched = [];
 const posts = [];
+const down = new Set(scenario.down || []); // paths that fail from the start
+const timers = [];
 const windows = [];
 class HTMLIFrameElement {}
 Object.defineProperty(globalThis, "localStorage", {
@@ -111,6 +115,7 @@ Object.assign(globalThis, {
   location: { search: "?t=k3y", hash: scenario.hash || "" },
   addEventListener() {}, removeEventListener() {},
   matchMedia: (q) => ({ matches: (scenario.visible || []).includes(q), addEventListener() {}, removeEventListener() {} }),
+  setInterval: (f) => { timers.push(f); return timers.length; }, clearInterval() {},
   open: (url) => { const w = { location: { href: String(url || "") }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
   fetch: async (url, init) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
@@ -129,6 +134,7 @@ Object.assign(globalThis, {
     }
     fetched.push(p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
+    if (down.has(p)) return { ok: false, status: 503, json: async () => ({}) };
     if ((scenario.delay || {})[p]) await new Promise((r) => setTimeout(r, scenario.delay[p])); // a slow one
     const body = scenario.answers[p];
     const missing = body === undefined || body === null; // null: the server fails on it
@@ -162,6 +168,11 @@ for (const st of scenario.steps || []) {
   }
   await settle();
 }
+if (scenario.tick) {
+  (scenario.fail || []).forEach((p) => down.add(p));
+  (scenario.heal || []).forEach((p) => down.delete(p)); // the server is back at the first tick
+  for (let i = 0; i < scenario.tick; i++) { timers.forEach((f) => f()); await settle(); }
+}
 if (scenario.pick) { // the product picker moved to another entry, then the slow answers arrive
   const sel = one(app, (n) => n.localName === "select");
   sel.value = scenario.pick;
@@ -182,15 +193,26 @@ const chart = (c) => ({
   figure: words(one(c, (n) => cls(n, "figure"))),
   legend: all(c, (n) => n.parentNode && cls(n.parentNode, "legend")).map(words),
   ylabels: all(c, (n) => cls(n, "ylabel")).map(words),
-  xlabels: one(c, (n) => cls(n, "xlabels")).children.map(words),
+  xlabels: (one(c, (n) => cls(n, "xlabels")) || { children: [] }).children.map(words),
+  empty: words(one(c, (n) => cls(n, "empty-in-plot")) || { nodeType: 3, data: "" }),
+  rules: all(c, (n) => n.localName === "li" && n.parentNode.parentNode && cls(n.parentNode.parentNode, "rules")).map(words),
+  bars: all(c, (n) => cls(n, "hbar")).map((n) => n.style.width),
+  tasks: all(c, (n) => n.localName === "li" && cls(n.parentNode, "hbars")).map(words),
+  types: all(c, (n) => cls(n, "types")).flatMap((t) => t.children.slice(1).map(words)),
+  meters: all(c, (n) => cls(n, "meter")).map((n) => ({
+    kind: n.attributes["data-window"], text: words(n),
+    fill: one(n, (x) => cls(x, "fill")).attributes.class, width: one(n, (x) => cls(x, "fill")).style.width,
+  })),
+  line: all(c, (n) => cls(n, "line") && n.localName === "polyline").map((n) => n.attributes.points),
+  dots: all(c, (n) => cls(n, "dot")).map((n) => n.attributes["data-day"]),
   today: words(one(c, (n) => cls(n, "today")) || { nodeType: 3, data: "" }),
-  aria: one(c, (n) => cls(n, "plot")).attributes["aria-label"],
+  aria: (one(c, (n) => cls(n, "plot")) || { attributes: {} }).attributes["aria-label"],
   tip: words(one(c, (n) => cls(n, "tip")) || { nodeType: 3, data: "" }),
   columns: all(c, (n) => n.localName === "g" && "data-day" in n.attributes).map((g) => ({
     day: g.attributes["data-day"],
     kind: g.attributes["data-kind"],
     top: words(one(g, (n) => n.localName === "text") || { nodeType: 3, data: "" }),
-    segs: all(g, (n) => "data-family" in n.attributes).map((s) => [s.attributes["data-family"], Number(s.attributes["data-usd"])]),
+    segs: all(g, (n) => "data-key" in n.attributes).map((s) => [s.attributes["data-key"], Number(s.attributes["data-value"])]),
   })),
 });
 const bar = all(app, (n) => n.localName === "a" && cls(n, "tab"));
@@ -209,6 +231,8 @@ console.log(JSON.stringify({
   pills: all(app, (n) => cls(n, "pill")).map((n) => [n.attributes.class, words(n)]),
   buttons: all(app, (n) => n.localName === "button").map(words),
   charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
+  offline: words(one(app, (n) => cls(n, "offline")) || { nodeType: 3, data: "" }),
+  dim: !!one(app, (n) => cls(n, "dim")),
   agents: all(app, (n) => n.localName === "article" && cls(n, "agent")).map((a) => ({
     cls: a.attributes.class,
     avatar: text1(a, (n) => cls(n, "avatar")),

@@ -75,9 +75,9 @@ export interface Projects {
   language?: string;
 }
 
-// /api/metrics (lib/foreman/metrics.py `build`): the fields the charts built so far read
+// /api/metrics (lib/foreman/metrics.py `build`, plus the account's `quota`): the fields the charts read
 export type Family = "opus" | "sonnet" | "haiku" | "other";
-export type DayCost = Record<Family | "usd", number>;
+export type DayCost = Record<Family | "usd", number> & { cheap_share?: number | null };
 export interface Today {
   cost: Record<Family | "usd", number> & { avg_before: number; spark: number[] };
   integrated: { integrated: number; measured: number; yesterday: number; spark: number[] };
@@ -88,14 +88,28 @@ export interface Quota {
   percent_used: number;
   resets_at?: string | null;
 }
+export interface Delivery {
+  integrated: number;
+  measured: number;
+  ok: number;
+  partial: number;
+  failed: number;
+}
 export interface Metrics {
   days: string[];
   cost: Record<string, DayCost>;
   total: number;
-  reviews?: Record<string, { clean: number; back: number }>;
+  top_issues: { issue: string; short: string; usd: number; runs: number }[];
+  by_type: { type: string; usd: number; runs: number }[];
+  deliveries: Record<string, Delivery>;
+  reviews: Record<string, { clean: number; back: number }>;
+  rounds: Record<string, number>;
+  guard: Record<string, { agent: number; orchestrator: number; other: number }>;
+  guard_rules: { rule: string; band: string; n: number }[];
   today?: Today;
   quota?: Quota[];
-  since: { cost: string | null } & Record<string, string | null>; // the first day with data of each series
+  // the first day with data of each series (a day, or null)
+  since: { cost: string | null; deliveries: string | null; reviews: string | null; guard: string | null };
 }
 
 // what /api/state says of a product that the home and «Needs you» screens read
@@ -178,6 +192,9 @@ export function dayWord(s: string): string {
 // whole minutes from `ts` (epoch seconds) to now, or null
 export const minutesSince = (ts: number | null | undefined): number | null =>
   ts == null ? null : Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
+
+// «15:20»
+export const clock = (d: Date): string => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 // /api/agents (lib/foreman/agents_screen.py): who is running, who finished today, when the next pass is due
 export interface AgentCard {
   id: string;
