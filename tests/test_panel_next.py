@@ -297,7 +297,9 @@ class NextPageTest(ProjectCase):
         cols = {c["day"]: c for c in g1["columns"]}
         self.assertEqual(cols["2026-11-07"]["segs"], [["opus", 60.8], ["sonnet", 13.0], ["haiku", 0.5]])
         # the highest day and today carry their figure; a day without work is a thin bar
-        self.assertEqual([(c["day"][-2:], c["top"]) for c in g1["columns"] if c["top"]], [("01", "$219"), ("07", "$74")])
+        self.assertEqual(
+            [(c["day"][-2:], c["top"]) for c in g1["columns"] if c["top"]], [("01", "$219"), ("07", "$74")]
+        )
         self.assertEqual([c["kind"] for c in g1["columns"]], ["cost", "zero", "zero", "zero", "cost", "zero", "cost"])
         self.assertIn("dom 1 $219, lun 2 $0", g1["aria"])
         self.assertEqual(g1["tip"], "")
@@ -329,13 +331,13 @@ class NextPageTest(ProjectCase):
         self.assertEqual(out["charts"], [])
 
     def test_a_failed_answer_offers_to_retry(self):
-        out = self.how(answers={"/api/metrics?p=alpha&days=7": None})
+        out = self.mount({"hash": "#/how", "answers": {"/api/projects": self.PROJECTS}})  # metrics: 404
         self.assertIn("No se ha podido cargar.", out["text"])
         self.assertIn("Reintentar", out["buttons"])
 
     def test_more_lists_backlog_wiki_and_system(self):
         out = self.mount({"hash": "#/more", "answers": {"/api/projects": self.PROJECTS}})
-        self.assertIn("Más Backlog › Wiki › Sistema ›", out["text"])
+        self.assertIn("Backlog › Wiki › Sistema ›", out["text"])
         out = self.mount({"hash": "#/wiki", "answers": {"/api/projects": self.PROJECTS}})
         self.assertEqual(out["current"], ["Más"])  # a «More» screen lights the «More» tab
         self.assertIn("Abrir el panel de hoy", out["text"])  # not built yet: today's panel

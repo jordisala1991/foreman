@@ -1,0 +1,4 @@
+# The new panel as built from panel/next-src (`npm run build`, CONTRIBUTING.md): generated files, folded in pull
+# requests. The selftest checks them against their source (panel/next/BUILD); the CI builds them again and diffs.
+panel/next/** linguist-generated=true
+panel/next-src/package-lock.json linguist-generated=true

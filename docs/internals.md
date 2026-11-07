@@ -87,13 +87,14 @@ carries another version than its own, and on a failed poll it asks `/api/version
 (a restored tab) does not stay stuck on an error.
 
 **The new panel** (`/next/`, being built; the page at `/` does not change with it). It lists only the products with
-`[panel] next = true` (`next` in each product of `/api/projects`); with none, it says how to turn it on. Its files are
-in `panel/next/`, served as written (no build step): Preact, htm and Chart.js are copied into `panel/next/vendor/`
-as published, each with its version and sha256 in `vendor/MANIFEST` and its licence in `vendor/LICENSES/` (the
-selftest checks the hashes); the modules load through the import map of `panel/next/index.html`, whose `{{U file}}`
-the server fills with `/next/file?v=VERSION&t=KEY`, so every module's imports carry the key. `/next/<file>` serves
-only the files under `panel/next/` ending in `.js .mjs .css .json` (`panel.next_files`: the path must be one of them
-as written; anything else, `MANIFEST` and the licences included, is a 404), with `nosniff`, gzipped, immutable when
+`[panel] next = true` (`next` in each product of `/api/projects`); with none, it says how to turn it on. It is a
+React and TypeScript app in `panel/next-src/`, built with Vite (CONTRIBUTING.md, «Building the new panel») into
+`panel/next/`, which is committed so that installing foreman needs no Node: `index.html` (the template), `app.js` (one
+ES module, React and the charts' code included), `app.css`, `LICENSES.txt` (the bundled packages' licences) and
+`BUILD` (the sha256 of every source file and of every built file; the selftest checks both without Node, and the CI
+builds again and diffs). The server fills each `{{U file}}` of `index.html` with `/next/file?v=VERSION&t=KEY`.
+`/next/<file>` serves only the files under `panel/next/` ending in `.js .css` (`panel.next_files`: the path must be
+one of them as written; anything else, `BUILD` and the licences included, is a 404), with `nosniff`, gzipped, immutable when
 `v` is the new panel's version (`panel_cache.next_version`, the newest mtime under `panel/next/`, apart from the old
 page's). `/next` moves to `/next/` with its query. `/api/metrics?p=NAME&days=7|30` (only for a product with the
 switch on; another `days` is a 400, a failure inside `metrics.py` a 500) gives the charts' series, every day present
