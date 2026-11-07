@@ -54,7 +54,7 @@ from __future__ import annotations
 import copy
 import os
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -1240,10 +1240,13 @@ def registered_projects(
     return out
 
 
-def project_for_cwd(cwd: PathLike, active_only: bool = True) -> Project | None:
-    """The registered project that owns `cwd` (deepest home wins), or None. Used by the hooks."""
+def project_for_cwd(
+    cwd: PathLike, active_only: bool = True, projects: Sequence[Project] | None = None
+) -> Project | None:
+    """The registered project that owns `cwd` (deepest home wins), or None. Used by the hooks. `projects`: the
+    registry's (registered_projects()), if already loaded."""
     try:
-        projects = registered_projects()
+        projects = registered_projects() if projects is None else projects
     except ConfigError:
         return None
     hits = [p for p in projects if (p.active or not active_only) and p.owns(cwd, projects)]

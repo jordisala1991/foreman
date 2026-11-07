@@ -38,11 +38,8 @@ while a grants.json written by hand is still asked again (the module's second ch
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
 import re
-import secrets
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -376,6 +373,8 @@ def panel_key(create: bool = False) -> bytes | None:
         except FileExistsError:
             pass
         else:
+            import secrets
+
             with os.fdopen(fd, "w") as out:
                 out.write(secrets.token_hex(32))
     try:
@@ -386,6 +385,9 @@ def panel_key(create: bool = False) -> bytes | None:
 
 
 def _sign(key: bytes | None, group: str, g: dict[str, Any]) -> str:
+    import hashlib  # here (and hmac, secrets): the guard imports this module on every command and signs nothing
+    import hmac
+
     fields = [group, *(str(g.get(k)) for k in ("session", "pid", "pid_start", "at", "until", "via"))]
     return hmac.new(key or b"", "\n".join(fields).encode(), hashlib.sha256).hexdigest()
 
@@ -397,6 +399,8 @@ def from_panel(project: Project, group: str) -> dict[str, Any] | None:
     key = panel_key()
     if not g or g.get("via") != "panel" or not key or not isinstance(g.get("sig"), str):
         return None
+    import hmac
+
     return g if hmac.compare_digest(g["sig"], _sign(key, group, g)) else None
 
 
