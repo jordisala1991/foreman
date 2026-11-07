@@ -524,6 +524,7 @@ def grant_requests(project: Project) -> list[Obj]:
             "group": g,
             "pending": True,
             "command": r.get("command") or "",
+            "summary": r.get("summary") or "",
             "orchestrator": r.get("orchestrator") or "",
             "at": r.get("at"),
             "expires": r["expires"],
@@ -587,6 +588,43 @@ def grant_approve(p: Project, group: str) -> Obj:
         grant={"group": group, "until": g["until"]},
     )
     return {"granted": group, "until": g["until"]}
+
+
+def grant_deny(p: Project, group: str) -> Obj:
+    """/api/grants/deny: the owner says no to a pending request (grants.deny: it is dropped and the group cools down
+    for that session, as after a no in the chat), with its line in approved.jsonl, a note and a message for the
+    orchestrator. It never grants. Refused (403, `why` none) when no request waits."""
+    from . import approved, grants
+
+    if not p.active:
+        raise Refused(f"{p.name} is {p.mode}: no orchestrator to answer")
+    if group not in grants.groups(p, True):
+        raise ValueError(f"no [deny.grants] group {group!r}")
+    try:
+        r = grants.deny(p, group)
+    except grants.NotApproved as e:
+        raise Refused(str(e), e.why) from e
+    command = str(r.get("command") or "")
+    approved.granted(
+        p,
+        {
+            "verdict": "deny",
+            "group": group,
+            "answer": "no",
+            "surfaces": ["panel"],
+            "session": r.get("session"),
+            "orchestrator": r.get("orchestrator"),
+            "command": command,
+            "tool_use_id": r.get("tool_use_id"),
+            "via": "panel",
+            "asked": r.get("at"),
+        },
+    )
+    t = i18n.for_project(p)
+    asked = str(r.get("at") or "")[11:16]
+    notes.note(p, "-", t["grant_note_panel_no"].format(group=group, owner=p.owner, asked=asked, command=command[:200]))
+    notes.inbox_add(p, t["grant_panel_inbox_no"].format(group=group, command=command[:200]), sender="owner")
+    return {"denied": group}
 
 
 def recurring(project: Project) -> list[Obj]:
@@ -699,6 +737,8 @@ def act(path: str, q: Query, body: str) -> Obj:
         return act(p, arg("id"), arg("op"))
     if path == "/api/grants/approve":
         return grant_approve(p, arg("g"))
+    if path == "/api/grants/deny":
+        return grant_deny(p, arg("g"))
     if path == "/api/approve":
         repo, branch = arg("repo"), arg("branch")
         if repo not in p.repos or not branch:

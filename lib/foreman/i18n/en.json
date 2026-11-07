@@ -85,6 +85,8 @@
   "grant_log": "«{group}» allowed for {orchestrator} until {until}",
   "grant_late_granted": "{owner}'s answer ({answer}) about the group «{group}» came after the question had expired: it is written down and changes nothing; the group is already allowed until {until} ({via}).",
   "grant_note_panel": "grant «{group}»: {owner} approved from the panel the request of {asked} for {orchestrator}, until {until}: `{command}`",
+  "grant_note_panel_no": "grant «{group}»: {owner} said no from the panel to the request of {asked}: `{command}`",
+  "grant_panel_inbox_no": "Refused from the panel: the group «{group}» stays closed. Do not run again: `{command}`",
   "grant_panel_inbox": "Approved from the panel: the group «{group}» is allowed until {until}. You may run again: `{command}`",
   "grant_file_question": "Do you let this session of {project} write `{path}`, {what}? It is for this one change only.",
   "grant_file_question_bash": "Do you let this session of {project} run `{command}`? It writes `{path}`, {what}. It is for this one command only.",

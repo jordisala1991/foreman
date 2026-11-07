@@ -85,6 +85,8 @@
   "grant_log": "«{group}» permitido a {orchestrator} hasta las {until}",
   "grant_late_granted": "La respuesta de {owner} ({answer}) sobre el grupo «{group}» llegó cuando la pregunta ya había caducado: queda apuntada y no cambia nada; el grupo ya está permitido hasta las {until} ({via}).",
   "grant_note_panel": "permiso «{group}»: {owner} aprobó desde el panel la petición de las {asked} para {orchestrator}, hasta las {until}: `{command}`",
+  "grant_note_panel_no": "permiso «{group}»: {owner} dijo que no desde el panel a la petición de las {asked}: `{command}`",
+  "grant_panel_inbox_no": "Rechazado desde el panel: el grupo «{group}» sigue cerrado. No vuelvas a ejecutar: `{command}`",
   "grant_panel_inbox": "Aprobado desde el panel: el grupo «{group}» está permitido hasta las {until}. Puedes volver a ejecutar: `{command}`",
   "grant_file_question": "¿Dejas que esta sesión de {project} escriba `{path}`, {what}? Vale solo para este cambio.",
   "grant_file_question_bash": "¿Dejas que esta sesión de {project} ejecute `{command}`? Escribe `{path}`, {what}. Vale solo para esta orden.",

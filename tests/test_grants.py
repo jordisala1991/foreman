@@ -793,6 +793,87 @@ class PanelApproveTest(GrantCase):
         self.age("deploy", minutes=31)
         self.assertEqual(req("/api/grants/approve?p=fake&g=deploy", "POST")[1]["why"], "expired")
 
+    def test_deny_only_restricts(self):
+        """«No» from the panel (grants.deny, /api/grants/deny): the request is dropped, the group cools down for that
+        session (no question, still refused), nothing is granted, a live grant of another group is untouched."""
+        self.pend()
+        self.assertEqual(self.why(DEPLOY), ("orchestrator", "grant", "deploy"))
+        r = grants.deny(self.project, "deploy")
+        self.assertEqual(r["command"], DEPLOY)
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["grants"]), ({}, {}))
+        self.assertEqual(d["cooldowns"]["deploy"]["session"], "S1")
+        self.assertEqual(self.why(DEPLOY)[1], "grant")  # still refused
+        self.assertEqual(self.mod(phase="check", command=DEPLOY).get("live"), None)  # and not asked again
+        with self.assertRaises(grants.NotApproved) as e:  # nothing left to approve or deny
+            grants.approve(self.project, "deploy")
+        self.assertEqual(e.exception.why, "none")
+        with self.assertRaises(grants.NotApproved):
+            grants.deny(self.project, "deploy")
+
+    def test_deny_from_the_panel(self):
+        """POST /api/grants/deny: needs the key and POST, answers 403 `none` with nothing pending, and writes the
+        log line, the note and the orchestrator's message."""
+        from foreman import notes, panel, panel_registry
+
+        (self.tmp / "projects.toml").write_text(f'[[project]]\nname = "fake"\nhome = "{self.home}"\nmode = "active"\n')
+        panel_registry.REG.__init__()
+        srv, token = panel.make_server("127.0.0.1", 0, token="k3y")
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+        def req(path, method="GET", key=True):
+            url = base + path + (("&" if "?" in path else "?") + "t=" + token if key else "")
+            try:
+                with urllib.request.urlopen(
+                    urllib.request.Request(url, data=b"" if method == "POST" else None, method=method), timeout=20
+                ) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                with e:
+                    body = e.read()
+                return e.code, json.loads(body) if body.startswith(b"{") else body.decode()
+
+        url = "/api/grants/" + "deny?p=fake&g=deploy"
+        self.pend()
+        self.assertEqual(req(url, "POST", key=False)[0], 403)
+        self.assertEqual(req(url)[0], 404)
+        self.assertEqual(req("/api/grants/" + "deny?p=fake&g=nope", "POST")[0], 400)
+        self.assertIn("deploy", grants.pending(self.project))
+        self.assertEqual(req(url, "POST"), (200, {"denied": "deploy"}))
+        self.assertEqual(grants.pending(self.project), {})
+        self.assertIsNone(grants.live(self.project, "deploy"))
+        self.assertEqual(req(url, "POST")[1]["why"], "none")
+        line = self.log()[-1]
+        self.assertEqual(
+            (line["verdict"], line["answer"], line["via"], line["command"]), ("deny", "no", "panel", DEPLOY)
+        )
+        self.assertIn("said no from the panel", self.notes_text())
+        msg = notes.inbox(self.project)[-1]
+        self.assertEqual((msg["from"], msg["read"]), ("owner", False))
+        self.assertIn(f"Do not run again: `{DEPLOY}`", msg["text"])
+
+    def test_page_words(self):
+        """The page says what a request does in plain words, keeps the command folded and has a No."""
+        root = Path(selftest.__file__).resolve().parents[2]
+        js = (root / "panel/app.js").read_text()
+        self.assertIn('onclick="grantDeny(this)"', js)
+        self.assertIn('<details class="gcmd">', js)
+        self.assertIn('onclick="seeGrants()"', js)
+        for lang in ("en", "es"):
+            st = json.loads((root / f"panel/strings.{lang}.json").read_text())
+            for k in (
+                "grant_no",
+                "grant_req_say",
+                "grant_say_push",
+                "grant_say_release",
+                "grant_see_cmd",
+                "grant_wait_say",
+            ):
+                self.assertTrue(st[k], (lang, k))
+
     def test_page(self):
         """The You tab's section and its strings (the panel's own style: the page's source and both languages)."""
         root = Path(selftest.__file__).resolve().parents[2]
@@ -800,7 +881,7 @@ class PanelApproveTest(GrantCase):
         self.assertIn("grants: all('grants')", js)
         self.assertIn("api(`/api/grants/approve?g=${encodeURIComponent(b.dataset.g)}", js)
         self.assertIn("t(`grant_why_${j.why}`)", js)
-        self.assertIn("tn('grants_wait', asks)", js)
+        self.assertIn("tn('grants_wait', asks.length)", js)
         self.assertIn('<div id="grantreq"></div>', (root / "panel/index.html").read_text())
         for lang in ("en", "es"):
             st = json.loads((root / f"panel/strings.{lang}.json").read_text())

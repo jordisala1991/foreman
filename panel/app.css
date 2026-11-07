@@ -70,6 +70,7 @@ nav button.on{color:var(--acc)}
 .ctitle{display:flex;align-items:center;gap:var(--sp2);font-size:var(--fs-l);font-weight:600;cursor:pointer}.ctitle span:first-child{flex:1;min-width:0}
 .csub{color:var(--muted);font-size:var(--fs-s)}
 .clead{margin-top:2px;font-size:var(--fs-m)}
+.gcmd{margin-top:10px;font-size:var(--fs-s);color:var(--muted)}.gcmd summary{cursor:pointer}.gcmd .mono{margin-top:4px;overflow-wrap:anywhere;color:var(--muted)}
 .answered{margin-top:var(--sp2);font-size:var(--fs-m)}
 .free{margin-top:var(--sp2)}.free textarea{min-height:56px}.answered.warn{margin-bottom:-4px}
 /* a question, told in order: situation, what is at stake, the options as cards of
