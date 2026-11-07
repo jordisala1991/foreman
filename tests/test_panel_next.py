@@ -446,7 +446,7 @@ class NextPageTest(ProjectCase):
     def card(self, **extra):
         now = time.time()
         return {
-            "id": "a1", "p": "alpha", "name": "ag1", "task": "Agentes que ves desde la app", "issue": "FO-197",
+            "id": "a1", "p": "alpha", "name": "ag1", "task": "Agentes que ves desde la app", "issue": "PF-7",
             "sub": "T1", "type": "foreman:dev", "family": "opus", "status": "working", "since": int(now - 25 * 60),
             "sign": int(now - 60), "msg": "El guardián ya trata como agente una sesión.", "session": True,
             "link": None, **extra,
@@ -454,7 +454,7 @@ class NextPageTest(ProjectCase):
 
     def finished(self, **extra):
         return {
-            "agent": "d1", "p": "alpha", "task": "Plan de «Agentes»", "issue": "FO-197", "sub": None,
+            "agent": "d1", "p": "alpha", "task": "Plan de «Agentes»", "issue": "PF-7", "sub": None,
             "type": "foreman:planner", "outcome": "ok", "minutes": 8.0, "family": "opus", "usd": 3.4,
             "end": "2026-11-07 10:30", **extra,
         }  # fmt: skip
@@ -475,7 +475,7 @@ class NextPageTest(ProjectCase):
         done = [self.finished(), {**partial, "minutes": 75, "family": "sonnet", "usd": 9.1}]
         out = self.agents([self.card(), lock, stuck], done)
         a, w, s = out["agents"]
-        self.assertEqual((a["avatar"], a["task"], a["id"]), ("AD", "Agentes que ves desde la app", "FO-197"))
+        self.assertEqual((a["avatar"], a["task"], a["id"]), ("AD", "Agentes que ves desde la app", "PF-7"))
         self.assertEqual(a["meta"], "T1 · desarrollo Opus")
         self.assertEqual(a["state"], "Trabajando · lleva 25 min")
         self.assertEqual(a["stateTone"], "dot ok")
