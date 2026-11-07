@@ -1201,13 +1201,22 @@ class Handler(BaseHTTPRequestHandler):
             p = REG.get(q.get("p", [""])[0])
             if p is None or not p.section("panel").get("next"):
                 return self.json({"error": "not found"}, 404)
-            try:
+            try:  # only a bad `days` is the caller's fault: an error inside metrics is a 500, not a 400
                 days = int(q.get("days", ["7"])[0])
-                deps = [costs.file_of(p), Backlog(p).data_path]
-                out = memo(("metrics", p.name, days, datetime.now().date()), lambda: metrics.cost(p, days), deps=deps)
-            except ValueError as e:
-                return self.json({"error": str(e)}, 400)
-            return self.json(out)
+                if days not in metrics.PERIODS:
+                    raise ValueError
+            except ValueError:
+                return self.json({"error": f"days must be one of {metrics.PERIODS}"}, 400)
+            today = datetime.now().date()
+            try:
+                out = memo(
+                    ("metrics", p.name, days, today),
+                    lambda: metrics.build(p, days, today),
+                    deps=metrics.deps(p, days, today),
+                )
+            except Exception as e:  # noqa: BLE001 (a corrupt data file: the chart says so, the connection is not dropped)
+                return self.json({"error": f"metrics failed: {type(e).__name__}"}, 500)
+            return self.json({**out, "quota": metrics.quota(REG.projects.values())})  # the account's, live: not cached
         if u.path == "/api/state":
             name = q.get("p", [""])[0]
             p = REG.get(name)

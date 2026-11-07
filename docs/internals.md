@@ -96,9 +96,14 @@ only the files under `panel/next/` ending in `.js .mjs .css .json` (`panel.next_
 as written; anything else, `MANIFEST` and the licences included, is a 404), with `nosniff`, gzipped, immutable when
 `v` is the new panel's version (`panel_cache.next_version`, the newest mtime under `panel/next/`, apart from the old
 page's). `/next` moves to `/next/` with its query. `/api/metrics?p=NAME&days=7|30` (only for a product with the
-switch on; another `days` is a 400) gives the charts' series (`metrics.py`): `days`, `cost` {day: {opus, sonnet,
-haiku, other, usd}} at list price from `costs.jsonl`, counting only the lines of issues of the product's own backlog
-(archive included), every day present, `total`, and `since` (the first day with an own line). Nothing in
+switch on; another `days` is a 400, a failure inside `metrics.py` a 500) gives the charts' series, every day present
+(0 when empty), by local day: `cost` {day: {opus, sonnet, haiku, other, usd, tokens, cheap_share}} at list price from
+`costs.jsonl`, counting only the lines of issues of the product's own backlog (archive included) and each run whole on
+the day it ended; `total`, `top_issues` and `by_type`; `deliveries` {day: {integrated, measured, ok, partial, failed}}
+(notes headings and `done` lines of `progress.jsonl`); `reviews` {day: {clean, back}} and `rounds`; `guard` {day:
+{agent, orchestrator, other}} and `guard_rules`; `today` (Inicio's figures with their comparison); `since` (the first
+day with data of each series); and `quota`, the account's windows now, never cached. The rest is cached by the files
+it reads. Nothing in
 `panel/next/` names a URL off the machine: no fonts, no CDN.
 
 **Following the installed version.** Python code is loaded once, so a panel keeps running the version it started
