@@ -154,6 +154,13 @@ button.sec.bad{background:var(--card);color:var(--bad);border-color:var(--bad)}
 .lrow.res .tt{grid-area:2/2/3/3;font-size:var(--fs-s)}
 .lrow.res .meta{gap:var(--sp2)}.lrow.res .rq{min-width:58px}.lrow.res .ract{width:150px}
 }
+/* the product picker, on a phone: the name on the first line, what the orchestrator does under it (it wraps; on one
+   line it pushed the name out of the row) */
+@media(max-width:699px){
+.lrow.prow{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:var(--sp2);row-gap:2px;padding-top:8px;padding-bottom:8px}
+.lrow.prow>.dot{grid-area:1/1/3/2;align-self:center}.lrow.prow .tt{grid-area:1/2}
+.lrow.prow .meta{grid-area:2/2;white-space:normal;display:block}
+}
 /* rows with a button at the right (Te necesita): the button centred on the row, also when the text wraps */
 .lrow.att{align-items:center}.lrow.att>.dot{margin-top:0}
 .empty{padding:9px var(--sp3);color:var(--muted);font-size:var(--fs-m)}

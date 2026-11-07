@@ -27,6 +27,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
   worktree's line is judged there; a check whose own folder is gone no longer refuses the whole command, each rule
   compares its text only.
 
+### Fixed
+
+- Panel: on a phone the product picker shows each product's name (what its orchestrator does goes under it); «Back», a tap outside and Escape close the confirmation of an option that cannot be undone; a panel reopened on the Wiki tab lists the pages instead of «wiki_failed».
+
 ## [0.62.0] - 2026-11-06
 
 ### Fixed
