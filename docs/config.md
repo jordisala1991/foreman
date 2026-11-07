@@ -167,7 +167,7 @@ pass and the panel read the merged values without knowing where each came from.
 | Section | Keys the machine may set |
 |---|---|
 | `[machine.project]` | `owner`, `language`, `owner_knows` (`config_schema`: checked as a foreman.toml's, not inherited) |
-| `[machine.agents]` | `production_slots`, `ready_target`, `production_types`, `stalled_min` |
+| `[machine.agents]` | `production_slots`, `ready_target`, `production_types`, `stalled_min` (not `sessions`: it is the product's own) |
 | `[machine.loop]` | `every_min`, `context_rotate`, `disk_low_gb`, `lock_long_min` |
 | `[machine.deny]` | `patterns`, `message`, `grants`, `grant_minutes`, `ask_minutes` |
 | `[machine.strings]` | any text, as `[strings]` |
@@ -207,6 +207,12 @@ registry), and `[deny] drop`. Machine resources keep their own `[resources.NAME]
   too until every session runs a foreman that knows it (the merge does not repeat it).
 - **Grants are per product.** A `[machine.deny.grants]` group is granted in each product apart: the owner's yes in
   one product's panel does not open it in another.
+
+- **`[agents] sessions`** is the product's own (the machine's `[machine.agents]` does not take it) and `false` by
+  default. With `true`, `foreman launch --session` starts an agent as a Claude Code session of its own
+  (docs/orchestrator.md, «Fill the slots»); with `false` it is refused naming the key and agents launch through the
+  Agent tool. Because `foreman.toml` is a reserved file, the owner or the orchestrator turns it on or off. Turning it
+  off changes nothing for session agents already running: the guard keeps treating them as agents.
 
 ## Python: which one foreman runs, and what happens without one
 
@@ -723,7 +729,10 @@ A command that matches a group's pattern passes only when all of this holds:
 - no pattern of `patterns` matches it (those win for everyone, the orchestrator too);
 - it comes from the **main thread of the marked orchestrator's session**: the hook event's `session_id` is the one
   `foreman session` marked, and it carries no `agent_id`. A subagent shares its parent's session id but always has
-  an `agent_id`, so no agent passes, whatever text it copies; another session does not pass either;
+  an `agent_id`, so no agent passes, whatever text it copies; another session does not pass either. A session agent
+  (`foreman launch --session`) has a session id and no `agent_id` too, but it does not pass as the owner's session:
+  foreman registered it (its launch token in `FOREMAN_LAUNCH`, or its session id), so it is an agent even if it was
+  marked with `foreman session`;
 - it runs in the **orchestrator's own Claude Code process**: the nearest `claude` process above the guard's hook is
   the one the session recorded when it marked itself (pid and start time, read with `ps`). A copy of the session
   (`claude -p --resume ID`) sends the same `session_id` and no `agent_id`, but runs in another process. A mark
