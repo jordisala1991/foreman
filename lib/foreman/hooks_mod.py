@@ -379,7 +379,8 @@ def context_text(m: dict[str, Any] | None, limit: int | None = None) -> str:
 def pass_due(project: Project, o: Mark, now: float | None = None) -> bool:
     """Whether the marked session `o` (orchestrator.current) is due a pass: no `loop` heartbeat, one older than
     [loop] every_min (less DUE_SLACK_S), or one older than the mark (a session marked since the last pass gets its
-    first pass at its next tick) or than the session's last renewal (renew.compacted_at: the pass right after it)."""
+    first pass at its next tick) or than the session's last renewal (renew.compacted_at: the pass right after it), or
+    an unread owner message newer than it (owner_wrote_since)."""
     from . import orchestrator
 
     now = time.time() if now is None else now
@@ -389,9 +390,22 @@ def pass_due(project: Project, o: Mark, now: float | None = None) -> bool:
     marked = util.iso_epoch(o.get("since"))
     if marked is not None and marked > last:
         return True
-    if renewed_since_pass(project, o):
+    if renewed_since_pass(project, o) or owner_wrote_since(project, last):
         return True
     return now - last >= orchestrator.every_min(project) * 60 - DUE_SLACK_S
+
+
+def owner_wrote_since(project: Project, last: float) -> bool:
+    """Whether an unread owner message (a yes from the panel included) came in the minute of the last pass or after
+    it: the pass comes at the next tick instead of at the hour. The inbox keeps minutes, so a message of the pass's
+    own minute counts; the next pass is a minute later at least, so it does not repeat. Never raises."""
+    from . import notes
+
+    try:
+        since = time.strftime("%Y-%m-%d %H:%M", time.localtime(last))
+        return any(str(m.get("time") or "") >= since for m in notes.inbox_new(project))
+    except Exception:  # noqa: BLE001 (an unreadable inbox never fails the tick)
+        return False
 
 
 def renewed_since_pass(project: Project, o: Mark) -> bool:
