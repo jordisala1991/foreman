@@ -92,6 +92,8 @@ REFUSED = (
     "git checkout -- .claude/settings.json",
     "git restore .claude",
     "git checkout -- '*.toml'",
+    "git checkout -- '*.tsv'",  # a pathspec's * crosses folders (ops/tests/guard.tsv): not a glob per component
+    "git checkout -- sub/.claude",  # a .claude folder of the checkout, settings or not
     "git checkout -- :/",
     'git restore "$F"',
     "for f in a b; do git mv ops/$f old/$f; done",

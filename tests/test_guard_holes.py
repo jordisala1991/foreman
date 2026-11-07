@@ -431,6 +431,10 @@ class ProgramHolesTest(BashWriteCase):
             "ruby -e 'p = \"foreman.toml\"; FileUtils.rm p'": "file:config",
             'ruby -e \'puts File.read("foreman.toml"); puts "remove it later"\'': "allow",
             "python3 -c \"import copy, sys; print(open('foreman.toml').read())\"": "allow",
+            # perl's "<" reads, through a variable or in the file's literal (review T4 round 1, F5); "+<" writes
+            'perl -e \'my $p = "foreman.toml"; open my $f, "<", $p; print <$f>\'': "allow",
+            "perl -e 'open(F, \"<foreman.toml\"); print <F>'": "allow",
+            'perl -e \'my $p = "foreman.toml"; open my $f, "+<", $p; print $f "x"\'': "file:config",
         }
         got = {cmd: self.deny(cmd) for cmd in cases}
         self.assertEqual(got, cases)
@@ -445,6 +449,9 @@ class ProgramHolesTest(BashWriteCase):
             ),
             "python3 -c \"import sys, os; t = 'foreman.toml'; os.replace('x', t)\"": "file:config",
             "python3 -c \"import sys; from os import replace; t = 'foreman.toml'; replace('x', t)\"": "file:config",
+            # os under another name (review T4 round 1, F2)
+            "python3 -c \"import os as o; t = 'foreman.toml'; o.replace('x', t)\"": "file:config",
+            "python3 -c \"t = 'foreman.toml'; __import__('os').replace('x', t)\"": "file:config",
             "python3 -c \"import sys; from pathlib import Path; t = 'foreman.toml'; Path('x').replace(t)\"": (
                 "file:config"
             ),
@@ -468,8 +475,18 @@ class ProgramHolesTest(BashWriteCase):
                 f'import os\nfrom pathlib import Path\nbase = Path.home() / "home"\nprint({tail[2:-14]}.read_text())'
             ): "allow",
         }
-        got = {cmd: self.deny(cmd, cwd=wt) for cmd in cases}
-        self.assertEqual(got, cases)
+        # another literal between the base and the write, an f-string, a base built from another (T4 round 1, F3)
+        between = 'import os\nfrom pathlib import Path\nbase = Path.home() / "home"\nprint("patching")\n'
+        more = {
+            py(between + '(base / "foreman.toml").write_text(os.environ.get("X", ""))'): "file:config",
+            py(between + 'open(f"{base}/foreman.toml", "w").write(os.environ.get("X", ""))'): "file:config",
+            py(
+                between + 'cfg = os.path.join(base, "foreman.toml")\nprint("x")\nopen(cfg, "w").write("")'
+            ): "file:config",
+            py(between + 'print(open(f"{base}/foreman.toml").read())'): "allow",
+        }
+        got = {cmd: self.deny(cmd, cwd=wt) for cmd in {**cases, **more}}
+        self.assertEqual(got, {**cases, **more})
 
     def test_interpreters_that_read_or_write_elsewhere(self):
         """H11's rule by what the code writes: reading a reserved file passes; Python that passes the gate is judged

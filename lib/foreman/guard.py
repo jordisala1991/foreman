@@ -1138,10 +1138,11 @@ OPEN_MODE = re.compile(r"\s*(\+?[<>]{1,2}|[wax]\+?b?|r\+b?)\s*")
 CODE_LITERAL = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"|`([^`\n]*)`")
 MAX_LITERAL = 4096  # a longer quoted literal is not a file name
 ADJACENT = re.compile(r"\s*([,/+])\s*")  # between two literals of one path written in pieces
-PIECE = re.compile(r"/?[\w.~-]+(/[\w.~-]+)*/?")  # a literal that may be a piece of a path
-JOINED = re.compile(r"[/,+]\s*\Z")  # before a literal joined onto a name: `base / "x"`, `join(base, "x")`
+JOINED = re.compile(r"\b([A-Za-z_]\w*)\s*[/,+]\s*\Z")  # a literal joined onto a name: `base / "x"`, `join(base, "x")`
+ASSIGNED = re.compile(r"(?<![\w.])\$?([A-Za-z_]\w*)\s*=(?!=)\s*([^;\n]*)")  # NAME = what (to `;` or a line's end)
+IN_LITERAL = re.compile(r"\$?\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")  # a name inside a literal: f"{base}/x", "$base/x"
 STATEMENT = re.compile(r"(^|[;{}\n])\s*\Z")  # the start of a statement, before a call
-OS_DOT = re.compile(r"\bos\.\Z")
+OS_WORD = re.compile(r"\bos\b")  # os.replace, also as `import os as o` or __import__('os')
 MAX_PIECES = 8
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 NOT_LITERAL = re.compile(r"[$`*?\[]")  # what is left after expanding: the path is not known, only its text
@@ -1285,19 +1286,14 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
                     break
             lits = [x for g in CODE_LITERAL.finditer(args) for x in g.groups() if x]
             if m.group(1).lower() == "open" and not any(
-                OPEN_MODE.fullmatch(x) or re.match(r"\s*\+?[<>]", x) for x in lits
+                (OPEN_MODE.fullmatch(x) and x.strip() != "<") or re.match(r"\s*(\+[<>]|>)", x) for x in lits
             ):
-                continue  # it reads: open(f, "w"), open my $f, ">", "f" and open(F, ">f") write
+                continue  # it reads (also perl's "<"): open(f, "w"), open my $f, ">", "f" and open(F, ">f") write
             dot, bare = text[m.start() - 1 : m.start()] == ".", CODE_LITERAL.sub("", args)
             start = dot or STATEMENT.search(text, 0, m.start())  # `File.write p, …`, `open my $f, …`: no parentheses
             called = rest[:1] == "(" or (start and re.match(r"[ \t]+[A-Za-z_$@]", text[m.end() :]))
-            if (
-                dot
-                and m.group(0) in ("replace", "replaceAll")
-                and "," in bare
-                and not OS_DOT.search(text, 0, m.start())
-            ):
-                called = False  # a string's replace(pattern, value), not os.replace: its own literals only
+            if dot and m.group(0) in ("replace", "replaceAll") and "," in bare and not OS_WORD.search(text):
+                called = False  # a string's replace(pattern, value) in code that never names os: its own literals
             if (called and re.search(r"[A-Za-z_$]", bare)) or (dot and m.group(0) in pyscript.WRITES_SELF):
                 args = text  # a target it cannot name (a variable, an expression, a Path's object): any of the code's
             out += [x for x in _pieces(args, args is text) if not OPEN_MODE.fullmatch(x)]
@@ -1307,21 +1303,39 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
 def _pieces(code: str, spread: bool = False) -> list[str]:
     """The quoted literals of code (perl's `>` in front of a file dropped), and each run of literals written next to
     each other also joined as one path, the way a path is built in pieces (`'a', 'b'` and `"a" / "b"`: a/b; `'a' +
-    'b'`: ab; runs of up to MAX_PIECES); with spread (a target the code cannot name), a path's piece joined onto a
-    name also runs on from the literal before it (`base = home / "a"` … `base / "b"`: a/b)."""
+    'b'`: ab; runs of up to MAX_PIECES). With spread (a target the code cannot name), a name the code assigns a path
+    built of literals stands for each such value: a literal joined onto it (`base / "b"`, `join(base, "b")`) runs on
+    from it, and `{base}` or `$base` inside a literal is replaced by it."""
+    values: dict[str, list[str]] = {}
+    for a in ASSIGNED.finditer(code) if spread else ():
+        whole = _joined(a.group(2), values)[1]
+        if whole:
+            values[a.group(1)] = list(dict.fromkeys([*values.get(a.group(1), []), whole]))[-MAX_VALUES:]
+    return _joined(code, values)[0]
+
+
+def _joined(code: str, values: dict[str, list[str]]) -> tuple[list[str], str]:
+    """_pieces' literals and runs of code, with the values of the names (_pieces), and the whole of its last run."""
     out: list[str] = []
     run: list[tuple[str, str]] = []
     last = None
     for m in CODE_LITERAL.finditer(code):
         lit = re.sub(r"^\s*\+?[<>]{1,2}\s*", "", next(x for x in m.groups() if x is not None))
+        for n in IN_LITERAL.finditer(lit) if values else ():
+            name = n.group(1) or n.group(2)
+            out += [lit.replace(n.group(0), v) for v in values.get(name, ())]
         gap = ADJACENT.fullmatch(code, last.end(), m.start()) if last else None
-        joins = spread and last and run and JOINED.search(code, last.end(), m.start())
-        joins = joins and PIECE.fullmatch(lit) and PIECE.fullmatch(run[-1][1])
-        sep = gap.group(1) if gap else "/" if joins else ""
-        run, last = ([*run, ("" if sep == "+" else "/", lit)] if sep else [("", lit)]), m
-        run = run[-MAX_PIECES:]
+        onto = None if gap or not values else JOINED.search(code, last.end() if last else 0, m.start())
+        if onto and onto.group(1) in values:
+            out += [v + "/" + lit for v in values[onto.group(1)][:-1]]
+            run = [("", values[onto.group(1)][-1])]
+        elif not gap:
+            run = []
+        sep = "" if not run or (gap and gap.group(1) == "+") else "/"
+        run, last = [*run, (sep, lit)][-MAX_PIECES:], m
         out += [run[j][1] + "".join(s + x for s, x in run[j + 1 :]) for j in range(len(run))]
-    return [x for x in out if x and len(x) <= MAX_LITERAL]
+    whole = run[0][1] + "".join(s + x for s, x in run[1:]) if run else ""
+    return [x for x in out if x and len(x) <= MAX_LITERAL], whole
 
 
 def _targets(lines: Iterable[Line | str]) -> Iterator[_Target]:
