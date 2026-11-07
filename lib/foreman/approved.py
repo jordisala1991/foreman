@@ -7,10 +7,13 @@ name), pattern, command (its first 300 characters), tool_use_id, for why=process
 when it records none), for why=grant group (the group without a grant), and on an allow grant ([{group, via, at,
 answer}], the live grants it used)}; on an allow it also writes a line to today's notes (who ran what, and each
 grant: group, the owner, when and through which surface). The owner's answers to the hooks module's question
-(hooks_mod.grant, grants.py) are lines too (granted): {at, verdict: grant | deny | late | revoke, why: grant, group,
-answer (yes | no | dismissed | timeout | unavailable), surfaces, session, orchestrator, command, tool_use_id, until
-(on a grant), cooldown_until (after a no), pending (the request kept for the panel), refused (session | process: a
-yes that came where it grants nothing)}; `foreman permissions grants off` writes {verdict: revoke, group, session}. A
+(hooks_mod.grant, grants.py) are lines too (granted): {at, verdict: grant | deny | late | revoke | withdraw, why:
+grant, group, answer (yes | no | dismissed | timeout | unavailable), surfaces, session, orchestrator, command,
+tool_use_id, until (on a grant), cooldown_until (after a no), pending (the request kept for the owner), late and asked
+(a late yes or no in the chat that applied to the pending request; asked: the request's time, also on a grant from
+the panel), refused (session | process: a yes that came where it grants nothing; on a late line, none | expired |
+session | process | live: a late yes or no that found no request it could apply to)}; `foreman permissions grants
+off` writes {verdict: revoke, group, session}, and with --pending {verdict: withdraw, group, session}. A
 reserved file a Write/Edit call of an agent or another session tried (guard.check_file) is a deny line too, with pattern
 `file:<class>` and file (its path) instead of command. A call of another tool (guard.check_tool) adds tool (its
 name) and has place (the path or URL that matched) or command (the one it runs), never the rest of its input. So who

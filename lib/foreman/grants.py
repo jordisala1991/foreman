@@ -280,6 +280,12 @@ def _same_mark(r: dict[str, Any], mark: dict[str, Any]) -> bool:
     return (r.get("pid"), r.get("pid_start")) == (mark.get("pid"), mark.get("pid_start"))
 
 
+def _carried(r: dict[str, Any], session: str, mark: dict[str, Any]) -> bool:
+    """Whether `session` is an id the request was carried from (carry()) to the mark's session, in the mark's process:
+    the answer of a question asked before a /clear of that same process."""
+    return session in (r.get("carried_from") or []) and _same_mark(r, mark)
+
+
 def _foreign(r: dict[str, Any], mark: dict[str, Any]) -> str:
     """Why a request is not the mark's (not _same_mark): `process` (another process, or none recorded) or `session`."""
     proc = (r.get("pid"), r.get("pid_start"))
@@ -289,7 +295,9 @@ def _foreign(r: dict[str, Any], mark: dict[str, Any]) -> str:
 def carry(project: Project, old: str, new: str) -> list[str]:
     """The mark moved from session `old` to `new` in the same `claude` process (orchestrator.carry, after a /clear or
     an in-process resume): the requests `old` made from that process (its pid and start time, a recorded one only)
-    move to `new`, so they stay the mark's and the owner may still answer them. Returns the groups moved."""
+    move to `new`, so they stay the mark's and the owner may still answer them; each keeps the ids it was carried
+    from (`carried_from`), so a late answer that still names one (a module that asked under it) is that request's
+    (take_late, drop_late: still the same process and question). Returns the groups moved."""
     from . import orchestrator
 
     mark = orchestrator.record(project)
@@ -301,6 +309,7 @@ def carry(project: Project, old: str, new: str) -> list[str]:
         for g, r in d["pending"].items():
             if r.get("session") == old and (r.get("pid"), r.get("pid_start")) == (pid, mark.get("pid_start")):
                 r["session"] = new
+                r["carried_from"] = [*(r.get("carried_from") or []), old]
                 moved.append(g)
         if moved:
             _write(project, d)
@@ -388,7 +397,8 @@ def take_late(
     """The owner's yes in the chat to the group's question after its time limit refused the call (the question stays
     drawn, `hook mod grant` with `late`): the grant a timely yes gives (grant_minutes from now, via "ask", plus `late`
     and `asked`), but only to that very request: it waits, carries this tool_use_id and is not expired; `session`
-    (the one answering) is the marked one and made it, from the mark's process, and this call runs in that process
+    (the one answering) is the marked one and made it, or the request was carried to the mark from it (carry()),
+    from the mark's process, and this call runs in that process
     (orchestrator.runs_here; `ps` unreadable: refused); no grant of the group is live. One request grants once: it
     is taken under the file's lock. Returns (grant, request); raises NotApproved (none | expired | session | process
     | live; an expired request is dropped)."""
@@ -402,7 +412,7 @@ def take_late(
         why = ""
         if not _ahead(_expiry(r.get("at"))):
             why = "expired"
-        elif mark.get("session") != session:
+        elif mark.get("session") != session and not _carried(r, session, mark):
             why = "session"
         elif not _same_mark(r, mark):
             why = _foreign(r, mark)
@@ -423,13 +433,20 @@ def take_late(
 
 def drop_late(project: Project, group: str, tool_use_id: str | None, session: str) -> dict[str, Any]:
     """The owner's no in the chat to the group's question after its time limit (as take_late): that very request (it
-    waits, carries this tool_use_id, `session` made it, not expired) is dropped and the group cools down for the
-    session (COOLDOWN_S), as a timely no. It only ever restricts. Returns the request with `cooldown_until`; raises
-    NotApproved (none | expired; an expired request is dropped, with no cooldown)."""
+    waits, carries this tool_use_id, `session` made it or it was carried from `session`, not expired) is dropped and
+    the group cools down for the request's session (COOLDOWN_S), as a timely no. It only ever restricts. Returns the
+    request with `cooldown_until`; raises NotApproved (none | expired; an expired request is dropped, with no
+    cooldown)."""
     with _locked(project) as d:
         r = d["pending"].get(group)
-        if r is None or not tool_use_id or r.get("tool_use_id") != tool_use_id or r.get("session") != session:
+        if (
+            r is None
+            or not tool_use_id
+            or r.get("tool_use_id") != tool_use_id
+            or (r.get("session") != session and session not in (r.get("carried_from") or []))
+        ):
             raise NotApproved("none", f"no request of the group {group!r} with this question waits")
+        session = str(r.get("session"))  # the cooldown is for the session that goes on asking (carried or not)
         d["pending"].pop(group)
         fresh = _ahead(_expiry(r.get("at")))
         until = (util.now() + timedelta(seconds=COOLDOWN_S)).strftime(ISO)

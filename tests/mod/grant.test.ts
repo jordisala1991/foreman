@@ -112,7 +112,8 @@ function engine(
   const logs: string[] = []
   const asked = later<void>()
   const clock = mock.clock(on)
-  on('session.id', () => ({ value: 'S-orch' }))
+  const id = { value: 'S-orch' } // $.session.id(): a test may change it (a /clear in the same process)
+  on('session.id', () => ({ value: id.value }))
   on('session.version', () => ({ value: { version: '2.1.314', base: '2.1.314' } }))
   on('session.surfaces', () => ({ value: ['desktop'] }))
   on('agent.list', () => ({ value: [] }))
@@ -150,7 +151,7 @@ function engine(
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
-  return { grants, questions, statuses, logs, clock, asked: asked.promise }
+  return { grants, questions, statuses, logs, clock, id, asked: asked.promise }
 }
 
 function phases(grants: Input[]): unknown[] {
@@ -384,6 +385,23 @@ test('a late yes that Python grants (the pending request) is kept: the retry goe
   // the orchestrator runs it again (its inbox says so): grants.json holds the grant the module heard given
   expect((await $.tool.call({ tool: 'Bash', command: DEPLOY })).result).toBe('ok')
   expect(w.questions.length).toBe(1)
+})
+
+test('a late answer goes with the session id of the moment it comes (a /clear moved the mark and the request)', async ($, on) => {
+  const answer = later<Ask>()
+  const timeout = '{"deny": "no answer in time", "granted": false}\n'
+  const w = engine(on, [question()], [timeout, GRANTED], [answer.promise])
+  await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
+  const first = $.tool.call({ tool: 'Bash', command: DEPLOY })
+  await w.asked
+  await w.clock.advance(ASK_MS)
+  await first
+  w.id.value = 'S-new' // /clear in the same process: the module goes on under the new id
+  answer.settle({ answer: 'Yes, for 30 min' })
+  await w.clock.advance(0)
+  expect(phases(w.grants)).toEqual(['check', 'timeout', 'late'])
+  expect(w.grants[1]!.session).toBe('S-orch')
+  expect(w.grants[2]).toEqual({ ...w.grants[1], session: 'S-new', answer: 'yes', late: true })
 })
 
 test('a late dismissal (Esc on the old question) is recorded as late too', async ($, on) => {

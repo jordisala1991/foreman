@@ -773,11 +773,19 @@ async function grantFor($: EngineInterface, what: Record<string, unknown>, toolU
   }
   const input = { phase: 'answer', ...call, group, surfaces }
   if ('timeout' in outcome) {
-    // The question stays drawn and its answer still comes: recorded as late, nothing granted. Until then the group's
-    // question is open, so no other one piles up behind it.
-    void asked.then(late => {
+    // The question stays drawn and its answer still comes, marked late: Python applies a yes or a no to the request
+    // this question left pending (only for the marked session, in its own process) and records anything else. It
+    // goes with the session's id at answer time: after a /clear the mark and the request moved to the new id.
+    // Until then the group's question is open, so no other one piles up behind it.
+    void asked.then(async late => {
       asking.delete(group)
-      void answered($, group, { ...input, answer: meaning(late, yes), late: true })
+      let now = session
+      try {
+        now = await $.session.id()
+      } catch {
+        // the id it asked under; Python also takes it for a request carried from it
+      }
+      void answered($, group, { ...input, session: now, answer: meaning(late, yes), late: true })
     })
   } else {
     asking.delete(group)

@@ -1174,7 +1174,8 @@ class LateAnswerTest(PendCase):
         r = grants.pending(self.project)["deploy"]
         self.assertEqual((r["session"], r["tool_use_id"]), ("S2", "T-late"))
         self.assertEqual(grants.orphans(self.project), {})
-        out = self.late(session="S2")
+        self.assertEqual(grants.read(self.project)["pending"]["deploy"]["carried_from"], ["S1"])
+        out = self.late(session="S2")  # the module re-reads the session id for a late answer
         self.assertTrue(out["granted"], out)
         self.assertEqual(grants.live(self.project, "deploy")["session"], "S2")
         # and from the panel too
@@ -1183,6 +1184,42 @@ class LateAnswerTest(PendCase):
         hooks_mod.carry_mark(self.project, "S2", "S3")
         g, _ = grants.approve(self.project, "deploy")
         self.assertEqual(g["session"], "S3")
+
+    def test_row10_a_late_answer_under_the_id_it_was_asked_with_applies_after_a_clear(self):
+        """A module that still names the old id (it asked under it) reaches the carried request: same process and
+        question only; the grant is the mark's (S2), and a late no cools down S2, the session that goes on asking."""
+        self.pend()
+        hooks_mod.carry_mark(self.project, "S1", "S2")
+        self.reparent(COPY_PID)  # from another process: nothing, even with the old id
+        self.assertEqual(self.late(session="S1")["granted"], False)
+        self.assertEqual(self.log()[-1]["refused"], "process")
+        self.start_ps()
+        self.assertEqual(self.late(session="S1", tid="T-other")["granted"], False)  # another question
+        self.assertEqual(self.late(session="S7")["granted"], False)  # an id it was never carried from
+        self.assertEqual(self.log()[-1]["refused"], "session")
+        self.nothing_granted()
+        out = self.late(session="S1")
+        self.assertTrue(out["granted"], out)
+        g = grants.live(self.project, "deploy")
+        self.assertEqual((g["session"], g["pid"]), ("S2", orchestrator.record(self.project)["pid"]))
+        # a late no under the old id
+        grants.revoke(self.project, "deploy")
+        self.answer("timeout", tool_use_id="T-2", session="S2")
+        hooks_mod.carry_mark(self.project, "S2", "S3")
+        self.assertIn("said no (late)", self.late("no", tid="T-2", session="S2")["log"])
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["cooldowns"]["deploy"]["session"]), ({}, "S3"))
+
+    def test_row10_an_orphan_is_not_reached_through_its_old_id(self):
+        """A carried request whose process is no longer the mark's (the orchestrator restarted after the /clear)."""
+        self.pend()
+        hooks_mod.carry_mark(self.project, "S1", "S2")
+        self.reparent(COPY_PID)
+        orchestrator.mark(self.project, "S3", "fake-3", own_session="S3")
+        for session in ("S1", "S2", "S3"):
+            self.assertEqual(self.late(session=session)["granted"], False, session)
+        self.nothing_granted()
+        self.assertEqual(grants.orphans(self.project)["deploy"]["why"], "process")
 
     def test_row10_a_carry_from_another_process_moves_nothing(self):
         self.pend()
