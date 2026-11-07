@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.67.1] - 2026-11-07
+
 ## [0.67.0] - 2026-11-07
 
 ### Added
