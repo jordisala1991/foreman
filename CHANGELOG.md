@@ -9,13 +9,16 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- The panel shows a «See conversation» button for each session agent (in its row and its detail): it turns Remote Control on for that session only when clicked (`claude attach` on a pseudo-terminal, `/remote-control`, then Enter on the dialog it leaves open; the session is not stopped, so no turn is cut and no copy is made) and opens the claude.ai/code link of its conversation in the Claude app. It sends the owner's phone a push on that click, never at launch. A failure says why and the button can be pressed again (`POST /api/agent/watch`, same key and project rules as the other writes).
+
 ## [0.65.0] - 2026-11-07
 
 ### Added
 
 - `foreman launch NAME … --session [--brief-file F]` starts the agent as a Claude Code session of its own (`claude --bg`, in its worktree, with the guard deciding its permissions) instead of through the orchestrator's Agent tool, so it keeps running when the orchestrator's session ends. It is off until the product sets `[agents] sessions = true`; with the key false, `--session` is refused and names it. The session carries its launch token in `FOREMAN_LAUNCH`, which is how the guard knows it is an agent. Remote Control is not turned on.
 - A session agent is followed like a subagent: its tool calls are its activity, its `foreman progress --done` its delivery (so `foreman agents`, `--cost` and the branches ready to integrate see it), and its `Stop` goes through the delivery check (the new `Stop` hook; a session that is not a registered agent is untouched). `foreman agents` and the loop pass cross it with `claude agents --json` (a failed or stopped session shows as stopped), `foreman agents --stop` also runs `claude stop`, the orchestrator's renewal no longer waits for it, and its delivery brings the next pass within a minute.
-- The panel shows a «See conversation» button for each session agent (in its row and its detail): it turns Remote Control on for that session only when clicked (`claude attach` on a pseudo-terminal, `/remote-control`, then Enter on the dialog it leaves open; the session is not stopped, so no turn is cut and no copy is made) and opens the claude.ai/code link of its conversation in the Claude app. It sends the owner's phone a push on that click, never at launch. A failure says why and the button can be pressed again (`POST /api/agent/watch`, same key and project rules as the other writes).
 
 ### Config
 
