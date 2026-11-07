@@ -1,0 +1,9 @@
+# The libraries of the new panel, copied as published (npm tarballs, checked against the registry's integrity), not
+# built here. One line per file: file, package, version, sha256 of the file, its licence under LICENSES/.
+# File in the package: preact dist/preact.mjs, preact hooks/dist/hooks.mjs, htm dist/htm.mjs,
+# chart.js dist/chart.umd.min.js. To update one: copy the new file over, put its version and sha256 here
+# (tests/test_panel_next.py checks them), and its licence if it changed.
+preact.mjs preact 11.2.0 bdcbd9abdf2c77c5c45326eab42191e949222d479d0d5f69467387a77040cb55 preact.txt
+hooks.mjs preact 11.2.0 e862ab2973aa6455eaa0f77c5d832d2157d6be59a17c8ba546550a575b58c6b4 preact.txt
+htm.mjs htm 3.1.1 ab33dd3f38059b9be4d5f5350128eefb2356639c4e0bbe9d9e8b3ba75847e9e4 htm.txt
+chart.umd.min.js chart.js 4.6.1 87364cc2b2a76a6684929e7d6b80b18a897794db38400caff1fcf1791c6925d2 chart.js.txt

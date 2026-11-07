@@ -207,6 +207,7 @@ scripts behind `lock`, `time-limit` and `hung-shells`). `tests/test_docs_tied.py
 | `init.py` | `foreman init`: a new project's home (minimal `foreman.toml`, starting rules, backlog) and its registry entry, appended |
 | `issue_docs.py` | the documents of an issue (plans, reports, branch reviews, decision pages, cited files): the card's list and `backlog show` |
 | `panel.py`, `panel_cache.py`, `panel_cards.py`, `panel_locks.py`, `panel_registry.py`, `panel_wiki.py` | the web panel: server and routes, cache, backlog cards, locks, registry, wiki |
+| `metrics.py` | the series of the new panel's charts (`/api/metrics`, `panel/next/`): cost per day and model |
 | `install.py`, `release.py`, `selftest.py`, `quality.py`, `cover.py`, `mods.py` | where foreman is installed and the panel service; version and release checks; the static checks and the test runner; the code quality checks (ruff, pyright); the coverage run; the hooks module's check (claude plugin validate/test) the selftest runs |
 | `i18n/` | the texts a person reads, `en.json` and `es.json` (same keys in both: a static check) |
 

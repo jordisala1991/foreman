@@ -86,6 +86,21 @@ The page's version is the newest mtime of `index.html`, `app.js` and `app.css`: 
 carries another version than its own, and on a failed poll it asks `/api/version`, so code from an older version
 (a restored tab) does not stay stuck on an error.
 
+**The new panel** (`/next/`, being built; the page at `/` does not change with it). It lists only the products with
+`[panel] next = true` (`next` in each product of `/api/projects`); with none, it says how to turn it on. Its files are
+in `panel/next/`, served as written (no build step): Preact, htm and Chart.js are copied into `panel/next/vendor/`
+as published, each with its version and sha256 in `vendor/MANIFEST` and its licence in `vendor/LICENSES/` (the
+selftest checks the hashes); the modules load through the import map of `panel/next/index.html`, whose `{{U file}}`
+the server fills with `/next/file?v=VERSION&t=KEY`, so every module's imports carry the key. `/next/<file>` serves
+only the files under `panel/next/` ending in `.js .mjs .css .json` (`panel.next_files`: the path must be one of them
+as written; anything else, `MANIFEST` and the licences included, is a 404), with `nosniff`, gzipped, immutable when
+`v` is the new panel's version (`panel_cache.next_version`, the newest mtime under `panel/next/`, apart from the old
+page's). `/next` moves to `/next/` with its query. `/api/metrics?p=NAME&days=7|30` (only for a product with the
+switch on; another `days` is a 400) gives the charts' series (`metrics.py`): `days`, `cost` {day: {opus, sonnet,
+haiku, other, usd}} at list price from `costs.jsonl`, counting only the lines of issues of the product's own backlog
+(archive included), every day present, `total`, and `since` (the first day with an own line). Nothing in
+`panel/next/` names a URL off the machine: no fonts, no CDN.
+
 **Following the installed version.** Python code is loaded once, so a panel keeps running the version it started
 with. The hooks record where Claude Code runs foreman from: on each session start and prompt in an active project,
 the plugin root (`CLAUDE_PLUGIN_ROOT`) and its version go to `<state root>/install/installs.json`, and

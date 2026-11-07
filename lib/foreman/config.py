@@ -72,7 +72,7 @@ SOURCES = ("default", "foreman.toml", "registry", "registry+foreman.toml", "envi
 # The highest foreman.toml schema this foreman understands. It goes up by one with every new key or section (and
 # tests/config_schema.json records the keys of each schema: the selftest fails if they differ). Keys that ship in the
 # same release share one schema: add them to the newest list of tests/config_schema.json while it is unreleased.
-CONFIG_SCHEMA = 23
+CONFIG_SCHEMA = 24
 # Keys foreman no longer reads, (section, key): what to tell the owner. One left in a foreman.toml is a warning (it
 # loads, ignored; `foreman check` names it), never an error, so an old file keeps working until it is cleaned.
 REMOVED: dict[tuple[str, str], str] = {
@@ -202,7 +202,7 @@ DEFAULTS: dict[str, Any] = {
         "ask_minutes": 5,
         "drop": [],
     },
-    "panel": {"title": "", "wiki": "", "wiki_first": []},
+    "panel": {"title": "", "wiki": "", "wiki_first": [], "next": False},
     "publish": {"means": []},
     "strings": {},
     "check": {"guard_table": ""},
@@ -695,6 +695,8 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
         err.append('[agents] production_types must be a list of agent types (strings), such as ["dev"]')
     if not isinstance(raw.get("agents", {}).get("sessions", False), bool):
         err.append("[agents] sessions must be true or false")
+    if not isinstance(raw.get("panel", {}).get("next", False), bool):
+        err.append("[panel] next must be true or false")
     if not _whole(raw.get("loop", {}).get("lock_long_min", 60), 1):
         err.append("[loop] lock_long_min must be a whole number of minutes, 1 or more")
     string_problems(raw.get("strings", {}), err, warn)
