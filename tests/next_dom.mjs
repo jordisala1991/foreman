@@ -151,6 +151,13 @@ const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) 
 const errors = [];
 const origError = console.error;
 console.error = (...a) => { errors.push(a.map(String).join(" ")); };
+if (scenario.now) { // a fixed «now» (ms): the screens' durations must not depend on how long the test takes
+  const RealDate = Date;
+  globalThis.Date = class extends RealDate {
+    constructor(...a) { super(...(a.length ? a : [scenario.now])); }
+    static now() { return scenario.now; }
+  };
+}
 await import(pathToFileURL(path.join(dir, "app.js")).href);
 await settle();
 if (scenario.click) {

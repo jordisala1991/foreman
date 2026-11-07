@@ -20,6 +20,7 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 ### Fixed
 
 - In the new panel's System, «All good» no longer shows without data: with no Mac measure, no quota measure or no answer yet from the product's state (first paint, a slow or failed call) it says «No data yet» and what is missing. The recurring tasks' schedules show in Spanish, the latest lines are cut when long, and «Integrated» of a task says «Has a commit» (it counts parts with a commit, not what is in main). A short block reason is cut at a clause, not in the middle of a phrase. «Do you want it done?» ignores a second click while the first is sent. An unknown status no longer blanks a screen.
+- In the new panel's System, a recurring task every 1 day, hour or week reads «cada día», «cada hora», «cada semana» (and «every day» in English), not «cada 1 días».
 
 ## [0.66.0] - 2026-11-07
 

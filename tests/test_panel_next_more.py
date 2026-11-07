@@ -363,6 +363,24 @@ class SystemTest(NextMoreTest):
         ):
             self.assertIn(want, text)
 
+    def test_a_schedule_of_one_is_singular(self):
+        rec = [
+            {"name": n, "every": e, "late": False, "parts": []}
+            for n, e in (("A", "every 1 days"), ("B", "every 1 hours"), ("C", "every 2 days"), ("D", "every 1 weeks"))
+        ]
+        st = {"project": {**STATE["project"], "recurring": rec}}
+        for lang, want, notwant in (
+            ("es", ("cada día", "cada hora", "cada 2 días", "cada semana"), "cada 1"),
+            ("en", ("every day", "every hour", "every 2 days", "every week"), "every 1"),
+        ):
+            projects = {**self.PROJECTS, "language": lang, "mac": self.MAC, "quota": [], "errors": []}
+            out = self.mount(
+                {"hash": "#/system", "lang": lang, "answers": {"/api/projects": projects, "/api/state?p=alpha": st}}
+            )
+            for w in want:
+                self.assertIn(w, out["text"], lang)
+            self.assertNotIn(notwant, out["text"], lang)
+
     def test_all_good(self):
         calm = {**self.MAC, "swap_gb": 1.1}
         projects = {
