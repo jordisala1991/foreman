@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0e10" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>foreman</title>
+<!-- The page of the new panel, built from panel/next-src (npm run build): the server fills in {{LANG}} and each
+     {{U file}} with the file's URL, its version and the panel's key, and serves only the files under panel/next/.
+     No fonts, no CDN: the panel works without the network. -->
+<link rel="stylesheet" href="{{U app.css}}">
+<script type="module" src="{{U app.js}}"></script>
+</head>
+<body>
+<div id="app"></div>
+</body>
+</html>
