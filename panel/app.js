@@ -561,16 +561,12 @@ function renderYou(d){
   const unanswered = d.decisions.filter(x => !x.answer).length, asks = d.grants.filter(x => x.pending).length;
   $('badge').hidden = !(unanswered + asks); $('badge').textContent = unanswered + asks;
   renderGrants(d);
-  // each decision is a card: title (opens the detail), the first sentence of its text, date and the answer buttons
-  // right there, the recommended option marked; below them, when it says so, what waits until the answer and a link to
-  // its page. One that says what each option changes: one button per option, and folded once answered (decCardRich)
+  // each decision is a card (decCardRich): title (opens the detail), the first sentence of its text, one button per
+  // option and what it holds; folded once answered
   // in the order first seen: one just answered (the state lists it after the pending ones) stays in its place
   d.decisions.forEach(x => { if(!DEC_SEEN.has(decKey(x))) DEC_SEEN.set(decKey(x), DEC_SEEN.size); });
   const decs = [...d.decisions].sort((a, b) => DEC_SEEN.get(decKey(a)) - DEC_SEEN.get(decKey(b)));
-  const dec = sect(t('decisions'), decs.length ? decs.map(x => card(hasDetails(x) ? decCardRich(x) :
-      `<div class="ctitle" data-k="dec" data-key="${esc(decKey(x))}"><span>${ptag(x.p)}${esc(x.title)}</span><span class="chev">›</span></div>`
-      + (x.lead ? `<div class="clead">${esc(x.lead)}</div>` : '')
-      + `<div class="csub">${x.date ? t('asked_on', {date: esc(x.date)}) : ''}</div>` + decisionActions(x) + decisionMore(x))).join('')
+  const dec = sect(t('decisions'), decs.length ? decs.map(x => card(decCardRich(x))).join('')
     : list(empty(t('nothing_pending'))), unanswered || null);
   // painted only when it changed, so an «other answer» being typed keeps its focus while the rest polls
   if($('dec').dataset.sig !== dec){ $('dec').innerHTML = dec; $('dec').dataset.sig = dec; fillFree($('dec')); }
@@ -605,28 +601,13 @@ async function grantApprove(b){
   lastSignature = null; lastEtag = null; await load();
   if(err) $('err').textContent = t('error', {text: err});
 }
-// a decision's answer part: answered (resolved from the panel, until the orchestrator reads it), or its option
-// buttons and, for a product the panel writes to, «Other answer»: a box for his own words (sent as free text, which
-// the orchestrator interprets). `sent`: the answer only reached the inbox (the backlog could not be saved)
-const decisionActions = x => x.answer
-  ? `<div class="ok answered">${t(x.free ? 'answered_free' : 'answered', {text: esc(x.answer)})}</div>`
-  : decisionSent(x)
-    + `<div class="btns">${x.options.map(o => canWrite(x.p) ? `<button class="sec${o===x.recommended ? ' rec' : ''}" data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-op="${esc(o)}" data-p="${esc(x.p)}" onclick="decide(this)">${optLabel(x, o)}</button>` : `<span class="chip${o===x.recommended ? ' rec' : ''}">${optLabel(x, o)}</span>`).join('')}`
-    + otherButton(x) + '</div>' + freeBox(x);
 const decisionSent = x => x.sent ? `<div class="warn answered">${t('sent_not_closed', {text: esc(x.sent)})}</div>` : '';
 const otherButton = x => canWrite(x.p) && !FREE_OPEN.has(freeKey(x)) ? `<button class="sec other" data-fk="${esc(freeKey(x))}" onclick="freeToggle(this)">${t('other_answer')}</button>` : '';
 const freeBox = x => canWrite(x.p) && FREE_OPEN.has(freeKey(x)) ? `<div class="free"><textarea maxlength="2000" data-fk="${esc(freeKey(x))}" placeholder="${esc(t('other_answer_ph'))}" oninput="FREE_DRAFT.set(this.dataset.fk, this.value)"></textarea>`
       + `<div class="btns"><button data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-p="${esc(x.p)}" data-fk="${esc(freeKey(x))}"${x.answer ? ' data-ch="1"' : ''} onclick="decideFree(this)">${t('send_answer')}</button>`
       + `<button class="sec" data-fk="${esc(freeKey(x))}" onclick="freeToggle(this)">${t('cancel')}</button></div></div>` : '';
-// what a decision says besides its text, only when it says it, so one recorded before shows as before: without what
-// each option changes, the card says what waits until the answer (with the reminder's date) and links its page
 const UNDO_CLS = {yes: 'ok', hard: 'warn', no: 'bad'};
-const hasDetails = x => !!x.details && x.options.some(o => x.details[o]);
-const decWaits = u => u.by ? t('dec_waits_by', {date: esc(u.by), text: esc(u.waits)}) : t('dec_waits', {text: esc(u.waits)});
-const decisionMore = x => x.answer || !((x.unanswered && x.unanswered.waits) || x.page) ? ''
-  : '<div class="dmore">'
-    + (x.unanswered && x.unanswered.waits ? `<div class="csub">${decWaits(x.unanswered)}</div>` : '')
-    + (x.page ? `<a class="slink" data-k="dec" data-key="${esc(decKey(x))}" data-page="1">${t('dec_see_page')}</a>` : '') + '</div>';
+
 
 // A question that says what each option changes is told in order: the question, its situation (the text), what is
 // at stake (what happens without an answer, the reminder, the tasks it holds), then each option as a card with its
@@ -637,7 +618,7 @@ const decisionMore = x => x.answer || !((x.unanswered && x.unanswered.waits) || 
 const optLetter = o => (/^\s*([A-Za-z0-9]{1,2})\s*[:.)]\s/.exec(o) || [])[1] || '';
 const UNDO_ICO = {yes: '↺', hard: '⚠︎', no: '⊘'};
 const undoChip = u => UNDO_CLS[u] ? `<span class="ochip ${UNDO_CLS[u]}"><span aria-hidden="true">${UNDO_ICO[u]}</span> ${t('chip_undo_' + u)}</span>` : '';
-const undoOf = (x, o) => (x.details[o] || {}).undo || '';
+const undoOf = (x, o) => ((x.details || {})[o] || {}).undo || '';
 // an option's data for its button: data-ch when it changes an answer the orchestrator has not read yet
 const optData = (x, o) => `data-id="${esc(x.id || '')}" data-d="${esc(x.title)}" data-op="${esc(o)}" data-p="${esc(x.p)}" data-undo="${esc(undoOf(x, o))}"${x.answer ? ` data-ch="1" data-fk="${esc(freeKey(x))}"` : ''}`;
 const optButton = (x, o, cls='') => `<button class="${cls}" ${optData(x, o)} onclick="decideOpt(this)">${optLetter(o) ? t('dec_choose', {l: esc(optLetter(o))}) : t('dec_choose_it')}</button>`;
@@ -677,7 +658,7 @@ function decCardRich(x){
 // one option as a card. Answered (`done`): the chosen one with «✓ Your choice», highlighted; the others grey, the
 // recommended one with only its label (no «why», no border); no buttons
 function decOptCard(x, o, write, done){
-  const d = x.details[o] || {}, rec = o===x.recommended, mine = !!x.answer && !x.free && x.answer===o;
+  const d = (x.details || {})[o] || {}, rec = o===x.recommended, mine = !!x.answer && !x.free && x.answer===o;
   return `<div class="ocard${rec && !done ? ' rec' : ''}${done ? (mine ? ' chosen' : ' dim') : ''}">`
     + `<div class="ohead"><b>${esc(o)}</b>${mine ? `<span class="obadge ok"><span aria-hidden="true">✓</span> ${t('dec_your_choice')}</span>` : ''}${rec ? `<span class="obadge">${t('dec_rec_badge')}</span>` : ''}</div>`
     // always its five parts, empty ones too: side by side, each part lines up with the same part of the others
@@ -733,8 +714,6 @@ function freeToggle(b){
   if(MV.length) renderModal(true);
   if(open){ const a = [...document.querySelectorAll('.free textarea')].find(x => x.dataset.fk===k && x.offsetParent); if(a) a.focus(); }
 }
-// an option's label, with «(recommended)» after the one the recommendation names
-const optLabel = (x, o) => esc(o) + (o===x.recommended ? ` <span class="recm">${t('recommended_mark')}</span>` : '');
 
 // ---- Trabajo: agents, branches by column and the pull requests
 const BRANCH_COLS = [['working','col_working'],['pr','col_pr'],['ready','col_ready'],['main','col_today']];
@@ -1132,24 +1111,14 @@ const VIEWS = {
   },
   dec(key){
     const x = lastData.decisions.find(y => decKey(y)===key); if(!x) return null;
-    // one that says what each option changes is told in order (decDetailRich); one of before, as before
-    const rich = hasDetails(x);
-    return {p: x.p, title: t('decision'), html: dhead(`${ptag(x.p)}${t(rich && x.answer ? 'dec_answered_head' : 'pending_decision')}`, esc(x.title)) + (rich ? decDetailRich(x) : props([
-        [t('asked'), esc(x.date || '')], [t('status'), x.answer ? `<span class="ok">${t(x.free ? 'answered_free_lc' : 'answered_lc', {text: esc(x.answer)})}</span>` : `<span class="warn">${t('waits_answer')}</span>`],
-        [t('options'), x.options.map(o => optLabel(x, o)).join(' · ')], x.recommendation && [t('recommendation'), esc(x.recommendation)],
-        x.unanswered && x.unanswered.waits && [t('dec_unanswered'), esc(x.unanswered.waits) + (x.unanswered.by ? ` <span class="muted">· ${t('dec_reminder', {date: esc(x.unanswered.by)})}</span>` : '')]])
-      + sect(t('detail'), `<div class="md">${md(x.text)}</div>`)
-      // its page inside, with its images (loaded after: it is a document)
-      + (x.page ? `<div id="mpage" class="md"><span class="muted">${t('loading_lc')}</span></div>` : '')
-      + decisionActions(x)),
+    return {p: x.p, title: t('decision'), html: dhead(`${ptag(x.p)}${t(x.answer ? 'dec_answered_head' : 'pending_decision')}`, esc(x.title)) + decDetailRich(x),
       after: async v => {
         fillFree($('mbody'));
         if(!x.page) return;
         const r = await loadDoc(x.page, x.p), el = $('mpage');
         if(!el || MV[MV.length-1]!==v) return;
-        // folded under «See more detail» in a rich one, without its first title (the question says it already)
-        el.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(rich ? r.md.replace(/^\s*# [^\n]*\n+/, '') : r.md, x.p, r.path);
-        if(v.page){ v.page = false; if($('dpage')) $('dpage').open = true; el.scrollIntoView(); }   // opened from the card's link
+        // folded under «See more detail», without its first title (the question says it already)
+        el.innerHTML = r.err ? `<span class="bad">${esc(r.err)}</span>` : mdFull(r.md.replace(/^\s*# [^\n]*\n+/, ''), x.p, r.path);
       }};
   },
   msg(key, obj){
@@ -1208,7 +1177,7 @@ document.addEventListener('click', e => {
     return; }
   // a row, link or button with data-k opens its detail (a row only if the tap was not on a control inside it)
   const r = e.target.closest('[data-k]');
-  if(r && (r.matches('button, a') || !e.target.closest('button, a, .grip, details'))){ e.preventDefault(); openView(r.dataset.k, r.dataset.key, r.dataset.page ? {page: true} : undefined); }
+  if(r && (r.matches('button, a') || !e.target.closest('button, a, .grip, details'))){ e.preventDefault(); openView(r.dataset.k, r.dataset.key); }
 });
 async function renderModal(keepScroll){
   const v = MV[MV.length-1]; $('modal').hidden = !v; document.body.style.overflow = v ? 'hidden' : '';

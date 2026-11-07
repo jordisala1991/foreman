@@ -274,10 +274,7 @@ def backlog_cards(project: Project) -> Cards:
             return clean((sub or {}).get("title") or i["title"])
 
         def holds(d: Record) -> dict[str, Any]:
-            """The open work a decision with details holds ({ref, title} each), for the detail's «holds N tasks»; none
-            for a decision without details, so a decision of before is sent as before."""
-            if not d.get("details"):
-                return {}
+            """The open work a decision holds ({ref, title} each), for the detail's «holds N tasks»."""
             out = [{"ref": r, "title": hold_title(r)} for r in d.get("blocks") or [] if Backlog.hold_open(data, r)]
             return {"holds": out} if out else {}
 

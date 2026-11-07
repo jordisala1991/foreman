@@ -70,13 +70,9 @@ nav button.on{color:var(--acc)}
 .ctitle{display:flex;align-items:center;gap:var(--sp2);font-size:var(--fs-l);font-weight:600;cursor:pointer}.ctitle span:first-child{flex:1;min-width:0}
 .csub{color:var(--muted);font-size:var(--fs-s)}
 .clead{margin-top:2px;font-size:var(--fs-m)}
-button.sec.rec,.chip.rec{border-color:var(--acc)}.recm{color:var(--muted);font-weight:400}
 .answered{margin-top:var(--sp2);font-size:var(--fs-m)}
 .free{margin-top:var(--sp2)}.free textarea{min-height:56px}.answered.warn{margin-bottom:-4px}
-/* what a decision says besides its text: under the card's buttons */
-.dmore{margin-top:10px;padding-top:var(--sp2);border-top:1px solid var(--line);display:flex;flex-direction:column;gap:var(--sp1);font-size:var(--fs-m)}
-.dmore .slink{font-size:var(--fs-m)}
-/* a question that says what each option changes, told in order: situation, what is at stake, the options as cards of
+/* a question, told in order: situation, what is at stake, the options as cards of
    the same size with their own button (side by side from 700 px), «Other answer», the page folded */
 .dsit p:first-child{margin-top:0}.dsit p:last-child{margin-bottom:0}
 .dstake{margin:var(--sp3) 0 var(--sp4);padding:2px 0 2px var(--sp3);border-left:3px solid var(--warn);font-size:var(--fs-m)}

@@ -1643,14 +1643,9 @@ console.log(JSON.stringify(out));
         self.assertEqual(rec(["sí", "no"], "depende del coste"), "")
         self.assertEqual(rec(["yes", "no"], ""), "")
         self.assertEqual(rec(["no", "nota"], "nota: x"), "nota")
-        # the page: the lead under the title, the mark on the button (and on the chip of a read-only product) and in
-        # the detail's options, the labelled recommendation row
+        # the page: the lead under the title
         js = (ROOT / "panel/app.js").read_text()
-        self.assertIn("(x.lead ? `<div class=\"clead\">${esc(x.lead)}</div>` : '')", js)
-        self.assertIn("o===x.recommended ? ` <span class=\"recm\">${t('recommended_mark')}</span>` : ''", js)
-        self.assertEqual(js.count("${optLabel(x, o)}"), 2)  # the button and the chip
-        self.assertIn("[t('options'), x.options.map(o => optLabel(x, o)).join(' · ')]", js)
-        self.assertIn("x.recommendation && [t('recommendation'), esc(x.recommendation)]", js)
+        self.assertIn("(x.lead ? `<div class=\"clead olead\">${esc(x.lead)}</div>` : '')", js)
         self.assertIn(".clead{", (ROOT / "panel/app.css").read_text())
 
     def test_decision_recommend_option(self):
@@ -1696,9 +1691,6 @@ console.log(JSON.stringify(out));
         self.assertEqual(cards["Area J3"]["recommended"], "the full copy")
         self.assertEqual(cards["Area J1"]["recommended"], "")  # old data: inferred from the text, as before
         self.assertEqual(self.cli("check").returncode, 0)
-        for lang, label, mark in (("en", "Recommendation", "(recommended)"), ("es", "Recomendación", "(recomendada)")):
-            st = self.req(f"/api/strings?lang={lang}")[1]
-            self.assertEqual((st["recommendation"], st["recommended_mark"]), (label, mark))
 
     def test_owner_strings_without_jargon(self):
         """The panel's texts for the owner say what happens in plain words (docs/owner.md): no command or
