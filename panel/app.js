@@ -41,7 +41,7 @@ async function loadStrings(lang){
   document.querySelectorAll('[data-sa]').forEach(el => el.setAttribute('aria-label', t(el.dataset.sa)));
   lastSignature = null;
 }
-const dur = s => s == null ? '' : s < 60 ? t('dur_s', {n: s}) : s < 3600 ? t('dur_min', {n: Math.floor(s/60)}) : t('dur_h', {h: Math.floor(s/3600), m: Math.floor(s%3600/60)});
+const dur = s => s == null ? '' : s < 60 ? t('dur_s', {n: s}) : s < 3600 ? t('dur_min', {n: Math.floor(s/60)}) : s < 172800 ? t('dur_h', {h: Math.floor(s/3600), m: Math.floor(s%3600/60)}) : t('dur_d', {n: Math.round(s/86400)});
 const ago = h => h==null ? t('never') : h < 1 ? t('ago_min', {n: Math.round(h*60)}) : h < 48 ? t('ago_h', {n: Math.round(h)}) : t('ago_d', {n: Math.round(h/24)});
 const agoS = s => s==null ? '' : ago(s/3600);
 // ---- Ages: the state carries times in epoch seconds (activity_ts, start_ts, since_ts, committed_ts, report.ts,
@@ -61,7 +61,15 @@ function paintAges(){
   document.querySelectorAll('[data-at]').forEach(el => { const s = ageText(+el.dataset.at, el.dataset.f); if(el.textContent !== s) el.textContent = s; });
   document.querySelectorAll('[data-turn]').forEach(el => { if(!passed(+el.dataset.turn)) return;
     if(el.dataset.bg) el.style.background = el.dataset.bg;
+    if(el.dataset.cls) el.classList.add(el.dataset.cls);
     el.hidden = false; el.removeAttribute('data-turn'); });
+}
+// the orchestrator's report older than REPORT_STALE_S: its age turns amber and says it may be out of date
+const REPORT_STALE_S = 6 * 3600;
+function reportAge(ts){
+  const turn = ts + REPORT_STALE_S, late = passed(turn);
+  return `<span class="${late ? 'warn ' : ''}stale-age" ${late ? '' : `data-turn="${+turn}" data-cls="warn"`}>${ageEl(ts, 'ago_dur')}</span>`
+    + `<span class="warn stale-note" ${late ? '' : `data-turn="${+turn}" hidden`}> · ${esc(t('report_stale'))}</span>`;
 }
 function setSkew(r){ const ms = Date.parse(r.headers.get('Date') || ''); if(!isNaN(ms)) SKEW = ms + 500 - Date.now(); }   // Date has whole seconds
 const hhmm = h => { const s = String(h || ''); return s.length > 5 ? s.slice(11, 16) : s; };
@@ -528,8 +536,8 @@ function renderNow(d){
     // an inactive product (set up, its orchestrator not started) has no loop to pause
     const foot = p.mode==='inactive' ? `<div class="foot">${dot('var(--muted)')}<span>${t('inactive')}</span></div>`
       : `<div class="foot">${dot(hb ? `var(--${HEALTH_CLS[hb.verdict]})` : p.paused ? 'var(--warn)' : 'var(--ok)')}<span>${orchLine(p.orchestrator)}${orchVersionTag(p.name)} · ${hb ? healthTag(hb) : p.paused ? t('loop_paused') : t('loop_active')} · ${t('last_pass', {when: loopPart.last_ts != null ? ageEl(loopPart.last_ts, 'ago') : t('never')})}</span>${p.paused || !p.writable ? '' : `<button class="sec sm" onclick="post('/api/pause?on=1','${esc(p.name)}')">${t('pause')}</button>`}</div>`;
-    return sect(d.joint ? `${t('report')} · ${esc(p.title)}` : t('report'), card((p.report ? `<div class="md">${md(p.report.text)}</div>` : `<span class="muted">${t('no_report')}</span>`) + foot),
-      null, p.report ? ageEl(p.report.ts, 'ago_dur') : '');
+    return sect(d.joint ? `${t('report')} · ${esc(p.title)}` : t('report'), card((p.report ? `${mdFull(p.report.text)}` : `<span class="muted">${t('no_report')}</span>`) + foot),
+      null, p.report ? reportAge(p.report.ts) : '');
   }).join('');
 }
 // ---- Resources: one row per lock (dot, name, who has it, queue) with the one action its state allows; the row opens
