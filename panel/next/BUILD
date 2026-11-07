@@ -1,8 +1,8 @@
 # Written by `npm run build` in panel/next-src: do not edit. The selftest checks that the sources and the
 # files built from them still have these sha256 (a source changed without a build, or a built file changed
 # by hand, fails it).
-source 6029285ba83a27de411a8cc3eab68b2bcb98aeca58af77d66e013105b845b08a
+source d820c065486d29286dcff42d72407be8577de4d5c9625b08fc87279f4ee7198e
 8d2e234f8edc34f66e1036a86b865ea9785e8bead8a9776d7b2d6c2de6406eb7  index.html
-5ce7fc26ac9e0e8d0bad4d9c1f34c9c6c9eea2ea835ae8accdb75b71de4e7a20  app.js
-ade0842fb1d062a5ed96e4f85596c3f86383d29501264dccca9cf141fcb1ae62  app.css
+cc84941b446c768aa15d386a73be3bffde2452bf8ccd8fc098c7c87eb9448c8b  app.js
+d76edb0996683ff6e403db84a1a4a5797c7772129c2fed1ba11b963293570b6a  app.css
 dfb7ad4d73d99d403d1ca0191c378580230c907435c8a03f59475aaabd8ee10d  LICENSES.txt
