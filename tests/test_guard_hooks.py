@@ -1142,7 +1142,7 @@ class GuardFailsClosedTest(ProjectCase):
             mock.patch.object(sys, "stdin", stdin),
             contextlib.redirect_stderr(err),
             contextlib.redirect_stdout(io.StringIO()),
-            mock.patch.object(hooks, "project_of", lambda ev: self.project),
+            mock.patch.object(hooks, "project_of", lambda ev, projects=None: self.project),
         ):
             rc = hooks.run(name)
         return rc, err.getvalue()
@@ -1183,13 +1183,38 @@ class GuardFailsClosedTest(ProjectCase):
         self.assertEqual(rc, 2)
         self.assertIn("refused this call (deny)", err)
 
+    def test_registry_read_once(self):
+        """The registry that finds the session's project is the one the guard's rules read: one load per call."""
+        from unittest import mock
+
+        from foreman import config, hooks
+
+        real = config.registered_projects
+        write = {"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": "a1"}
+        write["tool_input"] = {"file_path": str(self.home / "foreman.toml"), "content": "x"}
+        for ev, want in (
+            (self.bash("ls"), 0),
+            (self.bash(f"echo x > {self.home / 'foreman.toml'}"), 2),
+            (self.bash("make deploy"), 2),
+            (write, 2),
+        ):
+            with self.subTest(ev=ev), mock.patch.object(config, "registered_projects", side_effect=real) as reg:
+                import contextlib
+                import io
+                import sys
+
+                stdin = io.StringIO(json.dumps({"cwd": str(self.home), **ev}))
+                with mock.patch.object(sys, "stdin", stdin), contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(hooks.run("guard"), want)
+                self.assertEqual(reg.call_count, 1)
+
     def test_missing_foreman_module_refuses_only_in_the_guard(self):
         from unittest import mock
 
         from foreman import hooks
 
         def missing(name):
-            def hook(project, ev):
+            def hook(project, ev, projects=None):
                 raise ModuleNotFoundError(f"No module named {name!r}", name=name)
 
             return hook
@@ -1202,7 +1227,11 @@ class GuardFailsClosedTest(ProjectCase):
             ("foreman.loop", "pause-agents", 0),
             ("foreman.loop", "resume", 0),
         ):
-            with self.subTest(mod=mod, hook=name), mock.patch.dict(hooks.HOOKS, {name: missing(mod)}):
+            with (
+                self.subTest(mod=mod, hook=name),
+                mock.patch.dict(hooks.HOOKS, {name: missing(mod)}),
+                mock.patch.object(hooks, "hook_guard", missing(mod)),
+            ):
                 rc, err = self.run_hook(name, self.bash("ls"))
                 self.assertEqual(rc, want)
                 self.assertEqual("cannot run" in err, want == 2)

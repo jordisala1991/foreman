@@ -98,7 +98,7 @@ import io
 import json
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 # Only what the guard needs to reach its verdict is imported here: `hook guard` runs on every tool call, so the rest
@@ -123,9 +123,20 @@ def read_event() -> dict[str, Any] | None:
         return None
 
 
-def project_of(ev: Event) -> Project | None:
+def registry(ev: Event) -> list[Project] | None:
+    """The registry's projects, read once for the whole hook (the guard's rules read them too); None when the event
+    has no cwd or the registry does not read (no project then, as project_for_cwd says)."""
+    if not ev.get("cwd"):
+        return None
+    try:
+        return config.registered_projects()
+    except config.ConfigError:
+        return None
+
+
+def project_of(ev: Event, projects: Sequence[Project] | None = None) -> Project | None:
     cwd = ev.get("cwd")
-    return config.project_for_cwd(cwd, active_only=True) if cwd else None
+    return config.project_for_cwd(cwd, active_only=True, projects=projects) if cwd else None
 
 
 def out(obj: dict[str, Any]) -> None:
@@ -487,15 +498,16 @@ def hook_loop(project: Project, ev: Event) -> None:
         emit(event, " ".join(texts))
 
 
-def hook_guard(project: Project, ev: Event) -> int:
+def hook_guard(project: Project, ev: Event, projects: Sequence[Project] | None = None) -> int:
+    """`projects`: the registry's, if already loaded (run reads it once to find the project)."""
     tool = ev.get("tool_name")
     if tool not in (None, "Bash"):
-        return guard_tool(project, ev, tool)
+        return guard_tool(project, ev, tool, projects)
     cmd = (ev.get("tool_input") or {}).get("command", "")
     if cmd:
         identity.record_call(project, ev)  # who runs its foreman calls (never fails)
     ctx = _guard_ctx(ev)
-    verdict = guard.check(project, cmd, ctx) if cmd else None
+    verdict = guard.check(project, cmd, ctx, projects) if cmd else None
     if verdict:
         return _refuse(project, ev, verdict)
     held = pause.guard_check(project, cmd) if cmd else None
@@ -546,7 +558,7 @@ def _refuse(project: Project, ev: Event, verdict: guard.Verdict) -> int:
     return 2
 
 
-def guard_tool(project: Project, ev: Event, tool: str) -> int:
+def guard_tool(project: Project, ev: Event, tool: str, projects: Sequence[Project] | None = None) -> int:
     """The guard on a call of any tool but Bash (guard.check_call): a FILE_TOOLS tool by the file it writes
     (check_file), then like any other, by the places and commands it names (check_tool); a command it runs also
     waits while the product is paused, as in Bash. A call that names nothing leaves before anything is built."""
@@ -556,7 +568,7 @@ def guard_tool(project: Project, ev: Event, tool: str) -> int:
     if path is None and not places and not commands:
         return 0
     ctx = _guard_ctx(ev)
-    verdict = guard.check_call(project, tool, ti, ctx)
+    verdict = guard.check_call(project, tool, ti, ctx, projects)
     if verdict:
         return _refuse(project, ev, verdict)
     for cmd in commands:
@@ -679,7 +691,8 @@ def run(name: str) -> int:
         return 0
     try:
         ev = read_event()
-        project = project_of(ev) if ev else None
+        projects = registry(ev) if ev else None
+        project = project_of(ev, projects) if ev and projects is not None else None
         if project is None or ev is None:
             if ev and name in ("who", "loop"):
                 hook_broken(name, ev)
@@ -691,7 +704,7 @@ def run(name: str) -> int:
             best = install.record()  # where the sessions run foreman from (the panel follows it); never raises
         if name not in ("who", "loop"):
             try:
-                rc = HOOKS[name](project, ev)
+                rc = hook_guard(project, ev, projects) if name == "guard" else HOOKS[name](project, ev)
             except ImportError as e:
                 if name != "guard" or (e.name or "").split(".")[0] != "foreman":
                     raise
