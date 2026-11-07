@@ -2019,7 +2019,7 @@ class LinearPanelTest(PanelCase):
 
     def test_list_rows_show_priority(self):
         """An issue row of the list (global and project page) shows its urgency at the left of the id,
-        as in Linear, in a fixed 14 px slot with a muted «—» for 'none' or a missing field (so the ids stay aligned),
+        as in Linear, in a fixed 14 px slot, empty for 'none' or a missing field (so the ids stay aligned),
         reusing the detail's strings."""
         js = (ROOT / "panel/app.js").read_text()
         row = js[js.index("const storyRow") : js.index("function laneGroups")]
@@ -2029,7 +2029,7 @@ class LinearPanelTest(PanelCase):
         prio = js[js.index("const PRIO_ICON") : js.index("const ICONS")]
         self.assertIn("['urgent', 'high', 'medium', 'low'].includes(p)) p = 'none'", prio)
         self.assertNotIn("return ''", prio)  # every row gets the slot
-        self.assertIn("p==='none' ? '<path d=\"M3 7h8\"", prio)
+        self.assertIn("p==='none' ? ''", prio)  # no dash for «no priority»
         self.assertIn("t('priorities.' + p)", prio)
         self.assertIn('aria-label="${lbl}"><title>${lbl}</title>', prio)
         css = (ROOT / "panel/app.css").read_text()
