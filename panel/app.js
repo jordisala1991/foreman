@@ -463,8 +463,16 @@ function renderProducts(d){
   $('products').innerHTML = sect(t('home_title'), list(rows.map(r => r.html).join('')), rows.length);
 }
 // ---- Ahora: status headline, chips, what needs attention, the locks and the orchestrator's report
+// why a product is stopped: its orchestrator does not answer (down), the loop is paused, nobody orchestrates it
+// (none) or it is inactive on purpose; null when it runs. The headline and «Te necesita» both read it.
+const up1 = x => x.charAt(0).toUpperCase() + x.slice(1);
+const stopOf = p => p.broken ? null : healthBad(p.orchestrator_health) ? 'down' : p.paused ? 'paused'
+  : !p.orchestrator ? (p.mode==='inactive' ? 'inactive' : 'none') : null;
 function attention(d){
   const att = [];   // [level, text, action]
+  d.ps.forEach(p => { const k = stopOf(p);
+    if(k==='down') att.push(['bad', `${ptag(p.name)}${esc(up1(orchHealthText(healthBad(p.orchestrator_health))))}. ${t('stopped_down_do')}`, '']);
+    else if(k==='none') att.push(['warn', `${ptag(p.name)}${t('stopped_none_text')}`, '']); });
   // a product that loads with config warnings (unknown keys, a newer schema): it works, but `foreman check` fails
   d.ps.forEach(p => (p.warnings || []).forEach(w => att.push(['warn', `${ptag(p.name)}${t('config_warning', {text: esc(w)})}`, ''])));
   d.ps.filter(p => p.paused).forEach(p => att.push(['warn', `${ptag(p.name)}${t('paused', {text: esc(p.paused)})}`, p.writable ? `<button class="sm" onclick="post('/api/pause?on=0','${esc(p.name)}')">${t('resume')}</button>` : '']));
@@ -495,11 +503,17 @@ function renderChips(d){
 function renderNow(d){
   const att = attention(d);
   const bads = att.filter(a => a[0]==='bad').length, mine = att.filter(a => a[0]==='acc').length;
-  const [mark, color, headline] = bads ? ['!', 'var(--bad)', tn('problems', bads)]
+  const stops = d.ps.map(p => [stopOf(p), p]).filter(x => x[0]), live = stops.filter(x => x[0]!=='inactive');
+  const stopped = !stops.length ? null : live.length ? live : stops.length===d.ps.length ? stops : null;
+  const [mark, color, headline] = stopped ? ['!', stopped.some(x => x[0]==='down') ? 'var(--bad)' : stopped[0][0]==='inactive' ? 'var(--muted)' : 'var(--warn)',
+      stopped.length > 1 ? tn('stopped', stopped.length) : t('stopped_' + stopped[0][0])]
+    : bads ? ['!', 'var(--bad)', tn('problems', bads)]
     : mine ? ['?', 'var(--acc)', t('needs_you')] : att.length ? ['!', 'var(--warn)', t('with_notices')] : ['✓', 'var(--ok)', t('all_fine')];
   // the agents themselves are listed in Trabajo; here only who is running
   const alive = d.agents.filter(a => !a.end);
-  const who = alive.length ? t('agents_running', {names: alive.map(a => esc(a.name)).join(', ')}) : t('no_agents');
+  const who = stopped ? (stopped.length > 1 ? stopped.map(x => esc(x[1].title || x[1].name)).join(', ')
+      : (d.joint ? `${esc(stopped[0][1].title || stopped[0][1].name)}: ` : '') + t('stopped_' + stopped[0][0] + '_do'))
+    : alive.length ? t('agents_running', {names: alive.map(a => esc(a.name)).join(', ')}) : t('no_agents');
   $('headline').innerHTML = `<div class="headline"><div class="ico" style="background:${color}">${mark}</div><div style="min-width:0"><div class="t">${headline}</div><div class="s">${who}</div></div></div>`;
   renderProducts(d);
   renderChips(d);
