@@ -89,6 +89,30 @@ class CallersTest(ProjectCase):
         line, err = self.progress("first")
         self.assertEqual((line["agent"], line["agent_id"], err), ("zed7", "ag1", ""))
 
+    def caller_of(self, *call, home="/home/me"):
+        """identity.recorded_caller as the CLI of this session would ask it, with the given home."""
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": SESSION, "HOME": home}):
+            return identity.recorded_caller("progress", [None, "progress", *call])
+
+    def test_two_agents_deliver_with_shell_expanded_words(self):
+        """Two agents of one session deliver at once; the shell expands `~` and `$VAR` before the CLI runs, so the
+        words the guard wrote down are not the CLI's own: each must still be told apart (FO-193)."""
+        self.pre("foreman progress --done --report ~/reviews/a.md A", agent="ag1")
+        self.pre("foreman progress --done --report ~/reviews/b.md B", agent="ag2")
+        self.assertEqual(self.caller_of("--done", "--report", "/home/me/reviews/b.md", "B"), ("ag2", "kip3"))
+        self.assertEqual(self.caller_of("--done", "--report", "/home/me/reviews/a.md", "A"), ("ag1", "zed7"))
+        # a variable the guard cannot resolve stands for any word, when the other call cannot be it
+        self.pre('R=/x/r1.md; foreman progress --report "$R" A2', agent="ag1")
+        self.pre("foreman progress --report /x/r2.md B2", agent="ag2")
+        self.assertEqual(self.caller_of("--report", "/x/r1.md", "A2"), ("ag1", "zed7"))
+        self.assertEqual(self.caller_of("--report", "/x/r2.md", "B2"), ("ag2", "kip3"))
+        # two calls it cannot tell apart stay ambiguous
+        self.pre('Q=/x/r4.md; foreman progress --report "$Q" A2', agent="ag2")
+        self.assertEqual(self.caller_of("--report", "/x/r3.md", "A2")[0], "ambiguous")
+
     def test_ambiguous(self):
         self.pre('foreman progress "same"', agent="ag1")
         self.pre('foreman progress "same"', agent="ag2")

@@ -695,6 +695,24 @@ def agent_name(state: util.PathLike, aid: str) -> str:
     return h.get("name") or f"agent-{aid[:6]}"
 
 
+def _fits(written: Any, actual: list[Any], loose: bool) -> bool:
+    """Whether the CLI's own command line `actual` can be the call the guard wrote down once the shell expanded its
+    words: a leading `~` is the home; with `loose`, a word with `$` or a backtick stands for any text."""
+    if not isinstance(written, list) or len(written) != len(actual) or written[:2] != actual[:2]:
+        return False
+
+    def ok(w: Any, a: Any) -> bool:
+        if w == a:
+            return True
+        if not isinstance(w, str):
+            return False
+        if w.startswith("~") and "$" not in w and os.path.expanduser(w) == a:
+            return True
+        return loose and re.search(r"[$`]", w) is not None
+
+    return all(ok(w, a) for w, a in zip(written, actual))
+
+
 def recorded_caller(sub: str, call: list[Any]) -> tuple[str | None, str | int | None]:
     """Who runs this CLI by the calls the guard wrote down: (agent id, name) for an agent, (None, None) for the
     main thread or nothing written down, or "ambiguous" with the number of open calls when it cannot tell. `call`
@@ -718,6 +736,9 @@ def recorded_caller(sub: str, call: list[Any]) -> tuple[str | None, str | int | 
     hit = one(open_)
     if hit is None:
         same = [e for e in open_ if call in e.get("calls")]
+        for loose in (False, True):  # the shell expanded `~` and `$VAR` after the guard read the words
+            if not same:
+                same = [e for e in open_ if any(_fits(c, call, loose) for c in e.get("calls") or [])]
         hit = one(same) if same else None
         if hit is None:
             return "ambiguous", len(open_)
