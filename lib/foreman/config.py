@@ -72,7 +72,7 @@ SOURCES = ("default", "foreman.toml", "registry", "registry+foreman.toml", "envi
 # The highest foreman.toml schema this foreman understands. It goes up by one with every new key or section (and
 # tests/config_schema.json records the keys of each schema: the selftest fails if they differ). Keys that ship in the
 # same release share one schema: add them to the newest list of tests/config_schema.json while it is unreleased.
-CONFIG_SCHEMA = 22
+CONFIG_SCHEMA = 23
 # Keys foreman no longer reads, (section, key): what to tell the owner. One left in a foreman.toml is a warning (it
 # loads, ignored; `foreman check` names it), never an error, so an old file keeps working until it is cleaned.
 REMOVED: dict[tuple[str, str], str] = {
@@ -183,6 +183,7 @@ DEFAULTS: dict[str, Any] = {
         "ready_target": 2,
         "production_types": ["dev"],
         "production_worktree": "",
+        "sessions": False,
         "stalled_min": 20,
     },
     "loop": {
@@ -271,7 +272,7 @@ PRODUCT_SETTINGS: dict[str, tuple[str, ...] | None] = {
     "paths": None,
     "backlog": None,
     "ids": None,
-    "agents": ("production_worktree",),
+    "agents": ("production_worktree", "sessions"),
     "loop": ("prompt", "checks"),
     "deny": ("drop",),
     "panel": None,
@@ -692,6 +693,8 @@ def problems(raw: Table) -> tuple[list[str], list[str]]:
         err.append("[loop] context_rotate must be a whole number of tokens >= 0 (0 turns it off)")
     if not _text_list(raw.get("agents", {}).get("production_types", [])):
         err.append('[agents] production_types must be a list of agent types (strings), such as ["dev"]')
+    if not isinstance(raw.get("agents", {}).get("sessions", False), bool):
+        err.append("[agents] sessions must be true or false")
     if not _whole(raw.get("loop", {}).get("lock_long_min", 60), 1):
         err.append("[loop] lock_long_min must be a whole number of minutes, 1 or more")
     string_problems(raw.get("strings", {}), err, warn)

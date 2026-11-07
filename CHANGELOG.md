@@ -9,6 +9,14 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- `foreman launch NAME … --session [--brief-file F]` starts the agent as a Claude Code session of its own (`claude --bg`, in its worktree, with the guard deciding its permissions) instead of through the orchestrator's Agent tool, so it keeps running when the orchestrator's session ends. It is off until the product sets `[agents] sessions = true`; with the key false, `--session` is refused and names it. The session carries its launch token in `FOREMAN_LAUNCH`, which is how the guard knows it is an agent. Remote Control is not turned on.
+
+### Config
+
+- `[agents] sessions` (default `false`), the product's own; `config_schema` 23.
+
 ## [0.64.0] - 2026-11-07
 
 ### Changed
