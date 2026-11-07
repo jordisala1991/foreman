@@ -1,5 +1,6 @@
 // What the «More» screens share: loading an answer of the panel's API (again when asked, or every `every` ms), the
 // writes (POST with the key), and the formats of ages.
+import { useParams } from "@tanstack/react-router";
 import { useFeed } from "../feed";
 import { t, withKey } from "../lib";
 
@@ -43,9 +44,9 @@ export function ago(when: string | number | null | undefined, now = Date.now()):
 }
 
 // the hash after the screen's name, as parts: "#/backlog/AB-1" -> ["AB-1"]
-export function rest(): string[] {
-  return location.hash
-    .replace(/^#\/?/, "")
+export function useRest(): string[] {
+  const splat = useParams({ strict: false })._splat ?? "";
+  return splat
     .split("/")
     .slice(1)
     .filter(Boolean)

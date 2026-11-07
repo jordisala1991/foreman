@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ScreenHead } from "../head";
 import { t, type Key } from "../lib";
 import { Doc, docCtx } from "./Doc";
-import { ago, go, q, rest, useApi } from "./api";
+import { ago, go, q, useApi, useRest } from "./api";
 import { render, type Ctx } from "./md";
 import { Failed, Loading, Section, Split } from "./parts";
 import type { MoreProduct, WikiHit, WikiPage, WikiPageFull } from "./types";
@@ -327,7 +327,7 @@ function PageView({ product, name, pages }: { product: MoreProduct; name: string
 }
 
 export function Wiki({ product, products, pick }: { product: MoreProduct; products: MoreProduct[]; pick: (name: string) => void }) {
-  const parts = rest();
+  const parts = useRest();
   const [query, setQuery] = useState("");
   const list = useApi<{ pages: WikiPage[] }>(product.wiki ? `/api/wiki?p=${q(product.name)}` : null, 60000);
   if (parts[0] === "doc") return <Doc product={product} path={parts.slice(1).join("/")} />;

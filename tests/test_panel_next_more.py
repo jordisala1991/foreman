@@ -423,7 +423,7 @@ class SystemTest(NextMoreTest):
         projects = {**self.PROJECTS, "mac": self.MAC, "quota": [], "errors": []}
         answers = {"/api/projects": projects, "/api/state?p=alpha": STATE_QUIET}
         out = self.mount({"hash": "#/system", "answers": answers, "hang": ["/api/state?p=alpha"]})
-        self.assertIn("Cargando", out["text"])
+        self.assertEqual(out["skeletons"], 1)  # a block, with the header, until both answers are there
         self.assertNotIn("Todo bien", out["text"])
 
     def test_an_old_session_is_a_thing_to_look_at(self):

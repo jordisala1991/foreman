@@ -8,7 +8,7 @@ import { ShareChart } from "./charts/ShareChart";
 import { SpendChart } from "./charts/SpendChart";
 import { g1, g2, g3, g4, g7 } from "./charts/specs";
 import { StackChart } from "./charts/StackChart";
-import { ScreenHead } from "./head";
+import { ScreenHead, Skel } from "./head";
 import { clock, dayMonth, t, type Metrics, type Product } from "./lib";
 import { Refresh } from "./icons";
 
@@ -53,7 +53,7 @@ export function How({ product }: { product: Product }) {
           </button>
         </div>
       ) : !m ? (
-        <div className="card quiet">{t("loading")}</div>
+        <Skel h={360} />
       ) : !m.since.cost ? (
         <div className="card quiet">{t("no_data")}</div>
       ) : (

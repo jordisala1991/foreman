@@ -8,7 +8,7 @@ import { t, type Key } from "../lib";
 import { Doc } from "./Doc";
 import { Issue } from "./Issue";
 import { Failed, Loading, Section, Split } from "./parts";
-import { go, post, q, rest, useApi } from "./api";
+import { go, post, q, useApi, useRest } from "./api";
 import { useSortable } from "./sortable";
 import type { BacklogAnswer, Card, MoreProduct, ProjectCard, StateAnswer } from "./types";
 
@@ -313,7 +313,7 @@ function ProjectsView({ view, reload, product }: { view: View; reload: () => voi
 }
 
 export function Backlog({ product }: { product: MoreProduct }) {
-  const parts = rest();
+  const parts = useRest();
   const bl = useApi<BacklogAnswer>(`/api/backlog?p=${q(product.name)}&closed=recent`, 30000);
   const st = useApi<StateAnswer>(`/api/state?p=${q(product.name)}`, 30000);
   const [filter, setFilter] = useState("");

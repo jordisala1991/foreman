@@ -41,7 +41,7 @@ export function ScreenHead({ title, product, all, sub, kicker, children }: {
       <div className="titles">
         {kicker ? <div className="kicker">{kicker}</div> : null}
         <h1>{title}</h1>
-        {sub ? <div className="sub">{sub}</div> : null}
+        {sub !== undefined ? <div className="sub">{sub}</div> : null}
         {children ? <div className="controls">{children}</div> : null}
       </div>
       <span className="wide-only">
@@ -50,3 +50,7 @@ export function ScreenHead({ title, product, all, sub, kicker, children }: {
     </div>
   );
 }
+
+// Where a screen's content comes while it is on its way: a block of about the height it will have (no text, so
+// nothing to swap), under the screen's own final header
+export const Skel = ({ h }: { h: number }) => <div className="card skel" aria-busy="true" style={{ minHeight: h }} />;

@@ -4,7 +4,7 @@
 // every 10 s and the durations tick by themselves.
 import { useState } from "react";
 import { useFeed, useNow } from "./feed";
-import { ScreenHead } from "./head";
+import { ScreenHead, Skel } from "./head";
 import { duration, lang, post, t, usd2, withKey, type AgentCard, type AgentsData, type Family, type Key, type Product } from "./lib";
 
 const REFRESH_MS = 10_000;
@@ -141,9 +141,7 @@ export function Agents({ product, titles }: { product: Product; titles: Record<s
     : "";
   return (
     <div className="screen agents">
-      <ScreenHead title={t("tab_agents")} product={product}>
-        {summary ? <span className="summary">{summary}</span> : null}
-      </ScreenHead>
+      <ScreenHead title={t("tab_agents")} product={product} sub={summary} />
       {failed && !data ? (
         <div className="card quiet">
           {t("load_failed")}{" "}
@@ -152,7 +150,7 @@ export function Agents({ product, titles }: { product: Product; titles: Record<s
           </button>
         </div>
       ) : !data ? (
-        <div className="card quiet">{t("loading")}</div>
+        <Skel h={320} />
       ) : (
         <>
           <section aria-label={t("agents_running")} className="block">

@@ -1,7 +1,8 @@
 // The shell of the new panel, as in the approved mockups: on a wide screen a 248 px sidebar (the product picker, the
 // four sections with their badges, the «More» group); on the phone the picker and the product's status pill on top
 // and a bottom bar of five tabs. The theme follows the system (app.css); there is no switch.
-import { useEffect, useState } from "react";
+import { Outlet, useLocation, useParams } from "@tanstack/react-router";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Agents } from "./Agents";
 import { Boundary } from "./Boundary";
 import { How } from "./How";
@@ -11,30 +12,18 @@ import { Wiki } from "./more/Wiki";
 import type { MoreProduct } from "./more/types";
 import { Home } from "./Home";
 import { Needs } from "./Needs";
-import { ScreenHead, StatusPill, productState } from "./head";
+import { ScreenHead, Skel, StatusPill, productState } from "./head";
 import { Chevron, Icon } from "./icons";
 import { useFeedPart } from "./feed";
 import { oldPanel, t, type Key, type Product, type Projects } from "./lib";
+import { ALL, KEPT, MORE, SECTIONS, TABS, chosen, tabOf, warmRest, warmTab, type Tab } from "./warm";
 
-const SECTIONS = ["home", "needs", "agents", "how"] as const;
-const MORE = ["backlog", "wiki", "system"] as const;
-const TABS = [...SECTIONS, "more"] as const;
-type Tab = (typeof TABS)[number] | (typeof MORE)[number];
-
-const isTab = (s: string): s is Tab => (TABS as readonly string[]).includes(s) || (MORE as readonly string[]).includes(s);
-const route = (): Tab => {
-  const r = location.hash.replace(/^#\/?/, "").split("/")[0] ?? "";
-  return isTab(r) ? r : "home";
-};
-
-const ALL = "*"; // the picker's «All products»
-
-function Picker({ products, product, all, pick }: { products: Product[]; product: Product; all: boolean; pick: (name: string) => void }) {
+function Picker({ products, product, all, pick, value }: { products: Product[]; product: Product; all: boolean; pick: (name: string) => void; value: string | undefined }) {
   return (
     <label className="picker">
       <span className="name">{all ? t("all_products") : product.title}</span>
       <Chevron />
-      <select aria-label={t("product")} value={all ? ALL : product.name} onChange={(e) => pick(e.target.value)}>
+      <select aria-label={t("product")} value={value ?? (all ? ALL : product.name)} onChange={(e) => pick(e.target.value)}>
         {products.length > 1 ? <option value={ALL}>{t("all_products")}</option> : null}
         {products.map((p) => (
           <option key={p.name} value={p.name}>
@@ -87,8 +76,6 @@ export function None() {
   );
 }
 
-const KEPT = "next-product";
-
 // the «All» entry of the Agents screen (it asks /api/agents with name «*»): the sums of the products, and a pill that counts those with an orchestrator running
 function joint(products: Product[]): Product {
   const sum = (k: "decisions" | "unread" | "agents") => products.reduce((n, x) => n + (x[k] ?? 0), 0);
@@ -107,41 +94,39 @@ function joint(products: Product[]): Product {
 
 const REFRESH_MS = 10_000;
 
-export function Shell({ all: initial }: { all: Product[] }) {
-  // the products and their counts, read again while the page is visible (the badges follow what waits)
-  const every = useFeedPart<Projects, Product[]>("/api/projects", REFRESH_MS, (d) => d.projects) ?? initial;
-  const products = every.filter((p) => p.next && !p.broken);
-  const [tab, setTab] = useState<Tab>(route);
-  const [, setHash] = useState(location.hash); // a screen's own route (#/backlog/AB-1) re-renders it
-  const [name, setName] = useState<string | undefined>(() => {
-    const kept = localStorage.getItem(KEPT);
-    return kept === ALL || products.some((p) => p.name === kept) ? (kept ?? undefined) : products[0]?.name;
-  });
-  useEffect(() => {
-    const go = () => {
-      setTab(route());
-      setHash(location.hash);
-      window.scrollTo(0, 0);
-    };
-    addEventListener("hashchange", go);
-    return () => removeEventListener("hashchange", go);
-  }, []);
-  const everyone = name === ALL && products.length > 1;
-  const p = products.find((x) => x.name === name) ?? products[0];
-  if (!p) return <None />;
+interface Ctx {
+  products: Product[];
+  p: Product;
+  everyone: boolean;
+  pick: (name: string) => void;
+}
+const ShellCtx = createContext<Ctx | null>(null);
+const useShell = (): Ctx => {
+  const c = useContext(ShellCtx);
+  if (!c) throw new Error("no shell");
+  return c;
+};
+
+const TITLE: Partial<Record<Tab, Key>> = { backlog: "bl_title", wiki: "wiki_title", system: "sys_title" };
+
+// What a screen shows while its data is on its way (the router shows it only after a short wait, and keeps the old
+// screen until then): its own header, final from the first frame, and a block where the content comes
+export function Pending() {
+  const { products, p, everyone } = useShell();
+  const tab = tabOf(useParams({ strict: false })._splat);
+  return (
+    <div className="screen">
+      <ScreenHead title={t(TITLE[tab] ?? (`tab_${tab}` as Key))} product={p} all={everyone && (tab === "home" || tab === "needs") ? products : undefined} sub="" />
+      <Skel h={240} />
+    </div>
+  );
+}
+
+// the screen of the route: the tab is the first part of the path, the rest is the screen's own route (#/backlog/AB-1)
+export function Screen() {
+  const { products, p, everyone, pick } = useShell();
+  const tab = tabOf(useParams({ strict: false })._splat);
   const scope = everyone ? products : [p];
-  const pick = (n: string) => {
-    localStorage.setItem(KEPT, n);
-    setName(n);
-  };
-  // what waits: the questions, the permissions to approve and the orchestrator's unread messages
-  const sum = (f: (x: Product) => number | undefined) => scope.reduce((n, x) => n + (f(x) ?? 0), 0);
-  const badge: Partial<Record<Tab, number>> = {
-    needs: sum((x) => x.decisions) + sum((x) => x.permissions) + sum((x) => x.unread),
-    agents: sum((x) => x.agents),
-  };
-  const current = (k: Tab, bar: boolean) =>
-    tab === k || (bar && k === "more" && (MORE as readonly string[]).includes(tab)) ? "page" : undefined;
   const screen =
     tab === "home" ? (
       <Home key={scope.map((x) => x.name).join()} scope={scope} all={everyone} />
@@ -169,46 +154,81 @@ export function Shell({ all: initial }: { all: Product[] }) {
     ) : (
       <Soon tab={tab} product={p} all={everyone} />
     );
+  return <Boundary key={`${tab}/${everyone ? "*" : p.name}`}>{screen}</Boundary>;
+}
+
+export function Shell() {
+  // the products and their counts, read again while the page is visible (the badges follow what waits)
+  const every = useFeedPart<Projects, Product[]>("/api/projects", REFRESH_MS, (d) => d.projects) ?? [];
+  const products = every.filter((p) => p.next && !p.broken);
+  const path = useLocation({ select: (l) => l.pathname });
+  const tab = tabOf(path.replace(/^\//, ""));
+  const [picked, setPicked] = useState<string | undefined>(() => chosen(products)); // what the picker shows
+  const [name, setName] = useState<string | undefined>(picked); // what the screens show: it moves when their data is there
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [path]);
+  useEffect(() => warmRest(tab, name), [name]); // eslint-disable-line react-hooks/exhaustive-deps
+  const everyone = name === ALL && products.length > 1;
+  const p = products.find((x) => x.name === name) ?? products[0];
+  if (!p) return <None />;
+  const scope = everyone ? products : [p];
+  const pick = (n: string) => {
+    localStorage.setItem(KEPT, n);
+    setPicked(n);
+    void warmTab(tab, n).then(() => setName(n));
+  };
+  // what waits: the questions, the permissions to approve and the orchestrator's unread messages
+  const sum = (f: (x: Product) => number | undefined) => scope.reduce((n, x) => n + (f(x) ?? 0), 0);
+  const badge: Partial<Record<Tab, number>> = {
+    needs: sum((x) => x.decisions) + sum((x) => x.permissions) + sum((x) => x.unread),
+    agents: sum((x) => x.agents),
+  };
+  const current = (k: Tab, bar: boolean) =>
+    tab === k || (bar && k === "more" && (MORE as readonly string[]).includes(tab)) ? "page" : undefined;
+  const pickerValue = picked === ALL || products.some((x) => x.name === picked) ? picked : p.name;
   return (
-    <div className="shell">
-      <aside className="side">
-        <Picker products={products} product={p} all={everyone} pick={pick} />
-        <nav aria-label={t("sections")} className="navs">
-          {SECTIONS.map((k) => (
-            <a key={k} className="nav" href={`#/${k}`} aria-current={current(k, false)}>
-              <Icon name={k} size={20} />
-              <span className="label">{t(`tab_${k}`)}</span>
-              <Badge n={badge[k] ?? 0} red={k === "needs"} />
-            </a>
-          ))}
-        </nav>
-        <div className="navs">
-          <div className="group">{t("tab_more")}</div>
-          {MORE.map((k) => (
-            <a key={k} className="nav" href={`#/${k}`} aria-current={current(k, false)}>
+    <ShellCtx.Provider value={{ products, p, everyone, pick }}>
+      <div className="shell">
+        <aside className="side">
+          <Picker products={products} product={p} all={everyone} pick={pick} value={pickerValue} />
+          <nav aria-label={t("sections")} className="navs">
+            {SECTIONS.map((k) => (
+              <a key={k} className="nav" href={`#/${k}`} aria-current={current(k, false)}>
+                <Icon name={k} size={20} />
+                <span className="label">{t(`tab_${k}`)}</span>
+                <Badge n={badge[k] ?? 0} red={k === "needs"} />
+              </a>
+            ))}
+          </nav>
+          <div className="navs">
+            <div className="group">{t("tab_more")}</div>
+            {MORE.map((k) => (
+              <a key={k} className="nav" href={`#/${k}`} aria-current={current(k, false)}>
+                {t(`tab_${k}`)}
+              </a>
+            ))}
+          </div>
+        </aside>
+        <main>
+          <div className="top">
+            <Picker products={products} product={p} all={everyone} pick={pick} value={pickerValue} />
+            <StatusPill product={p} all={everyone ? products : undefined} />
+          </div>
+          <Outlet />
+        </main>
+        <nav className="bar" aria-label={t("sections")}>
+          {TABS.map((k) => (
+            <a key={k} className="tab" href={`#/${k}`} aria-current={current(k, true)}>
+              <span className="icon">
+                <Icon name={k} />
+                <Badge n={badge[k] ?? 0} red={k === "needs"} />
+              </span>
               {t(`tab_${k}`)}
             </a>
           ))}
-        </div>
-      </aside>
-      <main>
-        <div className="top">
-          <Picker products={products} product={p} all={everyone} pick={pick} />
-          <StatusPill product={p} all={everyone ? products : undefined} />
-        </div>
-        <Boundary key={`${tab}/${everyone ? "*" : p.name}`}>{screen}</Boundary>
-      </main>
-      <nav className="bar" aria-label={t("sections")}>
-        {TABS.map((k) => (
-          <a key={k} className="tab" href={`#/${k}`} aria-current={current(k, true)}>
-            <span className="icon">
-              <Icon name={k} />
-              <Badge n={badge[k] ?? 0} red={k === "needs"} />
-            </span>
-            {t(`tab_${k}`)}
-          </a>
-        ))}
-      </nav>
-    </div>
+        </nav>
+      </div>
+    </ShellCtx.Provider>
   );
 }

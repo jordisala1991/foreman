@@ -1,8 +1,9 @@
 // Small pieces the «More» screens share.
 import type { ReactNode } from "react";
+import { Skel } from "../head";
 import { t } from "../lib";
 
-export const Loading = () => <div className="card quiet">{t("loading")}</div>;
+export const Loading = () => <Skel h={200} />;
 
 export function Failed({ retry }: { retry: () => void }) {
   return (

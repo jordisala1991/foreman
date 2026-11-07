@@ -108,6 +108,7 @@ globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
   checkDCE() {}, onCommitFiberUnmount() {}, onCommitFiberRoot() { commits++; }, onPostCommitFiberRoot() {},
 };
 const listeners = {};
+const setHash = (url) => { if (url === undefined) return; const i = String(url).indexOf("#"); globalThis.location.hash = i < 0 ? "" : String(url).slice(i); };
 const store = { ...(scenario.store || {}) };
 const fetched = [];
 const posts = [];
@@ -121,8 +122,14 @@ Object.defineProperty(globalThis, "localStorage", {
   value: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
 });
 Object.assign(globalThis, {
-  document, window: globalThis, HTMLIFrameElement,
-  location: { search: "?t=k3y", hash: scenario.hash || "" },
+  document, window: globalThis, self: globalThis, HTMLIFrameElement,
+  location: { pathname: "/next/", search: "?t=k3y", hash: scenario.hash || "", get href() { return "http://panel" + this.pathname + this.search + this.hash; } },
+  // what the router's hash history needs of the browser: a url written by pushState/replaceState sets the hash
+  history: {
+    state: null, length: 1, go() {}, back() {}, forward() {},
+    pushState(state, _t, url) { this.state = state; setHash(url); },
+    replaceState(state, _t, url) { this.state = state; setHash(url); },
+  },
   addEventListener(t, f) { (listeners[t] = listeners[t] || []).push(f); }, removeEventListener(t, f) { listeners[t] = (listeners[t] || []).filter((x) => x !== f); },
   scrollTo() {},
   matchMedia: (q) => ({ matches: (scenario.visible || []).includes(q), addEventListener() {}, removeEventListener() {} }),
@@ -197,15 +204,27 @@ if (scenario.press) {
   g.dispatch("keydown", { key: scenario.press.key });
   await settle();
 }
+const layouts = []; // per hash step: the distinct states of the screen header while its answers come
+const struct = (n) => (n.nodeType === 1 ? n.localName + "." + (n.attributes.class || "") + "[" + n.childNodes.map(struct).join(",") + "]" : "");
 const duringNav = []; // the text 20 ms after each {hash, delay} step: the new screen while its answers are on their way
 for (const st of scenario.steps || []) {
   if (st.hash) { // the owner moves to another screen (the hash changes) and the answers take st.delay ms
     globalThis.location.hash = st.hash;
     delayAfter = st.delay || 0;
+    (listeners.popstate || []).forEach((f) => f({}));
     (listeners.hashchange || []).forEach((f) => f({}));
     await new Promise((r) => setTimeout(r, 20));
     duringNav.push(words(app));
-    await new Promise((r) => setTimeout(r, delayAfter + 40));
+    // the header of the screen as it changes while the answers come: its structure (tags and classes, no text), its title
+    // and whether a «loading» text is on screen; each distinct state once, in order
+    const seen = [];
+    for (let waited = 0; waited < delayAfter + 60; waited += 10) {
+      const h = one(app, (n) => cls(n, "screenhead"));
+      const s = { title: h ? words(one(h, (n) => n.localName === "h1") || { nodeType: 3, data: "" }) : "", head: h ? struct(h) : "", loading: /Cargando|Loading/.test(words(app)), skeleton: !!one(app, (n) => cls(n, "skel")), cards: all(app, (n) => cls(n, "card")).length };
+      if (!seen.length || JSON.stringify(seen[seen.length - 1]) !== JSON.stringify(s)) seen.push(s);
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    layouts.push({ hash: st.hash, seen });
     delayAfter = 0;
     continue;
   }
@@ -251,7 +270,7 @@ if (scenario.tap) {
   one(g, (n) => cls(n, "hit")).click();
   await settle();
 }
-console.error = origError;
+console.error = origError; if (process.env.T15DEBUG) console.log("HASH", globalThis.location.hash);
 
 const chart = (c) => ({
   name: c.attributes["data-chart"],
@@ -287,7 +306,7 @@ const badge = (k) => { const b = tab(k) && one(tab(k), (n) => cls(n, "badge")); 
 const side = one(app, (n) => cls(n, "side"));
 const text1 = (a, f) => words(one(a, f) || { nodeType: 3, data: "" }); // a card of the Home screen has fewer parts
 console.log(JSON.stringify({
-  commitsInTicks, duringTick, duringNav,
+  commitsInTicks, duringTick, duringNav, layouts,
   text: words(app),
   tabs: bar.map(words),
   current: bar.filter((n) => n.attributes["aria-current"] === "page").map(words),
@@ -315,6 +334,7 @@ console.log(JSON.stringify({
   })),
   done: all(app, (n) => n.localName === "li" && n.parentNode && cls(n.parentNode, "done")).map(words),
   nobody: words(one(app, (n) => cls(n, "nobody")) || { nodeType: 3, data: "" }),
+  skeletons: all(app, (n) => cls(n, "skel")).length, // the blocks that stand where a screen's content is on its way
   windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,
   posts,
