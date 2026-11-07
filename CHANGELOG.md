@@ -9,6 +9,12 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.67.1] - 2026-11-07
+
+### Fixed
+
+- The new panel's Agents screen no longer goes blank when a finished run is «stopped» or has no outcome (every reviewer launched as a subagent); a screen that fails now shows «The screen failed. Retry» and the rest of the panel stays.
+
 ## [0.67.0] - 2026-11-07
 
 ### Added
