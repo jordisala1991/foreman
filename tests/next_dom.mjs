@@ -51,16 +51,17 @@ class Node {
   focus() {}
   blur() {}
   // a click as the browser sends it: capture from the top down, then bubbling up from the target
-  click() {
+  click() { this.dispatch("click"); }
+  dispatch(type) {
     const path = [];
     for (let n = this; n; n = n.parentNode) path.push(n);
     let stopped = false;
     const e = {
-      type: "click", target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
+      type, target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
       button: 0, detail: 1, isTrusted: true, preventDefault() { this.defaultPrevented = true; },
       stopPropagation() { stopped = true; },
     };
-    const run = (n, capture) => n._on.filter((l) => l.type === "click" && l.capture === capture).forEach((l) => {
+    const run = (n, capture) => n._on.filter((l) => l.type === type && l.capture === capture).forEach((l) => {
       e.currentTarget = n;
       l.f.call(n, e);
     });
@@ -95,10 +96,11 @@ const document = {
   getElementById: (id) => one(html, (n) => n.attributes.id === id),
   addEventListener() {}, removeEventListener() {},
 };
-const store = {};
+const store = { ...(scenario.store || {}) };
 const fetched = [];
 const down = new Set(scenario.down || []); // paths that fail from the start
 const timers = [];
+const windows = [];
 class HTMLIFrameElement {}
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
@@ -109,12 +111,14 @@ Object.assign(globalThis, {
   location: { search: "?t=k3y", hash: scenario.hash || "" },
   addEventListener() {}, removeEventListener() {},
   setInterval: (f) => { timers.push(f); return timers.length; }, clearInterval() {},
-  fetch: async (url) => {
+  open: (url) => { const w = { location: { href: String(url || "") }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
+  fetch: async (url, opts) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
-    fetched.push(p);
+    fetched.push(opts && opts.method === "POST" ? "POST " + p : p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
     if (down.has(p)) return { ok: false, status: 503, json: async () => ({}) };
-    const body = scenario.answers[p];
+    if ((scenario.delay || {})[p]) await new Promise((r) => setTimeout(r, scenario.delay[p])); // a slow one
+    const body = scenario.answers[(opts && opts.method === "POST" ? "POST " : "") + p];
     return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
   },
 });
@@ -136,6 +140,12 @@ if (scenario.tick) {
   (scenario.fail || []).forEach((p) => down.add(p));
   (scenario.heal || []).forEach((p) => down.delete(p)); // the server is back at the first tick
   for (let i = 0; i < scenario.tick; i++) { timers.forEach((f) => f()); await settle(); }
+}
+if (scenario.pick) { // the product picker moved to another entry, then the slow answers arrive
+  const sel = one(app, (n) => n.localName === "select");
+  sel.value = scenario.pick;
+  sel.dispatch("change");
+  await new Promise((r) => setTimeout(r, scenario.wait || 300));
 }
 if (scenario.tap) {
   const g = one(app, (n) => n.localName === "g" && n.attributes["data-day"] === scenario.tap);
@@ -190,6 +200,21 @@ console.log(JSON.stringify({
   charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
   offline: words(one(app, (n) => cls(n, "offline")) || { nodeType: 3, data: "" }),
   dim: !!one(app, (n) => cls(n, "dim")),
+  agents: all(app, (n) => n.localName === "article" && cls(n, "agent")).map((a) => ({
+    cls: a.attributes.class,
+    avatar: words(one(a, (n) => cls(n, "avatar"))),
+    task: words(one(a, (n) => n.localName === "h3")),
+    id: words(one(a, (n) => cls(n, "id")) || { nodeType: 3, data: "" }),
+    meta: words(one(a, (n) => cls(n, "meta"))),
+    state: words(one(a, (n) => cls(n, "state"))),
+    stateTone: one(a, (n) => cls(n, "dot")).attributes.class,
+    msg: words(one(a, (n) => cls(n, "msg")) || { nodeType: 3, data: "" }),
+    watch: !!one(a, (n) => cls(n, "watch")),
+  })),
+  done: all(app, (n) => n.localName === "li" && n.parentNode && cls(n.parentNode, "done")).map(words),
+  nobody: words(one(app, (n) => cls(n, "nobody")) || { nodeType: 3, data: "" }),
+  windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,
   errors,
 }));
+process.exit(0); // the screens poll: their timers would keep node alive

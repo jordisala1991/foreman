@@ -60,6 +60,7 @@ from . import (
     agents as agents_mod,
 )
 from . import (
+    agents_screen,
     config,
     costs,
     heartbeat,
@@ -76,6 +77,7 @@ from . import (
     transcripts,
     util,
     versions,
+    watchpage,
 )
 from .backlog import Backlog, BacklogError
 from .panel_cache import NEXT, STATIC, iso_age, iso_ts, memo, next_version, page_version, sh
@@ -512,17 +514,40 @@ def report(project: Project) -> Obj | None:
         return None
 
 
-def project_state(project: Project, lock_list: list[Status]) -> Obj:
-    bl = backlog_cards(project)  # shared and cached: read only (the cards themselves go in /api/backlog)
-    bl = {**bl, "issues": bl.get("issues", [])}
-    branch_of_agent = {
+def branches_of_agents(bl: Obj) -> dict[str, str]:
+    """{agent name: branch} of the backlog's sub-issues in progress (what agents() falls back to for the branch)."""
+    return {
         s["agent"]: s["branch"]
         for p in bl["projects"] + [{"issues": bl["issues"]}]
         for c in p["issues"]
         for s in c["subs"]
         if s.get("agent") and s.get("branch") and s.get("status") == "in progress"
     }
-    agent_list = agents(project, lock_list, branch_of_agent)
+
+
+def agents_screen_data(names: list[str], lock_list: list[Status]) -> Obj:
+    """/api/agents: the agents screen's data for the products `names` (agents_screen.build each, their lists joined:
+    every entry says its product `p`), and `next_pass` of the first one (a single product's)."""
+    out: Obj = {"projects": names, "live": [], "done": [], "next_pass": None}
+    for name in names:
+        p = REG.projects[name]
+        bl = backlog_cards(p)
+        bl = {**bl, "issues": bl.get("issues", [])}
+        live = agents(p, lock_list, branches_of_agents(bl))
+        model_of = lambda path: memo(("model", path), lambda: transcripts.last_model(path), deps=[path])  # noqa: E731
+        one = agents_screen.build(p, live, model_of, datetime.now())
+        out["live"] += one["live"]
+        out["done"] += one["done"]
+        if len(names) == 1:
+            out["next_pass"] = one["next_pass"]
+    out["done"].sort(key=lambda x: x["end"], reverse=True)
+    return out
+
+
+def project_state(project: Project, lock_list: list[Status]) -> Obj:
+    bl = backlog_cards(project)  # shared and cached: read only (the cards themselves go in /api/backlog)
+    bl = {**bl, "issues": bl.get("issues", [])}
+    agent_list = agents(project, lock_list, branches_of_agents(bl))
     live_branches = {a["branch"] for a in agent_list if a["branch"] and not a["end"]}
     repos = [repo_view(project, k, live_branches) for k in project.repos]
     live = issue_live(bl, agent_list, {b["branch"] for r in repos for b in r["branches"]})
@@ -1123,6 +1148,9 @@ class Handler(BaseHTTPRequestHandler):
                 .replace("{{LANG}}", REG.language())
             )
             return self.send(200, html, "text/html; charset=utf-8")
+        if u.path == "/agent/wait":  # the tab a «See conversation» click opens (watchpage.py)
+            html = watchpage.page(q.get("name", [""])[0], REG.language())
+            return self.send(200, html, "text/html; charset=utf-8", headers=watchpage.HEADERS)
         if u.path == "/next":
             return self.send(301, "", "text/plain; charset=utf-8", headers={"Location": "/next/?" + u.query})
         if u.path == "/next/":
@@ -1216,6 +1244,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:  # noqa: BLE001 (a corrupt data file: the chart says so, the connection is not dropped)
                 return self.json({"error": f"metrics failed: {type(e).__name__}"}, 500)
             return self.json({**out, "quota": metrics.quota(REG.projects.values())})  # the account's, live: not cached
+        if (
+            u.path == "/api/agents"
+        ):  # the new panel's agents screen: a product with [panel] next, or `*` for all of them
+            want = q.get("p", [""])[0]
+            names = [n for n, p in REG.projects.items() if p.section("panel").get("next") and want in ("*", n)]
+            if not names:
+                return self.json({"error": "not found"}, 404)
+            try:
+                return self.json(agents_screen_data(names, locks()))
+            except Exception as e:  # noqa: BLE001 (a corrupt data file: the screen says so, the connection is not dropped)
+                return self.json({"error": f"agents failed: {type(e).__name__}"}, 500)
         if u.path == "/api/state":
             name = q.get("p", [""])[0]
             p = REG.get(name)

@@ -2,8 +2,9 @@
 // four sections with their badges, the «More» group); on the phone the picker and the product's status pill on top
 // and a bottom bar of five tabs. The theme follows the system (app.css); there is no switch.
 import { useEffect, useState } from "react";
+import { Agents } from "./Agents";
 import { How } from "./How";
-import { ScreenHead, StatusPill } from "./head";
+import { ScreenHead, StatusPill, productState } from "./head";
 import { Chevron, Icon } from "./icons";
 import { oldPanel, t, type Key, type Product } from "./lib";
 
@@ -75,6 +76,24 @@ export function None() {
 }
 
 const KEPT = "next-product";
+const ALL = "*"; // the picker's «All», only on the Agents screen
+const KEPT_ALL = "next-all";
+
+// the «All» entry: the sums of the products, and a pill that counts those with an orchestrator running
+function everyone(products: Product[]): Product {
+  const sum = (k: "decisions" | "unread" | "agents") => products.reduce((n, x) => n + (x[k] ?? 0), 0);
+  const running = products.filter((x) => productState(x) === "running").length;
+  const pill = running === 1 ? t("pill_all_1") : t("pill_all", { n: running });
+  return {
+    name: ALL,
+    title: t("all"),
+    next: true,
+    decisions: sum("decisions"),
+    unread: sum("unread"),
+    agents: sum("agents"),
+    ...(running ? { orchestrator_health: { verdict: "ok" }, pill } : {}),
+  };
+}
 
 export function Shell({ all }: { all: Product[] }) {
   const products = all.filter((p) => p.next && !p.broken);
@@ -88,9 +107,17 @@ export function Shell({ all }: { all: Product[] }) {
     addEventListener("hashchange", go);
     return () => removeEventListener("hashchange", go);
   }, []);
-  const p = products.find((x) => x.name === name) ?? products[0];
-  if (!p) return <None />;
+  const [wide, setWide] = useState(() => localStorage.getItem(KEPT_ALL) === "1"); // «All» chosen (it counts only on the Agents screen)
+  const real = products.find((x) => x.name === name) ?? products[0];
+  if (!real) return <None />;
+  const several = products.length > 1;
+  const joint = several && wide && tab === "agents";
+  const p = joint ? everyone(products) : real;
+  const choices = several && tab === "agents" ? [everyone(products), ...products] : products;
   const pick = (n: string) => {
+    setWide(n === ALL);
+    localStorage.setItem(KEPT_ALL, n === ALL ? "1" : "0");
+    if (n === ALL) return;
     localStorage.setItem(KEPT, n);
     setName(n);
   };
@@ -100,6 +127,8 @@ export function Shell({ all }: { all: Product[] }) {
   const screen =
     tab === "how" ? (
       <How product={p} />
+    ) : tab === "agents" ? (
+      <Agents product={p} titles={Object.fromEntries(products.map((x) => [x.name, x.title]))} />
     ) : tab === "more" ? (
       <More product={p} />
     ) : (
@@ -108,7 +137,7 @@ export function Shell({ all }: { all: Product[] }) {
   return (
     <div className="shell">
       <aside className="side">
-        <Picker products={products} product={p} pick={pick} />
+        <Picker products={choices} product={p} pick={pick} />
         <nav aria-label={t("sections")} className="navs">
           {SECTIONS.map((k) => (
             <a key={k} className="nav" href={`#/${k}`} aria-current={current(k, false)}>
@@ -129,7 +158,7 @@ export function Shell({ all }: { all: Product[] }) {
       </aside>
       <main>
         <div className="top">
-          <Picker products={products} product={p} pick={pick} />
+          <Picker products={choices} product={p} pick={pick} />
           <StatusPill product={p} />
         </div>
         {screen}
