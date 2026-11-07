@@ -99,7 +99,7 @@ class CallersTest(ProjectCase):
 
     def test_two_agents_deliver_with_shell_expanded_words(self):
         """Two agents of one session deliver at once; the shell expands `~` and `$VAR` before the CLI runs, so the
-        words the guard wrote down are not the CLI's own: each must still be told apart (FO-193)."""
+        words the guard wrote down are not the CLI's own: each must still be told apart."""
         self.pre("foreman progress --done --report ~/reviews/a.md A", agent="ag1")
         self.pre("foreman progress --done --report ~/reviews/b.md B", agent="ag2")
         self.assertEqual(self.caller_of("--done", "--report", "/home/me/reviews/b.md", "B"), ("ag2", "kip3"))
