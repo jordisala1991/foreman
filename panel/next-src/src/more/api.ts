@@ -63,7 +63,7 @@ export function ago(when: string | number | null | undefined, now = Date.now()):
   return days === 1 ? t("ago_yesterday") : t("ago_days", { n: days });
 }
 
-// the hash after the screen's name, as parts: "#/backlog/FO-1" -> ["FO-1"]
+// the hash after the screen's name, as parts: "#/backlog/AB-1" -> ["AB-1"]
 export function rest(): string[] {
   return location.hash
     .replace(/^#\/?/, "")

@@ -79,15 +79,15 @@ def recommended_option(options: Iterable[str], recommendation: str) -> str:
 
 _WAITS = re.compile(r"^(?:espera|waiting|waits|wait|blocked by|bloquead[ao] por)\b", re.I)
 _DECIDES = re.compile(
-    r"\b(?:lo decid\w+|decid\w+ (?:el dueño|tú|jordi)|(?:it is|it's) (?:up to|for) \w+ to decide)\b[^,;:.()]*", re.I
+    r"\b(?:lo decid\w+|decid\w+ (?:el dueño|tú|el owner)|(?:it is|it's) (?:up to|for) \w+ to decide)\b[^,;:.()]*", re.I
 )
 WHY_MAX = 44
 
 
 def why_short(blocked: str | None) -> str:
     """A short reason (up to WHY_MAX characters) from the free text of `blocked`, for the row of a blocked issue: its
-    first clause when it says what it waits for («espera a copets e ingot: …»), the phrase that says who decides
-    («lo decide Jordi») when there is one, else its first clause; cut at a word, with «…». «» for no text."""
+    first clause when it says what it waits for («espera a tidepool e quayside: …»), the phrase that says who decides
+    («lo decide Ana») when there is one, else its first clause; cut at a word, with «…». «» for no text."""
     t = clean(blocked)
     if not t:
         return ""

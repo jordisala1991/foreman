@@ -83,7 +83,7 @@ const KEPT = "next-product";
 export function Shell({ all }: { all: Product[] }) {
   const products = all.filter((p) => p.next && !p.broken);
   const [tab, setTab] = useState<Tab>(route);
-  const [, setHash] = useState(location.hash); // a screen's own route (#/backlog/FO-1) re-renders it
+  const [, setHash] = useState(location.hash); // a screen's own route (#/backlog/AB-1) re-renders it
   const [name, setName] = useState<string | undefined>(() => {
     const kept = localStorage.getItem(KEPT);
     return products.some((p) => p.name === kept) ? (kept ?? undefined) : products[0]?.name;

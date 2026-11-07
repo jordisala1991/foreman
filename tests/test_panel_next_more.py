@@ -24,14 +24,14 @@ A1 = card(
     ],
     outcome={"claim": "Un panel que se usa.", "criterion": "Lo usa una semana."},
     integrated={"n": 1, "of": 2, "commits": ["abc1234"]},
-    detail="2026-11-06 Jordi (chat): «quiero verlo». 2026-11-07 orquestador: hecho.",
+    detail="2026-11-06 Ana (chat): «quiero verlo». 2026-11-07 orquestador: hecho.",
     docs=[
         {"kind": "plan", "doc": "reviews/plan.md", "title": "Plan del panel"},
         {"kind": "report", "doc": "reviews/t0.md", "sub": "T0"},
         {"kind": "review", "doc": "reviews/r1.md", "sub": "T0", "round": 1, "open": 0},
     ],
 )
-A2 = card("A-2", "ready", "Bloqueada por otra", blocked="espera a copets: que confirmen", why="espera a copets")
+A2 = card("A-2", "ready", "Bloqueada por otra", blocked="espera a tidepool: que confirmen", why="espera a tidepool")
 A3 = card("A-3", "ready", "Lista para empezar")
 A4 = card("A-4", "triage", "Sin clasificar")
 A5 = card("A-5", "done", "Ya hecha", short=True)
@@ -95,7 +95,7 @@ class BacklogTest(NextMoreTest):
         text = out["text"]
         self.assertIn("Panel nuevo", text)  # the short name, not the long title
         self.assertNotIn("Un título largo del panel nuevo", text)
-        self.assertIn("espera a copets", text)  # the short reason of the block, next to the name
+        self.assertIn("espera a tidepool", text)  # the short reason of the block, next to the name
         self.assertNotIn("que confirmen", text)
 
     def test_an_empty_working_group_says_why(self):

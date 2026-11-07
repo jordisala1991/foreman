@@ -98,7 +98,7 @@ class CardNewFieldsTest(IssueDocsTest):
         with self.b.mutate() as d:
             self.b.edit(d, "AB-1", short="One short")
             lst, k, _ = self.b.find(d, "AB-10")
-            lst[k]["blocked"] = "espera a copets y local-llm: que confirmen"
+            lst[k]["blocked"] = "espera a tidepool y quayside: que confirmen"
             self.b.set_sub(d, "AB-1", "T1", commit="abcdef1")
             self.b.set_sub(d, "AB-1", "T3", status="in progress")
         c = self.card()
@@ -108,14 +108,14 @@ class CardNewFieldsTest(IssueDocsTest):
         self.assertEqual(titles["reviews/cited.md"], "The cited page")
         self.assertIsNone(titles["reviews/2026-11-03-ab-1-t1.md"])  # no heading: no title
         ten = next(i for i in panel_cards.backlog_cards(self.project)["projects"][0]["issues"] if i["id"] == "AB-10")
-        self.assertEqual(ten["why"], "espera a copets y local-llm")
+        self.assertEqual(ten["why"], "espera a tidepool y quayside")
         self.assertNotIn("integrated", ten)
         self.assertNotIn("short_name", ten)
 
     def test_why_short(self):
         why = panel_cards.why_short
         self.assertEqual(why(""), "")
-        self.assertEqual(why("es operar copets en su propia sesión: cuándo y cómo lo decide Jordi"), "lo decide Jordi")
+        self.assertEqual(why("es operar tidepool en su propia sesión: cuándo y cómo lo decide Ana"), "lo decide Ana")
         self.assertEqual(
             why("Solo queda T4, medida tras desplegar en los cuatro productos (los otros están parados)"),
             "Solo queda T4, medida tras desplegar en…",

@@ -12,7 +12,7 @@ interface Entry {
   who?: string;
   text: string;
 }
-// the detail as a journal: «2026-11-07 Jordi (chat): …» entries, and what comes before the first date as one entry
+// the detail as a journal: «2026-11-07 Ana (chat): …» entries, and what comes before the first date as one entry
 export function journal(detail: string): Entry[] {
   const out: Entry[] = [];
   for (const part of detail.split(/(?<=^|[\s.»)])(?=20\d\d-\d\d-\d\d\s)/)) {
