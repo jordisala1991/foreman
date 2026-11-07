@@ -110,7 +110,22 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_text, commands, config, delivery, guard, holdout, i18n, notes, permissions, plain, review, util
+from . import agents as agents_mod
+from . import (
+    backlog_text,
+    commands,
+    config,
+    delivery,
+    guard,
+    holdout,
+    i18n,
+    identity,
+    notes,
+    permissions,
+    plain,
+    review,
+    util,
+)
 from .backlog import Backlog, BacklogError, on_branch
 from .worktree import worktrees
 
@@ -1198,6 +1213,29 @@ class Integration:
             + ")",
         )
         self.close_backlog(head)
+        self.stop_sessions()
+
+    def stop_sessions(self) -> None:
+        """Stops the session of the branch's session agent(s) once it is integrated (as `foreman agents --stop`: short
+        id); a failure is a warning, the integration is done. A reviewer's session is not the branch's."""
+        try:
+            found = [
+                k
+                for k, h in agents_mod.agents(self.p).items()
+                if h.get(identity.SESSION_MARK)
+                and not h.get("review")
+                and not h.get("stopped")
+                and h.get("branch") == self.branch
+                and h.get("repo") in (None, self.repo["key"])
+            ]
+            errors: list[str] = []
+            for k in found:
+                agents_mod.stop_agent(self.p, k, errors)
+                self.out(f"== session agent {k[:8]} stopped")
+            for e in errors:
+                self.out(f"== warning: {e}")
+        except Exception as e:  # noqa: BLE001 (the integration is done: a failure here is only said)
+            self.out(f"== warning: the session agents of {self.branch} were not stopped: {e}")
 
     def ref(self) -> str:
         return f"{self.issue}{' ' + self.sub if self.sub else ''}"
@@ -1347,6 +1385,7 @@ class Integration:
             + f" ({self.main} {head} unchanged; report {a.report}; branch {drop})",
         )
         self.close_backlog("")
+        self.stop_sessions()
         return 0
 
     def close_backlog(self, head: str) -> None:

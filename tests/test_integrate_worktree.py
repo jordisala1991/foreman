@@ -1749,3 +1749,76 @@ guard_table = "tests/guard.tsv"
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionStopTest(LocalIntegrateCase):
+    """Integrating a branch stops the session of its delivered session agent (`claude stop`, short id); a failure
+    warns and the integration still closes; other agents, reviewers and --check leave sessions alone."""
+
+    LONG = "8e28877c-fe43-4d24-8cc9-849cbae066ce"
+
+    def setUp(self):
+        super().setUp()
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.stops = self.tmp / "stops.log"
+        self.claude("exit 0")
+        f = agents_mod.agents_file(self.project)
+        util.write_json(
+            f,
+            {
+                self.LONG: {
+                    "name": "w1",
+                    "branch": "ab1",
+                    "repo": "app",
+                    "session_agent": True,
+                    "start": "2026-01-01T00:00:00Z",
+                },
+                "other-long-id": {"name": "w2", "branch": "zz", "repo": "app", "session_agent": True},
+                "rev-long-id": {"name": "r1", "branch": "ab1", "repo": "app", "session_agent": True, "review": True},
+                "plain": {"name": "w3", "branch": "ab1", "repo": "app"},
+            },
+        )
+
+    def claude(self, tail):
+        f = self.bin / "claude"
+        f.write_text(f'#!/bin/sh\necho "$@" >> "{self.stops}"\n{tail}\n')
+        f.chmod(0o755)
+
+    def integrate(self, *args):
+        import os
+
+        return self.cli("integrate", *args, env={**self.ghenv, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}"})
+
+    def stopped(self):
+        return self.stops.read_text().splitlines() if self.stops.exists() else []
+
+    def test_merge_stops_the_branchs_session_agent_by_short_id(self):
+        self.worktree()
+        r = self.integrate("app", "ab1", "AB-1", "m", "--result", "ok")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.stopped(), ["stop 8e28877c"])
+        self.assertTrue(agents_mod.agents(self.project)[self.LONG]["stopped"])
+
+    def test_a_failing_stop_warns_and_the_integration_closes(self):
+        self.claude('echo "no job" >&2; exit 1')
+        self.worktree()
+        r = self.integrate("app", "ab1", "AB-1", "m", "--result", "ok")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("8e28877c", r.stdout + r.stderr)
+        self.assertIn("claude stop failed (no job)", r.stdout + r.stderr)
+        self.assertEqual(self.b.issue(self.b.load(), "AB-1")["subs"][0]["status"], "done")
+
+    def test_check_stops_nothing(self):
+        self.worktree()
+        r = self.integrate("app", "ab1", "AB-1", "m", "--result", "ok", "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.stopped(), [])
+
+    def test_measure_stops_it_too(self):
+        with self.b.mutate() as d:
+            self.b.set_sub(d, "AB-1", "T1", kind="measure")
+        self.worktree(files={"ops/reviews/m.md": "figures\n"})
+        r = self.integrate("app", "ab1", "AB-1 T1", "--measure", "--report", "reviews/m.md", "--result", "measured")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.stopped(), ["stop 8e28877c"])

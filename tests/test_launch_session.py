@@ -8,7 +8,7 @@ import json
 import os
 import re
 
-from helpers import ProjectCase, make_repo
+from helpers import ProjectCase, git, make_repo
 from test_identity import TOML
 
 from foreman import guard, identity, util
@@ -241,3 +241,27 @@ class StartTest(SessionLaunchCase):
         self.assertNotIn("session_id", rec)
         self.assertIn("8e28877c", r.stdout)
         self.assertTrue(re.search(r"\[foreman launch", r.stdout))
+
+
+class ReviewSessionTest(SessionLaunchCase):
+    """A reviewer launched as a session starts where the reviewed branch is checked out, never in the home (Claude Code
+    does not trust it): its worktree, or the repo's main checkout when the branch has none."""
+
+    def setUp(self):
+        super().setUp()
+        self.on()
+        self.fake()
+
+    def cwd(self):
+        return os.path.realpath(self.log.with_suffix(".args.cwd").read_text().strip())
+
+    def test_the_reviewer_starts_in_the_branchs_worktree(self):
+        self.run_launch(*self.prod("--session"))
+        self.run_launch("r1", "--review", "app:b/s1", "--session", "--no-backlog")
+        self.assertEqual(self.cwd(), os.path.realpath(self.tmp / "wt" / "app-s1"))
+
+    def test_without_a_worktree_it_starts_in_the_repos_main_checkout(self):
+        git(self.tmp / "app", "branch", "lone")
+        self.run_launch("r1", "--review", "app:lone", "--session", "--no-backlog")
+        self.assertEqual(self.cwd(), os.path.realpath(self.tmp / "app"))
+        self.assertNotEqual(self.cwd(), os.path.realpath(self.home))
