@@ -1291,9 +1291,13 @@ def cmd_agents(p: Project, args: argparse.Namespace) -> int:
         )
         return 2
     if args.stop:
-        hits = agents_mod.stop_agent(p, args.stop)
+        errors: list[str] = []
+        hits = agents_mod.stop_agent(p, args.stop, errors)
         print(f"stopped: {', '.join(hits)}" if hits else f"no agent {args.stop}")
-        return 0 if hits else 1
+        for e in errors:
+            print(f"foreman agents: {e}", file=sys.stderr)
+        return 0 if hits and not errors else 1
+    agents_mod.refresh_sessions(p)
     print(agents_mod.agents_json(p) if args.json else agents_mod.agents_compact(p))
     return 0
 

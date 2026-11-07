@@ -13,7 +13,7 @@ needs (each tool call starts it).
 The registry is read tolerantly (config.py): a project with warnings (unknown keys, a newer config schema) still gets
 every hook, and `who` and the loop pass name the warnings. A project whose config does not load gets no hook at all:
 the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), the others keep quiet.
-- agents  (SubagentStart, SubagentStop, PostToolUse): agent state in <state>/agents.json (forked from an earlier
+- agents  (SubagentStart, SubagentStop, PostToolUse, Stop): agent state in <state>/agents.json (forked from an earlier
           in-house version);
           keys start, type, transcript, end, final, final_chars, tool, activity, stopped, name,
           delivered. SubagentStop sets `end` (the agent delivered, or only stopped to wait for a task of its own);
@@ -33,6 +33,12 @@ the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), th
           its own) the delivery check runs, outside the agents.json lock: if something is missing the stop is blocked
           ({"decision": "block", "reason": …}; `end`, `delivered` and `outcome` go, `delivery_blocks` +1), at most
           delivery.MAX_BLOCKS times, then `delivery_incomplete` is recorded for the loop. Any error: no block.
+          A session agent (identity.session_agent: its own Claude Code session, events with session_id and no
+          agent_id) is the same entry keyed by its session id (SESSION_MARK; created at its first event by the launch
+          token in its environment when `launch --session` could not tie it): its PostToolUse sets activity and
+          `delivered`, its `Stop` is the SubagentStop above (same delivery check and block), its transcript is the
+          event's. Subagent events of a session agent's session (Claude Code's compaction makes some) are ignored,
+          and so is a `Stop` of any other session.
 - resume  (SessionStart compact|resume): only in the marked orchestrator's session. After a compaction (`compact`:
           a renewal foreman asked for, Claude Code's automatic one or the owner's /compact) it settles an open
           renewal and prints foreman's pack (renew.resume_text: who the session still is, the owner's last
@@ -185,12 +191,20 @@ def done_words(ev: Event) -> list[str] | None:
 def hook_agents(project: Project, ev: Event) -> None:
     aid = ev.get("agent_id")
     name = ev.get("hook_event_name", "")
-    if name not in ("SubagentStart", "SubagentStop", "PostToolUse"):
+    if name not in ("SubagentStart", "SubagentStop", "PostToolUse", "Stop"):
         return
     if name == "PostToolUse" and ev.get("tool_name") == "Bash":
         identity.drop_call(ev)  # the call is over: the guard's entry goes (the main thread's too)
     launch_tool = name == "PostToolUse" and ev.get("tool_name") in identity.AGENT_TOOLS
-    if not aid and not launch_tool:
+    sa = identity.session_agent(project.state, ev.get("session_id"), identity.launch_env())
+    if sa is not None and aid:
+        return  # Claude Code's own subagents of a session agent (a compaction's): not agents of the product
+    if name == "Stop":  # a session's turn ends: only a session agent's is an agent's stop
+        if sa is None or not ev.get("session_id"):
+            return
+        aid = None
+    sid = ev.get("session_id") if sa is not None and not aid and name in ("PostToolUse", "Stop") else None
+    if not aid and not sid and not launch_tool:
         return
     from . import agents as agents_mod
 
@@ -205,12 +219,34 @@ def hook_agents(project: Project, ev: Event) -> None:
             agent_event(project, d, aid, name, ev, now)
             if name == "SubagentStop" and aid in d and wants_check(project, d[aid], ev):
                 entry = dict(d[aid])
+        elif sid and session_entry(project, d, sid, ev):
+            agent_event(project, d, sid, "SubagentStop" if name == "Stop" else name, ev, now)
+            if name == "Stop" and wants_check(project, d[sid], ev):
+                entry = dict(d[sid])
         cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 86400))
         util.write_json(f, {k: v for k, v in d.items() if v.get("end", "9") > cutoff})
     if warning:
         emit("PostToolUse", warning)
-    if entry is not None and aid:  # outside the lock: the check runs git
-        delivery_stop(project, f, aid, entry)
+    if entry is not None and (aid or sid):  # outside the lock: the check runs git
+        delivery_stop(project, f, str(aid or sid), entry)
+
+
+def session_entry(project: Project, d: dict[str, Agent], sid: str, ev: Event) -> bool:
+    """Makes sure session agent `sid` has its agents.json entry in `d` (held by the caller): the one `foreman launch
+    --session` tied, else tied now by the launch token in the session's environment (the id could not be read at
+    launch); its transcript is the event's. Whether the entry is there (a token foreman does not know leaves none)."""
+    if sid not in d:
+        token = identity.launch_env()
+        if not token or not identity.link(project, d, sid, token, "launch"):
+            return False
+    a = d[sid]
+    a[identity.SESSION_MARK] = True
+    if not a.get("transcript") and isinstance(ev.get("transcript_path"), str):
+        a["transcript"] = ev["transcript_path"]
+    if ev.get("hook_event_name") == "PostToolUse":
+        a.pop("stopped", None)  # it works again (woken after a stop)
+        a.pop("claude_state", None)
+    return True
 
 
 def wants_check(project: Project, h: Agent, ev: Event) -> bool:
@@ -239,6 +275,8 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
             return
         if not res["items"]:
             a.pop("delivery_incomplete", None)
+            if a.get(identity.SESSION_MARK) and not a.get("delivered"):
+                restore_delivery(project, aid, a)
         else:
             n = int(a.get("delivery_blocks") or 0)
             missing = [k for k, _ in res["items"]]
@@ -253,6 +291,24 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
         util.write_json(f, d)
     if block:
         out({"decision": "block", "reason": block})
+
+
+def restore_delivery(project: Project, aid: str, a: Agent) -> None:
+    """A session agent that stops with nothing missing and whose `delivered` a later tool call cleared (anyone can
+    write to its session: «show me the diff» after it delivered): its delivery is still its last, so the entry says
+    `delivered` again, from the record `delivery_stop` found (the `done` line of progress.jsonl), with that time.
+    Held lock: `a` is the entry in the dict the caller writes."""
+    from . import delivery
+
+    x = delivery.progress_done(project, aid, a.get("name"), a.get("blocked_at") or a.get("start"))
+    if not x:
+        return
+    t = str(x.get("time") or "")
+    a["delivered"] = t.replace(" ", "T") + ":00" if len(t) == 16 else time.strftime("%Y-%m-%dT%H:%M:%S")
+    a["outcome"] = x.get("outcome") or "ok"
+    for k in ("report", "kind"):
+        if x.get(k):
+            a[k] = x[k]
 
 
 def agent_event(project: Project, d: dict[str, Agent], aid: str, name: str, ev: Event, now: str) -> None:
@@ -295,6 +351,9 @@ def agent_event(project: Project, d: dict[str, Agent], aid: str, name: str, ev: 
         if a.pop("end", None):  # a resumed agent is running again, until it delivers again
             for k in ("delivered", "outcome", "report", "kind", "delivery_incomplete"):
                 a.pop(k, None)
+            if a.get(identity.SESSION_MARK):  # woken by a new message: the delivery check has its two blocks again
+                for k in ("delivery_blocks", "blocked_at"):
+                    a.pop(k, None)
         # its delivery (delivery.py): outcome (an invalid one was refused by the CLI), report relative to the home
         # (not checked here: the delivery check and the pass do), `--kind measure`
         words = done_words(ev)

@@ -481,8 +481,13 @@ def hung_shells() -> list[str]:
 
 
 def session_agents(project: Project, session: str | None) -> list[Agent]:
-    """The live agents that run inside `session` (or whose transcript is not known): they would die with it."""
-    return [h for h in live_agents(project) if not h.get("transcript") or f"/{session}/" in h["transcript"]]
+    """The live agents that run inside `session` (or whose transcript is not known): they would die with it. A session
+    agent (a Claude Code session of its own) does not: it outlives the orchestrator's session."""
+    return [
+        h
+        for h in live_agents(project)
+        if not h.get(identity.SESSION_MARK) and (not h.get("transcript") or f"/{session}/" in h["transcript"])
+    ]
 
 
 def foreman_versions(project: Project, session: str | None) -> tuple[dict[str, Any] | None, list[Entry], Found | None]:
@@ -1431,7 +1436,9 @@ def with_versions(
 def notices_for_pass(project: Project, session: str | None = None, mark: bool = True) -> list[Notice]:
     """The notices of a loop pass, in the order the summary shows them; each check decides its `actionable` (table in
     docs/orchestrator.md). mark=False (`foreman loop`) reads the markers that keep a notice from repeating without
-    writing them, so looking does not use up a pass's notices. Each group of notices is one function."""
+    writing them, so looking does not use up a pass's notices. Each group of notices is one function. The session
+    agents are crossed with `claude agents --json` first (agents.refresh_sessions)."""
+    agents_mod.refresh_sessions(project)
     s = Snapshot(project, session)
     if mark:
         from . import costs

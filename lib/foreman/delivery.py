@@ -32,7 +32,8 @@ incomplete, and every delivery states its outcome.
   measurement needs no commits, only its report (`measures`: the delivery said `--kind measure`, the agent's
   sub-issue is `kind = "measure"`, or `branch_kind` says `measure`). A step
   that errors (git fails, a folder is gone) counts as found: the check never blocks on its own failure.
-- **Blocking.** The hook answers SubagentStop with `{"decision": "block", "reason": …}` (`block_reason`): the agent
+- **Blocking.** The hook answers SubagentStop (and a session agent's `Stop`) with
+  `{"decision": "block", "reason": …}` (`block_reason`): the agent
   goes back to work with the reason. `end` and `delivered` go from its entry (it is working again and must run
   `progress --done` again as its last command), `delivery_blocks` counts the blocks. At most MAX_BLOCKS per agent
   (an entry is one launch): after that it is let go, with `delivery_incomplete` ({at, missing}) in its entry, which
