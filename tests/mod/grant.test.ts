@@ -339,7 +339,7 @@ test('one question per group: a call while it is open is refused at once, the fi
   expect(phases(w.grants)).toEqual(['check', 'check', 'yes'])
 })
 
-test('past ask_ms the call is refused, the question stays open; its late answer is recorded and grants nothing', async ($, on) => {
+test('past ask_ms the call is refused, the question stays open; its late answer goes to Python marked late', async ($, on) => {
   const answer = later<Ask>()
   const timeout = '{"deny": "no answer in time", "granted": false}\n'
   const late = '{"granted": false, "log": "late: nothing granted"}\n'
@@ -366,6 +366,24 @@ test('past ask_ms the call is refused, the question stays open; its late answer 
   // the question is closed: the next call asks again
   expect((await $.tool.call({ tool: 'Bash', command: DEPLOY })).deny).toBeDefined()
   expect(w.questions.length).toBe(2)
+})
+
+test('a late yes that Python grants (the pending request) is kept: the retry goes on without a second question', async ($, on) => {
+  const answer = later<Ask>()
+  const timeout = '{"deny": "no answer in time", "granted": false}\n'
+  const w = engine(on, [question(), question(ASK_MS, UNTIL)], [timeout, GRANTED], [answer.promise])
+  await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
+  const first = $.tool.call({ tool: 'Bash', command: DEPLOY })
+  await w.asked
+  await w.clock.advance(ASK_MS)
+  expect((await first).deny).toContain('no answer in time')
+  answer.settle({ answer: 'Yes, for 30 min' })
+  await w.clock.advance(0)
+  expect(phases(w.grants)).toEqual(['check', 'timeout', 'late'])
+  expect(w.logs).toEqual(['«deploy» allowed for orq until 10:30'])
+  // the orchestrator runs it again (its inbox says so): grants.json holds the grant the module heard given
+  expect((await $.tool.call({ tool: 'Bash', command: DEPLOY })).result).toBe('ok')
+  expect(w.questions.length).toBe(1)
 })
 
 test('a late dismissal (Esc on the old question) is recorded as late too', async ($, on) => {

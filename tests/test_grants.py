@@ -549,7 +549,8 @@ class ModTest(GrantCase):
             (p["session"], p["command"], p["tool_use_id"], p["orchestrator"]), ("S1", DEPLOY, "T-timeout", "fake-1")
         )
         self.assertEqual(grants.read(self.project)["grants"], {})
-        # a late answer (O12): written down, nothing granted, the request still pending
+        # a late yes to another question (no tool_use_id: not the pending request's): written down, nothing granted,
+        # the request still pending (LateAnswerTest: a late yes to the request itself applies)
         out = self.answer("yes", late=True)
         self.assertEqual(out["granted"], False)
         self.assertIn("came after the question had expired", out["log"])
@@ -595,10 +596,8 @@ class CliTest(GrantCase):
         self.assertEqual(self.cli("permissions", "grants").stdout.strip(), "no [deny.grants] groups in this project")
 
 
-class PanelApproveTest(GrantCase):
-    """A question left unanswered (its time limit) leaves the request pending; the owner approves it from foreman's
-    panel (grants.approve, panel.grant_approve): the same grant as a yes in the chat, for the marked session and
-    process only, once, before it expires."""
+class PendCase(GrantCase):
+    """A GrantCase with a request left pending (a question's time limit) and a way to age it."""
 
     def pend(self, group="deploy", tid="T-late"):
         self.answer("timeout", group=group, tool_use_id=tid)
@@ -610,6 +609,12 @@ class PanelApproveTest(GrantCase):
         d["pending"][group]["at"] = (util.now() - timedelta(**delta)).strftime(grants.ISO)
         grants.file(self.project).write_text(json.dumps(d))
 
+
+class PanelApproveTest(PendCase):
+    """A question left unanswered (its time limit) leaves the request pending; the owner approves it from foreman's
+    panel (grants.approve, panel.grant_approve): the same grant as a yes in the chat, for the marked session and
+    process only, once, before it expires."""
+
     def test_timeout_records_the_request(self):
         r = self.pend()
         rec = orchestrator.record(self.project)
@@ -617,7 +622,7 @@ class PanelApproveTest(GrantCase):
             (r["session"], r["pid"], r["pid_start"], r["command"], r["tool_use_id"], r["orchestrator"]),
             ("S1", rec["pid"], rec["pid_start"], DEPLOY, "T-late", "fake-1"),
         )
-        self.assertEqual(util.fromiso(r["expires"]) - util.fromiso(r["at"]), timedelta(minutes=30))
+        self.assertEqual(util.fromiso(r["expires"]) - util.fromiso(r["at"]), timedelta(hours=grants.PENDING_H))
         self.assertRegex(grants.lines(self.project)[0], r"^deploy: closed; a request waits for the owner since")
 
     def test_approve_writes_the_grant(self):
@@ -681,13 +686,18 @@ class PanelApproveTest(GrantCase):
             self.assertEqual(grants.read(self.project)["grants"], {}, why)
 
         self.pend()
-        self.age("deploy", minutes=31)  # expired: not listed, refused and dropped
+        self.age("deploy", hours=24, minutes=1)  # expired: not listed, refused and dropped
         self.assertEqual(grants.pending(self.project), {})
         refused("expired", False)
-        # another session marked now
+        # another session marked now, by hand (no process): an orphan, refused and kept for the owner to drop
         self.pend()
         orchestrator.mark(self.project, "S9", "other")
         self.assertEqual(grants.pending(self.project), {})
+        self.assertEqual(grants.orphans(self.project)["deploy"]["why"], "process")
+        refused("process", True)
+        # another session that marked itself from the same process (not carried): refused and dropped
+        orchestrator.mark(self.project, "S9", "other", own_session="S9")
+        self.assertEqual(grants.orphans(self.project)["deploy"]["why"], "session")
         refused("session", False)
         orchestrator.mark(self.project, "S1", "fake-1", own_session="S1")
         # the same session, but the request came from another process
@@ -793,7 +803,7 @@ class PanelApproveTest(GrantCase):
         self.assertIn(f"You may run again: `{DEPLOY}`", msg["text"])
         # a stale request: refused with its reason, for the page to say it
         self.pend()
-        self.age("deploy", minutes=31)
+        self.age("deploy", hours=24, minutes=1)
         self.assertEqual(req("/api/grants/approve?p=fake&g=deploy", "POST")[1]["why"], "expired")
 
     def test_deny_only_restricts(self):
@@ -817,7 +827,7 @@ class PanelApproveTest(GrantCase):
     def test_deny_of_a_stale_request_does_nothing(self):
         """A request too old or of another session is dropped, not denied: no cooldown, no log line."""
         self.pend()
-        self.age("deploy", minutes=31)
+        self.age("deploy", hours=24, minutes=1)
         with self.assertRaises(grants.NotApproved) as e:
             grants.deny(self.project, "deploy")
         self.assertEqual(e.exception.why, "expired")
@@ -954,6 +964,266 @@ class PanelApproveTest(GrantCase):
                 "grants_wait_n",
             ):
                 self.assertTrue(st[k], (lang, k))
+
+
+class LateAnswerTest(PendCase):
+    """A request left unanswered waits up to grants.PENDING_H; the owner's yes (panel, or late in the chat to that
+    very question) opens the group for grant_minutes from the yes, only for the marked session and process that
+    asked; a late no drops it; a request of another process is an orphan, never granted. Each test names its row of
+    the acceptance table of the change's plan."""
+
+    def setUp(self):
+        super().setUp()
+        self.inbox_before = len(self.inbox())
+
+    def inbox(self):
+        from foreman import notes
+
+        return notes.inbox(self.project)
+
+    def late(self, answer="yes", tid="T-late", **kw):
+        return self.answer(answer, late=True, tool_use_id=tid, **kw)
+
+    def assert_half_hour_from_now(self, until):
+        left = util.fromiso(until) - util.now()
+        self.assertTrue(timedelta(minutes=29) < left <= timedelta(minutes=30), left)
+
+    def nothing_granted(self):
+        self.assertEqual(grants.read(self.project)["grants"], {})
+        self.assertEqual(self.why(DEPLOY)[0], "orchestrator")  # refused (for want of a grant, or earlier)
+
+    def test_row1_a_request_of_8_hours_is_listed_and_its_approval_lasts_30_min_from_now(self):
+        from foreman import panel
+
+        self.pend()
+        self.age("deploy", hours=8)
+        self.assertIn("deploy", grants.pending(self.project))
+        (r,) = panel.grant_requests(self.project)
+        self.assertEqual((r["group"], r["pending"], r["command"]), ("deploy", True, DEPLOY))
+        self.assertEqual(util.fromiso(r["expires"]) - util.fromiso(r["at"]), timedelta(hours=24))
+        self.nothing_granted()  # row 13: 8 hours unanswered, nothing granted
+        out = panel.grant_approve(self.project, "deploy")
+        self.assert_half_hour_from_now(out["until"])
+        self.assertIsNone(self.why(DEPLOY))  # the command passes
+
+    def test_row2_row13_a_day_and_a_minute_later_it_is_gone_and_nothing_is_granted(self):
+        from foreman import panel
+
+        for answer in (grants.approve, grants.deny):
+            self.pend()
+            self.age("deploy", hours=24, minutes=1)
+            self.assertEqual((grants.pending(self.project), grants.orphans(self.project)), ({}, {}))
+            self.assertEqual(panel.grant_requests(self.project), [])
+            with self.assertRaises(grants.NotApproved) as e:
+                answer(self.project, "deploy")
+            self.assertEqual(e.exception.why, "expired")
+            self.assertEqual(grants.read(self.project)["pending"], {})  # dropped
+            self.assertEqual(grants.read(self.project)["cooldowns"], {})
+            self.nothing_granted()
+        # nor late in the chat
+        self.pend()
+        self.age("deploy", hours=24, minutes=1)
+        out = self.late()
+        self.assertEqual(
+            (out["granted"], self.log()[-1]["verdict"], self.log()[-1]["refused"]), (False, "late", "expired")
+        )
+        self.assertEqual(grants.read(self.project)["pending"], {})
+        self.nothing_granted()
+
+    def test_row3_a_late_yes_to_the_pending_request_grants_from_the_yes(self):
+        self.pend()
+        self.age("deploy", hours=8)
+        asked = grants.read(self.project)["pending"]["deploy"]["at"]
+        out = self.late()
+        self.assertTrue(out["granted"], out)
+        self.assert_half_hour_from_now(out["until"])
+        self.assertIn("late yes to the request of", out["log"])
+        self.assertNotIn("deny", out)
+        g = grants.live(self.project, "deploy")
+        self.assertEqual(
+            (g["until"], g["via"], g["late"], g["asked"], g["tool_use_id"]),
+            (out["until"], "ask", True, asked, "T-late"),
+        )
+        self.assertEqual(grants.read(self.project)["pending"], {})
+        self.assertIsNone(self.why(DEPLOY))  # the command passes
+        line = self.log()[-1]
+        self.assertEqual(
+            (line["verdict"], line["late"], line["asked"], line["until"], line["answer"], line["tool_use_id"]),
+            ("grant", True, asked, out["until"], "yes", "T-late"),
+        )
+        self.assertIn("said yes late in the chat", self.notes_text())
+        msg = self.inbox()[-1]
+        self.assertEqual(
+            (msg["from"], msg["grant"], msg["read"]), ("owner", {"group": "deploy", "until": out["until"]}, False)
+        )
+        self.assertIn(f"You may run again: `{DEPLOY}`", msg["text"])
+        # the retry: the check says live (the module, which heard the yes, lets it on without asking)
+        q = self.mod(phase="check", command=DEPLOY)
+        self.assertEqual((q["live"], q["until"]), (True, out["until"]))
+        # one request grants once: the same late yes again changes nothing (row 4)
+        again = self.late()
+        self.assertEqual(again["granted"], False)
+        self.assertIn("already allowed", again["log"])
+        self.assertEqual(grants.live(self.project, "deploy")["until"], out["until"])
+
+    def test_row3_only_from_the_marked_process(self):
+        """The late yes's call must run in the mark's process (orchestrator.runs_here); `ps` unreadable: nothing."""
+        self.pend()
+        self.reparent(COPY_PID)  # this call now hangs from another claude
+        self.assertEqual(self.late()["granted"], False)
+        self.assertEqual(self.log()[-1]["refused"], "process")
+        self.ps_rows = None
+        self.assertEqual(self.late()["granted"], False)
+        self.assertEqual(self.log()[-1]["refused"], "process")
+        self.nothing_granted()
+        self.assertIn("deploy", grants.read(self.project)["pending"])  # still there for the owner
+        self.start_ps()
+        self.assertTrue(self.late()["granted"])
+
+    def test_row5_no_request_or_another_question_grants_nothing(self):
+        self.pend()
+        out = self.late(tid="T-other")  # another question's late yes
+        self.assertEqual(
+            (out["granted"], self.log()[-1]["verdict"], self.log()[-1]["refused"]), (False, "late", "none")
+        )
+        self.assertIn("deploy", grants.pending(self.project))
+        self.assertEqual(self.late(group="stores")["granted"], False)  # another group, no request of its own
+        grants.deny(self.project, "deploy")  # refused from the panel meanwhile
+        out = self.late()
+        self.assertEqual((out["granted"], self.log()[-1]["verdict"]), (False, "late"))
+        self.pend()
+        grants.revoke(self.project, "deploy", pending_only=True)  # withdrawn by the orchestrator
+        self.assertEqual(self.late()["granted"], False)
+        self.nothing_granted()
+
+    def test_row6_row14_a_late_yes_from_a_session_that_is_not_the_mark(self):
+        self.pend()
+        self.assertEqual(self.late(session="S2")["granted"], False)  # an unmarked session (row 14)
+        self.assertEqual(self.log()[-1]["refused"], "session")
+        orchestrator.mark(self.project, "S9", "other")  # the mark in another session of another process (row 6)
+        self.assertEqual(self.late()["granted"], False)
+        self.assertEqual(self.log()[-1]["refused"], "session")
+        self.nothing_granted()
+        self.assertEqual(len(self.inbox()), self.inbox_before)
+
+    def test_row7_a_late_no_drops_the_request_and_cools_down(self):
+        self.pend()
+        self.age("deploy", hours=3)
+        asked = grants.read(self.project)["pending"]["deploy"]["at"]
+        out = self.late("no")
+        self.assertEqual(out["granted"], False)
+        self.assertNotIn("deny", out)
+        self.assertIn("said no (late)", out["log"])
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["grants"]), ({}, {}))
+        self.assertEqual(d["cooldowns"]["deploy"]["session"], "S1")
+        self.assertIn("will not ask again before", self.mod(phase="check", command=DEPLOY)["deny"])
+        line = self.log()[-1]
+        self.assertEqual((line["verdict"], line["late"], line["asked"], line["answer"]), ("deny", True, asked, "no"))
+        self.assertEqual(line["cooldown_until"], d["cooldowns"]["deploy"]["until"])
+        self.assertIn("said no late in the chat", self.notes_text())
+        msg = self.inbox()[-1]
+        self.assertEqual(msg["from"], "owner")
+        self.assertNotIn("grant", msg)
+        self.assertIn("stays closed", msg["text"])
+
+    def test_row7_a_late_no_from_another_session_changes_nothing(self):
+        self.pend()
+        self.late("no", session="S2")
+        self.assertEqual(self.log()[-1]["verdict"], "late")
+        self.assertIn("deploy", grants.pending(self.project))
+        self.assertEqual(grants.read(self.project)["cooldowns"], {})
+
+    def test_row8_a_late_dismissal_leaves_the_request(self):
+        self.pend()
+        for answer in ("dismissed", "timeout", "unavailable"):
+            out = self.late(answer)
+            self.assertEqual((out["granted"], self.log()[-1]["verdict"]), (False, "late"), answer)
+            self.assertNotIn("refused", self.log()[-1])
+        self.assertIn("deploy", grants.pending(self.project))
+        self.assertEqual(grants.read(self.project)["cooldowns"], {})
+        self.nothing_granted()
+
+    def test_row9_a_request_of_a_process_that_ended_is_an_orphan(self):
+        self.pend()
+        self.reparent(COPY_PID)  # the orchestrator restarted: a new claude process marks itself
+        orchestrator.mark(self.project, "S2", "fake-2", own_session="S2")
+        self.assertEqual(orchestrator.record(self.project)["pid"], COPY_PID)
+        self.assertEqual(grants.pending(self.project), {})
+        o = grants.orphans(self.project)["deploy"]
+        self.assertEqual((o["why"], o["session"], o["command"]), ("process", "S1", DEPLOY))
+        self.assertIn("a request of another process since", grants.lines(self.project)[0])
+        with self.assertRaises(grants.NotApproved) as e:
+            grants.approve(self.project, "deploy")
+        self.assertEqual(e.exception.why, "process")
+        self.assertIn("deploy", grants.orphans(self.project))  # kept, for the owner to drop
+        self.assertEqual(self.late(session="S2")["granted"], False)  # the new session's yes: not its request
+        self.assertEqual(self.late(session="S1")["granted"], False)  # the old session: not the mark
+        self.nothing_granted()
+        # discarding it (the panel's no) drops it and cools nothing
+        with self.assertRaises(grants.NotApproved) as e:
+            grants.deny(self.project, "deploy")
+        self.assertEqual(e.exception.why, "expired")
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["cooldowns"], d["grants"]), ({}, {}, {}))
+
+    def test_row10_a_clear_in_the_same_process_carries_the_request(self):
+        self.pend()
+        hooks_mod.carry_mark(self.project, "S1", "S2")  # /clear: the module starts again under S2
+        self.assertEqual(orchestrator.record(self.project)["session"], "S2")
+        r = grants.pending(self.project)["deploy"]
+        self.assertEqual((r["session"], r["tool_use_id"]), ("S2", "T-late"))
+        self.assertEqual(grants.orphans(self.project), {})
+        out = self.late(session="S2")
+        self.assertTrue(out["granted"], out)
+        self.assertEqual(grants.live(self.project, "deploy")["session"], "S2")
+        # and from the panel too
+        grants.revoke(self.project, "deploy")
+        self.answer("timeout", tool_use_id="T-2", session="S2")
+        hooks_mod.carry_mark(self.project, "S2", "S3")
+        g, _ = grants.approve(self.project, "deploy")
+        self.assertEqual(g["session"], "S3")
+
+    def test_row10_a_carry_from_another_process_moves_nothing(self):
+        self.pend()
+        self.reparent(COPY_PID)
+        hooks_mod.carry_mark(self.project, "S1", "S2")
+        self.assertEqual(orchestrator.record(self.project)["session"], "S1")  # the mark did not move
+        self.assertEqual(grants.read(self.project)["pending"]["deploy"]["session"], "S1")
+        self.assertEqual(grants.carry(self.project, "S1", "S2"), [])  # the mark is not S2: nothing moves
+
+    def test_row12_the_owners_late_yes_brings_the_pass_at_the_next_tick(self):
+        import time
+        from datetime import datetime
+
+        beat = datetime.fromtimestamp(time.time() - 120).strftime("%Y-%m-%dT%H:%M:%S")  # a pass 2 min ago
+        util.write_json(self.project.state / "heartbeats.json", {"loop": beat})
+        o = {"session": "S1", "since": datetime.fromtimestamp(time.time() - 3600).strftime("%Y-%m-%dT%H:%M:%S")}
+        self.pend()
+        self.assertFalse(hooks_mod.pass_due(self.project, o))
+        self.assertTrue(self.late()["granted"])
+        self.assertTrue(hooks_mod.pass_due(self.project, o))
+
+    def test_withdraw_a_pending_request(self):
+        """`foreman permissions grants off GROUP --pending`: only the request goes; a live grant stays."""
+        self.pend()
+        self.answer("yes", group="stores")
+        r = self.cli("permissions", "grants", "off", "--pending", env={"CLAUDE_CODE_SESSION_ID": "S7"})
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "withdrawn: deploy"), r.stderr)
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], sorted(d["grants"])), ({}, ["stores"]))
+        self.assertEqual(self.log()[-1], {**self.log()[-1], "verdict": "withdraw", "group": "deploy", "session": "S7"})
+        self.assertIn("pending requests withdrawn", self.notes_text())
+        r = self.cli("permissions", "grants", "off", "deploy", "--pending")
+        self.assertEqual(r.stdout.strip(), "no pending request to withdraw")
+        self.assertEqual(self.cli("permissions", "grants", "--pending").returncode, 2)
+        self.assertEqual(self.cli("permissions", "--pending").returncode, 2)
+
+    def test_the_timeout_refusal_says_what_comes_next(self):
+        out = self.answer("timeout", tool_use_id="T-x")
+        self.assertIn("for up to 24 h", out["deny"])
+        self.assertIn("comes to your inbox", out["deny"])
+        self.assertIn("foreman permissions grants off deploy --pending", out["deny"])
 
 
 ORCH = "S-orch"  # the session the contract's grant cases mark

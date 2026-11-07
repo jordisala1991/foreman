@@ -1114,8 +1114,9 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         "action",
         nargs="?",
         choices=["apply", "grants"],
-        help="apply FILE: test the candidate and put it in place; grants [off [GROUP]]: the owner's grants for the "
-        "[deny.grants] groups (granted until, cooling down, waiting, closed), off removes them (every group or GROUP)",
+        help="apply FILE: test the candidate and put it in place; grants [off [GROUP] [--pending]]: the owner's grants "
+        "for the [deny.grants] groups (granted until, cooling down, waiting, closed), off removes them (every group or "
+        "GROUP; --pending: only the requests that wait)",
     )
     a.add_argument("file", nargs="?", metavar="FILE", help="the candidate foreman.toml (with apply); off (with grants)")
     a.add_argument("group", nargs="?", metavar="GROUP", help="with grants off: only this group")
@@ -1156,6 +1157,11 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     )
     a.add_argument("--since", metavar="WHEN", help="with --refused: from when (7d, 24h, HH:MM, a date; default 7d)")
     a.add_argument(
+        "--pending",
+        action="store_true",
+        help="with grants off: remove only the pending requests (a request no longer needed), not a live grant",
+    )
+    a.add_argument(
         "--json",
         action="store_true",
         help="every rule, row and failure as JSON; with grants: {grants, cooldowns, pending, once} as in "
@@ -1163,13 +1169,13 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     )
 
 
-def grants_command(p: Project, action: str | None, group: str | None, as_json: bool) -> int:
-    """`foreman permissions grants [off [GROUP]] [--json]` (grants.py)."""
+def grants_command(p: Project, action: str | None, group: str | None, as_json: bool, pending_only: bool = False) -> int:
+    """`foreman permissions grants [off [GROUP] [--pending]] [--json]` (grants.py)."""
     from . import approved
 
     if action != "off":
-        if action is not None or group:
-            print("usage: foreman permissions grants [off [GROUP]] [--json]", file=sys.stderr)
+        if action is not None or group or pending_only:
+            print("usage: foreman permissions grants [off [GROUP] [--pending]] [--json]", file=sys.stderr)
             return 2
         if as_json:
             print(json.dumps(grants.read(p), ensure_ascii=False, indent=1))
@@ -1179,8 +1185,18 @@ def grants_command(p: Project, action: str | None, group: str | None, as_json: b
     if group and group not in grants.groups(p, True):
         print(f"foreman permissions grants: no [deny.grants] group {group!r} in {p.name}", file=sys.stderr)
         return 2
-    gone = grants.revoke(p, group)
     session = os.environ.get("CLAUDE_CODE_SESSION_ID") or None
+    if pending_only:
+        gone = grants.revoke(p, group, pending_only=True)
+        for g in gone:
+            approved.granted(p, {"verdict": "withdraw", "group": g, "session": session})
+        if gone:
+            notes.note(
+                p, "-", f"pending requests withdrawn with `foreman permissions grants off --pending`: {', '.join(gone)}"
+            )
+        print(f"withdrawn: {', '.join(gone)}" if gone else "no pending request to withdraw")
+        return 0
+    gone = grants.revoke(p, group)
     for g in gone:
         approved.granted(p, {"verdict": "revoke", "group": g, "session": session})
     if gone:
@@ -1200,6 +1216,7 @@ def run(args: argparse.Namespace, project: Project) -> int:
             or args.opens
             or args.refused
             or args.since
+            or args.pending
         ):
             print("foreman permissions: --machine-candidate FILE goes alone (with --json)", file=sys.stderr)
             return 2
@@ -1211,9 +1228,15 @@ def run(args: argparse.Namespace, project: Project) -> int:
         return code
     if args.action == "grants":
         if args.candidate or args.table or args.base or args.opens or args.refused or args.since:
-            print("foreman permissions grants: usage: permissions grants [off [GROUP]] [--json]", file=sys.stderr)
+            print(
+                "foreman permissions grants: usage: permissions grants [off [GROUP] [--pending]] [--json]",
+                file=sys.stderr,
+            )
             return 2
-        return grants_command(project, args.file, args.group, args.json)
+        return grants_command(project, args.file, args.group, args.json, args.pending)
+    if args.pending:
+        print("foreman permissions: --pending goes with grants off", file=sys.stderr)
+        return 2
     if args.group:
         print("foreman permissions: GROUP goes with grants off", file=sys.stderr)
         return 2

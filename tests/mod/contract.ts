@@ -1987,7 +1987,7 @@ export default [
     },
     "run": {
       "exitCode": 0,
-      "stdout": "{\"deny\": \"Blocked: Owner did not answer the question about the group «deploy» in time. The request waits for Owner in foreman's panel; tell Owner in the chat and do not try again until Owner says so.\", \"granted\": false}\n",
+      "stdout": "{\"deny\": \"Blocked: Owner did not answer the question about the group «deploy» in time. The request waits for Owner in foreman's panel for up to 24 h, and a late answer in the chat counts too: when Owner answers, a message from Owner comes to your inbox. Do not try again until then; if you no longer need it, withdraw it with `foreman permissions grants off deploy --pending`.\", \"granted\": false}\n",
       "stderr": ""
     },
     "status": null

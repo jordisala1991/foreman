@@ -144,9 +144,17 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     note; {granted: true, until, log}. A yes from another session or process grants nothing ({granted: false, deny}).
     Any other answer: {granted: false, deny} (i18n grant_denied_ANSWER) and a line (verdict deny); a no starts the
     cooldown; a timeout keeps the request pending for the panel (grants.pend, with the mark's pid and start time; the
-    owner approves it there: grants.approve). With `late` true (the answer came after the timeout refused the call), a
-    line (verdict late) and nothing else: {granted: false, log}; the log says the group is already granted (i18n
-    grant_late_granted) when it is, e.g. approved from the panel meanwhile, and nothing is granted twice. The module
+    owner approves it there: grants.approve). With `late` true (the answer came after the timeout refused the call):
+    a yes to the request that very question left pending (grants.take_late: the same tool_use_id, still pending and
+    younger than grants.PENDING_H, the session answering is the marked one that made it, from the mark's process, and
+    this call runs in that process) is that grant, from now for grant_minutes: a line (verdict grant, `late`,
+    `asked`), a note and an inbox message from the owner with `grant` (the orchestrator's next pass comes at the next
+    tick: pass_due), {granted: true, until, log}; a no to it (grants.drop_late: same tool_use_id and session) drops
+    the request and starts the cooldown, with a line (verdict deny, `late`), a note and an inbox message, {granted:
+    false, log}. Anything else (dismissed, a request no longer there, of another question, session or process) is a
+    line (verdict late, with `refused` when a request was refused) and nothing else: {granted: false, log}; the log
+    says the group is already granted (i18n grant_late_granted) when it is, e.g. approved from the panel meanwhile,
+    and nothing is granted twice. The module
     (`surfaces` is $.session.surfaces(), for the record only): `granted` keeps `until` in its memory, shows `log` and
     lets the call on to the classic guard, which finds the grant; otherwise it refuses the call with `deny`. After a
     timeout it keeps listening to the question, still drawn: its late answer (or dismissal) goes here with `late` true
@@ -248,8 +256,9 @@ def carry_mark(project: Project, previous: str, session: str) -> None:
     """The module started again under a new id (`previous`: the one it ran under, after a /clear or an in-process
     resume): the old heartbeat ends if its session.end did not say so, and the orchestrator's mark moves to the new
     id when the old one was marked in this same `claude` process (orchestrator.carry), with a note for the
-    history. Never raises: a start never fails over the mark."""
-    from . import notes, orchestrator
+    history; the requests the old id left pending go with it (grants.carry). Never raises: a start never fails over
+    the mark."""
+    from . import grants, notes, orchestrator
 
     try:
         old = heartbeat.read(project, previous)
@@ -257,6 +266,7 @@ def carry_mark(project: Project, previous: str, session: str) -> None:
             heartbeat.end(project, previous)
         moved = orchestrator.carry(project, previous, session)
         if moved is not None:
+            grants.carry(project, previous, session)  # its pending requests go on with it (the same process)
             notes.note(
                 project,
                 f"Orchestrator mark moved (session {moved.get('name') or session})",
@@ -730,15 +740,8 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
         "tool_use_id": tid,
     }
     fmt = {"group": group, "owner": project.owner, "orchestrator": who, "answer": answer}
-    if ev.get("late") is True:  # the question had timed out and the call was refused: nothing is granted
-        approved.granted(project, {"verdict": "late", **rec})
-        g = grants.live(project, group)
-        if g:  # approved meanwhile (from the panel): the late answer changes nothing, and says so
-            return {
-                "granted": False,
-                "log": t["grant_late_granted"].format(**fmt, until=g["until"][11:16], via=g.get("via") or "?"),
-            }
-        return {"granted": False, "log": t["grant_late"].format(**fmt)}
+    if ev.get("late") is True:  # the question had timed out and the call was refused
+        return _late_answer(project, session, group, answer, rec, fmt, surfaces, tid)
     if answer == "yes":
         mark = orchestrator.record(project)
         refused = (
@@ -771,7 +774,79 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
         )
         extra["pending"] = True
     approved.granted(project, {"verdict": "deny", **rec, **extra})
-    return {"granted": False, "deny": t[f"grant_denied_{answer}"].format(**fmt, minutes=grants.COOLDOWN_S // 60)}
+    return {
+        "granted": False,
+        "deny": t[f"grant_denied_{answer}"].format(**fmt, minutes=grants.COOLDOWN_S // 60, hours=grants.PENDING_H),
+    }
+
+
+def _asked_for(r: dict[str, Any], command: str) -> str:
+    """The command a pending request was made for (as recorded when it timed out), else the late answer's own."""
+    return str(r.get("command") or command)[:200]
+
+
+def _late_answer(
+    project: Project,
+    session: str,
+    group: str,
+    answer: str,
+    rec: dict[str, Any],
+    fmt: dict[str, Any],
+    surfaces: list[str],
+    tid: str | None,
+) -> dict[str, Any]:
+    """A late answer (the module's docstring, `late`): a yes or a no applies to the request that question left
+    pending (grants.take_late, grants.drop_late: the same tool_use_id, session and process), with a line, a note and
+    an inbox message from the owner that brings the orchestrator's next pass at the next tick (pass_due); anything
+    else, or a request that is not there any more, is a line (verdict late) and changes nothing. Never a `deny`: the
+    call it was asked for is long gone."""
+    from . import approved, grants, notes
+
+    t = i18n.for_project(project)
+    g = grants.live(project, group)
+    if g:  # approved meanwhile (from the panel): the late answer changes nothing, and says so
+        approved.granted(project, {"verdict": "late", **rec})
+        return {
+            "granted": False,
+            "log": t["grant_late_granted"].format(**fmt, until=g["until"][11:16], via=g.get("via") or "?"),
+        }
+    refused = ""
+    command = str(rec.get("command") or "")[:200]
+    try:
+        if answer == "yes":
+            g, r = grants.take_late(project, group, tid, session, surfaces)
+            asked = str(r.get("at") or "")
+            approved.granted(project, {"verdict": "grant", **rec, "late": True, "asked": asked, "until": g["until"]})
+            until = g["until"][11:16]
+            words = {**fmt, "until": until, "asked": asked[11:16], "command": _asked_for(r, command)}
+            notes.note(project, "-", t["grant_note_late"].format(**words, surfaces=", ".join(surfaces) or "?"))
+            notes.inbox_add(
+                project,
+                t["grant_late_inbox"].format(**words),
+                sender="owner",
+                grant={"group": group, "until": g["until"]},
+            )
+            return {"granted": True, "until": g["until"], "log": t["grant_late_log"].format(**words)}
+        if answer == "no":
+            r = grants.drop_late(project, group, tid, session)
+            asked = str(r.get("at") or "")
+            approved.granted(
+                project,
+                {"verdict": "deny", **rec, "late": True, "asked": asked, "cooldown_until": r["cooldown_until"]},
+            )
+            words = {
+                **fmt,
+                "until": r["cooldown_until"][11:16],
+                "asked": asked[11:16],
+                "command": _asked_for(r, command),
+            }
+            notes.note(project, "-", t["grant_note_late_no"].format(**words))
+            notes.inbox_add(project, t["grant_late_inbox_no"].format(**words), sender="owner")
+            return {"granted": False, "log": t["grant_late_no_log"].format(**words)}
+    except grants.NotApproved as e:
+        refused = e.why
+    approved.granted(project, {"verdict": "late", **rec, **({"refused": refused} if refused else {})})
+    return {"granted": False, "log": t["grant_late"].format(**fmt)}
 
 
 def _path(ev: Event) -> str:

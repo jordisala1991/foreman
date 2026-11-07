@@ -64,10 +64,10 @@ permissions apply FILE [--table T] [--base HASH] [--opens]   tests the candidate
                                    foreman.toml changed since the copy (its base hash) or the change allows
                                    something new without --opens (which asks the owner yes/no). Only the marked
                                    orchestrator runs it
-permissions grants [off [GROUP]] [--json]   the owner's grants for the [deny.grants] groups (granted until, cooling
-                                   down after a no, a request waiting for the owner, closed); off: remove them
-                                   (every group, or GROUP) and the requests that wait; anyone may, as it only takes
-                                   away
+permissions grants [off [GROUP] [--pending]] [--json]   the owner's grants for the [deny.grants] groups (granted
+                                   until, cooling down after a no, a request waiting for the owner, closed); off:
+                                   remove them (every group, or GROUP) and the requests that wait, --pending: only
+                                   the requests; anyone may, as it only takes away
 check [--run-checks]               validates foreman.toml, the backlog and the [check] guard table; --run-checks:
                                    also runs each [loop] checks command once and validates its output lines
 config [--json]                    the project's configuration as foreman resolved it: every key with its default
