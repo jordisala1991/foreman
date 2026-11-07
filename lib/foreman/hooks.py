@@ -4,7 +4,9 @@ instead: hooks_mod.py.
 
 Every hook first finds the project of the session by the event's `cwd` in the registry and does nothing (exit 0,
 no output) unless it is an `active` project: with the plugin enabled for a user, sessions elsewhere are untouched.
-No hook ever fails the call: any error ends in exit 0, except the guard's deliberate rejection (exit 2).
+No hook ever fails the call: any error ends in exit 0, except the guard's deliberate rejection (exit 2) and a
+missing foreman module on the guard's path (exit 2 too: the guard cannot judge the call). lib/main.py runs this
+module without foreman.cli, and it imports at the top only what the guard needs (each tool call starts it).
 The registry is read tolerantly (config.py): a project with warnings (unknown keys, a newer config schema) still gets
 every hook, and `who` and the loop pass name the warnings. A project whose config does not load gets no hook at all:
 the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), the others keep quiet.
@@ -99,19 +101,10 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from . import (
-    approved,
-    config,
-    delivery,
-    guard,
-    i18n,
-    identity,
-    loop,
-    orchestrator,
-    pause,
-    transcripts,
-    util,
-)
+# Only what the guard needs to reach its verdict is imported here: `hook guard` runs on every tool call, so the rest
+# (approved, delivery, loop, orchestrator, transcripts, …) is imported where it is used (lib/main.py runs this module
+# without foreman.cli). A missing foreman module on the guard's path refuses the call (run).
+from . import config, guard, i18n, identity, pause, util
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -153,6 +146,8 @@ def session_start(ev: Event) -> bool:
 
 
 def is_orchestrator(project: Project, ev: Event) -> bool:
+    from . import orchestrator
+
     return orchestrator.is_orchestrator(project, ev.get("session_id"))
 
 
@@ -178,6 +173,8 @@ def hook_agents(project: Project, ev: Event) -> None:
     launch_tool = name == "PostToolUse" and ev.get("tool_name") in identity.AGENT_TOOLS
     if not aid and not launch_tool:
         return
+    from . import loop
+
     f = loop.agents_file(project)
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
     warning: str | None = None
@@ -200,6 +197,8 @@ def hook_agents(project: Project, ev: Event) -> None:
 def wants_check(project: Project, h: Agent, ev: Event) -> bool:
     """Whether this SubagentStop goes through the delivery check (delivery.py): a production agent tied to a launch
     record, with a branch or worktree, that does not stop to wait for background tasks of its own."""
+    from . import delivery
+
     return delivery.applies(project, h) and not ev.get("background_tasks")
 
 
@@ -207,6 +206,8 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
     """The delivery check at an agent's stop (delivery.py): blocks it (prints Claude Code's SubagentStop block) at
     most delivery.MAX_BLOCKS times, then lets it go with `delivery_incomplete` in its entry (the loop's notice). Any
     error: no block."""
+    from . import delivery
+
     try:
         res = {"items": delivery.missing(project, aid, entry)}
     except Exception:  # noqa: BLE001 (a delivery check never fails the hook)
@@ -237,6 +238,8 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
 
 def agent_event(project: Project, d: dict[str, Agent], aid: str, name: str, ev: Event, now: str) -> None:
     """One event of agent `aid` into the agents.json dict `d`."""
+    from . import delivery, transcripts
+
     # Claude Code's progress summaries arrive as untyped subagents and live for an instant: skip them.
     if aid not in d and not ev.get("agent_type"):
         return
@@ -363,6 +366,8 @@ def gone_notice(project: Project, o: Mark, session_id: str | None) -> tuple[str,
     """(who_gone / who_silent for this session when the marked session `o` is gone or silent, from its health
     (orchestrator.health), '' otherwise; whether that case was already said to this session). The case is recorded
     as said (<state>/who-gone-notified.json {session: case})."""
+    from . import orchestrator
+
     h = orchestrator.health(project, o)
     text = not_alive_text(project, o, session_id, h)
     if not text or h is None or not session_id:  # a text only comes from a health
@@ -374,6 +379,8 @@ def who_text(project: Project, session_id: str | None) -> str:
     """The notice for a session that is not the project's orchestrator ('' for the orchestrator itself). When the
     marked session is gone or silent, who_gone / who_silent instead of who_other (gone_notice: open_session_notice
     does not repeat it)."""
+    from . import orchestrator
+
     o = orchestrator.current(project)
     if o and session_id and session_id == o["session"]:
         return ""
@@ -393,6 +400,8 @@ def open_session_notice(project: Project, session_id: str | None) -> str:
     """who_gone / who_silent for a session already open (SessionStart never reached it with that
     case), once per case and session (<state>/who-gone-notified.json {session: case}); '' otherwise. Reads the mark,
     the `loop` heartbeat and the marked session's heartbeat (orchestrator.health), no process."""
+    from . import orchestrator
+
     o = orchestrator.current(project)
     if not o or not session_id or session_id == o["session"]:
         return ""
@@ -471,6 +480,8 @@ def hook_loop(project: Project, ev: Event) -> None:
     prompt = project.section("loop").get("prompt") or ""
     if prompt and ev.get("prompt", "").lstrip().startswith(prompt):
         return  # the pass the hooks module submitted: it carries its own summary
+    from . import loop
+
     texts = [n["text"] for n in loop.notices(project, ev.get("session_id"))]
     if texts:
         emit(event, " ".join(texts))
@@ -491,8 +502,7 @@ def hook_guard(project: Project, ev: Event) -> int:
     if held:
         print(pause.guard_message(project, held), file=sys.stderr)
         return 2
-    if "passed" in ctx:
-        approved.decided(project, ev, ctx["passed"], allowed=True)
+    _passed(project, ev, ctx)
     return 0
 
 
@@ -506,15 +516,33 @@ def _guard_ctx(ev: Event) -> guard.Ctx:
     }
 
 
+def _passed(project: Project, ev: Event, ctx: guard.Ctx) -> None:
+    """A [deny.grants] command that passed with the owner's yes goes to approved.jsonl and today's notes."""
+    if "passed" in ctx:
+        from . import approved
+
+        approved.decided(project, ev, ctx["passed"], allowed=True)
+
+
 def _refuse(project: Project, ev: Event, verdict: guard.Verdict) -> int:
     """Exit 2 with the reason; the refusal of a [deny.grants] rule or a reserved file for an agent or another session
-    goes to approved.jsonl (the orchestrator's notice), every refusal to guard.jsonl."""
-    if verdict[0] == "orchestrator" or (verdict[0] == "file" and verdict[1].why):
-        approved.decided(project, ev, verdict[1], allowed=False)
-    from . import permissions  # only on a refusal: the allowed path stays as it was
+    goes to approved.jsonl (the orchestrator's notice), every refusal to guard.jsonl. The verdict is already taken:
+    nothing that fails here (those records, their imports, the message) turns it into a pass."""
+    try:
+        if verdict[0] == "orchestrator" or (verdict[0] == "file" and verdict[1].why):
+            from . import approved
 
-    permissions.log_refusal(project, ev, verdict)
-    print(guard.message(project, verdict), file=sys.stderr)
+            approved.decided(project, ev, verdict[1], allowed=False)
+        from . import permissions  # only on a refusal: the allowed path stays as it was
+
+        permissions.log_refusal(project, ev, verdict)
+    except Exception as e:  # noqa: BLE001 (a refusal stays a refusal)
+        print(f"foreman: the guard could not record this refusal ({type(e).__name__}: {e})", file=sys.stderr)
+    try:
+        text = guard.message(project, verdict)
+    except Exception as e:  # noqa: BLE001 (a refusal stays a refusal)
+        text = f"foreman's guard refused this call ({verdict[0]}); its message failed ({type(e).__name__}: {e})"
+    print(text, file=sys.stderr)
     return 2
 
 
@@ -536,8 +564,7 @@ def guard_tool(project: Project, ev: Event, tool: str) -> int:
         if held:
             print(pause.guard_message(project, held), file=sys.stderr)
             return 2
-    if "passed" in ctx:
-        approved.decided(project, ev, ctx["passed"], allowed=True)
+    _passed(project, ev, ctx)
     return 0
 
 
@@ -663,7 +690,15 @@ def run(name: str) -> int:
 
             best = install.record()  # where the sessions run foreman from (the panel follows it); never raises
         if name not in ("who", "loop"):
-            rc = HOOKS[name](project, ev)
+            try:
+                rc = HOOKS[name](project, ev)
+            except ImportError as e:
+                if name != "guard" or (e.name or "").split(".")[0] != "foreman":
+                    raise
+                # a module of foreman that the guard imports where it is used is missing: the guard cannot judge
+                # this call, and it is refused rather than let through (the launcher does the same without a Python)
+                print(f"foreman's guard cannot run ({e}); the call is refused. Reinstall foreman.", file=sys.stderr)
+                return 2
             return rc if name == "guard" and rc else 0
         buf = io.StringIO()
         try:

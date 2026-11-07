@@ -1121,6 +1121,93 @@ class HooksTest(ProjectCase):
         self.assertIn("relieves (no name) (session S2)", self.cli("session", "S3", "--name", "orch-3").stdout)
 
 
+class GuardFailsClosedTest(ProjectCase):
+    """hooks.py imports what only some paths use where they use it: a foreman module missing there never turns the
+    guard's refusal, or a call it cannot judge, into a pass (lib/main.py's light path runs the same hooks.run)."""
+
+    toml = TOML
+
+    def run_hook(self, name, event):
+        """hooks.run(name) in this process with `event` on stdin: (exit code, stderr)."""
+        import contextlib
+        import io
+        import sys
+        from unittest import mock
+
+        from foreman import hooks
+
+        err = io.StringIO()
+        stdin = io.StringIO(json.dumps({"cwd": str(self.home), **event}))
+        with (
+            mock.patch.object(sys, "stdin", stdin),
+            contextlib.redirect_stderr(err),
+            contextlib.redirect_stdout(io.StringIO()),
+            mock.patch.object(hooks, "project_of", lambda ev: self.project),
+        ):
+            rc = hooks.run(name)
+        return rc, err.getvalue()
+
+    def bash(self, cmd):
+        return {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": cmd}, "agent_id": "a1"}
+
+    def test_refusal_survives_missing_modules(self):
+        import contextlib
+        import sys
+        from unittest import mock
+
+        import foreman
+
+        # what a refusal imports only then (the records of approved.py and permissions.py): gone, still a refusal.
+        # Gone from the package too: `from . import x` takes an attribute already set before it looks at sys.modules.
+        gone = ("permissions", "approved")
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(sys.modules, {f"foreman.{m}": None for m in gone}))
+            for m in gone:
+                if hasattr(foreman, m):
+                    stack.enter_context(mock.patch.object(foreman, m))
+                    delattr(foreman, m)
+            rc, err = self.run_hook("guard", self.bash("make deploy"))
+            self.assertEqual(rc, 2)
+            self.assertIn("could not record this refusal", err)
+            self.assertIn("make deploy", err)
+            # a reserved file through the Write tool: the same
+            ev = {"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": "a1"}
+            ev["tool_input"] = {"file_path": str(self.home / "foreman.toml"), "content": "x"}
+            self.assertEqual(self.run_hook("guard", ev)[0], 2)
+        self.assertEqual(self.run_hook("guard", self.bash("ls"))[0], 0)
+        # the message itself failing: still a refusal, with a line that says so
+        from foreman import guard
+
+        with mock.patch.object(guard, "message", side_effect=RuntimeError("boom")):
+            rc, err = self.run_hook("guard", self.bash("make deploy"))
+        self.assertEqual(rc, 2)
+        self.assertIn("refused this call (deny)", err)
+
+    def test_missing_foreman_module_refuses_only_in_the_guard(self):
+        from unittest import mock
+
+        from foreman import hooks
+
+        def missing(name):
+            def hook(project, ev):
+                raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+            return hook
+
+        for mod, name, want in (
+            ("foreman.loop", "guard", 2),  # the guard cannot judge the call: refused
+            ("foreman", "guard", 2),  # `from . import x` with x gone: ImportError(name="foreman")
+            ("tomllib", "guard", 0),  # not foreman's: as any other error, the guard fails open
+            ("foreman.loop", "agents", 0),  # every other hook: exit 0 as always
+            ("foreman.loop", "pause-agents", 0),
+            ("foreman.loop", "resume", 0),
+        ):
+            with self.subTest(mod=mod, hook=name), mock.patch.dict(hooks.HOOKS, {name: missing(mod)}):
+                rc, err = self.run_hook(name, self.bash("ls"))
+                self.assertEqual(rc, want)
+                self.assertEqual("cannot run" in err, want == 2)
+
+
 class PauseTest(ProjectCase):
     """While <state>/pause exists (the panel writes it) the loop, the guard and the pause-agents hook respect
     it."""
