@@ -113,6 +113,81 @@ class CallersTest(ProjectCase):
         self.pre('Q=/x/r4.md; foreman progress --report "$Q" A2', agent="ag2")
         self.assertEqual(self.caller_of("--report", "/x/r3.md", "A2")[0], "ambiguous")
 
+    LONG = (
+        'pkill -f "panel --port 879" ; cd {wt} && D=/home/me/reviews && mkdir -p $D && cp /tmp/a $D/x && '
+        "cat > report.md <<'EOF'\n# Report\nforeman progress is only mentioned\nEOF\n"
+        "git add -A && git commit -qm msg && "
+        'foreman progress --done --report ~/reviews/{n}.md "{n} done" 2>&1 | tail -3'
+    )
+
+    def in_dir(self, d, *call):
+        """caller_of with the process working in folder `d`."""
+        import os
+
+        old = os.getcwd()
+        os.chdir(d)
+        try:
+            return self.caller_of(*call)
+        finally:
+            os.chdir(old)
+
+    def worktrees(self, **named):
+        """Gives each agent id a worktree folder (agents.json); returns {id: path}."""
+        agents = util.read_json(self.project.state / "agents.json", {})
+        out = {}
+        for aid, name in named.items():
+            d = self.tmp / "wts" / name
+            d.mkdir(parents=True, exist_ok=True)
+            agents[aid]["worktree"] = str(d)
+            out[aid] = d
+        util.write_json(self.project.state / "agents.json", agents)
+        return out
+
+    def test_long_command_with_redirection_fits(self):
+        """The delivery at the end of a long chain (heredoc, cd, `2>&1 | tail`): the words written down are the
+        CLI's own, the `2>&1` is not an argument."""
+        self.assertEqual(
+            identity.calls_of(self.LONG.format(wt="/w", n="a"))[0][2:],
+            ["--done", "--report", "~/reviews/a.md", "a done"],
+        )
+        self.pre(self.LONG.format(wt="/w/one", n="a"), agent="ag1")
+        self.pre(self.LONG.format(wt="/w/two", n="b"), agent="ag2")
+        self.pre(self.LONG.format(wt="/w/three", n="c"), agent="ag3")
+        self.assertEqual(self.caller_of("--done", "--report", "/home/me/reviews/b.md", "b done"), ("ag2", "kip3"))
+        self.assertEqual(self.caller_of("--done", "--report", "/home/me/reviews/a.md", "a done"), ("ag1", "zed7"))
+
+    def test_working_folder_decides_when_words_do_not(self):
+        wts = self.worktrees(ag1="one", ag2="two")
+        self.pre('foreman progress "same"', agent="ag1")
+        self.pre('foreman progress "same"', agent="ag2")
+        self.assertEqual(self.in_dir(wts["ag2"], "same"), ("ag2", "kip3"))
+        self.assertEqual(self.in_dir(wts["ag1"] / ".", "same"), ("ag1", "zed7"))
+        sub = wts["ag1"] / "lib"
+        sub.mkdir()
+        self.assertEqual(self.in_dir(sub, "same"), ("ag1", "zed7"))
+
+    def test_working_folder_outside_any_worktree_is_ambiguous(self):
+        self.worktrees(ag1="one", ag2="two")
+        self.pre('foreman progress "same"', agent="ag1")
+        self.pre('foreman progress "same"', agent="ag2")
+        self.assertEqual(self.in_dir(self.tmp, "same"), ("ambiguous", 2))
+
+    def test_two_agents_in_one_worktree_are_ambiguous(self):
+        wts = self.worktrees(ag1="one")
+        agents = util.read_json(self.project.state / "agents.json", {})
+        agents["ag2"]["worktree"] = str(wts["ag1"])
+        util.write_json(self.project.state / "agents.json", agents)
+        self.pre('foreman progress "same"', agent="ag1")
+        self.pre('foreman progress "same"', agent="ag2")
+        self.assertEqual(self.in_dir(wts["ag1"], "same"), ("ambiguous", 2))
+
+    def test_working_folder_never_picks_the_main_thread(self):
+        wts = self.worktrees(ag1="one")
+        self.pre('foreman progress "same"')
+        self.pre('foreman progress "same"', agent="ag1")
+        # the main thread is a candidate too: its folder is unknown, so the folder of an agent does not decide
+        self.assertEqual(self.in_dir(wts["ag1"], "same")[0], "ambiguous")
+
     def test_ambiguous(self):
         self.pre('foreman progress "same"', agent="ag1")
         self.pre('foreman progress "same"', agent="ag2")
