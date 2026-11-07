@@ -263,34 +263,81 @@ const agents = (await (await fetch(api('/api/state?p=fake'))).json()).project.ag
 lastData = {joint: false, ps: [{name: 'fake', writable: true}], agents};
 const sid = agents.find(a => a.session).id;
 const opened = [];
-window.open = () => { const w = {location: {}, close() { opened.push('closed'); }}; opened.push(w); return w; };
+let block = false;
+window.open = (u) => { opened.push(u); return block ? null : {}; };
 """
 
-    def test_the_button_is_only_on_a_session_agent_and_opens_the_link(self):
+    def test_the_button_is_only_on_a_session_agent_and_opens_the_waiting_page(self):
         out = self.run_page(
             self.SETUP
             + """
 renderWork({agents, notes: [], progress: [], repos: []});
 const rows = $('agents').innerHTML;
-await watchAgent({dataset: {id: sid, p: 'fake'}, disabled: false, textContent: ''});
+await watchAgent({dataset: {id: sid, p: 'fake', name: 'Issue 2'}, disabled: false, textContent: ''});
 return {buttons: (rows.match(/watchAgent/g) || []).length, label: rows.includes('Ver conversación'),
-  href: opened[0].location.href, err: $('err').textContent};
+  named: rows.includes('data-name="'), opened, err: $('err').textContent};
 """,
             tab="work",
         )
-        self.assertEqual((out["buttons"], out["label"]), (1, True))
-        self.assertEqual(out["href"], LINK)
+        self.assertEqual((out["buttons"], out["label"], out["named"]), (1, True, True))
+        (url,) = out["opened"]
+        self.assertTrue(url.startswith(f"/agent/wait?id={SID}&p=fake&name=Issue%202&t="), url)
+        self.assertEqual(self.attached(), [])  # the waiting page asks, not this one
         self.assertEqual(out["err"], "")
 
-    def test_a_failure_closes_the_window_and_says_why(self):
+    def test_a_blocked_tab_asks_from_the_page_and_shows_the_link_or_why(self):
+        out = self.run_page(
+            self.SETUP
+            + """
+block = true;
+await watchAgent({dataset: {id: sid, p: 'fake', name: 'x'}, disabled: false, textContent: ''});
+return {err: $('err').innerHTML};
+""",
+            tab="work",
+        )
+        self.assertIn(LINK, out["err"])
         os.environ["FAKE_MODE"] = "never"
         out = self.run_page(
             self.SETUP
             + """
-await watchAgent({dataset: {id: sid, p: 'fake'}, disabled: false, textContent: ''});
-return {err: $('err').textContent, opened: opened.map(w => typeof w === 'string' ? w : 'window')};
+block = true;
+await watchAgent({dataset: {id: sid, p: 'fake', name: 'x'}, disabled: false, textContent: ''});
+return {err: $('err').textContent};
 """,
             tab="work",
         )
         self.assertIn("dialog stays open", out["err"])
-        self.assertEqual(out["opened"], ["window", "closed"])
+
+
+class WaitingPageTest(WatchCase):
+    """GET /agent/wait: the page the click opens while Remote Control turns on."""
+
+    def get(self, query, token=True):
+        import http.client
+
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        c.request("GET", f"/agent/wait?{query}" + (f"&t={self.token}" if token else ""))
+        r = c.getresponse()
+        out = r.status, dict(r.getheaders()), r.read().decode()
+        c.close()
+        return out
+
+    def test_the_page_names_the_agent_and_asks_nothing_itself(self):
+        code, headers, body = self.get("id=x&p=fake&name=Agentes%20que%20ves")
+        self.assertEqual(code, 200)
+        self.assertIn("<h1>Agentes que ves</h1>", body)
+        self.assertIn("Abriendo la conversación…", body)
+        self.assertIn("prefers-color-scheme: dark", body)
+        self.assertEqual(self.attached(), [])  # reading the page never starts claude: its script does, with the key
+        csp = headers["Content-Security-Policy"]
+        self.assertIn("default-src 'none'", csp)
+        self.assertIn("connect-src 'self'", csp)
+        self.assertNotRegex(body, r"https?://")  # nothing from outside the panel
+
+    def test_the_name_is_text_not_markup(self):
+        _, _, body = self.get("name=" + "%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E")
+        self.assertNotIn("<img", body)
+        self.assertIn("&lt;img", body)
+
+    def test_it_needs_the_key(self):
+        self.assertEqual(self.get("name=x", token=False)[0], 403)

@@ -77,6 +77,7 @@ from . import (
     transcripts,
     util,
     versions,
+    watchpage,
 )
 from .backlog import Backlog, BacklogError
 from .panel_cache import NEXT, STATIC, iso_age, iso_ts, memo, next_version, page_version, sh
@@ -1147,6 +1148,9 @@ class Handler(BaseHTTPRequestHandler):
                 .replace("{{LANG}}", REG.language())
             )
             return self.send(200, html, "text/html; charset=utf-8")
+        if u.path == "/agent/wait":  # the tab a «See conversation» click opens (watchpage.py)
+            html = watchpage.page(q.get("name", [""])[0], REG.language())
+            return self.send(200, html, "text/html; charset=utf-8", headers=watchpage.HEADERS)
         if u.path == "/next":
             return self.send(301, "", "text/plain; charset=utf-8", headers={"Location": "/next/?" + u.query})
         if u.path == "/next/":

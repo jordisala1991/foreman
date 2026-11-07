@@ -106,7 +106,7 @@ Object.assign(globalThis, {
   document, window: globalThis, HTMLIFrameElement,
   location: { search: "?t=k3y", hash: scenario.hash || "" },
   addEventListener() {}, removeEventListener() {},
-  open: () => { const w = { location: { href: "" }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
+  open: (url) => { const w = { location: { href: String(url || "") }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
   fetch: async (url, opts) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
     fetched.push(opts && opts.method === "POST" ? "POST " + p : p);

@@ -4,7 +4,7 @@
 // every 10 s and the durations tick by themselves.
 import { useCallback, useEffect, useState } from "react";
 import { ScreenHead } from "./head";
-import { api, duration, lang, post, t, usd2, type AgentCard, type AgentsData, type Family, type Key, type Product } from "./lib";
+import { api, duration, lang, post, t, usd2, withKey, type AgentCard, type AgentsData, type Family, type Key, type Product } from "./lib";
 
 const REFRESH_MS = 10_000;
 const AVATARS = ["#9cc0ff", "#f2a9cb", "#e3c49c", "#ffb98a", "#86d4e6", "#d6b3f0", "#a8c5d9", "#c9d98f"];
@@ -38,20 +38,20 @@ const STATE: Record<AgentCard["status"], { tone: Tone; text: Key }> = {
 function Watch({ agent }: { agent: AgentCard }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ link?: string; error?: string } | null>(null);
-  // the window is opened by the click itself (a browser blocks one opened after the wait) and pointed at the link
-  // when it comes: the server turns Remote Control on for the session, which takes seconds
+  // the tab is opened by the click itself (a browser blocks one opened after the wait) on the server's waiting page,
+  // which turns Remote Control on (it takes seconds), goes to the link and, if it fails, says why. Only a browser that
+  // blocks the tab makes this page ask, and it shows the link on the card
   const open = async () => {
-    const w = window.open("", "_blank");
+    const id = encodeURIComponent(agent.id);
+    const p = encodeURIComponent(agent.p);
+    const w = window.open(withKey(`/agent/wait?id=${id}&p=${p}&name=${encodeURIComponent(agent.task)}`), "_blank");
+    if (w) return;
     setBusy(true);
     setNote(null);
     try {
-      const { link } = await post<{ link: string }>(
-        `/api/agent/watch?id=${encodeURIComponent(agent.id)}&p=${encodeURIComponent(agent.p)}`,
-      );
-      if (w) w.location.href = link;
-      else setNote({ link });
+      const { link } = await post<{ link: string }>(`/api/agent/watch?id=${id}&p=${p}`);
+      setNote({ link });
     } catch (e) {
-      w?.close();
       setNote({ error: e instanceof Error ? e.message : String(e) });
     }
     setBusy(false);

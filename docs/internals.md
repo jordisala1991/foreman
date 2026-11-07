@@ -354,7 +354,10 @@ What it changes:
   project rules): only then is Remote Control turned on for that session, with `claude attach` on a pseudo-terminal,
   `/remote-control` and Enter on the dialog it leaves open (the session is not stopped, resumed or copied), and the
   claude.ai/code link comes back. Every connection sends the owner's phone a push, which is why nothing connects at
-  launch. A failure comes back as a 400 with the reason and the button can be pressed again.
+  launch. A failure comes back as a 400 with the reason and the button can be pressed again. Both panels open the click's
+  tab on `GET /agent/wait?id&p&name` (`watchpage.py`: the new panel's look, light and dark by the system, the agent's
+  name, a quiet progress bar): that page makes the POST itself with the key it was opened with, goes to the link, or
+  says why with a button to close the tab. A browser that blocks the tab leaves the panel to ask and show the link.
 
 ## The hidden acceptance checks: the orchestrator's and the planners'
 

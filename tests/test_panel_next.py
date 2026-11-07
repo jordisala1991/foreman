@@ -580,22 +580,22 @@ class NextPageTest(ProjectCase):
         })  # fmt: skip
         self.assertEqual([a["task"] for a in out["agents"]], ["Solo de alpha"])
 
-    def test_see_conversation_opens_the_link_the_server_gives(self):
+    def test_see_conversation_opens_the_waiting_page_inside_the_click(self):
+        wait = "/agent/wait?id=a1&p=alpha&name=Agentes%20que%20ves%20desde%20la%20app&t=k3y"
+        out = self.agents([self.card()], [], click="Ver conversación")
+        self.assertEqual(out["windows"], [{"href": wait, "closed": False}])  # the page asks and goes to the link
+        self.assertFalse([f for f in out["fetched"] if "agent/watch" in f])  # this page does not ask itself
+
+    def test_a_browser_that_blocks_the_tab_gets_the_link_on_the_card(self):
         post = "POST /api/agent/watch?id=a1&p=alpha"
-        out = self.agents([self.card()], [], click="Ver conversación",
-                          answers={post: {"link": "https://claude.ai/code/session_x"}})  # fmt: skip
-        self.assertIn(post, out["fetched"])
-        self.assertEqual(out["windows"], [{"href": "https://claude.ai/code/session_x", "closed": False}])
-        # a browser that blocks the window: the link, on the card
         out = self.agents([self.card()], [], click="Ver conversación", blockPopups=True,
                           answers={post: {"link": "https://claude.ai/code/session_x"}})  # fmt: skip
+        self.assertIn(post, out["fetched"])
         self.assertIn(
             "El navegador ha bloqueado la ventana: abre el enlace : https://claude.ai/code/session_x", out["text"]
         )
-        # the server says no: its words, and the empty window closed
-        out = self.agents([self.card()], [], click="Ver conversación")  # POST: 404
+        out = self.agents([self.card()], [], click="Ver conversación", blockPopups=True)  # the server says no: 404
         self.assertIn("No se ha podido abrir la conversación: 404", out["text"])
-        self.assertEqual(out["windows"], [{"href": "", "closed": True}])
 
     def test_agents_that_cannot_load_offer_to_retry(self):
         out = self.mount({"hash": "#/agents", "answers": {"/api/projects": self.PROJECTS}})
