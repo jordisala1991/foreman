@@ -1506,7 +1506,7 @@ export default [
     },
     "run": {
       "exitCode": 0,
-      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "stderr": ""
     },
     "status": null
@@ -1570,7 +1570,7 @@ export default [
     },
     "run": {
       "exitCode": 0,
-      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to use Read on `/srv/prod-api/config.json`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to use Read on `/srv/prod-api/config.json`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "stderr": ""
     },
     "status": null
@@ -1607,7 +1607,7 @@ export default [
     },
     "run": {
       "exitCode": 0,
-      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to use Monitor on `make deploy`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to use Monitor on `make deploy`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "stderr": ""
     },
     "status": null
@@ -1684,7 +1684,7 @@ export default [
       "input": {
         "file_path": "/srv/prod-api/config.json"
       },
-      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to use Read on `/srv/prod-api/config.json`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to use Read on `/srv/prod-api/config.json`, which the group «deploy» covers. Do you let it run the commands of «deploy» and reach what they name for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "ask": {
         "answer": "Yes, for 30 min"
       },
@@ -1743,7 +1743,7 @@ export default [
     },
     "run": {
       "exitCode": 0,
-      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": true, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"until\": \"2026-11-01T10:10:30\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": true, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"until\": \"2026-11-01T10:10:30\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "stderr": ""
     },
     "status": null
@@ -1820,7 +1820,7 @@ export default [
       "surfaces": [
         "desktop"
       ],
-      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "ask": {
         "answer": "Yes, for 30 min"
       },
@@ -1863,7 +1863,7 @@ export default [
       "surfaces": [
         "desktop"
       ],
-      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "ask": {
         "answer": "No"
       },
@@ -1905,7 +1905,7 @@ export default [
       "surfaces": [
         "desktop"
       ],
-      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "ask": {
         "reject": "foreman: $.ui.ask: no answer (The user doesn't want to proceed with this tool use.)"
       }
@@ -1944,7 +1944,7 @@ export default [
       "surfaces": [
         "desktop"
       ],
-      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "ask": {
         "reject": "foreman: $.tool.call: no tool named \"AskUserQuestion\" in this session"
       }
@@ -1983,7 +1983,7 @@ export default [
       "surfaces": [
         "desktop"
       ],
-      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "ask": {
         "timeout": true
       }
@@ -2022,7 +2022,7 @@ export default [
       "surfaces": [
         "desktop"
       ],
-      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "check": "{\"ask_ms\": 300000, \"group\": \"deploy\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «deploy»: `make deploy`. Do you let it run the commands of «deploy» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «deploy» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "ask": {
         "answer": "Yes, for 30 min"
       }
@@ -2110,7 +2110,7 @@ export default [
     },
     "run": {
       "exitCode": 0,
-      "stdout": "{\"ask_ms\": 300000, \"group\": \"permissions\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «permissions»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «permissions»: `foreman permissions apply cand.toml --opens`. Do you let it run the commands of «permissions» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «permissions» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"permissions\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «permissions»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «permissions»: `foreman permissions apply cand.toml --opens`. Do you let it run the commands of «permissions» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «permissions» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "stderr": ""
     },
     "status": null
@@ -2139,7 +2139,7 @@ export default [
     },
     "run": {
       "exitCode": 0,
-      "stdout": "{\"ask_ms\": 300000, \"group\": \"permissions\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «permissions»: answer in the chat or in foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «permissions»: `foreman integrate app ab1 AB-1 --opens`. Do you let it run the commands of «permissions» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «permissions» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
+      "stdout": "{\"ask_ms\": 300000, \"group\": \"permissions\", \"header\": \"foreman\", \"live\": false, \"no\": \"No\", \"notice\": \"orq, the orchestrator of fake, asks for your yes to «permissions»: answer in the chat; with no answer in 5 min the request moves to foreman's panel.\", \"question\": \"orq, the orchestrator of fake, wants to run a command of the group «permissions»: `foreman integrate app ab1 AB-1 --opens`. Do you let it run the commands of «permissions» for 30 minutes?\", \"waiting\": \"Blocked: a question about the group «permissions» is already waiting for Owner's answer. Do not try again until Owner says so in the chat.\", \"yes\": \"Yes, for 30 min\"}\n",
       "stderr": ""
     },
     "status": null

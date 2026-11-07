@@ -574,8 +574,8 @@ class NoticeTest(GrantCase):
         q = self.mod(phase="check", command=DEPLOY, tool_use_id="T1")
         self.assertEqual(
             q["notice"],
-            "fake-1, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat or in "
-            "foreman's panel.",
+            "fake-1, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in "
+            "5 min the request moves to foreman's panel.",
         )
         place = "/srv/prod-api/config.json"
         q = self.mod(phase="check", tool="Read", input={"file_path": place})
@@ -587,8 +587,34 @@ class NoticeTest(GrantCase):
         q = self.mod(phase="check", command=STORE)
         self.assertEqual(
             q["notice"],
-            "fake-1, el orquestador de fake, pide tu sí para «stores»: contesta en el chat o en el panel de foreman.",
+            "fake-1, el orquestador de fake, pide tu sí para «stores»: contesta en el chat; si no contestas en 5 min, "
+            "la petición pasa al panel de foreman.",
         )
+        # ask_minutes = 0: the question never times out, so the request never reaches the panel: the chat only
+        self.write_toml(
+            TOML.replace('owner = "Owner"', 'owner = "Owner"\nlanguage = "es"').replace(
+                "ask_minutes = 5", "ask_minutes = 0"
+            )
+        )
+        q = self.mod(phase="check", command=STORE)
+        self.assertEqual(q["notice"], "fake-1, el orquestador de fake, pide tu sí para «stores»: contesta en el chat.")
+        self.write_toml(TOML.replace("ask_minutes = 5", "ask_minutes = 0"))
+        q = self.mod(phase="check", command=STORE)
+        self.assertEqual(
+            q["notice"], "fake-1, the orchestrator of fake, asks for your yes to «stores»: answer in the chat."
+        )
+
+    def test_the_notice_tells_where_the_request_is_when_it_is_sent(self):
+        """While the question is open the request is not in the panel (it goes there at the time limit): the notice
+        must not send the owner to the panel now."""
+        from foreman import panel
+
+        q = self.mod(phase="check", command=DEPLOY, tool_use_id="T1")
+        self.assertEqual([r for r in panel.grant_requests(self.project) if r["pending"]], [])
+        self.assertNotIn("answer in the chat or in foreman's panel", q["notice"])
+        self.assertIn("with no answer in 5 min the request moves to foreman's panel", q["notice"])
+        self.answer("timeout", tool_use_id="T1", notified="no:no-surface")  # the time limit: now it is there
+        self.assertEqual([r["group"] for r in panel.grant_requests(self.project) if r["pending"]], ["deploy"])
 
     def test_no_notice_without_a_question(self):
         self.answer("no")

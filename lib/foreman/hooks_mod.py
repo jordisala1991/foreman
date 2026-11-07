@@ -138,7 +138,8 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     `timeout`. Neither the surfaces nor `isInteractive` decide whether to ask: they cannot tell a hosted session
     with a person behind it (the desktop app, an SDK host, the phone) from none. An answer that asks also carries
     `notice` (i18n grant_notice: who asks, the project and the group, never the command, as it goes to a system
-    channel): right after raising the question the module raises it with `$.ui.notify(notice, {title: header})`,
+    channel, and that the request moves to the panel after ask_minutes; grant_notice_chat, the chat only, with no
+    limit): right after raising the question the module raises it with `$.ui.notify(notice, {title: header})`,
     without waiting on it, and the answer phase carries how it went as `notified`: `sent:<channel>`, `no:<reason>`
     (no terminal, notifications off…), `error` (it rejected, or this Claude Code has no $.ui.notify) or `unknown`
     (not settled within 2 s of the answer).
@@ -699,6 +700,7 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
     else:
         return {}
     minutes = grants.minutes(project, "grant_minutes", 30)
+    ask = grants.minutes(project, "ask_minutes", 5)
     o = orchestrator.current(project) or {}
     who = o.get("name") or session[:8]
     out = {
@@ -715,9 +717,12 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
         "yes": t["grant_yes"].format(minutes=minutes),
         "no": t["grant_no"],
         "header": t["grant_header"],
-        "ask_ms": grants.minutes(project, "ask_minutes", 5) * 60_000,
+        "ask_ms": ask * 60_000,
         "waiting": t["grant_denied_waiting"].format(group=group, owner=project.owner),
-        "notice": t["grant_notice"].format(orchestrator=who, project=project.name, group=group),
+        # the request reaches the panel only at the question's time limit (none with ask_minutes 0)
+        "notice": t["grant_notice" if ask else "grant_notice_chat"].format(
+            orchestrator=who, project=project.name, group=group, ask=ask
+        ),
     }
     if live:
         out["until"] = (grants.live(project, group) or {}).get("until")
