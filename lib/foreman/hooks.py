@@ -245,6 +245,7 @@ def session_entry(project: Project, d: dict[str, Agent], sid: str, ev: Event) ->
         a["transcript"] = ev["transcript_path"]
     if ev.get("hook_event_name") == "PostToolUse":
         a.pop("stopped", None)  # it works again (woken after a stop)
+        a.pop("claude_state", None)
     return True
 
 
@@ -274,6 +275,8 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
             return
         if not res["items"]:
             a.pop("delivery_incomplete", None)
+            if a.get(identity.SESSION_MARK) and not a.get("delivered"):
+                restore_delivery(project, aid, a)
         else:
             n = int(a.get("delivery_blocks") or 0)
             missing = [k for k, _ in res["items"]]
@@ -288,6 +291,24 @@ def delivery_stop(project: Project, f: Path, aid: str, entry: Agent) -> None:
         util.write_json(f, d)
     if block:
         out({"decision": "block", "reason": block})
+
+
+def restore_delivery(project: Project, aid: str, a: Agent) -> None:
+    """A session agent that stops with nothing missing and whose `delivered` a later tool call cleared (anyone can
+    write to its session: «show me the diff» after it delivered): its delivery is still its last, so the entry says
+    `delivered` again, from the record `delivery_stop` found (the `done` line of progress.jsonl), with that time.
+    Held lock: `a` is the entry in the dict the caller writes."""
+    from . import delivery
+
+    x = delivery.progress_done(project, aid, a.get("name"), a.get("blocked_at") or a.get("start"))
+    if not x:
+        return
+    t = str(x.get("time") or "")
+    a["delivered"] = t.replace(" ", "T") + ":00" if len(t) == 16 else time.strftime("%Y-%m-%dT%H:%M:%S")
+    a["outcome"] = x.get("outcome") or "ok"
+    for k in ("report", "kind"):
+        if x.get(k):
+            a[k] = x[k]
 
 
 def agent_event(project: Project, d: dict[str, Agent], aid: str, name: str, ev: Event, now: str) -> None:
@@ -330,6 +351,9 @@ def agent_event(project: Project, d: dict[str, Agent], aid: str, name: str, ev: 
         if a.pop("end", None):  # a resumed agent is running again, until it delivers again
             for k in ("delivered", "outcome", "report", "kind", "delivery_incomplete"):
                 a.pop(k, None)
+            if a.get(identity.SESSION_MARK):  # woken by a new message: the delivery check has its two blocks again
+                for k in ("delivery_blocks", "blocked_at"):
+                    a.pop(k, None)
         # its delivery (delivery.py): outcome (an invalid one was refused by the CLI), report relative to the home
         # (not checked here: the delivery check and the pass do), `--kind measure`
         words = done_words(ev)

@@ -31,7 +31,9 @@ def agents(project: Project) -> dict[str, Agent]:
 
 WAIT_LIMIT = 3 * 3600  # an agent stopped without delivering counts as live this long (the last resort)
 LIVE_STATES = ("working", "waiting")
-SESSION_GONE = ("failed", "stopped")  # `claude agents --json` states of a session that is over and not done
+SESSION_GONE = ("failed", "stopped", "gone")  # a session that is over and not done: its `claude agents --json --all`
+# state (the default list drops a stopped session, `--all` keeps it as `stopped`), or "gone" (no longer listed)
+GONE_GRACE_S = 120  # a session younger than this missing from the list may only be starting
 CLAUDE_TIMEOUT_S = 10
 
 
@@ -87,12 +89,15 @@ def quiet_minutes(project: Project, h: Agent, busy: Collection[str] = (), now: f
 
 
 def claude_rows(timeout: int = CLAUDE_TIMEOUT_S) -> list[dict[str, Any]] | None:
-    """The rows of `claude agents --json`, or None when they cannot be read (no `claude`, an error, not JSON)."""
+    """The rows of `claude agents --json --all` (`claude stop` takes a session off the default list), or None when
+    they cannot be read (no `claude`, an error, not JSON)."""
     exe = shutil.which("claude")
     if not exe:
         return None
     try:
-        r = subprocess.run([exe, "agents", "--json"], capture_output=True, text=True, timeout=timeout, check=False)
+        r = subprocess.run(
+            [exe, "agents", "--json", "--all"], capture_output=True, text=True, timeout=timeout, check=False
+        )
         rows = json.loads(r.stdout)
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
@@ -101,8 +106,9 @@ def claude_rows(timeout: int = CLAUDE_TIMEOUT_S) -> list[dict[str, Any]] | None:
 
 def refresh_sessions(project: Project) -> bool:
     """Crosses the session agents (identity.SESSION_MARK) of agents.json with `claude agents --json`: a session Claude
-    Code lists as failed or stopped is recorded as `claude_state` (agent_state then says `stopped`, unless it
-    delivered); one that is listed otherwise, or woken again, loses it. No session agent, or rows that cannot be read:
+    Code lists as failed or stopped, or no longer lists at all (removed; after a short grace), is recorded as
+    `claude_state` (agent_state then says `stopped`, unless it delivered); one that is listed otherwise loses it.
+    No session agent, or rows that cannot be read:
     nothing is run or changed. Whether it changed an entry. Never raises."""
     try:
         if not any(isinstance(h, dict) and h.get(identity.SESSION_MARK) for h in agents(project).values()):
@@ -115,9 +121,14 @@ def refresh_sessions(project: Project) -> bool:
         f = agents_file(project)
         with util.locked_json(f, {}) as d:
             for sid, h in d.items():
-                if not isinstance(h, dict) or not h.get(identity.SESSION_MARK) or sid not in state:
+                if not isinstance(h, dict) or not h.get(identity.SESSION_MARK):
                     continue
-                st = state[sid]
+                if sid in state:
+                    st = state[sid]
+                elif time.time() - (util.iso_epoch(h.get("start")) or 0) > GONE_GRACE_S:
+                    st = "gone"
+                else:
+                    continue
                 if st in SESSION_GONE and h.get("claude_state") != st:
                     h["claude_state"], changed = st, True
                 elif st not in SESSION_GONE and h.pop("claude_state", None):
@@ -150,6 +161,13 @@ def stop_agent(project: Project, aid: str, errors: list[str] | None = None) -> l
     sessions: list[str] = []
     with util.locked_json(f, {}) as d:
         hits = [k for k in d if k == aid or k.startswith(aid) or d[k].get("name") == aid]
+        exact = [k for k in hits if k == aid or d[k].get("name") == aid]
+        if exact and any(d[k].get(identity.SESSION_MARK) for k in hits):
+            hits = exact  # a session agent is stopped by its id or name, a prefix alone must not pick it
+        if len(hits) > 1 and any(d[k].get(identity.SESSION_MARK) for k in hits):
+            if errors is not None:  # a prefix must not stop several sessions
+                errors.append(f"{aid} matches {len(hits)} agents: give more of the id or the name")
+            return []
         for k in hits:
             d[k]["stopped"] = True
             if d[k].get(identity.SESSION_MARK):

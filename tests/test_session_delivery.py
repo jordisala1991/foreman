@@ -111,6 +111,40 @@ class MainThreadTest(SessionLifecycle):
         self.assertEqual(self.state(), "working")
         self.assertNotIn("stopped", e)
 
+    def test_review_f1_a_delivery_survives_a_later_tool_and_stop(self):
+        """deliver, stop, a tool call (the owner asked «show me the diff»), stop: still delivered, its branch ready."""
+        self.deliver_work()
+        self.bash('foreman --project fake progress --done "all good" --outcome ok --report reviews/2026-11-07-s1.md')
+        self.cli(
+            "--project", "fake", "progress", "--done", "all good", "--outcome", "ok",
+            "--report", "reviews/2026-11-07-s1.md", env={"FOREMAN_WHO": "s1"},
+        )  # fmt: skip
+        self.assertIsNone(self.send("Stop", last_assistant_message="Delivered."))
+        self.assertEqual(self.state(), "delivered")
+        self.bash("git diff")
+        self.assertEqual(self.state(), "working")
+        self.assertIsNone(self.send("Stop", last_assistant_message="Here is the diff."))
+        e = self.entry()
+        self.assertEqual((self.state(), e["outcome"]), ("delivered", "ok"))
+        self.assertEqual(e["report"], "reviews/2026-11-07-s1.md")
+        self.assertNotIn(SID, [h["id"] for h in loop.live_agents(self.project)])
+
+    def test_review_f4_a_new_message_gives_the_delivery_check_its_blocks_again(self):
+        for _ in range(2):
+            self.assertEqual(self.send("Stop", last_assistant_message="x")["decision"], "block")
+        self.assertIsNone(self.send("Stop", last_assistant_message="x"))  # let go, incomplete
+        self.bash("git status")  # woken by a message
+        self.assertNotIn("delivery_blocks", self.entry())
+        self.assertEqual(self.send("Stop", last_assistant_message="x")["decision"], "block")
+
+    def test_review_f3_waking_clears_claude_state(self):
+        agents = agents_mod.agents(self.project)
+        agents[SID]["claude_state"] = "stopped"
+        util.write_json(self.project.state / "agents.json", agents)
+        self.assertEqual(self.state(), "stopped")
+        self.bash("git status")
+        self.assertEqual(self.state(), "working")
+
     def test_subagent_events_of_a_session_agent_are_not_agents(self):
         """Claude Code's compaction runs internal subagents with the session's agent type: no entry, no check."""
         for name in ("SubagentStart", "SubagentStop", "PostToolUse"):
@@ -215,6 +249,32 @@ class CrossCheckTest(SessionLifecycle):
         self.assertTrue(self.refresh("stopped"))
         self.assertEqual(self.state(), "stopped")
 
+    def test_review_f2_a_session_missing_from_the_list_is_gone_after_the_grace(self):
+        """Live (Claude Code 2.1.317): `claude stop` and `claude rm` take a session off the default list; `--all`
+        keeps a stopped one as `stopped` and drops a removed one; a killed process is respawned by the supervisor."""
+        f = self.bin / "claude"
+        f.write_text('#!/bin/sh\necho \'[{"sessionId":"other","state":"working"}]\'\n')
+        f.chmod(0o755)
+        old = os.environ["PATH"]
+        os.environ["PATH"] = self.path()["PATH"]
+        try:
+            self.assertFalse(agents_mod.refresh_sessions(self.project))  # just started: it may not be listed yet
+            self.assertEqual(self.state(), "working")
+            agents = agents_mod.agents(self.project)
+            agents[SID]["start"] = "2026-11-07T00:00:00"
+            util.write_json(self.project.state / "agents.json", agents)
+            self.assertTrue(agents_mod.refresh_sessions(self.project))
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual((self.entry()["claude_state"], self.state()), ("gone", "stopped"))
+
+    def test_the_rows_asked_for_are_the_whole_list(self):
+        self.rows("working")
+        f = self.bin / "claude"
+        f.write_text(f.read_text().replace("echo '", f'echo "$@" > "{self.log}.args"; echo \'', 1))
+        self.cli("agents", env=self.path())
+        self.assertEqual((self.log.with_name("claude.args.args")).read_text().split(), ["agents", "--json", "--all"])
+
     def test_a_delivered_agent_stays_delivered(self):
         self.bash('foreman --project fake progress --done "x"')
         self.refresh("stopped")
@@ -254,6 +314,16 @@ class StopCommandTest(SessionLifecycle):
         self.assertEqual(r.returncode, 1)
         self.assertIn("claude stop failed", r.stderr)
         self.assertEqual(self.state(), "stopped")
+
+    def test_review_f5_a_prefix_of_several_sessions_stops_none(self):
+        agents = agents_mod.agents(self.project)
+        agents["8e28aaaa-other"] = {**agents[SID], "name": "s2"}
+        util.write_json(self.project.state / "agents.json", agents)
+        r = self.cli("agents", "--stop", "8e28", env={"PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}"})
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("matches 2 agents", r.stderr)
+        self.assertNotIn("stopped", self.entry())
+        self.assertFalse(self.log.with_name("claude.args").read_text().startswith("stop"))
 
     def test_a_subagent_is_only_marked(self):
         util.write_json(self.project.state / "agents.json", {"a9": {"start": "2026-11-07T10:00:00", "name": "x"}})
