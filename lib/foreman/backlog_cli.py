@@ -7,7 +7,7 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
-from . import backlog_list, backlog_text, util
+from . import backlog_list, backlog_text, issue_docs, util
 from .backlog import CLOSED, UNDO, Backlog, BacklogError, DecisionResolved
 
 if TYPE_CHECKING:
@@ -94,9 +94,21 @@ def show_one(b: Backlog, data: Data, key: str, as_json: bool = False) -> str:
     if i["plan"]:
         out.append("plan: " + " · ".join(p["path"] + (f" {p['note']}" if p["note"] else "") for p in i["plan"]))
     out += [f"  {backlog_text.render_sub(b, s)}" for s in i["subs"]]
+    docs = issue_docs.lines(documents_of(b, data, i))
+    if docs:
+        out += ["documents:", *docs]
     if i["detail"]:
         out.append(f"detail: {i['detail']}")
     return "\n".join(out)
+
+
+def documents_of(b: Backlog, data: Data, i: Issue) -> list[dict[str, Any]]:
+    """The documents of issue `i` that exist (issue_docs), as the panel's card lists them."""
+    from . import panel_cards  # a `show` of an issue with documents only
+
+    p = b.project
+    ix = panel_cards.doc_index(p)
+    return issue_docs.issue_docs(p, data, i, issue_docs.review_files(p), lambda t: panel_cards.doc_ref(p, t, ix))
 
 
 def add_from_args(b: Backlog, data: Data, args: argparse.Namespace) -> str:

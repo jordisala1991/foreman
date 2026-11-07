@@ -82,6 +82,9 @@ relations: blocks HB-2
 plan: reviews/2020-01-10-plan-HB-1.md
   T1 Form ✓ abc1234 agent ag1, branch `a1/t1` report reviews/2020-01-12-hb1-t1.md
   T2 Form tests ✓ def5678
+documents:
+  plan: reviews/2020-01-10-plan-HB-1.md
+  report T1: reviews/2020-01-12-hb1-t1.md
 detail: A note appended to the detail.
 $ foreman --project harbor backlog show A1
 [exit 0]
@@ -444,6 +447,9 @@ relations: blocks HB-2
 plan: reviews/2020-01-10-plan-HB-1.md
   T1 Form ✓ abc1234 agent ag1, branch `a1/t1` report reviews/2020-01-12-hb1-t1.md
   T2 Form tests ✓ def5678
+documents:
+  plan: reviews/2020-01-10-plan-HB-1.md
+  report T1: reviews/2020-01-12-hb1-t1.md
 detail: A note appended to the detail.
 $ foreman --project harbor backlog show HB-1 --json
 [exit 0]

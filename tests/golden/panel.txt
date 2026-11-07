@@ -136,6 +136,8 @@ $ GET /api/strings?lang=es
   "branch": "Rama",
   "branch_of": "Rama de {repo}",
   "branches": "Ramas",
+  "broken_count_1": "{n} no carga",
+  "broken_count_n": "{n} no cargan",
   "busy_cut": "(cortado)",
   "busy_error": "no se pudo saber quién lo usa: la comprobación falló",
   "busy_more": "+{n} líneas más (en el detalle)",
@@ -211,7 +213,14 @@ $ GET /api/strings?lang=es
   "derived": "(de sus issues)",
   "description": "Descripción",
   "disk_free": "libres en disco de {gb}",
+  "doc_cited": "Citado",
+  "doc_decision": "Pregunta {id}",
   "doc_failed": "No se pudo cargar {path}",
+  "doc_open": "{n} abiertos",
+  "doc_plan": "Plan",
+  "doc_report": "Informe {sub}",
+  "doc_review": "Revisión {sub} · ronda {round}",
+  "documents": "Documentos",
   "done_lc": "hecho",
   "draft": "borrador",
   "drag": "Arrastrar para reordenar",
@@ -260,6 +269,7 @@ $ GET /api/strings?lang=es
   "hint_projects": "Arrastra ⋮⋮ para cambiar la prioridad. Toca un proyecto para ver sus issues.",
   "hits_1": "{n} vez",
   "hits_n": "{n} veces",
+  "home_title": "Productos",
   "hypothesis": "Hipótesis",
   "in_main_today": "En main hoy · {repo}",
   "inactive": "Inactivo",
@@ -312,6 +322,14 @@ $ GET /api/strings?lang=es
   "n_queued": "{n} en cola",
   "n_ready": "{n} por empezar",
   "n_running": "{n} en marcha",
+  "need_grants_1": "{n} permiso por aprobar",
+  "need_grants_n": "{n} permisos por aprobar",
+  "need_inactive": "inactivo",
+  "need_no_orch": "sin orquestador",
+  "need_none": "nada te necesita",
+  "need_paused": "en pausa",
+  "need_questions_1": "{n} pregunta",
+  "need_questions_n": "{n} preguntas",
   "needs_attention": "Te necesita",
   "needs_you": "Te necesito para decidir",
   "never": "nunca",
@@ -414,7 +432,6 @@ $ GET /api/strings?lang=es
   "release": "Soltar",
   "repo_missing": "No encuentro el repositorio {key}.",
   "report": "Informe del orquestador",
-  "reports": "Informes",
   "resource": "Recurso",
   "resources": "Recursos",
   "result": "Resultado",
@@ -434,6 +451,17 @@ $ GET /api/strings?lang=es
   "slots": "Huecos",
   "sources": "Fuentes",
   "status": "Estado",
+  "stopped_1": "1 producto parado",
+  "stopped_down": "Parado: el orquestador no responde",
+  "stopped_down_do": "Abre una sesión de Claude Code en el producto y pídele que sea el orquestador; hasta entonces nadie lanza agentes.",
+  "stopped_inactive": "Parado: no ha empezado",
+  "stopped_inactive_do": "El producto está inactivo: no hay nada que hacer hasta que lo actives.",
+  "stopped_n": "{n} productos parados",
+  "stopped_none": "Parado: no ha empezado",
+  "stopped_none_do": "Abre una sesión de Claude Code en el producto y pídele que sea el orquestador.",
+  "stopped_none_text": "Sin orquestador: nadie lanza agentes. Abre una sesión de Claude Code en el producto y pídele que sea el orquestador.",
+  "stopped_paused": "Parado: está en pausa",
+  "stopped_paused_do": "Pulsa «Reanudar» en «Te necesita» para que el bucle vuelva a lanzar agentes.",
   "stuck": "{name}: sin actividad hace {dur}",
   "sub_status": {
     "doing": "en marcha",
@@ -555,6 +583,8 @@ $ GET /api/strings?lang=en
   "branch": "Branch",
   "branch_of": "Branch of {repo}",
   "branches": "Branches",
+  "broken_count_1": "{n} fails to load",
+  "broken_count_n": "{n} fail to load",
   "busy_cut": "(cut)",
   "busy_error": "could not tell who uses it: the check failed",
   "busy_more": "+{n} more lines (in the detail)",
@@ -630,7 +660,14 @@ $ GET /api/strings?lang=en
   "derived": "(from its issues)",
   "description": "Description",
   "disk_free": "free on disk of {gb}",
+  "doc_cited": "Cited",
+  "doc_decision": "Question {id}",
   "doc_failed": "Could not load {path}",
+  "doc_open": "{n} open",
+  "doc_plan": "Plan",
+  "doc_report": "Report {sub}",
+  "doc_review": "Review {sub} · round {round}",
+  "documents": "Documents",
   "done_lc": "done",
   "draft": "draft",
   "drag": "Drag to reorder",
@@ -679,6 +716,7 @@ $ GET /api/strings?lang=en
   "hint_projects": "Drag ⋮⋮ to change the priority. Tap a project to see its issues.",
   "hits_1": "{n} hit",
   "hits_n": "{n} hits",
+  "home_title": "Products",
   "hypothesis": "Hypothesis",
   "in_main_today": "In main today · {repo}",
   "inactive": "Inactive",
@@ -731,6 +769,14 @@ $ GET /api/strings?lang=en
   "n_queued": "{n} queued",
   "n_ready": "{n} ready to start",
   "n_running": "{n} running",
+  "need_grants_1": "{n} permission to approve",
+  "need_grants_n": "{n} permissions to approve",
+  "need_inactive": "inactive",
+  "need_no_orch": "no orchestrator",
+  "need_none": "nothing needs you",
+  "need_paused": "paused",
+  "need_questions_1": "{n} question",
+  "need_questions_n": "{n} questions",
   "needs_attention": "Needs you",
   "needs_you": "I need you to decide",
   "never": "never",
@@ -833,7 +879,6 @@ $ GET /api/strings?lang=en
   "release": "Release",
   "repo_missing": "Repository {key} not found.",
   "report": "Orchestrator's report",
-  "reports": "Reports",
   "resource": "Resource",
   "resources": "Resources",
   "result": "Result",
@@ -853,6 +898,17 @@ $ GET /api/strings?lang=en
   "slots": "Slots",
   "sources": "Sources",
   "status": "Status",
+  "stopped_1": "1 product stopped",
+  "stopped_down": "Stopped: the orchestrator does not answer",
+  "stopped_down_do": "Open a Claude Code session in the product and ask it to be the orchestrator; until then nobody launches agents.",
+  "stopped_inactive": "Stopped: not started",
+  "stopped_inactive_do": "The product is inactive: nothing to do until you activate it.",
+  "stopped_n": "{n} products stopped",
+  "stopped_none": "Stopped: not started",
+  "stopped_none_do": "Open a Claude Code session in the product and ask it to be the orchestrator.",
+  "stopped_none_text": "No orchestrator: nobody launches agents. Open a Claude Code session in the product and ask it to be the orchestrator.",
+  "stopped_paused": "Stopped: paused",
+  "stopped_paused_do": "Press «Resume» under «Needs you» so the loop launches agents again.",
   "stuck": "{name}: no activity for {dur}",
   "sub_status": {
     "doing": "running",
@@ -1103,6 +1159,7 @@ $ GET /api/backlog?p=faro
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "FA-3",
               "outcome": {
                 "criterion": "un aviso llega en un minuto"
@@ -1122,6 +1179,7 @@ $ GET /api/backlog?p=faro
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "FA-2",
               "outcome": {
                 "criterion": "cada faro sale en el mapa"
@@ -1152,6 +1210,7 @@ $ GET /api/backlog?p=faro
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "FA-4",
               "outcome": {
                 "criterion": "notas ordenadas"
@@ -1343,6 +1402,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-3",
               "outcome": {
                 "criterion": "the feed updates hourly"
@@ -1362,6 +1422,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-2",
               "outcome": {
                 "criterion": "a card payment goes through"
@@ -1384,6 +1445,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-5",
               "plan": [],
               "project": "A1",
@@ -1403,6 +1465,7 @@ $ GET /api/backlog?p=harbor
             {
               "blocked": "",
               "detail": "",
+              "docs": [],
               "id": "HB-4",
               "outcome": {
                 "criterion": "notes tidy"
@@ -1693,6 +1756,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-3",
                 "outcome": {
                   "criterion": "un aviso llega en un minuto"
@@ -1712,6 +1776,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-2",
                 "outcome": {
                   "criterion": "cada faro sale en el mapa"
@@ -1742,6 +1807,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-4",
                 "outcome": {
                   "criterion": "notas ordenadas"
@@ -1805,6 +1871,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-3",
                 "outcome": {
                   "criterion": "the feed updates hourly"
@@ -1824,6 +1891,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-2",
                 "outcome": {
                   "criterion": "a card payment goes through"
@@ -1846,6 +1914,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-5",
                 "plan": [],
                 "project": "A1",
@@ -1865,6 +1934,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-4",
                 "outcome": {
                   "criterion": "notes tidy"
@@ -1905,6 +1975,7 @@ $ GET /api/issue?p=faro&id=FA-2
   "issue": {
     "blocked": "",
     "detail": "",
+    "docs": [],
     "id": "FA-2",
     "outcome": {
       "criterion": "cada faro sale en el mapa"
@@ -1935,6 +2006,17 @@ $ GET /api/issue?p=faro&id=FA-1
     "blocked": "",
     "closed": "<TODAY>",
     "detail": "Nota añadida al detalle.",
+    "docs": [
+      {
+        "doc": "reviews/2020-01-10-plan-FA-1.md",
+        "kind": "plan"
+      },
+      {
+        "doc": "reviews/2020-01-12-fa1-t1.md",
+        "kind": "report",
+        "sub": "T1"
+      }
+    ],
     "id": "FA-1",
     "outcome": {
       "criterion": "las cartas se leen en menos de un segundo",
@@ -2774,6 +2856,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-2",
                 "outcome": {
                   "criterion": "cada faro sale en el mapa"
@@ -2796,6 +2879,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-3",
                 "outcome": {
                   "criterion": "un aviso llega en un minuto"
@@ -2823,6 +2907,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "FA-4",
                 "outcome": {
                   "criterion": "notas ordenadas"
@@ -2886,6 +2971,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-4",
                 "outcome": {
                   "criterion": "notes tidy"
@@ -2908,6 +2994,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-3",
                 "outcome": {
                   "criterion": "the feed updates hourly"
@@ -2927,6 +3014,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-2",
                 "outcome": {
                   "criterion": "a card payment goes through"
@@ -2949,6 +3037,7 @@ $ GET /api/backlog?p=*
               {
                 "blocked": "",
                 "detail": "",
+                "docs": [],
                 "id": "HB-5",
                 "plan": [],
                 "project": "A1",
