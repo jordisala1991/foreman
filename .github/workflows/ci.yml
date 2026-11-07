@@ -36,6 +36,16 @@ jobs:
         with:
           node-version: "22"
 
+      # The new panel's built files (panel/next/) must be what its source (panel/next-src/) builds: build them again
+      # at the lockfile's versions and fail on any difference. The selftest checks the same without node, against
+      # the sha256 that panel/next/BUILD records.
+      - name: Build the new panel and compare
+        run: |
+          npm ci --prefix panel/next-src --no-audit --no-fund
+          npm run build --prefix panel/next-src
+          git diff --exit-code -- panel/next
+          test -z "$(git status --porcelain -- panel/next)"
+
       # ruff, pyright and coverage at the versions of pyproject.toml [dependency-groups] dev (pip 25.1+ reads it).
       # Without uv, quality.py takes the tool on the PATH at the pinned version. The first `pyright --version`
       # fetches pyright's own package, so that happens here and not inside the selftest.

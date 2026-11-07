@@ -105,15 +105,14 @@ IMAGES = {
     ".gif": ("image/gif", lambda b: b[:6] in (b"GIF87a", b"GIF89a")),
     ".webp": ("image/webp", lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"),
 }
-# the new panel's files (/next/<file>): the files under panel/next/ with one of these extensions, and nothing else
-# (index.html is served at /next/ only, filled in). Never SVG (see IMAGES) nor anything outside panel/next/
+# the new panel's files (/next/<file>): the files under panel/next/ (built from panel/next-src) with one of these
+# extensions, and nothing else (index.html is served at /next/ only, filled in; BUILD and LICENSES.txt never). Never
+# SVG (see IMAGES) nor anything outside panel/next/
 NEXT_TYPES = {
     ".js": "text/javascript; charset=utf-8",
-    ".mjs": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
 }
-NEXT_URL = re.compile(r"\{\{U ([\w./-]+)\}\}")  # {{U vendor/preact.mjs}} in panel/next/index.html
+NEXT_URL = re.compile(r"\{\{U ([\w./-]+)\}\}")  # {{U app.js}} in panel/next/index.html
 
 
 def next_files() -> dict[str, str]:
@@ -132,7 +131,7 @@ def next_files() -> dict[str, str]:
 
 def next_index(token: str) -> str:
     """panel/next/index.html with {{LANG}} and each {{U path}} filled in: the URL of an allowed file with the page's
-    version and key (the import map too, so a module's imports carry them)."""
+    version and key."""
     v, files = next_version(), next_files()
 
     def url(m: re.Match[str]) -> str:

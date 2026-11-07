@@ -9,27 +9,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>foreman</title>
-<!-- Everything comes from this server, with the page's version and key: the server fills in each file's URL below
-     and refuses a file that is not in panel/next/. No fonts, no CDN: the panel works without the network. -->
+<!-- The page of the new panel, copied by the build of panel/next-src (npm run build): the server fills in the
+     language and each file's URL with its version and the panel's key, and serves only the files under panel/next/.
+     No fonts, no CDN: the panel works without the network. -->
 <link rel="stylesheet" href="{{U app.css}}">
-<script type="importmap">
-{"imports": {
-  "preact": "{{U vendor/preact.mjs}}",
-  "preact/hooks": "{{U vendor/hooks.mjs}}",
-  "htm": "{{U vendor/htm.mjs}}",
-  "next/lib.js": "{{U lib.js}}",
-  "next/g1.js": "{{U g1.js}}",
-  "next/how.js": "{{U how.js}}",
-  "next/app.js": "{{U app.js}}"
-}}
-</script>
-<script src="{{U vendor/chart.umd.min.js}}" defer></script>
+<script type="module" src="{{U app.js}}"></script>
 </head>
 <body>
 <div id="app"></div>
-<script type="module">
-import { mount } from "next/app.js";
-mount(document.getElementById("app"));
-</script>
 </body>
 </html>

@@ -1,32 +1,33 @@
 // node tests/next_dom.mjs PANEL_NEXT_DIR SCENARIO.json
-// Mounts the new panel (panel/next/app.js, with the import map of its index.html pointed at the files on disk) over
-// a minimal DOM, with fetch answered from the scenario ({hash, answers: {path without the key: JSON}, click: text of
-// a button to press once mounted}) and from the files of PANEL_NEXT_DIR for /next/…, and Chart.js replaced by a
-// recorder. Prints one line of JSON: the text, the tabs and their badges, the products of the picker, the charts'
-// configurations (their callbacks run once, so a broken one fails here) and the API paths fetched.
+// Mounts the built new panel (PANEL_NEXT_DIR/app.js, one ES module with React inside: no node_modules needed) over a
+// minimal DOM, with fetch answered from the scenario ({hash, width, answers: {path without the key: JSON}, hang:
+// [paths that never answer], click: text of a button to press once mounted, tap: a day whose chart column to tap}).
+// Prints one line of JSON: the text, the tabs and their badges, the sidebar, the products of the picker, the status
+// pill, each chart as drawn (columns with their segments, labels, legend, figure) and the API paths fetched.
 import fs from "node:fs";
 import path from "node:path";
-import { register } from "node:module";
 import { pathToFileURL } from "node:url";
 
 const [dir, scenarioPath] = process.argv.slice(2);
 const scenario = JSON.parse(fs.readFileSync(scenarioPath, "utf8"));
 
-class Style {
-  setProperty(k, v) { this[k] = v; }
-  removeProperty(k) { delete this[k]; }
-}
 class Node {
   constructor(type, name, ns) {
-    Object.assign(this, { nodeType: type, nodeName: name, localName: name, namespaceURI: ns || null });
-    Object.assign(this, { childNodes: [], parentNode: null, attributes: {}, style: new Style(), dataset: {}, _on: {} });
+    Object.assign(this, { nodeType: type, nodeName: name.toUpperCase(), localName: name, tagName: name.toUpperCase() });
+    Object.assign(this, { namespaceURI: ns || "http://www.w3.org/1999/xhtml", childNodes: [], parentNode: null });
+    Object.assign(this, { attributes: {}, style: {}, _on: [] });
   }
   get ownerDocument() { return document; }
+  get parentElement() { return this.parentNode && this.parentNode.nodeType === 1 ? this.parentNode : null; }
   get firstChild() { return this.childNodes[0] || null; }
   get lastChild() { return this.childNodes[this.childNodes.length - 1] || null; }
   get nextSibling() { const s = this.parentNode && this.parentNode.childNodes; return s ? s[s.indexOf(this) + 1] || null : null; }
   get previousSibling() { const s = this.parentNode && this.parentNode.childNodes; return s ? s[s.indexOf(this) - 1] || null : null; }
   get children() { return this.childNodes.filter((c) => c.nodeType === 1); }
+  get options() { return all(this, (n) => n.localName === "option"); }
+  get clientWidth() { return this.attributes.class === "plot" ? scenario.width || 0 : 0; }
+  get nodeValue() { return this.nodeType === 1 ? null : this.data; }
+  set nodeValue(v) { this.data = String(v); }
   appendChild(c) { return this.insertBefore(c, null); }
   insertBefore(c, ref) {
     if (c.parentNode) c.parentNode.removeChild(c);
@@ -39,111 +40,132 @@ class Node {
   remove() { if (this.parentNode) this.parentNode.removeChild(this); }
   contains(n) { for (; n; n = n.parentNode) if (n === this) return true; return false; }
   setAttribute(k, v) { this.attributes[k] = String(v); }
+  setAttributeNS(_ns, k, v) { this.attributes[k] = String(v); }
   getAttribute(k) { return k in this.attributes ? this.attributes[k] : null; }
   removeAttribute(k) { delete this.attributes[k]; }
   hasAttribute(k) { return k in this.attributes; }
-  addEventListener(t, f) { (this._on[t] = this._on[t] || []).push(f); }
-  removeEventListener(t, f) { this._on[t] = (this._on[t] || []).filter((g) => g !== f); }
-  dispatch(type) {
-    const e = { type, target: this, currentTarget: this, preventDefault() {}, stopPropagation() {} };
-    (this._on[type] || []).forEach((f) => f.call(this, e));
+  addEventListener(type, f, o) { this._on.push({ type, f, capture: o === true || !!(o && o.capture) }); }
+  removeEventListener(type, f) { this._on = this._on.filter((l) => l.type !== type || l.f !== f); }
+  focus() {}
+  blur() {}
+  // a click as the browser sends it: capture from the top down, then bubbling up from the target
+  click() {
+    const path = [];
+    for (let n = this; n; n = n.parentNode) path.push(n);
+    let stopped = false;
+    const e = {
+      type: "click", target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
+      button: 0, detail: 1, isTrusted: true, preventDefault() { this.defaultPrevented = true; },
+      stopPropagation() { stopped = true; },
+    };
+    const run = (n, capture) => n._on.filter((l) => l.type === "click" && l.capture === capture).forEach((l) => {
+      e.currentTarget = n;
+      l.f.call(n, e);
+    });
+    for (const n of [...path].reverse()) { if (stopped) return; run(n, true); }
+    for (const n of path) { if (stopped) return; run(n, false); }
   }
-  get textContent() { return this.nodeType === 3 ? this.data : this.childNodes.map((c) => c.textContent).join(""); }
-  set textContent(v) { this.childNodes = []; if (v !== "" && v != null) this.appendChild(document.createTextNode(String(v))); }
+  get textContent() { return this.nodeType === 1 ? this.childNodes.map((c) => c.textContent).join("") : this.data; }
+  set textContent(v) {
+    if (this.nodeType !== 1) { this.data = String(v); return; }
+    this.childNodes.forEach((c) => { c.parentNode = null; });
+    this.childNodes = [];
+    if (v !== "" && v != null) this.appendChild(document.createTextNode(String(v)));
+  }
 }
 const all = (n, ok, out = []) => { if (ok(n)) out.push(n); n.childNodes.forEach((c) => all(c, ok, out)); return out; };
 const words = (n) => (n.nodeType === 3 ? String(n.data) : n.childNodes.map(words).join(" ")).replace(/\s+/g, " ").trim();
 const cls = (n, c) => (n.attributes.class || "").split(" ").includes(c);
+const one = (root, ok) => all(root, ok)[0] || null;
 
 const html = new Node(1, "html");
-html.lang = "es";
+html.lang = scenario.lang || "es";
 const body = html.appendChild(new Node(1, "body"));
+const app = body.appendChild(new Node(1, "div"));
+app.attributes.id = "app";
 const document = {
-  documentElement: html, body, title: "",
+  nodeType: 9, documentElement: html, body, title: "", activeElement: body,
+  defaultView: null,
   createElement: (n) => new Node(1, n),
   createElementNS: (ns, n) => new Node(1, n, ns),
-  createTextNode: (s) => Object.assign(new Node(3, "#text"), { data: s }),
-  createComment: (s) => Object.assign(new Node(8, "#comment"), { data: s }),
+  createTextNode: (s) => Object.assign(new Node(3, "#text"), { data: String(s) }),
+  createComment: (s) => Object.assign(new Node(8, "#comment"), { data: String(s) }),
+  getElementById: (id) => one(html, (n) => n.attributes.id === id),
+  addEventListener() {}, removeEventListener() {},
 };
 const store = {};
-const on = {};
-const charts = [];
-const ticks = [];
 const fetched = [];
+class HTMLIFrameElement {}
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
+});
 Object.assign(globalThis, {
-  document, window: globalThis,
+  document, window: globalThis, HTMLIFrameElement,
   location: { search: "?t=k3y", hash: scenario.hash || "" },
-  localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
-  matchMedia: () => ({ matches: false, addEventListener() {} }),
-  addEventListener: (t, f) => { on[t] = f; }, removeEventListener() {},
-  requestAnimationFrame: (f) => setTimeout(f, 0), cancelAnimationFrame: clearTimeout,
-  Chart: scenario.noChart ? undefined : class { constructor(canvas, cfg) { charts.push(cfg); } destroy() {} },
+  addEventListener() {}, removeEventListener() {},
   fetch: async (url) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
-    let body;
-    if (p.startsWith("/next/")) body = JSON.parse(fs.readFileSync(path.join(dir, p.slice(6)), "utf8"));
-    else {
-      fetched.push(p);
-      if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
-      body = scenario.answers[p];
-    }
+    fetched.push(p);
+    if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
+    const body = scenario.answers[p];
     return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
   },
 });
+document.defaultView = globalThis;
 
-// the import map of index.html, each {{U file}} pointed at the file on disk
-const index = fs.readFileSync(path.join(dir, "index.html"), "utf8");
-const raw = /<script type="importmap">([\s\S]*?)<\/script>/.exec(index)[1];
-const map = JSON.parse(raw.replace(/\{\{U ([\w./-]+)\}\}/g, (m, f) => pathToFileURL(path.join(dir, f)).href)).imports;
-const hooks = `let M; export async function initialize(d) { M = d; }
-export async function resolve(s, c, next) { return s in M ? { url: M[s], shortCircuit: true } : next(s, c); }`;
-register("data:text/javascript," + encodeURIComponent(hooks), { data: map });
-
-const settle = () => new Promise((r) => setTimeout(r, 60));
-const { mount } = await import(map["next/app.js"]);
-const root = body.appendChild(new Node(1, "div"));
-await mount(root);
-for (let i = 0; i < 5; i++) await settle();
+const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5)); };
+const errors = [];
+const origError = console.error;
+console.error = (...a) => { errors.push(a.map(String).join(" ")); };
+await import(pathToFileURL(path.join(dir, "app.js")).href);
+await settle();
 if (scenario.click) {
-  const b = all(root, (n) => n.localName === "button" && words(n) === scenario.click)[0];
+  const b = one(app, (n) => n.localName === "button" && words(n) === scenario.click);
   if (!b) throw new Error("no button " + scenario.click);
-  b.dispatch("click");
-  for (let i = 0; i < 5; i++) await settle();
+  b.click();
+  await settle();
 }
-
-// run each callback of a chart's configuration once, as Chart.js would
-function exercise(cfg) {
-  const n = cfg.data.labels.length;
-  const o = cfg.options;
-  for (let i = 0; i < n; i++) {
-    cfg.data.datasets.forEach((d) => typeof d.borderRadius === "function" && d.borderRadius({ dataIndex: i }));
-    o.scales.x.ticks.color({ index: i });
-    o.scales.x.ticks.font({ index: i });
-    const items = [{ dataIndex: i, dataset: cfg.data.datasets[0], parsed: { y: cfg.data.datasets[0].data[i] } }];
-    o.plugins.tooltip.callbacks.title(items);
-    o.plugins.tooltip.callbacks.footer(items);
-    if (items[0].parsed.y) o.plugins.tooltip.callbacks.label(items[0]);
-    o.plugins.tooltip.filter(items[0]);
-  }
-  o.scales.y.ticks.callback(10);
-  // the x labels as Chart.js would ask for them on a narrow and on a wide chart
-  const at = (w) => cfg.data.labels.map((_, i) => o.scales.x.ticks.callback.call({ chart: { width: w } }, i, i));
-  ticks.push({ narrow: at(390), wide: at(1000) });
+if (scenario.tap) {
+  const g = one(app, (n) => n.localName === "g" && n.attributes["data-day"] === scenario.tap);
+  if (!g) throw new Error("no column " + scenario.tap);
+  one(g, (n) => cls(n, "hit")).click();
+  await settle();
 }
-charts.forEach(exercise);
+console.error = origError;
 
-const tab = (k) => all(root, (n) => n.localName === "a" && cls(n, "tab") && n.attributes.href === "#/" + k)[0];
-const badge = (k) => { const b = all(tab(k), (n) => cls(n, "badge"))[0]; return b ? words(b) : null; };
-const bar = all(root, (n) => n.localName === "a" && cls(n, "tab"));
-console.log(JSON.stringify({
-  text: words(root),
-  tabs: bar.map(words),
-  badges: bar.length ? { needs: badge("needs"), agents: badge("agents") } : {},
-  products: [...new Set(all(root, (n) => n.localName === "option").map(words))],
-  charts: charts.map((c) => ({
-    type: c.type, labels: c.data.labels, stacked: c.options.scales.x.stacked,
-    datasets: c.data.datasets.map((d) => ({ label: d.label, data: d.data })),
+const chart = (c) => ({
+  name: c.attributes["data-chart"],
+  title: words(one(c, (n) => n.localName === "h2")),
+  figure: words(one(c, (n) => cls(n, "figure"))),
+  legend: all(c, (n) => n.parentNode && cls(n.parentNode, "legend")).map(words),
+  ylabels: all(c, (n) => cls(n, "ylabel")).map(words),
+  xlabels: one(c, (n) => cls(n, "xlabels")).children.map(words),
+  today: words(one(c, (n) => cls(n, "today")) || { nodeType: 3, data: "" }),
+  aria: one(c, (n) => cls(n, "plot")).attributes["aria-label"],
+  tip: words(one(c, (n) => cls(n, "tip")) || { nodeType: 3, data: "" }),
+  columns: all(c, (n) => n.localName === "g" && "data-day" in n.attributes).map((g) => ({
+    day: g.attributes["data-day"],
+    kind: g.attributes["data-kind"],
+    top: words(one(g, (n) => n.localName === "text") || { nodeType: 3, data: "" }),
+    segs: all(g, (n) => "data-family" in n.attributes).map((s) => [s.attributes["data-family"], Number(s.attributes["data-usd"])]),
   })),
-  ticks,
+});
+const bar = all(app, (n) => n.localName === "a" && cls(n, "tab"));
+const tab = (k) => bar.find((n) => n.attributes.href === "#/" + k);
+const badge = (k) => { const b = tab(k) && one(tab(k), (n) => cls(n, "badge")); return b ? words(b) : null; };
+const side = one(app, (n) => cls(n, "side"));
+console.log(JSON.stringify({
+  text: words(app),
+  tabs: bar.map(words),
+  current: bar.filter((n) => n.attributes["aria-current"] === "page").map(words),
+  badges: bar.length ? { needs: badge("needs"), agents: badge("agents") } : {},
+  badgeColours: bar.length ? { needs: one(tab("needs"), (n) => cls(n, "badge"))?.attributes.class, agents: one(tab("agents"), (n) => cls(n, "badge"))?.attributes.class } : {},
+  side: side ? { nav: all(side, (n) => cls(n, "nav")).map(words), group: words(one(side, (n) => cls(n, "group"))) } : null,
+  products: [...new Set(all(app, (n) => n.localName === "option").map(words))],
+  pills: all(app, (n) => cls(n, "pill")).map((n) => [n.attributes.class, words(n)]),
+  buttons: all(app, (n) => n.localName === "button").map(words),
+  charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
   fetched,
+  errors,
 }));

@@ -325,6 +325,27 @@ higher version on main or a session still loading it in place (a root with `.git
 run unpublished code. To try panel changes, run `bin/foreman panel --port <another port>` from the working tree,
 without `--follow-installed`.
 
+### Building the new panel
+
+The new panel (`/next/`, docs/internals.md) is a React and TypeScript app in `panel/next-src/`, built with Vite into
+`panel/next/`. The built files are committed: the plugin is the repository, so whoever installs foreman needs only
+Python, Claude Code and a browser, never Node. Changing the panel needs Node 22 or later and the network once:
+
+```sh
+cd panel/next-src
+npm ci              # the exact versions of package-lock.json, into node_modules/ (ignored by git)
+npm run build       # type-check (strict), then write panel/next/: index.html, app.js, app.css, LICENSES.txt, BUILD
+npm run watch       # rebuild on each change, while trying it on a panel of your own (below)
+```
+
+Commit the source and `panel/next/` together. `panel/next/BUILD` holds the sha256 of every source file and of every
+built file: the selftest (`test_panel_next`) fails when a source changed without a build or a built file was changed
+by hand, without needing Node, and the CI builds again at the lockfile's versions and fails on any difference. The
+built files are marked generated in `.gitattributes`, so pull requests fold them. To add a package, pin its exact
+version (`npm install --save-exact`), keep the panel under 150 KB gzipped (a test checks it) and check that its
+licence lands in `LICENSES.txt`. With Node installed, the selftest also mounts the built `app.js` in a minimal DOM
+(`tests/next_dom.mjs`); without it, those tests are skipped.
+
 ### Trying the working tree
 
 `claude --plugin-dir /path/to/your/clone` in a separate session loads the working tree for that session only,

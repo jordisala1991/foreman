@@ -497,14 +497,16 @@ worktree = "{{worktrees}}/{{repo}}-{{name}}"
     def published_files(self, root=ROOT):
         """Every file the public repo carries, under `root` (the working tree, or an exported snapshot): all but what
         the snapshot leaves out (snapshot.EXCLUDED: ops/, the project's own home, and tests/live/), caches, hidden
-        folders and a worktree's .git file (.claude-plugin: its manifests name the author), this file (it holds the
-        patterns) and LICENSE."""
+        folders and a worktree's .git file (.claude-plugin: its manifests name the author), the packages npm installs
+        to build the new panel (panel/next-src/node_modules/, ignored by git; what is bundled from them, panel/next/,
+        is scanned), this file (it holds the patterns) and LICENSE."""
         for f in sorted(root.rglob("*")):
             rel = f.relative_to(root)
             if (
                 not f.is_file()
                 or snapshot.excluded(rel)
                 or "__pycache__" in rel.parts
+                or rel.parts[:3] == ("panel", "next-src", "node_modules")
                 or any(d.startswith(".") for d in rel.parts[:-1])
                 or f.suffix == ".pyc"
             ):
