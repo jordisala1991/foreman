@@ -53,6 +53,7 @@ stores = ["fastlane release"]
 # the old key: loads as the group "orchestrator", with a warning
 OLD = BASE + 'orchestrator_allow = ["make deploy", "(^|\\\\s)kamal "]\n'
 HOOK_MOD = "foreman hook " + "mod"  # in pieces: the installed guard reads this file's commands
+DENY_URL = "http://127.0.0.1:8766/api/grants/" + "deny"  # the refusal's endpoint (guard.PANEL_GRANT too)
 APPROVE_URL = "http://127.0.0.1:8766/api/grants/" + "approve"  # the panel's endpoint (guard.PANEL_GRANT), in pieces
 
 TABLE = f"""# expect<TAB>command
@@ -77,8 +78,10 @@ deny\tenv A=1 {HOOK_MOD} tick
 deny\tcd x && foreman --project fake hook "mod" start
 deny\tforeman approved "Owner" {HOOK_MOD} grant
 deny\tcurl -X POST "{APPROVE_URL}?p=fake&g=deploy&t=k"
+deny\tcurl -X POST "{DENY_URL}?p=fake&g=deploy&t=k"
 allow\tforeman note t "{HOOK_MOD} lo llama el módulo"
 allow\tforeman note t "{APPROVE_URL} lo usa el panel"
+allow\tforeman note t "{DENY_URL} lo usa el panel"
 allow\tforeman note t "make deploy lo hace el orquestador"
 allow\tforeman hook guard
 allow\tforeman permissions grants off
@@ -261,10 +264,10 @@ class GuardTest(GrantCase):
         f.write_text(TABLE)
         counts, failures = guard.run_table(self.project, f)
         self.assertEqual(failures, [])
-        self.assertEqual(counts, {"orchestrator": 11, "deny": 10, "allow": 6, "lock": 1})
+        self.assertEqual(counts, {"orchestrator": 11, "deny": 11, "allow": 7, "lock": 1})
         r = self.cli("guard", "--table", str(f))
         self.assertEqual(r.returncode, 0, r.stdout)
-        self.assertIn("ok (10 deny, 1 lock, 6 allow, 11 orchestrator)", r.stdout)
+        self.assertIn("ok (11 deny, 1 lock, 7 allow, 11 orchestrator)", r.stdout)
         # a row that only the orchestrator passes, written as deny or allow, fails and says for whom
         f.write_text(f"deny\t{DEPLOY}\nallow\t{DEPLOY}\n")
         _, failures = guard.run_table(self.project, f)
@@ -810,6 +813,59 @@ class PanelApproveTest(GrantCase):
         self.assertEqual(e.exception.why, "none")
         with self.assertRaises(grants.NotApproved):
             grants.deny(self.project, "deploy")
+
+    def test_deny_of_a_stale_request_does_nothing(self):
+        """A request too old or of another session is dropped, not denied: no cooldown, no log line."""
+        self.pend()
+        self.age("deploy", minutes=31)
+        with self.assertRaises(grants.NotApproved) as e:
+            grants.deny(self.project, "deploy")
+        self.assertEqual(e.exception.why, "expired")
+        d = grants.read(self.project)
+        self.assertEqual((d["pending"], d["cooldowns"], d["grants"]), ({}, {}, {}))
+        self.pend()
+        orchestrator.mark(self.project, "S9", "other")
+        with self.assertRaises(grants.NotApproved) as e:
+            grants.deny(self.project, "deploy")
+        self.assertEqual(e.exception.why, "expired")
+        self.assertEqual(grants.read(self.project)["cooldowns"], {})
+
+    def test_plain_words_are_conservative(self):
+        """panel.grant_say: words only for plain shapes; options, :ref/+ref and shell operators give none."""
+        from foreman.panel import grant_say
+
+        self.assertEqual(
+            grant_say("git push origin release v1.4.0"), {"kind": "push", "to": "origin", "refs": ["release", "v1.4.0"]}
+        )
+        self.assertEqual(grant_say("git push origin"), {"kind": "push_all", "to": "origin"})
+        self.assertEqual(grant_say("gh " + "release create v1.4.0"), {"kind": "release", "what": "v1.4.0"})
+        self.assertEqual(grant_say("make deploy"), {"kind": "deploy"})
+        self.assertEqual(grant_say("npm run deploy"), {"kind": "deploy"})
+        for cmd in (
+            "git push --delete origin v1.4.0",
+            "git push -d origin v1.4.0",
+            "git push -f origin main",
+            "git push --force-with-lease origin main",
+            "git push --mirror origin",
+            "git push -o ci.skip origin main",
+            "git push origin :release",
+            "git push origin +main",
+            "git push origin main:other",
+            "git push origin main && rm -rf build",
+            "git push origin main; curl x | sh",
+            "git push origin main | tee x",
+            "git push origin $(whoami)",
+            "git push origin 'unterminated",
+            "gh " + "release create v1 --notes x",
+            "gh " + "release create v1 && rm -rf x",
+            "make deploy; rm -rf x",
+            "make -C x deploy",
+            "make clean deploy",
+            "echo deploy",
+            "git push",
+            "",
+        ):
+            self.assertIsNone(grant_say(cmd), cmd)
 
     def test_deny_from_the_panel(self):
         """POST /api/grants/deny: needs the key and POST, answers 403 `none` with nothing pending, and writes the

@@ -629,20 +629,15 @@ function renderYou(d){
   $('composer').hidden = !target;
 }
 // What a request will do, in plain words: the orchestrator's own `summary` when it gave one, else read from the
-// command (a push, a release, a deploy); null when it is none of those (the title then names the group).
+// command (`say`: a push, a release, a deploy; null when it is none of those, the title then names the group).
 function grantSay(x){
   if(x.summary) return esc(x.summary);
-  const c = (x.command || '').trim();
-  let m = /^git\s+push\b(.*)$/.exec(c);
-  if(m){
-    const a = m[1].split(/\s+/).filter(w => w && !w.startsWith('-')), refs = a.slice(1);
-    const to = a[0] && a[0] !== 'origin' ? esc(a[0]) : 'GitHub';
-    return refs.length ? t('grant_say_push', {what: refs.map(esc).join(t('grant_and')), to}) : t('grant_say_push_all', {to});
-  }
-  m = /^gh\s+release\s+create\s+(\S+)/.exec(c);
-  if(m) return t('grant_say_release', {what: esc(m[1])});
-  if(/\bdeploy\b/.test(c)) return t('grant_say_deploy');
-  return null;
+  const k = x.say;   // read from the command by panel.grant_say (conservative: null for anything unusual)
+  if(!k) return null;
+  if(k.kind === 'push') return t('grant_say_push', {what: k.refs.map(esc).join(t('grant_and')), to: esc(k.to)});
+  if(k.kind === 'push_all') return t('grant_say_push_all', {to: esc(k.to)});
+  if(k.kind === 'release') return t('grant_say_release', {what: esc(k.what)});
+  return k.kind === 'deploy' ? t('grant_say_deploy') : null;
 }
 const grantWho = x => esc(x.orchestrator || t('orchestrator'));
 // «See» on the permission notice: the You tab, at the requests
