@@ -348,23 +348,21 @@ console.log(JSON.stringify({card, detail, ccard, cdetail, free, posted, open: CH
         self.assertTrue(out["posted"][0].endswith("op=B%3A%20mail&change=1"))
         self.assertEqual(out["open"], 0)
 
-    def test_old_question_unchanged(self):
-        """A question without what each option changes keeps its card and its detail: decisionActions's output is the
-        one of before (the option buttons, «Other answer» in the same row) and the rich layout is never used."""
+    def test_question_without_details(self):
+        """A question recorded without what each option changes (details missing) is told in the same layout, with
+        an empty effect: neither its card nor its detail throws (F1 of the legacy review)."""
         out = json.loads(
             self.rich("""
 const x = {p: 'fake', id: 'J1', title: 'J1, Ship?', text: 'Context.', options: ['a: yes', 'b: no'],
-  recommended: 'b: no', recommendation: 'b'};
-const FREE = []; console.log(JSON.stringify({rich: hasDetails(x), actions: decisionActions(x), more: decisionMore(x)}));
+  recommended: 'b: no', recommendation: 'b', details: undefined};
+const FREE = [];
+console.log(JSON.stringify({card: decCardRich(x), detail: decDetailRich(x)}));
 """)
         )
-        self.assertFalse(out["rich"])
-        self.assertEqual(out["more"], "")
-        a = out["actions"]
-        self.assertTrue(a.startswith('<div class="btns"><button class="sec" data-id="J1"'))
-        self.assertIn('onclick="decide(this)">a: yes</button>', a)
-        other = '<button class="sec other" data-fk="fake|J1" onclick="freeToggle(this)">Other answer</button></div>'
-        self.assertIn(other, a)
+        self.assertEqual(out["card"].count('<button class="sec oline"'), 2)
+        self.assertEqual(out["detail"].count('<div class="oeff"></div>'), 2)
+        self.assertEqual(out["detail"].count("onclick=\"decideOpt(this)\""), 2)
+        self.assertIn('data-undo=""', out["detail"])
 
     def test_document_images(self):
         """mdInline with a document's options: a relative image goes to /api/file joined to the document's folder;
