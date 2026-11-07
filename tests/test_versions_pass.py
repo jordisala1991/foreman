@@ -18,6 +18,7 @@ from test_install import fake_root
 from test_loop_notices import NoticesCase
 from test_versions import stamp
 
+from foreman import agents as agents_mod
 from foreman import cli, heartbeat, hooks_mod, install, loop, notes, util, versions
 
 ASK = "Tell Owner, in plain words, to type /reload-plugins in this chat"  # foreman_behind: the host loads nothing
@@ -68,7 +69,7 @@ class VersionPassCase(NoticesCase):
         return started
 
     def free_agents(self):
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         for h in d.values():
             h["stopped"] = True
