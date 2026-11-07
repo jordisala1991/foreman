@@ -93,8 +93,9 @@ const document = {
   getElementById: (id) => one(html, (n) => n.attributes.id === id),
   addEventListener() {}, removeEventListener() {},
 };
-const store = {};
+const store = { ...(scenario.store || {}) };
 const fetched = [];
+const windows = [];
 class HTMLIFrameElement {}
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
@@ -104,11 +105,12 @@ Object.assign(globalThis, {
   document, window: globalThis, HTMLIFrameElement,
   location: { search: "?t=k3y", hash: scenario.hash || "" },
   addEventListener() {}, removeEventListener() {},
-  fetch: async (url) => {
+  open: () => { const w = { location: { href: "" }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
+  fetch: async (url, opts) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
-    fetched.push(p);
+    fetched.push(opts && opts.method === "POST" ? "POST " + p : p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
-    const body = scenario.answers[p];
+    const body = scenario.answers[(opts && opts.method === "POST" ? "POST " : "") + p];
     return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
   },
 });
@@ -166,6 +168,21 @@ console.log(JSON.stringify({
   pills: all(app, (n) => cls(n, "pill")).map((n) => [n.attributes.class, words(n)]),
   buttons: all(app, (n) => n.localName === "button").map(words),
   charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
+  agents: all(app, (n) => n.localName === "article" && cls(n, "agent")).map((a) => ({
+    cls: a.attributes.class,
+    avatar: words(one(a, (n) => cls(n, "avatar"))),
+    task: words(one(a, (n) => n.localName === "h3")),
+    id: words(one(a, (n) => cls(n, "id")) || { nodeType: 3, data: "" }),
+    meta: words(one(a, (n) => cls(n, "meta"))),
+    state: words(one(a, (n) => cls(n, "state"))),
+    stateTone: one(a, (n) => cls(n, "dot")).attributes.class,
+    msg: words(one(a, (n) => cls(n, "msg")) || { nodeType: 3, data: "" }),
+    watch: !!one(a, (n) => cls(n, "watch")),
+  })),
+  done: all(app, (n) => n.localName === "li" && n.parentNode && cls(n.parentNode, "done")).map(words),
+  nobody: words(one(app, (n) => cls(n, "nobody")) || { nodeType: 3, data: "" }),
+  windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,
   errors,
 }));
+process.exit(0); // the screens poll: their timers would keep node alive
