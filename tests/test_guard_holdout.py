@@ -113,6 +113,8 @@ ALLOWED = (
     "grep -rn holdout src",
     "grep -- -r ~/.local",
     "cat '' src/x.py",
+    "cat .claude/settings.json",  # a reserved file's rule is not this one
+    "cat ~/.local/share/foreman/fake/*.md",  # a glob beside the folder, matched per component
 )
 
 

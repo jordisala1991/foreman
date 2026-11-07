@@ -1138,9 +1138,16 @@ OPEN_MODE = re.compile(r"\s*(\+?[<>]{1,2}|[wax]\+?b?|r\+b?)\s*")
 CODE_LITERAL = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"|`([^`\n]*)`")
 MAX_LITERAL = 4096  # a longer quoted literal is not a file name
 ADJACENT = re.compile(r"\s*([,/+])\s*")  # between two literals of one path written in pieces
+JOINED = re.compile(r"\b([A-Za-z_]\w*)\s*[/,+]\s*\Z")  # a literal joined onto a name: `base / "x"`, `join(base, "x")`
+ASSIGNED = re.compile(r"(?<![\w.])\$?([A-Za-z_]\w*)\s*=(?!=)\s*([^;\n]*)")  # NAME = what (to `;` or a line's end)
+IN_LITERAL = re.compile(r"\$?\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")  # a name inside a literal: f"{base}/x", "$base/x"
+STATEMENT = re.compile(r"(^|[;{}\n])\s*\Z")  # the start of a statement, before a call
+OS_WORD = re.compile(r"\bos\b")  # os.replace, also as `import os as o` or __import__('os')
 MAX_PIECES = 8
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 NOT_LITERAL = re.compile(r"[$`*?\[]")  # what is left after expanding: the path is not known, only its text
+TEXT_STOP = re.compile(r"[\s'\"`;|&()<>]")  # where a path written in a text ends
+TILDE = re.compile(r"~(?=/)|(?<![^\s='\"])~(?![^\s'\"])")  # the home in a text: before a `/`, or a word
 SETTINGS_TEXT = re.compile(r"(^|/)\.claude/settings(\.local)?\.json$")
 DECLARERS = ("export", "local", "declare", "typeset", "readonly")
 MAX_VALUES = 8  # the values one word may take from the line's variables, at most
@@ -1254,7 +1261,9 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
     """The files the code an interpreter runs (RAW_INTERPRETERS: its -c/-e word, its heredoc or here-string) may
     write, as written: for Python that passes pyscript's gate, what it writes (pyscript.writes(): with the literals of
     a target it cannot name); for other code, the quoted literals of the arguments of each call that writes
-    (CODE_WRITES: up to its closing parenthesis, or to the end of the statement without one)."""
+    (CODE_WRITES: up to its closing parenthesis, or to the end of the statement without one); when those arguments
+    hold a name (a call with parentheses, or one without them at a statement's start or after a `.`; not a string's
+    `.replace(a, b)`) or it is a Path's method, every literal of the code, run on as a path's pieces (_pieces)."""
     name = PurePath(str(w[prog].value)).name if prog < len(w) and w[prog].literal else ""
     if not RAW_INTERPRETERS.fullmatch(name):
         return []
@@ -1277,31 +1286,56 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
                     break
             lits = [x for g in CODE_LITERAL.finditer(args) for x in g.groups() if x]
             if m.group(1).lower() == "open" and not any(
-                OPEN_MODE.fullmatch(x) or re.match(r"\s*\+?[<>]", x) for x in lits
+                (OPEN_MODE.fullmatch(x) and x.strip() != "<") or re.match(r"\s*(\+[<>]|>)", x) for x in lits
             ):
-                continue  # it reads: open(f, "w"), open my $f, ">", "f" and open(F, ">f") write
-            if (rest[:1] == "(" and re.search(r"[A-Za-z_$]", CODE_LITERAL.sub("", args))) or (
-                text[m.start() - 1 : m.start()] == "." and m.group(0) in pyscript.WRITES_SELF
-            ):
+                continue  # it reads (also perl's "<"): open(f, "w"), open my $f, ">", "f" and open(F, ">f") write
+            dot, bare = text[m.start() - 1 : m.start()] == ".", CODE_LITERAL.sub("", args)
+            start = dot or STATEMENT.search(text, 0, m.start())  # `File.write p, …`, `open my $f, …`: no parentheses
+            called = rest[:1] == "(" or (start and re.match(r"[ \t]+[A-Za-z_$@]", text[m.end() :]))
+            if dot and m.group(0) in ("replace", "replaceAll") and "," in bare and not OS_WORD.search(text):
+                called = False  # a string's replace(pattern, value) in code that never names os: its own literals
+            if (called and re.search(r"[A-Za-z_$]", bare)) or (dot and m.group(0) in pyscript.WRITES_SELF):
                 args = text  # a target it cannot name (a variable, an expression, a Path's object): any of the code's
-            out += [x for x in _pieces(args) if not OPEN_MODE.fullmatch(x)]
+            out += [x for x in _pieces(args, args is text) if not OPEN_MODE.fullmatch(x)]
     return list(dict.fromkeys(out))
 
 
-def _pieces(code: str) -> list[str]:
+def _pieces(code: str, spread: bool = False) -> list[str]:
     """The quoted literals of code (perl's `>` in front of a file dropped), and each run of literals written next to
     each other also joined as one path, the way a path is built in pieces (`'a', 'b'` and `"a" / "b"`: a/b; `'a' +
-    'b'`: ab; runs of up to MAX_PIECES)."""
+    'b'`: ab; runs of up to MAX_PIECES). With spread (a target the code cannot name), a name the code assigns a path
+    built of literals stands for each such value: a literal joined onto it (`base / "b"`, `join(base, "b")`) runs on
+    from it, and `{base}` or `$base` inside a literal is replaced by it."""
+    values: dict[str, list[str]] = {}
+    for a in ASSIGNED.finditer(code) if spread else ():
+        whole = _joined(a.group(2), values)[1]
+        if whole:
+            values[a.group(1)] = list(dict.fromkeys([*values.get(a.group(1), []), whole]))[-MAX_VALUES:]
+    return _joined(code, values)[0]
+
+
+def _joined(code: str, values: dict[str, list[str]]) -> tuple[list[str], str]:
+    """_pieces' literals and runs of code, with the values of the names (_pieces), and the whole of its last run."""
     out: list[str] = []
     run: list[tuple[str, str]] = []
     last = None
     for m in CODE_LITERAL.finditer(code):
         lit = re.sub(r"^\s*\+?[<>]{1,2}\s*", "", next(x for x in m.groups() if x is not None))
+        for n in IN_LITERAL.finditer(lit) if values else ():
+            name = n.group(1) or n.group(2)
+            out += [lit.replace(n.group(0), v) for v in values.get(name, ())]
         gap = ADJACENT.fullmatch(code, last.end(), m.start()) if last else None
-        run, last = ([*run, ("" if gap.group(1) == "+" else "/", lit)] if gap else [("", lit)]), m
-        run = run[-MAX_PIECES:]
+        onto = None if gap or not values else JOINED.search(code, last.end() if last else 0, m.start())
+        if onto and onto.group(1) in values:
+            out += [v + "/" + lit for v in values[onto.group(1)][:-1]]
+            run = [("", values[onto.group(1)][-1])]
+        elif not gap:
+            run = []
+        sep = "" if not run or (gap and gap.group(1) == "+") else "/"
+        run, last = [*run, (sep, lit)][-MAX_PIECES:], m
         out += [run[j][1] + "".join(s + x for s, x in run[j + 1 :]) for j in range(len(run))]
-    return [x for x in out if x and len(x) <= MAX_LITERAL]
+    whole = run[0][1] + "".join(s + x for s, x in run[1:]) if run else ""
+    return [x for x in out if x and len(x) <= MAX_LITERAL], whole
 
 
 def _targets(lines: Iterable[Line | str]) -> Iterator[_Target]:
@@ -1322,22 +1356,30 @@ def _targets(lines: Iterable[Line | str]) -> Iterator[_Target]:
                 yield _Target(_expand(path, True, env, True), here[k] | {str(Path.home())}, Write(k, tok), path)
 
 
+def _spelled(text: str) -> str:
+    """A text as the rules find paths in it (_names, _names_top, _holdout_named): $HOME, ${HOME} and `~` (before a
+    `/`, or a word of its own) read as the home, case-folded on macOS."""
+    home = str(Path.home())
+    return _fold(TILDE.sub(lambda _m: home, text.replace("${HOME}", home).replace("$HOME", home)))
+
+
+def _tails(t: str, key: str) -> Iterator[str]:
+    """The path written in a text (_spelled) at each place key appears in it: up to a space, a quote or an operator."""
+    i = t.find(key)
+    while i >= 0:
+        yield TEXT_STOP.split(t[i:], maxsplit=1)[0]
+        i = t.find(key, i + 1)
+
+
 def _names(text: str, entries: Sequence[Reserved]) -> Reserved | None:
     """The reserved entry a text names, as text only (a path that is not known: `$X/.claude/settings.json`,
     `${D:-~/.local/state/foreman}/x`): one of the reserved paths, or something under a reserved folder, appears in
     it; or it ends in .claude/settings.json or settings.local.json."""
-    t = _fold(text.replace("${HOME}", str(Path.home())).replace("$HOME", str(Path.home())))
+    t = _spelled(text)
     for e in entries:
-        i = t.find(e[1])
-        while i >= 0:
-            tail = re.split(r"[\s'\"`;|&()<>]", t[i:], maxsplit=1)[0]
-            if _match(os.path.normpath(tail), [e]) is not None:
-                return e
-            i = t.find(e[1], i + 1)
-    for word in re.split(r"[\s'\"`;|&()<>]", t):
-        if SETTINGS_TEXT.search(word):
-            return ("claude", word, False, "")
-    return None
+        if any(_match(os.path.normpath(tail), [e]) for tail in _tails(t, e[1])):
+            return e
+    return next((("claude", w, False, "") for w in TEXT_STOP.split(t) if SETTINGS_TEXT.search(w)), None)
 
 
 def _path_hit(full: str, entries: Sequence[Reserved], tree: bool) -> Reserved | None:
@@ -1475,7 +1517,6 @@ GIT_REWRITE_TEXT = re.compile(
     r"\bgit(\s+(-[Cc]\s*\S+|--?[\w-]+(=\S+)?))*\s+(" + "|".join(map(re.escape, sorted(GIT_REWRITES))) + r")(?![\w-])"
 )
 INTEGRATE_FREE = ("--help", "-h", "--check")  # what an agent may run of `foreman integrate`
-TEXT_STOP = re.compile(r"[\s'\"`;|&()<>]")
 
 
 class _Args:
@@ -1625,18 +1666,9 @@ def _reaches(t: Tok, folder: str, top: str, live: Sequence[str]) -> bool:
 
 def _names_top(text: str, tops: dict[str, Top]) -> str | None:
     """The folded top a text names (a path written in it whose checkout is that top), or None."""
-    home = str(Path.home())
-    t = text.replace("${HOME}", home).replace("$HOME", home)
-    t = _fold(re.sub(r"(^|[\s='\"])~(?=/|$|[\s'\"])", lambda m: m.group(1) + home, t))
-    for key in tops:
-        i = t.find(key)
-        while i >= 0:
-            tail = os.path.normpath(TEXT_STOP.split(t[i:], maxsplit=1)[0])
-            got = gitdir.checkout_of(tail)
-            if got is not None and _fold(got) == key:
-                return key
-            i = t.find(key, i + 1)
-    return None
+    t = _spelled(text)
+    tails = ((key, gitdir.checkout_of(os.path.normpath(tail))) for key in tops for tail in _tails(t, key))
+    return next((key for key, got in tails if got is not None and _fold(got) == key), None)
 
 
 def _git_hit(sub: str, top: Top, part: str) -> Hit:
@@ -1839,14 +1871,11 @@ def _holdout_hit(d: HoldoutDir, where: str, text: str) -> Hit:
 
 
 def _holdout_named(text: str, dirs: Sequence[HoldoutDir]) -> HoldoutDir | None:
-    """The folder a text names as text (`~`, $HOME and ${HOME} read as the home): its path, or one under it."""
-    home = str(Path.home())
-    t = _fold(text.replace("${HOME}", home).replace("$HOME", home).replace("~/", home + "/"))
-    for d in dirs:
-        for form in dict.fromkeys(d[:2]):
-            if re.search(re.escape(form) + r"(?=$|[/\s'\"`;|&()<>])", t):
-                return d
-    return None
+    """The folder a text names as text (_spelled): its path, or one under it."""
+    t = _spelled(text)
+    return next(
+        (d for d in dirs for form in dict.fromkeys(d[:2]) if any(_under(x, form) for x in _tails(t, form))), None
+    )
 
 
 def _holdout_reach(path: str, dirs: Sequence[HoldoutDir], walk: bool) -> HoldoutDir | None:

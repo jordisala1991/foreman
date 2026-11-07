@@ -253,6 +253,11 @@ class BashWritesTest(BashWriteCase):
         self.assertEqual(self.bash(f"sh -c \"echo $'a' > {cfg}\""), ("deny", "config"))
         self.assertEqual(self.bash(f"echo $'a' && cat {self.tmp}/x"), ("allow", ""))
         self.assertEqual(self.bash("echo $'a' > /tmp/x"), ("allow", ""))
+        # `~` is the home in such a text too, as $HOME is (guard._spelled, read the same by every rule)
+        for cmd in ("echo $'a' > ~/.claude.json", "echo $'a' > $HOME/.claude.json", "x=~/.claude.json; echo $'a' > $x"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), ("deny", "claude"))
+        self.assertEqual(self.bash("echo $'a' > ~/notes.md"), ("allow", ""))
 
     def test_the_board_only_for_the_orchestrator(self):
         board = self.project.board
