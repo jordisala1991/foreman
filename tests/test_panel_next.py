@@ -12,7 +12,7 @@ import re
 import shutil
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
 from urllib.parse import quote
@@ -130,6 +130,30 @@ class NextServeTest(PanelCase):
         code, d = self.req("/api/projects")
         self.assertEqual(code, 200)
         self.assertEqual({p["name"]: p.get("next") for p in d["projects"]}, {"fake": True, "other": False})
+
+    def test_projects_count_the_permissions_waiting_for_the_badge(self):
+        from unittest import mock
+
+        asks = [{"group": "publish", "pending": True}, {"group": "machine", "pending": False, "orphan": "process"}]
+        with mock.patch.object(panel, "grant_requests", return_value=asks):
+            code, d = self.req("/api/projects")
+        self.assertEqual(code, 200)
+        # only the requests that can be approved count: an orphan is only dropped
+        self.assertEqual({p["name"]: p["permissions"] for p in d["projects"]}, {"fake": 1, "other": 1})
+
+    def test_the_owner_marks_a_message_of_the_orchestrator_as_read(self):
+        from foreman import notes
+
+        def unread():
+            return {p["name"]: p["unread"] for p in self.req("/api/projects")[1]["projects"]}["fake"]
+
+        before = unread()  # the fixture's own reply is there, unread too
+        m = notes.inbox_add(self.project, "Integrated the guard fix", sender="orchestrator")
+        self.assertFalse(m["read"])  # born unread: the owner's panel has it to mark
+        self.assertEqual(unread(), before + 1)
+        self.assertEqual(self.req(f"/api/message/read?p=fake&id={m['id']}", "POST")[0], 200)
+        self.assertEqual(unread(), before)
+        self.assertEqual(self.req("/api/message/read?p=fake&id=x", "POST")[0], 400)
 
     def test_metrics_only_for_products_with_the_new_panel(self):
         from foreman.backlog import Backlog
@@ -766,10 +790,10 @@ class NextPageTest(ProjectCase):
             "done": [self.finished(p="beta")], "next_pass": None,
         }  # fmt: skip
         out = self.mount({
-            "hash": "#/agents", "store": {"next-all": "1"},
+            "hash": "#/agents", "store": {"next-product": "*"},
             "answers": {"/api/projects": both, "/api/agents?p=*": data},
         })  # fmt: skip
-        self.assertEqual(out["products"], ["Todos", "Alpha", "Beta"])
+        self.assertEqual(out["products"], ["Todos los productos", "Alpha", "Beta"])
         self.assertEqual(out["fetched"], ["/api/projects", "/api/agents?p=*"])
         self.assertIn("2 en marcha en 2 productos · 1 terminado hoy", out["text"])
         self.assertEqual(out["pills"], [["pill running", "2 productos en marcha"]] * 2)
@@ -778,12 +802,12 @@ class NextPageTest(ProjectCase):
         )
         self.assertTrue(out["done"][0].endswith("$3.40 Beta"), out["done"])
 
-    def test_all_is_only_for_the_agents_screen(self):
+    def test_all_on_the_charts_screen_asks_for_one_product(self):
         both = {"projects": [self.ALPHA, {**self.BETA, "next": True}], "language": "es"}
-        out = self.mount({"hash": "#/how", "store": {"next-all": "1"}, "answers": {"/api/projects": both}})
-        self.assertEqual(out["products"], ["Alpha", "Beta"])  # the charts are of one product
-        self.assertEqual(out["pills"][0], ["pill running", "En marcha"])
-        self.assertEqual(out["fetched"][1], "/api/metrics?p=alpha&days=7")
+        out = self.mount({"hash": "#/how", "store": {"next-product": "*"}, "answers": {"/api/projects": both}})
+        self.assertEqual(out["products"], ["Todos los productos", "Alpha", "Beta"])
+        self.assertIn("Elige un producto para ver esto.", out["text"])  # the charts are of one product
+        self.assertEqual(out["fetched"], ["/api/projects"])
 
     def test_the_stuck_agent_comes_first(self):
         stuck = self.card(
@@ -798,7 +822,7 @@ class NextPageTest(ProjectCase):
                      "live": [self.card(), self.card(id="b1", p="beta", task="De beta")]}  # fmt: skip
         mine = {"projects": ["alpha"], "live": [self.card(task="Solo de alpha")], "done": [], "next_pass": None}
         out = self.mount({
-            "hash": "#/agents", "store": {"next-all": "1"}, "pick": "alpha", "delay": {"/api/agents?p=*": 250},
+            "hash": "#/agents", "store": {"next-product": "*"}, "pick": "alpha", "delay": {"/api/agents?p=*": 250},
             "answers": {"/api/projects": both, "/api/agents?p=*": everybody, "/api/agents?p=alpha": mine},
         })  # fmt: skip
         self.assertEqual([a["task"] for a in out["agents"]], ["Solo de alpha"])
@@ -842,4 +866,294 @@ class NextPageTest(ProjectCase):
         out = self.mount({"hash": "#/how", "answers": {"/api/projects": none}})
         self.assertIn("Ningún producto tiene el panel nuevo", out["text"])
         self.assertIn("next = true", out["text"])
+        self.assertEqual(out["charts"], [])
+
+
+def soon(minutes):
+    """A local ISO time `minutes` from now (a little over, so rounding gives `minutes`)."""
+    return (datetime.now() + timedelta(minutes=minutes, seconds=20)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+QUESTION = {
+    "id": "AREA J1",
+    "title": "¿Los agentes arrancan con su conversación visible?",
+    "date": "2026-11-05",
+    "text": "Con este cambio cada agente tendrá su conversación. Y hay que decidir cuándo se abre.",
+    "options": ["Desde el principio", "Solo cuando la pido"],
+    "recommended": "Solo cuando la pido",
+    "details": {"Solo cuando la pido": {"effect": "Sin avisos; tarda unos segundos"}},
+    "blocks": ["PF-197 T1"],
+    "answer": None,
+}
+GRANT = {
+    "group": "publish",
+    "pending": True,
+    "summary": "Publicar la versión 0.65 en GitHub",
+    "command": "gh release create v0.65",
+    "orchestrator": "orquestador de alpha",
+    "expires": soon(24),
+    "notified": "no:off",
+}
+MESSAGE = {"id": 7, "time": "2026-11-05 12:00", "from": "orchestrator", "text": "Integrado el arreglo.", "read": False}
+AGENT = {
+    "id": "a1",
+    "name": "fo197t1",
+    "type": "dev",
+    "issue": "PF-197",
+    "sub": "T1",
+    "status": "working",
+    "last": "El guardián ya trata la sesión como agente.",
+    "start_ts": datetime.now().timestamp() - 25 * 60,
+    "link": "https://claude.ai/code/x",
+}
+STUCK = {
+    **AGENT,
+    "id": "a2",
+    "name": "ap1",
+    "issue": "PF-200",
+    "status": "maybe stuck",
+    "link": None,
+    "activity_ts": AGENT["start_ts"],
+}
+
+
+def state(**kw):
+    return {"project": {"decisions": [], "grants": [], "messages": [], "agents": [], "progress": [], **kw}}
+
+
+def today_metrics(**kw):
+    days = [f"2026-11-0{d}" for d in range(1, 8)]
+    td = {
+        "cost": {
+            "opus": 60.8,
+            "sonnet": 13.0,
+            "haiku": 0,
+            "other": 0,
+            "usd": 73.8,
+            "avg_before": 106.3,
+            "spark": [219.2, 175.7, 53.0, 0, 48.1, 140.2, 73.8],
+        },
+        "integrated": {"integrated": 29, "measured": 3, "yesterday": 51, "spark": [71, 66, 24, 0, 15, 51, 29]},
+        "reviews": {"back": 2, "total": 10, "yesterday_back": 12, "yesterday_total": 17},
+    }
+    return {
+        "days": days,
+        "cost": {d: {"opus": 0, "sonnet": 0, "haiku": 0, "other": 0, "usd": 0} for d in days},
+        "total": 0,
+        "reviews": {d: {"clean": 5, "back": 1} for d in days},
+        "today": td,
+        "quota": [
+            {"kind": "five_hour", "percent_used": 30, "resets_at": "2026-11-07T15:20:00"},
+            {"kind": "seven_day", "percent_used": 55, "resets_at": "2026-11-11T23:00:00"},
+        ],
+        "since": {"cost": "2026-11-01", "deliveries": "2026-11-01", "reviews": "2026-11-02", "guard": None},
+        **kw,
+    }
+
+
+class NextHomeTest(NextPageTest):
+    """Home and «Needs you» of the built bundle, in node: the waiting cards with their writes, the empty states, the
+    counts, the phone's short questions and the wide screen's whole ones, and the «All products» sums."""
+
+    BACKLOG: ClassVar[dict] = {
+        "issues": [{"id": "PF-197", "title": "Agentes que ves desde la app, largo", "short": "Agentes que ves"}]
+    }
+
+    def screen(self, hash_, st=None, projects=None, **extra):
+        answers = {
+            "/api/projects": projects or {**self.PROJECTS, "projects": [{**self.ALPHA, "permissions": 1}]},
+            "/api/state?p=alpha": st or state(decisions=[QUESTION], grants=[GRANT], messages=[MESSAGE]),
+            "/api/backlog?p=alpha&closed=recent": self.BACKLOG,
+            "/api/metrics?p=alpha&days=7": today_metrics(),
+        }
+        answers.update(extra.pop("answers", {}))
+        return self.mount({"hash": hash_, "answers": answers, **extra})
+
+    def test_the_badge_counts_questions_permissions_and_unread_messages(self):
+        out = self.screen("#/needs")
+        self.assertEqual(out["badges"]["needs"], "4")  # 2 questions + 1 permission + 1 unread message
+        only = {"projects": [{**self.ALPHA, "decisions": 0, "unread": 0, "permissions": 2}]}
+        self.assertEqual(self.screen("#/needs", projects=only)["badges"]["needs"], "2")
+
+    def test_needs_you_lists_permissions_then_questions_then_messages(self):
+        out = self.screen("#/needs")
+        self.assertIn("1 permiso, 1 pregunta y 1 mensaje", out["text"])
+        perm, quest = out["cards"]
+        self.assertEqual(perm["kind"], "permission")
+        self.assertIn("Publicar la versión 0.65 en GitHub", perm["text"])
+        self.assertIn("Caduca en 24 min", perm["text"])
+        self.assertIn("No te llegó el aviso al móvil", perm["text"])
+        self.assertEqual(perm["buttons"], ["Denegar", "Aprobar", "Hablar con quien lo pide"])
+        # a question comes with the issue it is about, its first sentence, each option's effect, the recommended one
+        self.assertTrue(quest["text"].startswith("Agentes que ves · PF-197"), quest["text"])
+        self.assertIn("espera desde 5 nov", quest["text"])
+        self.assertIn("Con este cambio cada agente tendrá su conversación.", quest["text"])
+        self.assertNotIn("Y hay que decidir", quest["text"])
+        self.assertIn("Solo cuando la pido (recomendada) Sin avisos; tarda unos segundos", quest["text"])
+        self.assertEqual(out["messages"], ["OR Orquestador de Alpha 5 nov Integrado el arreglo. Marcar como leído"])
+        self.assertEqual(out["sections"], ["Permisos", "Preguntas", "Mensajes del orquestador"])
+
+    def test_approving_denying_and_answering_write_like_the_panel_of_today(self):
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}, {"click": "Confirmar"}])
+        self.assertEqual(out["posts"], [{"path": "/api/grants/approve?g=publish&p=alpha", "body": None}])
+        out = self.screen("#/needs", steps=[{"click": "Denegar"}])
+        self.assertEqual(out["posts"][0]["path"], "/api/grants/deny?g=publish&p=alpha")
+        out = self.screen("#/needs", steps=[{"click": "Desde el principio"}])
+        path = "/api/decide?p=alpha&id=AREA%20J1&op=Desde%20el%20principio"
+        self.assertEqual(out["posts"], [{"path": path, "body": None}])
+        out = self.screen("#/needs", steps=[{"click": "Marcar como leído"}])
+        self.assertEqual(out["posts"], [{"path": "/api/message/read?p=alpha&id=7", "body": None}])
+
+    def test_the_owner_answers_in_his_own_words_and_writes_to_the_orchestrator(self):
+        free = {"type": {"id": "free-alpha-AREA J1", "text": "Desde el principio, sin aviso"}}
+        out = self.screen("#/needs", steps=[{"click": "Otra respuesta…"}, free, {"click": "Enviar"}])
+        path = "/api/decide?free=1&p=alpha&id=AREA%20J1"
+        self.assertEqual(out["posts"], [{"path": path, "body": "Desde el principio, sin aviso"}])
+        write = [{"type": {"id": "to-orchestrator", "text": "Hola"}}, {"click": "Enviar"}]
+        self.assertEqual(
+            self.screen("#/needs", steps=write)["posts"], [{"path": "/api/message?p=alpha", "body": "Hola"}]
+        )
+
+    def test_an_answered_question_waits_for_the_orchestrator_and_can_be_changed(self):
+        st = state(decisions=[{**QUESTION, "answer": "Desde el principio"}])
+        out = self.screen("#/needs", st=st)
+        self.assertIn("Respondiste «Desde el principio». El orquestador aún no lo ha leído.", out["cards"][0]["text"])
+        again = "Solo cuando la pido (recomendada) Sin avisos; tarda unos segundos"
+        out = self.screen("#/needs", st=st, steps=[{"click": "Cambiar"}, {"click": again}])
+        self.assertIn("&change=1&op=Solo%20cuando%20la%20pido", out["posts"][0]["path"])
+
+    def test_approving_a_permission_asks_first(self):
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}])
+        self.assertEqual(out["posts"], [])  # one tap writes nothing
+        self.assertIn("¿Dejas al orquestador ejecutar", out["cards"][0]["text"])
+        self.assertIn("30 minutos", out["cards"][0]["text"])
+        self.assertEqual(out["cards"][0]["buttons"][:2], ["Cancelar", "Confirmar"])
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}, {"click": "Cancelar"}])
+        self.assertEqual(out["posts"], [])
+        self.assertIn("Aprobar", out["cards"][0]["buttons"])
+        # the phone's short card asks too
+        out = self.screen("#/home", steps=[{"click": "Aprobar"}])
+        self.assertEqual(out["posts"], [])
+
+    def test_a_refused_write_says_so_on_the_card(self):
+        out = self.screen("#/needs", steps=[{"click": "Aprobar"}, {"click": "Confirmar"}], post=["/api/grants"])
+        self.assertIn("No se ha podido enviar: refused", out["cards"][0]["text"])
+
+    def test_a_refused_approval_says_why_in_the_panels_language(self):
+        out = self.screen(
+            "#/needs", steps=[{"click": "Aprobar"}, {"click": "Confirmar"}], post=["/api/grants"], why="expired"
+        )
+        self.assertIn("esa petición es demasiado antigua", out["cards"][0]["text"])
+        self.assertNotIn("refused", out["cards"][0]["text"])
+
+    def test_a_failing_metrics_still_shows_what_waits_and_says_so(self):
+        out = self.screen("#/home", answers={"/api/metrics?p=alpha&days=7": None})
+        self.assertEqual(out["cards"][0]["kind"], "permission")
+        self.assertNotIn("Cargando", out["text"])
+        self.assertIn("No se ha podido cargar", out["text"])
+        self.assertIn("Reintentar", out["text"])
+
+    def test_a_failing_state_says_so_instead_of_loading_forever(self):
+        for hash_ in ("#/home", "#/needs"):
+            out = self.screen(hash_, answers={"/api/state?p=alpha": None})
+            self.assertIn("No se ha podido cargar", out["text"], hash_)
+            self.assertNotIn("Cargando", out["text"], hash_)
+
+    def test_an_orphan_request_can_only_be_discarded(self):
+        orphan = {**GRANT, "pending": False, "orphan": "process"}
+        out = self.screen("#/needs", st=state(grants=[orphan]))
+        self.assertEqual(out["cards"][0]["buttons"], ["Descartar", "Hablar con quien lo pide"])
+
+    def test_nothing_waits(self):
+        out = self.screen("#/needs", st=state(messages=[{**MESSAGE, "read": True}]))
+        self.assertIn("Nada te espera", out["text"])
+        self.assertIn("No hay mensajes sin leer.", out["text"])
+        self.assertEqual(out["cards"], [])
+        out = self.screen("#/home", st=state())
+        self.assertIn("Nada te espera", out["text"])
+        self.assertIn("Nadie trabajando ahora", out["text"])
+
+    def test_the_phone_home_shows_the_questions_short(self):
+        progress = [{"time": "2026-11-05 12:28", "agent": "fo197t1", "text": "Empieza la parte T1"}]
+        done = {**AGENT, "id": "a3", "end": "x"}
+        st = state(
+            decisions=[QUESTION], grants=[GRANT], messages=[MESSAGE], agents=[AGENT, STUCK, done], progress=progress
+        )
+        out = self.screen("#/home", st=st)
+        perm, quest = out["cards"]
+        self.assertEqual(perm["buttons"], ["Denegar", "Aprobar"])
+        # the phone's card is title, time, one line of why (as the mockup's Main.dc.html) and buttons
+        self.assertIn("Solo se hace con tu sí.", perm["text"])
+        self.assertNotIn("caduca y no se hace", perm["text"])
+        self.assertEqual(quest["buttons"], ["Desde el principio", "Solo cuando la pido"])
+        self.assertNotIn("Con este cambio", quest["text"])
+        self.assertIn("Qué cambia cada opción", quest["text"])
+        self.assertIn("Ver las 3", out["text"])  # permission, question and message
+        # who is working: the finished one is not here; the stuck one is first and says why
+        self.assertEqual(len(out["agentRows"]), 2)
+        self.assertTrue(out["agentRows"][0].startswith("A ap1 PF-200 T1"), out["agentRows"][0])
+        self.assertIn("Puede estar atascado", out["agentRows"][0])
+        self.assertIn("Sin señales desde hace 25 min", out["agentRows"][0])
+        self.assertIn("Agentes que ves PF-197 T1 · desarrollo", out["agentRows"][1])
+        self.assertIn("Trabajando · lleva 25 min", out["agentRows"][1])
+        self.assertIn("Ver conversación", out["agentRows"][1])
+        self.assertNotIn("Ver conversación", out["agentRows"][0])  # no link: no button
+        self.assertEqual(out["latest"], ["5 nov fo197t1 Empieza la parte T1"])
+
+    def test_the_wide_home_shows_the_questions_whole(self):
+        out = self.screen("#/home", visible=["(min-width: 900px)"])
+        perm, quest = out["cards"]
+        self.assertIn("Lo pide orquestador de alpha.", perm["text"])
+        self.assertIn("Hablar con quien lo pide", perm["text"])
+        self.assertIn("Solo cuando la pido (recomendada) Sin avisos; tarda unos segundos", quest["text"])
+
+    def test_today_in_figures(self):
+        t = self.screen("#/home")["tiles"]
+        self.assertEqual(
+            t["cost"], "Coste de hoy $73.8 Opus $60.8 Sonnet $13.0 media de los 6 días anteriores: $106 D L M X J V S"
+        )
+        self.assertEqual(t["integrated"], "Integrado hoy 29 cambios y 3 medidas ayer 51 D L M X J V S")
+        self.assertEqual(t["reviews"], "Revisiones devueltas 2 de 10 pidieron cambios hoy ayer 12 de 17 D L M X J V S")
+        self.assertIn(
+            "Cuota 30 % de 5 h se renueva a las 15:20 Semana 55 % se renueva el mié 11 a las 23:00", t["quota"]
+        )
+
+    def test_without_a_quota_the_tile_says_so(self):
+        out = self.screen("#/home", answers={"/api/metrics?p=alpha&days=7": today_metrics(quota=[])})
+        self.assertIn("Cuota — Claude Code aún no ha dado la cuota", out["tiles"]["quota"])
+
+    def test_all_products_sums_the_figures_and_shows_each_one(self):
+        beta = {**self.ALPHA, "name": "beta", "title": "Beta", "decisions": 0, "unread": 0}
+        both = {"projects": [{**self.ALPHA, "permissions": 0}, beta], "language": "es"}
+        beta_metrics = today_metrics()
+        beta_metrics["today"]["cost"].update(usd=28.1, avg_before=42.0, opus=0, sonnet=28.1)
+        beta_metrics["today"]["integrated"].update(integrated=6, yesterday=13)
+        beta_metrics["today"]["reviews"].update(back=1, total=3)
+        out = self.screen(
+            "#/home",
+            projects=both,
+            store={"next-product": "*"},
+            answers={
+                "/api/state?p=beta": state(agents=[{**AGENT, "id": "b1"}]),
+                "/api/backlog?p=beta&closed=recent": {},
+                "/api/metrics?p=beta&days=7": beta_metrics,
+                "/api/state?p=alpha": state(decisions=[QUESTION]),
+            },
+        )
+        self.assertEqual(out["products"], ["Todos los productos", "Alpha", "Beta"])
+        self.assertEqual(out["pills"][0], ["pill running", "2 productos en marcha"])
+        self.assertIn("Hoy, en cifras · los 2 productos", out["text"])
+        self.assertIn(
+            "Coste de hoy $101.9 media de los 6 días anteriores: $148 Alpha $73.8 Beta $28.1", out["tiles"]["cost"]
+        )
+        self.assertIn("Integrado hoy 35 cambios ayer 64 Alpha 29 Beta 6", out["tiles"]["integrated"])
+        self.assertIn("Revisiones devueltas 3 de 13", out["tiles"]["reviews"])
+        self.assertIn("la comparten los 2 productos", out["tiles"]["quota"])  # not summed nor split
+        self.assertIn("Alpha", out["cards"][0]["text"])  # each card says whose it is
+        self.assertEqual(out["badges"]["needs"], "3")  # the sum of the two products' counts
+
+    def test_the_other_screens_ask_for_one_product_under_all(self):
+        both = {"projects": [self.ALPHA, {**self.ALPHA, "name": "beta", "title": "Beta"}], "language": "es"}
+        out = self.mount({"hash": "#/how", "store": {"next-product": "*"}, "answers": {"/api/projects": both}})
+        self.assertIn("Elige un producto para ver esto.", out["text"])
         self.assertEqual(out["charts"], [])

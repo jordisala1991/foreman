@@ -51,6 +51,17 @@ class NotesTest(ProjectCase):
         self.assertEqual(sorted(p.name for p in (self.home / "notes").iterdir()), [day])
         self.assertTrue((self.project.state / "locks-notes" / (day + ".lock")).exists())
 
+    def test_the_orchestrators_reply_is_stored_unread_until_the_owner_reads_it(self):
+        self.cli("inbox", "reply", "merged the fix")
+        self.cli("inbox", "add", "thanks")
+        by = {m["from"]: m for m in notes.inbox(self.project)}
+        self.assertFalse(by["orchestrator"]["read"])  # the panel's «Mark as read» has something to mark
+        self.assertEqual([m["from"] for m in notes.inbox_new(self.project)], ["owner"])  # its own inbox is unchanged
+        self.cli("inbox", "read")  # the orchestrator reading the owner's messages does not read its own
+        self.assertFalse({m["from"]: m for m in notes.inbox(self.project)}["orchestrator"]["read"])
+        notes.inbox_read(self.project, [str(by["orchestrator"]["id"])], sender="orchestrator")
+        self.assertTrue({m["from"]: m for m in notes.inbox(self.project)}["orchestrator"]["read"])
+
     def test_progress_inbox_heartbeat(self):
         self.cli("progress", "first result: 12 ms", env={"AGENT": "zed"})
         line = json.loads((self.project.state / "progress.jsonl").read_text())

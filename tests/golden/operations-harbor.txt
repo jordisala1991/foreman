@@ -1153,7 +1153,7 @@ foreman lock: unknown resource 'nope' (known: widget); declare it in foreman.tom
   "time": "<TODAY> <TIME>",
   "from": "orchestrator",
   "text": "Fine: the form is in",
-  "read": true
+  "read": false
  }
 ]
 === harbor/inbox.json.lock

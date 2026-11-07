@@ -55,6 +55,7 @@ $ GET /api/projects
       "orchestrator_health": null,
       "owner": "Marta",
       "paused": null,
+      "permissions": 0,
       "teams": [
         "app"
       ],
@@ -84,6 +85,7 @@ $ GET /api/projects
       "orchestrator_health": null,
       "owner": "Sam",
       "paused": null,
+      "permissions": 0,
       "teams": [
         "api"
       ],
