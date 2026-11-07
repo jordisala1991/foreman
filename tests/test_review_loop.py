@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from helpers import git
 from test_review import ReviewCase
 
+from foreman import agents as agents_mod
 from foreman import delivery, identity, loop, review, util
 
 
@@ -19,7 +20,7 @@ def at(minutes_ago=0):
 class LoopCase(ReviewCase):
     def agent(self, aid, live=False, **fields):
         """An agents.json entry: live (working) or delivered."""
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         d[aid] = {"start": at(30), "activity": at(1), "type": "dev", "named_by": "launch", **fields}
         if not live:
@@ -29,7 +30,7 @@ class LoopCase(ReviewCase):
         util.write_json(f, d)
 
     def stop(self, aid):
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         d[aid].update(end=at(0), delivered=at(0))
         util.write_json(f, d)
@@ -230,7 +231,7 @@ class ReviewerLaunch(LoopCase):
         self.assertEqual(
             (agents["rev1"]["review"], agents["rev1"]["branch"], agents["rev1"]["production"]), (True, "ab1", False)
         )
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         f.parent.mkdir(parents=True, exist_ok=True)
         agents["rev1"]["activity"] = at(0)
         util.write_json(f, agents)

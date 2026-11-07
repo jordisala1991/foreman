@@ -22,6 +22,7 @@ from unittest import mock
 
 from helpers import ENTRY, ProjectCase, git, make_repo
 
+from foreman import agents as agents_mod
 from foreman import backlog as backlog_mod
 from foreman import config, delivery, heartbeat, hooks_mod, identity, lock, loop, notes, notices, orchestrator, util
 from foreman.backlog import Backlog
@@ -102,7 +103,7 @@ class NoticesCase(ProjectCase):
         t.write_text(json.dumps({"text": text}) + "\n")
         when = (datetime.now() - timedelta(minutes=minutes_ago)).isoformat(timespec="seconds")
         os.utime(t, (time.time() - 60 * minutes_ago,) * 2)  # its transcript as quiet as its activity
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         d[aid] = {
             "start": when,
@@ -441,7 +442,7 @@ class LoopNoticesTest(NoticesCase):
         put(99, "2020-01-01T00:00:00.000Z")  # a window that already renewed says nothing
         self.assertNotIn("quota_high", self.kinds("S0"))
         self.agent("a1", "zed7", session="S0", minutes_ago=1)
-        t = Path(loop.agents(self.project)["a1"]["transcript"])
+        t = Path(agents_mod.agents(self.project)["a1"]["transcript"])
         msg = "You've hit your 5-hour limit · resets 1:30pm (Europe/Madrid)"
         rec = {
             "type": "assistant",
@@ -911,7 +912,7 @@ class BetweenPassesTest(NoticesCase):
         self.assertEqual(self.between(), [("wip_production", True)])
         self.agent("a1", "zed7")  # production full: the case goes away
         self.assertEqual(self.between(), [])
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         d["a1"]["stopped"] = True
         util.write_json(f, d)
@@ -1210,7 +1211,7 @@ class ContextRotateTest(NoticesCase):
         self.assertEqual(self.kinds("S1", mark=False)["context_rotate"], [True])  # looking does not use it up
         self.assertEqual(self.kinds("S1")["context_rotate"], [True])  # crosses
         self.assertEqual(self.kinds("S1")["context_rotate"], [False])  # then information
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         d["a1"]["stopped"] = True
         util.write_json(f, d)
@@ -1315,7 +1316,7 @@ class IdentityPassTest(NoticesCase):
         t.parent.mkdir(exist_ok=True)
         t.write_text(json.dumps({"message": {"role": "user", "content": brief}}, ensure_ascii=False) + "\n")
         now = datetime.now().isoformat(timespec="seconds")
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         d[aid] = {"start": now, "activity": now, "type": "general-purpose", "transcript": str(t), **fields}
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -1347,7 +1348,7 @@ class IdentityPassTest(NoticesCase):
         self.assertNotIn("orphan_in_progress", k)
         self.assertNotIn("nameless_agents", k)
         self.assertNotIn("wip_production", k)  # zed7 fills the production slot (general-purpose, but recorded so)
-        ident = json.loads(loop.agents_json(self.project))["ag1"]["identity"]
+        ident = json.loads(agents_mod.agents_json(self.project))["ag1"]["identity"]
         self.assertEqual(
             (ident["name"], ident["issue"], ident["branch"], ident["production"], ident["registered"], ident["source"]),
             ("zed7", "AB-1", "ab1/x", True, True, "launch"),
@@ -1393,7 +1394,7 @@ class IdentityPassTest(NoticesCase):
         self.issue("AB-1", "in progress", agent="c6", branch="feat/x")
         self.worktree("feat/x")
         self.entry("a1", "Read the rules; your name is c6. Issue: AB-1 T1.", type="foreman:dev")
-        ident = json.loads(loop.agents_json(self.project))["a1"]["identity"]
+        ident = json.loads(agents_mod.agents_json(self.project))["a1"]["identity"]
         self.assertEqual((ident["name"], ident["issue"], ident["source"]), (None, "AB-1", None))
         self.assertIn("nameless_agents", self.kinds("S1"))
 
@@ -1479,7 +1480,7 @@ class DeliveredTest(NoticesCase):
         self.send("PostToolUse", aid, tool_name="Bash", tool_input={"command": cmd})
 
     def state(self, aid="d1"):
-        return loop.agent_state(loop.agents(self.project)[aid])
+        return agents_mod.agent_state(agents_mod.agents(self.project)[aid])
 
     def live(self):
         return [h["id"] for h in loop.live_agents(self.project)]
@@ -1491,7 +1492,7 @@ class DeliveredTest(NoticesCase):
 
     def age(self, aid="d1", **minutes):
         """Moves the entry's timestamps back (key=minutes ago); `activity` moves its transcript's time too."""
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = util.read_json(f, {})
         for k, m in minutes.items():
             d[aid][k] = (datetime.now() - timedelta(minutes=m)).isoformat(timespec="seconds")
@@ -1532,11 +1533,12 @@ class DeliveredTest(NoticesCase):
         self.bash("ls")
         self.age(activity=60, start=90)
         self.assertEqual((loop.stalled(self.project), self.panel_status()), (["zed7 (60 min)"], "maybe stuck"))
-        t = loop.agents(self.project)["d1"]["transcript"]
+        t = agents_mod.agents(self.project)["d1"]["transcript"]
         with open(t, "a") as f:
             f.write('{"text": "still thinking"}\n')  # the transcript advances, `activity` does not
         self.assertEqual(
-            loop.agents(self.project)["d1"]["activity"][:16], (datetime.now() - timedelta(minutes=60)).isoformat()[:16]
+            agents_mod.agents(self.project)["d1"]["activity"][:16],
+            (datetime.now() - timedelta(minutes=60)).isoformat()[:16],
         )
         self.assertEqual((loop.stalled(self.project), self.panel_status()), ([], "working"))
         os.utime(t, (time.time() - 25 * 60,) * 2)  # quiet again for 25 min: stalled in both, counted from there
@@ -1576,7 +1578,7 @@ class DeliveredTest(NoticesCase):
         self.send("SubagentStop")
         self.assertEqual(self.state(), "delivered")
         self.bash("git status")  # resumed (SendMessage, or a notification of its task)
-        h = loop.agents(self.project)["d1"]
+        h = agents_mod.agents(self.project)["d1"]
         self.assertNotIn("end", h)
         self.assertNotIn("delivered", h)
         self.assertEqual((self.state(), self.live()), ("working", ["d1"]))
@@ -1589,7 +1591,7 @@ class DeliveredTest(NoticesCase):
         self.assertEqual(self.state(), "delivered")
         self.send("SubagentStop")
         self.assertEqual((self.state(), self.live()), ("delivered", []))
-        self.assertEqual(list(loop.agents(self.project)), ["d1"])  # two deliveries of one task: one agent
+        self.assertEqual(list(agents_mod.agents(self.project)), ["d1"])  # two deliveries of one task: one agent
         self.assertIn("ready_to_integrate", self.kinds())
 
     def test_stop_by_hand_and_what_is_not_a_delivery(self):
@@ -1605,7 +1607,7 @@ class DeliveredTest(NoticesCase):
         self.send("PostToolUse", tool_name="Write", tool_input={"command": self.DONE})
         self.send("PostToolUse", tool_name="Bash", tool_input="not a dict")
         self.assertEqual(self.state(), "working")
-        self.assertEqual(loop.stop_agent(self.project, "zed7"), ["d1"])
+        self.assertEqual(agents_mod.stop_agent(self.project, "zed7"), ["d1"])
         self.assertEqual((self.state(), self.live()), ("stopped", []))
         self.assertEqual(json.loads(self.cli("agents", "--json").stdout)["d1"]["state"], "stopped")
         self.assertEqual(self.panel_status(), "finished")
@@ -1631,7 +1633,7 @@ class DeliveredTest(NoticesCase):
             ({"stopped": True, "delivered": new}, "stopped"),
             ({"tool": "SubagentHandback", "end": new}, "waiting"),
         ):
-            self.assertEqual(loop.agent_state(h, now), want, h)
+            self.assertEqual(agents_mod.agent_state(h, now), want, h)
 
     def test_a_report_set_on_the_sub_issue_is_the_branch_report(self):
         """The acceptance criterion: a delivered branch whose sub-issue names its report (a file that does not cite
@@ -1662,12 +1664,12 @@ class DeliveredTest(NoticesCase):
         self.assertEqual((last["done"], last["report"]), (True, "reviews/2026-11-01-result.md"))
         self.bash(f"{self.DONE} --outcome partial --report {report}")
         self.send("SubagentStop", last_assistant_message="Delivered.")
-        h = loop.agents(self.project)["d1"]
+        h = agents_mod.agents(self.project)["d1"]
         self.assertEqual((h["outcome"], h["report"]), ("partial", "reviews/2026-11-01-result.md"))
         self.assertIsNone(self.b.issue(self.b.load(), "AB-1")["subs"][0].get("report"))
         self.assertIn("app:ab1/x (reviews/2026-11-01-result.md; outcome partial)", self.notice_of_ready())
         self.bash("git status")  # resumed: working again, the delivery and its report go
-        self.assertNotIn("report", loop.agents(self.project)["d1"])
+        self.assertNotIn("report", agents_mod.agents(self.project)["d1"])
         self.bash(self.DONE + " --report=reviews/nope.md")
         self.send("SubagentStop")
         self.assertIn(
@@ -1715,7 +1717,7 @@ class MeasureBranchesTest(NoticesCase):
         for br in ("ab1/code", "ab2/measure", "ab3/said", "ab4/closed", "ab5/mixed"):
             git(self.tmp / "app", "worktree", "add", "-q", "-b", br, str(self.tmp / "wt" / br.replace("/", "-")))
         util.write_json(
-            loop.agents_file(self.project),
+            agents_mod.agents_file(self.project),
             {"a3": {"name": "m3", "branch": "ab3/said", "delivered": "2026-11-01T10:00:00", "kind": "measure"}},
         )
 
@@ -1750,7 +1752,7 @@ class MeasureBranchesTest(NoticesCase):
         with self.b.mutate() as d:
             self.b.set_sub(d, "AB-2", "T1", report="reviews/m2.md")
         util.write_json(
-            loop.agents_file(self.project),
+            agents_mod.agents_file(self.project),
             {"a2": {"name": "m2", "branch": "ab2/measure", "delivered": "2026-11-01T10:00:00", "outcome": "partial"}},
         )
         m = next(n for n in self.notices(mark=False) if n["kind"] == "measure_delivered")
@@ -1827,7 +1829,7 @@ class BranchNoWorktreeTest(NoticesCase):
         self.assertNotIn("loose_branches", ns)  # c and d: named by closed sub-issues
 
     def test_a_live_agent_keeps_it_quiet(self):
-        util.write_json(loop.agents_file(self.project), {"a1": {"name": "c1", "branch": "ab1/code"}})
+        util.write_json(agents_mod.agents_file(self.project), {"a1": {"name": "c1", "branch": "ab1/code"}})
         self.agent("a1", "c1")
         n = next(n for n in self.notices(mark=False) if n["kind"] == "branch_no_worktree")
         self.assertNotIn("ab1/code", n["text"])
@@ -2014,7 +2016,7 @@ class BranchReportTest(NoticesCase):
         self.write("reviews/2026-11-01-ab-10.md")  # AB-10 is not AB-1: a name match would win over the health file
         os.utime(self.home / "reviews/2026-11-01-ab-1-x.md", (time.time() - 60,) * 2)
         self.assertIn("app:ab1/x (reviews/2026-11-01-ab-1-x.md)", self.ready())
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         start = (datetime.now() - timedelta(minutes=30)).isoformat(timespec="seconds")
         util.write_json(f, {"d1": {"start": start, "end": start, "delivered": start, "branch": "ab1/x"}})
         os.utime(self.home / "reviews/2026-11-01-ab-1-x.md", (time.time() - 3600,) * 2)  # before the agent
@@ -2399,7 +2401,7 @@ class TickTest(LivenessCase):
         self.mark("S1", since_ago=self.HOUR)
         ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
         for text, level in (("[]", "ok"), ('{"a1": "x"}', "bad")):
-            loop.agents_file(self.project).write_text(text)
+            agents_mod.agents_file(self.project).write_text(text)
             out = hooks_mod.tick(ev)
             self.assertEqual((out["band"]["level"], "grants" in out), (level, True), (text, out))
 
@@ -2412,7 +2414,7 @@ class TickTest(LivenessCase):
 
         self.mark("S1", since_ago=self.HOUR)  # a pass is due, but a turn runs (busy): no pass
         ev = {"cwd": str(self.home), "session": "S1", "busy": True, "claude_code": "2.1.314", "agents": []}
-        with mock.patch.object(loop, "agents", wraps=loop.agents) as ags:
+        with mock.patch.object(agents_mod, "agents", wraps=agents_mod.agents) as ags:
             with mock.patch.object(Backlog, "load", autospec=True, side_effect=Backlog.load) as load:
                 out = hooks_mod.tick(ev)
         self.assertEqual((out["due"], "band" in out, ags.call_count, load.call_count), (False, True, 1, 1), out)

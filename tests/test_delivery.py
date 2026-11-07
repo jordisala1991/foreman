@@ -6,6 +6,7 @@ import re
 
 from helpers import ProjectCase, git, make_repo
 
+from foreman import agents as agents_mod
 from foreman import delivery, loop
 
 TOML = """
@@ -115,7 +116,7 @@ class DeliveryCase(ProjectCase):
         (d / f"2026-10-31-{name}.md").write_text(REPORT)
 
     def entry(self, aid="ag1"):
-        return loop.agents(self.project)[aid]
+        return agents_mod.agents(self.project)[aid]
 
     def kinds(self):
         return {n["kind"]: n for n in loop.notices_for_pass(self.project, None, mark=False)}
@@ -132,7 +133,7 @@ class BlockTest(DeliveryCase):
         self.assertIn("no delivery recorded", reason)
         self.assertIn("foreman --project fake progress --done", reason)
         e = self.entry()
-        self.assertEqual((e["delivery_blocks"], "end" in e, loop.agent_state(e)), (1, False, "working"))
+        self.assertEqual((e["delivery_blocks"], "end" in e, agents_mod.agent_state(e)), (1, False, "working"))
 
     def test_each_missing_piece_blocks_alone(self):
         wt = self.launch()
@@ -153,7 +154,7 @@ class BlockTest(DeliveryCase):
         # the refused stop takes the delivery back: it has to run progress --done again
         e = self.entry()
         self.assertNotIn("delivered", e)
-        self.assertEqual(loop.agent_state(e), "working")
+        self.assertEqual(agents_mod.agent_state(e), "working")
 
     def test_no_report_blocks(self):
         wt = self.launch()
@@ -197,7 +198,7 @@ class BlockTest(DeliveryCase):
         self.done()
         self.assertIsNone(self.stop())
         e = self.entry()
-        self.assertEqual((loop.agent_state(e), e["outcome"], e.get("delivery_blocks")), ("delivered", "ok", None))
+        self.assertEqual((agents_mod.agent_state(e), e["outcome"], e.get("delivery_blocks")), ("delivered", "ok", None))
 
     def test_fixed_after_a_block(self):
         wt = self.launch()
@@ -207,7 +208,7 @@ class BlockTest(DeliveryCase):
         self.done("partial")
         self.assertIsNone(self.stop())
         e = self.entry()
-        self.assertEqual((loop.agent_state(e), e["outcome"], e["delivery_blocks"]), ("delivered", "partial", 1))
+        self.assertEqual((agents_mod.agent_state(e), e["outcome"], e["delivery_blocks"]), ("delivered", "partial", 1))
         self.assertNotIn("delivery_incomplete", self.kinds())
 
     def test_failed_outcome_needs_no_commits_nor_report(self):
@@ -240,7 +241,7 @@ class BlockTest(DeliveryCase):
         """An agent that stops to wait for a task of its own is not checked (it is `waiting`)."""
         self.launch()
         self.assertIsNone(self.stop(background_tasks=[{"id": "b1", "command": "selftest"}]))
-        self.assertEqual(loop.agent_state(self.entry()), "waiting")
+        self.assertEqual(agents_mod.agent_state(self.entry()), "waiting")
 
     def test_never_blocked_outside_production(self):
         # a planner with a launch record and no worktree
@@ -332,7 +333,7 @@ class BlockTest(DeliveryCase):
         self.done(kind="measure")
         self.assertIsNone(self.stop())
         e = self.entry()
-        self.assertEqual((loop.agent_state(e), e["outcome"], e["kind"]), ("delivered", "ok", "measure"))
+        self.assertEqual((agents_mod.agent_state(e), e["outcome"], e["kind"]), ("delivered", "ok", "measure"))
         self.assertNotIn("delivery_incomplete", e)  # let go complete, not after its two tries
         self.assertEqual(delivery.kind_of(self.project, branch="ab1/x"), "measure")
         self.assertEqual(delivery.kind_of(self.project, name="zed7"), "measure")
@@ -564,7 +565,7 @@ class MisledTest(DeliveryCase):
         self.write("2026-10-31-zed7.md", "# Report\nMisled: plan: said the schema stays (10 min)\n")
         self.done()
         self.assertIsNone(self.stop())
-        self.assertEqual(loop.agent_state(self.entry()), "delivered")
+        self.assertEqual(agents_mod.agent_state(self.entry()), "delivered")
 
     def test_none_passes_and_failed_needs_nothing(self):
         wt = self.launch()

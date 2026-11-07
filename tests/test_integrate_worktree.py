@@ -7,7 +7,8 @@ from pathlib import Path
 
 from helpers import ProjectCase, git, make_repo, snapshot
 
-from foreman import backlog_check, config, integrate, loop, util
+from foreman import agents as agents_mod
+from foreman import backlog_check, config, integrate, util
 from foreman.backlog import Backlog
 
 HERE = Path(__file__).resolve().parent
@@ -1164,7 +1165,7 @@ class LocalReportTest(LocalIntegrateCase):
         )
         self.assertEqual(r.returncode, 0, r.stderr)
         util.write_json(
-            loop.agents_file(self.project),
+            agents_mod.agents_file(self.project),
             {"a1": {"name": "w1", "branch": "ab1", "delivered": "2026-11-01T10:00:00", "report": "reviews/r.md"}},
         )
         r = self.integrate("app", "ab1", "AB-1", "--check")
@@ -1176,7 +1177,7 @@ class LocalReportTest(LocalIntegrateCase):
         self.assertIn("report reviews/s.md", self.integrate("app", "ab1", "AB-1", "--check").stdout)
         with self.b.mutate() as d:
             self.b.set_sub(d, "AB-1", "T1", report="reviews/gone.md")
-        util.write_json(loop.agents_file(self.project), {})
+        util.write_json(agents_mod.agents_file(self.project), {})
         r = self.integrate("app", "ab1", "AB-1", "--check")  # the progress line by the sub-issue's agent
         self.assertIn("report reviews/r.md", r.stdout)
         (self.project.state / "progress.jsonl").unlink()
@@ -1460,7 +1461,7 @@ class LocalMeasureTest(LocalIntegrateCase):
         self.assertIn("--measure merges nothing", r.stderr)
         # the delivery said --kind measure: --measure is accepted, and a merge gets a warning
         util.write_json(
-            loop.agents_file(self.project),
+            agents_mod.agents_file(self.project),
             {"a1": {"name": "w1", "branch": "ab1", "delivered": "2026-11-01T10:00:00", "kind": "measure"}},
         )
         r = self.integrate("app", "ab1", "AB-1 T1", "--measure", "--report", "reviews/m.md", "--check")
@@ -1468,7 +1469,7 @@ class LocalMeasureTest(LocalIntegrateCase):
         r = self.integrate("app", "ab1", "AB-1 T1", "--check")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("warning: the agent delivered AB-1 T1 as a measurement", r.stdout)
-        util.write_json(loop.agents_file(self.project), {})
+        util.write_json(agents_mod.agents_file(self.project), {})
         self.as_measure()
         r = self.integrate("app", "ab1", "AB-1 T1", "--measure")  # no report anywhere
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
