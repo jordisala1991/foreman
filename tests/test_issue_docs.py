@@ -118,6 +118,6 @@ class CardNewFieldsTest(IssueDocsTest):
         self.assertEqual(why("es operar tidepool en su propia sesión: cuándo y cómo lo decide Ana"), "lo decide Ana")
         self.assertEqual(
             why("Solo queda T4, medida tras desplegar en los cuatro productos (los otros están parados)"),
-            "Solo queda T4, medida tras desplegar en…",
+            "Solo queda T4…",
         )
         self.assertLessEqual(len(why("x " * 80)), panel_cards.WHY_MAX)

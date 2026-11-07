@@ -52,7 +52,7 @@ class Node {
   blur() {}
   // a click as the browser sends it: capture from the top down, then bubbling up from the target
   click() { this.dispatch("click"); }
-  dispatch(type) {
+  dispatch(type, extra) {
     const path = [];
     for (let n = this; n; n = n.parentNode) path.push(n);
     let stopped = false;
@@ -60,6 +60,7 @@ class Node {
       type, target: this, bubbles: true, cancelable: true, defaultPrevented: false, timeStamp: Date.now(),
       button: 0, detail: 1, isTrusted: true, preventDefault() { this.defaultPrevented = true; },
       stopPropagation() { stopped = true; },
+      ...extra,
     };
     const run = (n, capture) => n._on.filter((l) => l.type === type && l.capture === capture).forEach((l) => {
       e.currentTarget = n;
@@ -98,6 +99,7 @@ const document = {
 };
 const store = { ...(scenario.store || {}) };
 const fetched = [];
+const posts = []; // the POSTs as sent, with their key
 const down = new Set(scenario.down || []); // paths that fail from the start
 const timers = [];
 const windows = [];
@@ -115,10 +117,12 @@ Object.assign(globalThis, {
   fetch: async (url, opts) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
     fetched.push(opts && opts.method === "POST" ? "POST " + p : p);
+    if (opts && opts.method === "POST") posts.push(String(url));
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
     if (down.has(p)) return { ok: false, status: 503, json: async () => ({}) };
     if ((scenario.delay || {})[p]) await new Promise((r) => setTimeout(r, scenario.delay[p])); // a slow one
     const body = scenario.answers[(opts && opts.method === "POST" ? "POST " : "") + p];
+    if (body && body.__status) return { ok: false, status: body.__status, json: async () => body }; // an error answer
     return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
   },
 });
@@ -134,6 +138,26 @@ if (scenario.click) {
   const b = one(app, (n) => n.localName === "button" && words(n) === scenario.click);
   if (!b) throw new Error("no button " + scenario.click);
   b.click();
+  await settle();
+  if (scenario.then) { // a second button, once the first has been answered
+    const b2 = one(app, (n) => n.localName === "button" && words(n) === scenario.then);
+    if (!b2) throw new Error("no button " + scenario.then);
+    b2.click();
+    await settle();
+  }
+}
+// clicks: texts of buttons pressed in turn, each at once (the one after the other without waiting: a double click);
+// press: {nth, key} a key on the nth drag grip
+if (scenario.clicks) {
+  const bs = scenario.clicks.map((c) => one(app, (n) => n.localName === "button" && words(n) === c));
+  if (bs.includes(undefined)) throw new Error("no button in " + scenario.clicks);
+  bs.forEach((b) => b.click());
+  await settle();
+}
+if (scenario.press) {
+  const g = all(app, (n) => n.localName === "button" && cls(n, "grip"))[scenario.press.nth];
+  if (!g) throw new Error("no grip " + scenario.press.nth);
+  g.dispatch("keydown", { key: scenario.press.key });
   await settle();
 }
 if (scenario.tick) {
@@ -217,6 +241,7 @@ console.log(JSON.stringify({
   nobody: words(one(app, (n) => cls(n, "nobody")) || { nodeType: 3, data: "" }),
   windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,
+  posts,
   errors,
 }));
 process.exit(0); // the screens poll: their timers would keep node alive

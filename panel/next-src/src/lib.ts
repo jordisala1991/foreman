@@ -14,7 +14,7 @@ export const lang = (): string => document.documentElement.lang || "en";
 
 // a text of strings/<language>.json, its {name} placeholders filled from `vars`
 export function t(key: Key, vars?: Record<string, string | number>): string {
-  const text = (LANGS[lang()] ?? en)[key];
+  const text = (LANGS[lang()] ?? en)[key] as string | undefined ?? key; // an unknown key (a status the server adds) shows as it is, not a blank screen
   return text.replace(/\{(\w+)\}/g, (m, k: string) => (vars && k in vars ? String(vars[k]) : m));
 }
 

@@ -16,6 +16,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 - The new panel's «Agents» screen (`/next/#/agents`): a card for each agent running (what it works on, its state and how long it has been at it, its last words, red when it may be stuck, «See conversation» for a session agent), the agents that finished today with their result, time, model and list-price cost, and, in the product picker, «All» to see the agents of every product with the new panel, each with its product's tag. It asks `/api/agents?p=NAME` (`*` for all) again every 10 s. A finished agent counts only when its issue is one of the product's, as the charts do.
 - «How it goes» of the new panel now has eight charts of the last 7 or 30 days (`/api/metrics`): cost per day and model (at list price, only the product's own issues), delivery pace (the average is over the days the series covers), how agents end, reviews sent back, the share of tokens on cheaper models, where the cost goes, guard refusals and the quota now. It reads the data again every minute and, if the connection drops, keeps the charts dimmed under a «no connection» line; a first read that failed heals at the next one.
 
+### Fixed
+
+- In the new panel's System, «All good» no longer shows without data: with no Mac measure, no quota measure or no answer yet from the product's state (first paint, a slow or failed call) it says «No data yet» and what is missing. The recurring tasks' schedules show in Spanish, the latest lines are cut when long, and «Integrated» of a task says «Has a commit» (it counts parts with a commit, not what is in main). A short block reason is cut at a clause, not in the middle of a phrase. «Do you want it done?» ignores a second click while the first is sent. An unknown status no longer blanks a screen.
+
 ## [0.66.0] - 2026-11-07
 
 ### Added

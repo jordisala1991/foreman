@@ -86,8 +86,8 @@
   "isu_priority_v": "No. {n} of {total} in {p}",
   "isu_cost": "Cost",
   "isu_cost_v": "${usd} · {runs} runs · {share} % on Sonnet or Haiku",
-  "isu_integrated": "Integrated",
-  "isu_integrated_v": "{n} of {of} parts in main · last {last}",
+  "isu_integrated": "Has a commit",
+  "isu_integrated_v": "{n} of {of} parts with a commit · last {last}",
   "isu_repo": "Repository",
   "isu_agent": "Agent",
   "isu_branch": "Branch",
@@ -192,7 +192,7 @@
   "sys_late_tag": "late",
   "sys_resting_tag": "resting",
   "sys_last_hour": "Latest",
-  "sys_last_none": "Nothing in the last hour.",
+  "sys_last_none": "Nothing new today.",
   "sys_products": "Your products",
   "sys_p_running": "running",
   "sys_p_resting": "resting",
@@ -206,5 +206,10 @@
   "sys_session_current": "up to date",
   "sys_session_behind": "{version} → {installed}",
   "sys_orchestrator": "orchestrator",
-  "who_orchestrator": "orchestrator"
+  "who_orchestrator": "orchestrator",
+  "sys_no_data": "No data yet",
+  "sys_no_data_text": "Missing: {what}. Until it arrives it cannot be said that all is well.",
+  "sys_no_mac": "the Mac measure",
+  "sys_no_quota": "the quota measure",
+  "sys_no_state": "the product's state"
 }

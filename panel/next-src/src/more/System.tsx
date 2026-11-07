@@ -100,6 +100,15 @@ function QuotaBar({ x }: { x: Overview["quota"][number] }) {
   );
 }
 
+// the schedule words the config writes in English («every 60 min», «with each new model, and monthly») in Spanish
+const EVERY_ES: [RegExp, string][] = [
+  [/\bevery\b/g, "cada"], [/\bwith each new model\b/g, "con cada modelo nuevo"], [/\bmonthly\b/g, "cada mes"],
+  [/\bweekly\b/g, "cada semana"], [/\bdaily\b/g, "cada día"], [/\bhourly\b/g, "cada hora"], [/\band\b/g, "y"],
+  [/\bhours?\b/g, "h"], [/\bdays?\b/g, "días"], [/\bweeks?\b/g, "semanas"],
+];
+const every = (x: string): string => (lang() === "es" ? EVERY_ES.reduce((acc, [re, to]) => acc.replace(re, to), x) : x);
+const short = (x: string, n = 160): string => (x.length > n ? x.slice(0, n - 1).trimEnd() + "…" : x);
+
 const PRODUCT_STATE: Record<string, Key> = { running: "sys_p_running", paused: "sys_p_paused", silent: "sys_p_silent", resting: "sys_p_resting" };
 
 export function System({ product }: { product: MoreProduct }) {
@@ -118,11 +127,19 @@ export function System({ product }: { product: MoreProduct }) {
     ...(state?.notes ?? []).map((n) => ({ h: n.time, who: "orchestrator", text: n.text })),
     ...(state?.progress ?? []).filter((x) => String(x.time).slice(0, 10) === today).map((x) => ({ h: String(x.time).slice(11, 16), who: x.agent ?? "?", text: x.text })),
   ].sort((a, b) => b.h.localeCompare(a.h)).slice(0, 40);
+  const missing: Key[] = [];
+  if (!m) missing.push("sys_no_mac");
+  if (!o.quota.length) missing.push("sys_no_quota");
+  if (!state) missing.push("sys_no_state");
   const worst: Level = list.some(([, l]) => l === "bad") ? "bad" : "warn";
   const summary = (
-    <div className={list.length ? `card summary ${worst}` : "card summary good"} role="status">
-      <h2>{list.length ? (list.length === 1 ? t("sys_look_1") : t("sys_look_n", { n: list.length })) : t("sys_all_good")}</h2>
-      {list.length ? <ul>{list.map(([text, l], i) => <li key={i} className={l}>{text}</li>)}</ul> : <p>{t("sys_all_good_text")}</p>}
+    <div className={list.length ? `card summary ${worst}` : missing.length ? "card summary" : "card summary good"} role="status">
+      <h2>{list.length ? (list.length === 1 ? t("sys_look_1") : t("sys_look_n", { n: list.length })) : missing.length ? t("sys_no_data") : t("sys_all_good")}</h2>
+      {list.length ? (
+        <ul>{list.map(([text, l], i) => <li key={i} className={l}>{text}</li>)}</ul>
+      ) : (
+        <p>{missing.length ? t("sys_no_data_text", { what: missing.map((k) => t(k)).join(", ") }) : t("sys_all_good_text")}</p>
+      )}
     </div>
   );
   const mac: ReactNode = m ? (
@@ -176,7 +193,7 @@ export function System({ product }: { product: MoreProduct }) {
                       <span className={`dot ${cls}`} />
                       <span className="rname">{r.name}</span>
                       <span className="rmeta">
-                        {r.every ? r.every + " · " : ""}
+                        {r.every ? every(r.every) + " · " : ""}
                         {last ? t("sys_last", { when: ago(last) }) : t("sys_never")}
                         {r.late && !r.inactive ? <b className="red"> · {t("sys_late_tag")}</b> : r.inactive ? ` · ${t("sys_resting_tag")}` : ""}
                       </span>
@@ -195,7 +212,7 @@ export function System({ product }: { product: MoreProduct }) {
                   <div key={i} className="tl">
                     <span className="when">{x.h}</span>
                     <span className={x.who === "orchestrator" ? "who orch" : "who"}>{x.who === "orchestrator" ? t("who_orchestrator") : x.who}</span>
-                    <span className="what">{x.text}</span>
+                    <span className="what">{short(x.text)}</span>
                   </div>
                 ))
               ) : (

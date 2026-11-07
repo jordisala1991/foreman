@@ -66,6 +66,7 @@ STATE = {
         ],
     }
 }
+STATE_QUIET = {"project": {**STATE["project"], "recurring": []}}
 ISSUE = {"issue": A1, "cost": {"usd": 22.81, "runs": 9, "tokens": 1000, "cheap_share": 34.4}}
 
 
@@ -142,7 +143,7 @@ class BacklogTest(NextMoreTest):
             "T0 · ronda 1 · nada pendiente",
             "1.ª de 3 en E1",
             "$22.81 · 9 ejecuciones · 34 % con Sonnet o Haiku",
-            "1 de 2 partes en main · última abc1234",
+            "1 de 2 partes con commit · última abc1234",
             "Lo que se ha dicho",
             "Lo que has hecho tú",
         ):
@@ -178,6 +179,75 @@ class BacklogTest(NextMoreTest):
         out = self.screen("#/backlog/A-5", **{"/api/issue?p=alpha&id=A-5": closed})
         self.assertIn("Ya hecha", out["text"])
         self.assertIn("Hecho", out["text"])
+
+    def write(self, hash_, answers, **scenario):
+        base = {
+            "/api/projects": self.PROJECTS,
+            "/api/backlog?p=alpha&closed=recent": BACKLOG,
+            "/api/state?p=alpha": STATE,
+            "/api/issue?p=alpha&id=A-4": {"issue": A4, "cost": None},
+        }
+        base.update(answers)
+        return self.mount({"hash": hash_, "answers": base, **scenario})
+
+    def test_want_posts_with_the_key_and_the_flag(self):
+        out = self.write("#/backlog/A-4", {"POST /api/want?p=alpha&id=A-4&on=1": {"ok": True}}, click="La quiero hacer")
+        self.assertEqual(out["posts"], ["/api/want?p=alpha&id=A-4&on=1&t=k3y"])
+        self.assertIn("Hecho", out["text"])
+
+    def test_a_refused_write_shows_why(self):
+        refused = {"__status": 400, "error": "orchestrator not active"}
+        out = self.write("#/backlog/A-4", {"POST /api/want?p=alpha&id=A-4&on=1": refused}, click="La quiero hacer")
+        self.assertIn("No se pudo: orchestrator not active", out["text"])
+
+    def test_reject_asks_then_posts(self):
+        answers = {"POST /api/reject?p=alpha&id=A-4": {"ok": True}}
+        asked = self.write("#/backlog/A-4", answers, click="No la quiero")
+        self.assertEqual(asked["posts"], [])  # the first click only asks
+        out = self.write("#/backlog/A-4", answers, click="No la quiero", then="Sí, no la quiero")
+        self.assertEqual(out["posts"], ["/api/reject?p=alpha&id=A-4&t=k3y"])
+
+    def test_a_double_click_sends_one_post(self):
+        out = self.write(
+            "#/backlog/A-4",
+            {"POST /api/want?p=alpha&id=A-4&on=1": {"ok": True}},
+            clicks=["La quiero hacer", "La quiero hacer"],
+        )
+        self.assertEqual(len(out["posts"]), 1)
+
+    def test_arrows_on_a_grip_move_the_task(self):
+        ok = {"POST /api/move?p=alpha&id=A-2&a=2": {"ok": True}, "POST /api/move?p=alpha&id=A-3&a=1": {"ok": True}}
+        out = self.write("#/backlog/p/E1", ok, press={"nth": 1, "key": "ArrowDown"})
+        self.assertEqual(out["posts"], ["/api/move?p=alpha&id=A-2&a=2&t=k3y"])
+        out = self.write("#/backlog/p/E1", ok, press={"nth": 2, "key": "ArrowUp"})
+        self.assertEqual(out["posts"], ["/api/move?p=alpha&id=A-3&a=1&t=k3y"])
+
+    def test_arrows_on_a_project_grip_move_the_project(self):
+        two = {
+            "project": {
+                "name": "alpha",
+                "backlog": {
+                    **BACKLOG["project"]["backlog"],
+                    "projects": [
+                        {"id": "E1", "title": "core", "status": "in progress", "issues": [A1]},
+                        {"id": "E2", "title": "extra", "status": "planned", "issues": [A3]},
+                    ],
+                },
+            }
+        }
+        answers = {
+            "/api/backlog?p=alpha&closed=recent": two,
+            "POST /api/move?p=alpha&kind=project&id=E1&a=1": {"ok": True},
+        }
+        out = self.write("#/backlog/projects", answers, press={"nth": 0, "key": "ArrowDown"})
+        self.assertEqual(out["posts"], ["/api/move?p=alpha&kind=project&id=E1&a=1&t=k3y"])
+
+    def test_a_refused_move_shows_why(self):
+        refused = {"__status": 403, "error": "orchestrator not active"}
+        out = self.write(
+            "#/backlog/p/E1", {"POST /api/move?p=alpha&id=A-2&a=2": refused}, press={"nth": 1, "key": "ArrowDown"}
+        )
+        self.assertIn("orchestrator not active", out["text"])
 
 
 PAGES = [
@@ -290,10 +360,43 @@ class SystemTest(NextMoreTest):
 
     def test_all_good(self):
         calm = {**self.MAC, "swap_gb": 1.1}
-        state = {"project": {**STATE["project"], "recurring": []}}
-        projects = {**self.PROJECTS, "mac": calm, "quota": [], "errors": []}
-        out = self.mount({"hash": "#/system", "answers": {"/api/projects": projects, "/api/state?p=alpha": state}})
+        projects = {
+            **self.PROJECTS,
+            "mac": calm,
+            "quota": [{"kind": "five_hour", "percent_used": 10, "resets_at": None}],
+            "errors": [],
+        }
+        out = self.mount(
+            {"hash": "#/system", "answers": {"/api/projects": projects, "/api/state?p=alpha": STATE_QUIET}}
+        )
         self.assertIn("Todo bien", out["text"])
+
+    def test_no_data_is_not_all_good(self):
+        calm = {**self.MAC, "swap_gb": 1.1}
+        quota = [{"kind": "five_hour", "percent_used": 10, "resets_at": None}]
+        cases = {
+            "no state answer": (
+                {**self.PROJECTS, "mac": calm, "quota": quota, "errors": []},
+                {"down": ["/api/state?p=alpha"]},
+            ),
+            "slow state": (
+                {**self.PROJECTS, "mac": calm, "quota": quota, "errors": []},
+                {"hang": ["/api/state?p=alpha"]},
+            ),
+            "no Mac": ({**self.PROJECTS, "mac": None, "quota": quota, "errors": []}, {}),
+            "no quota": ({**self.PROJECTS, "mac": calm, "quota": [], "errors": []}, {}),
+        }
+        for name, (projects, extra) in cases.items():
+            with self.subTest(name):
+                out = self.mount(
+                    {
+                        "hash": "#/system",
+                        "answers": {"/api/projects": projects, "/api/state?p=alpha": STATE_QUIET},
+                        **extra,
+                    }
+                )
+                self.assertNotIn("Todo bien", out["text"])
+                self.assertIn("Sin datos", out["text"])
 
     def test_an_old_session_is_a_thing_to_look_at(self):
         text = self.system(

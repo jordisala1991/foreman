@@ -95,7 +95,13 @@ def why_short(blocked: str | None) -> str:
     m = _DECIDES.search(t)
     out = first if _WAITS.match(first) or not m else m.group(0).strip(" ,.")
     if len(out) > WHY_MAX:
-        out = out[: WHY_MAX - 1].rsplit(" ", 1)[0].rstrip(" ,.") + "…"
+        cut = out[: WHY_MAX - 1]
+        comma = cut.rfind(", ")
+        if comma >= 12:  # at a clause when there is one, not in the middle of a phrase
+            cut = cut[:comma]
+        else:
+            cut = cut.rsplit(" ", 1)[0]
+        out = cut.rstrip(" ,.") + "…"
     return out
 
 

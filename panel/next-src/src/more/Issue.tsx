@@ -1,6 +1,6 @@
 // The page of a task: what it is for, how its parts go, its documents grouped by type, what has been said and what
 // the owner did on it, and its data. A task in triage asks first «¿La quieres hacer?».
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { t, type Key } from "../lib";
 import { go, post, q, useApi } from "./api";
 import { isBlocked, nameOf, StatusIcon, SubRows, subLive, subState, whyOf } from "./Backlog";
@@ -73,12 +73,20 @@ function Docs({ docs }: { docs: DocRef[] }) {
 function Want({ c, product, done }: { c: Card; product: MoreProduct; done: () => void }) {
   const [sure, setSure] = useState(false);
   const [msg, setMsg] = useState("");
-  const call = (path: string) =>
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false); // a second click can come before the screen redraws
+  const call = (path: string) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
     void post(`${path}?p=${q(product.name)}&id=${q(c.id)}${path.endsWith("want") ? "&on=" + (c.wanted ? "0" : "1") : ""}`).then((r) => {
       setMsg(r.ok ? t("want_done") : t("want_failed", { text: r.error }));
       setSure(false);
+      inFlight.current = false;
+      setBusy(false);
       if (r.ok) done();
     });
+  };
   return (
     <div className="card want">
       <h2>{t("want_title")}</h2>
@@ -93,7 +101,7 @@ function Want({ c, product, done }: { c: Card; product: MoreProduct; done: () =>
         </>
       ) : (
         <div className="btnrow">
-          <button type="button" className="btn primary" onClick={() => call("/api/want")}>{c.wanted ? t("want_undo") : t("want_yes")}</button>
+          <button type="button" className="btn primary" disabled={busy} onClick={() => call("/api/want")}>{c.wanted ? t("want_undo") : t("want_yes")}</button>
           {!c.wanted ? <button type="button" className="btn" onClick={() => setSure(true)}>{t("want_no")}</button> : null}
         </div>
       )}

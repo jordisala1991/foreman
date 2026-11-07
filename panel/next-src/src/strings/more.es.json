@@ -86,8 +86,8 @@
   "isu_priority_v": "{n}.ª de {total} en {p}",
   "isu_cost": "Coste",
   "isu_cost_v": "${usd} · {runs} ejecuciones · {share} % con Sonnet o Haiku",
-  "isu_integrated": "Integrada",
-  "isu_integrated_v": "{n} de {of} partes en main · última {last}",
+  "isu_integrated": "Con commit",
+  "isu_integrated_v": "{n} de {of} partes con commit · última {last}",
   "isu_repo": "Repositorio",
   "isu_agent": "Agente",
   "isu_branch": "Rama",
@@ -192,7 +192,7 @@
   "sys_late_tag": "atrasada",
   "sys_resting_tag": "en reposo",
   "sys_last_hour": "Lo último",
-  "sys_last_none": "Nada en la última hora.",
+  "sys_last_none": "Nada nuevo hoy.",
   "sys_products": "Tus productos",
   "sys_p_running": "en marcha",
   "sys_p_resting": "en reposo",
@@ -206,5 +206,10 @@
   "sys_session_current": "al día",
   "sys_session_behind": "{version} → {installed}",
   "sys_orchestrator": "orquestador",
-  "who_orchestrator": "orquestador"
+  "who_orchestrator": "orquestador",
+  "sys_no_data": "Sin datos todavía",
+  "sys_no_data_text": "Falta: {what}. Hasta que llegue no se puede decir que todo vaya bien.",
+  "sys_no_mac": "la medida del Mac",
+  "sys_no_quota": "la medida de la cuota",
+  "sys_no_state": "el estado del producto"
 }
