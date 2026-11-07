@@ -748,7 +748,12 @@ makes a call of any other tool that names a place or a command of one (a Read of
 URL, a Monitor running its command: docs/internals.md, «Any other tool»; the question names the tool and what
 matched), and records the answer through `foreman hook mod grant` (hooks_mod.py). The question shows wherever the owner follows
 that chat: the terminal, the desktop app, an SDK host's chat, and the phone through Remote Control (the phone does not
-notify: open the session to see it). Its options are «Yes, for N min» and «No»; anything but the yes is a no, and
+notify: open the session to see it). As it asks, the module also raises a short notice («the orchestrator asks for
+your yes to «group»: answer in the chat», and that the request moves to the panel after `ask_minutes`; never the
+command) through Claude Code's notification channel: a terminal that notifies shows
+it, and the owner's own `Notification` hooks in Claude Code's settings receive it anywhere; with no terminal (the
+desktop app, an SDK host) and no such hook nothing shows. How it went is recorded with the answer and the pending
+request (`notified`), so the panel can say the owner could not be told. Its options are «Yes, for N min» and «No»; anything but the yes is a no, and
 closing it (Esc, «Chat about this») refuses the call without counting as a no. Where nobody can be asked (`claude
 -p`) the call is refused. The command waits while the question is open, and the orchestrator with it. No command
 gives a grant: the guard refuses any Bash call that runs `foreman hook mod`, for everyone. A no blocks that call and

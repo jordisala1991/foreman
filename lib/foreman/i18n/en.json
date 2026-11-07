@@ -72,6 +72,8 @@
   "grant_yes": "Yes, for {minutes} min",
   "grant_no": "No",
   "grant_header": "foreman",
+  "grant_notice": "{orchestrator}, the orchestrator of {project}, asks for your yes to «{group}»: answer in the chat; with no answer in {ask} min the request moves to foreman's panel.",
+  "grant_notice_chat": "{orchestrator}, the orchestrator of {project}, asks for your yes to «{group}»: answer in the chat.",
   "grant_denied_no": "Blocked: {owner} said no to the group «{group}». Do not try again until {owner} says so in the chat; for {minutes} minutes foreman will not ask again.",
   "grant_denied_dismissed": "Blocked: {owner} closed the question about the group «{group}» without saying yes. Do not try again until {owner} says so in the chat.",
   "grant_denied_timeout": "Blocked: {owner} did not answer the question about the group «{group}» in time. The request waits for {owner} in foreman's panel for up to {hours} h, and a late answer in the chat counts too: when {owner} answers, a message from {owner} comes to your inbox. Do not try again until then; if you no longer need it, withdraw it with `foreman permissions grants off {group} --pending`.",
