@@ -268,6 +268,26 @@ they disagree.
      launch its default, a dearer `--type` or `--model` is refused, and so is an Agent call dearer than its launch. The brief
      ends with «last command: `foreman progress --done "result" --outcome ok|partial|failed --report
      reviews/<file>.md`» (the agent names its report; the pass and `foreman integrate` take it).
+   - **As a session of its own (`--session`).** With `[agents] sessions = true` in the product's `foreman.toml`
+     (a reserved file: the owner or the orchestrator changes it; the default is `false`), add `--session [--brief-file F]`
+     to the same `foreman launch` instead of making an Agent call: foreman starts the agent as a Claude Code
+     session of its own (`claude --bg -n NAME`, run in its worktree, with the type as `--agent foreman:TYPE` and
+     `--model`; the guard decides its permissions) whose prompt is the launch line followed by the text of F, so it
+     keeps running when your session ends or is renewed. Write the brief to a file and pass it; there is no Agent
+     call. It prints `started as session ID`; the agent is in `foreman agents` at once, tied to its launch, and
+     nothing else changes in how you follow it: its tool calls are its activity, its `foreman progress --done` its
+     delivery (the delivery check runs at its `Stop`, as it does at a subagent's stop), `foreman agents --stop NAME`
+     also runs `claude stop`, and its delivery brings the next pass within a minute. A launch while the product is
+     paused (with `--repo`) is refused as any other. With the key `false`, `--session` is refused naming the key and
+     you launch with the Agent tool as above. To go back to that way, set the key to `false` (the owner's or your
+     change to `foreman.toml`): nothing else is needed, and the session agents already running stay recognised as
+     agents and can be stopped with `foreman agents --stop`.
+   - **Seeing a session agent.** `foreman agents` crosses each session agent with `claude agents --json --all`: one
+     that failed or was stopped shows as `stopped`, one no longer listed as `stopped` with `claude_state` `gone`.
+     Remote Control is not on at launch; the owner asks for it with the panel's «See conversation» button on the
+     agent (its row or detail), which turns it on for that session only (it does not stop the session or cut a turn)
+     and opens its conversation in the Claude app. Each click that connects sends the owner's phone a push, so do not
+     ask for it in a loop. A session agent gets no orchestrator messages from the hooks (who is who, «mark yourself»).
    - A production agent launched without the line gets you a warning right after the launch: give it its identity
      with `foreman agents --name AGENT_ID NAME --issue ID --sub Tn --branch BRANCH` (the id, or a unique prefix of
      it, is in `foreman agents`). Without either the agent has no name (the `nameless_agents` notice); foreman

@@ -16,6 +16,16 @@ them when it launched you, so `foreman agents` and the panel know who you are; l
   issue.
 - Work in your worktree and your own scratch folder; do not touch other agents' work.
 
+## If you run as a session of your own
+
+An agent launched with `foreman launch --session` is a Claude Code session started with `claude --bg`, not a subagent.
+Its brief and this procedure are the same; what differs is how foreman knows you: the launch token is in your
+environment (`FOREMAN_LAUNCH`, kept by the session), so the guard treats your main thread as an agent whatever else
+is written in the session, and `foreman progress` and `foreman lock` find your name as they do for a subagent. Your
+`foreman progress --done` is your delivery and your last stop goes through the delivery check. You are not the
+owner's session: marking yourself with `foreman session` gives you no powers. Nobody sees your conversation unless the
+owner asks the panel for it.
+
 ## While working
 
 - **Who you are, for foreman:** when your brief starts with the launch line, `foreman progress` and `foreman lock`
