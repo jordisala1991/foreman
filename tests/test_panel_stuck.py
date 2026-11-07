@@ -102,3 +102,44 @@ class StuckTest(PanelCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+STALE = """
+const ts = Math.round(Date.now() / 1000);
+const text = '# Informe\\n\\n| a | b |\\n|---|---|\\n| 1 | 2 |\\n\\n1. uno\\n2. dos\\n';
+const out = {};
+await settle(800);
+for(const [k, age] of [['fresh', 600], ['old', 143 * 3600 + 19 * 60]]){
+  const d = JSON.parse(JSON.stringify(lastData));
+  d.ps = [Object.assign(d.ps[0], {report: {ts: ts - age, text}})];
+  renderNow(d);
+  out[k] = $('report').innerHTML;
+}
+out.durs = [dur(90), dur(3 * 3600 + 5 * 60), dur(30 * 3600), dur(6 * 86400 + 100)];
+out.ago_old = ago(143.3);
+return out;
+"""
+
+
+class ReportTest(PanelCase):
+    run_page = StuckTest.run_page
+
+    def test_report_is_formatted_and_old_one_warns(self):
+        """The orchestrator's report is a full document (heading, table, numbered list); past 6 h its age is amber
+        with «puede estar desfasado»; durations past 2 days read in days, shorter ones as before."""
+        js = (ROOT / "panel/app.js").read_text()
+        self.assertNotIn("md(p.report.text)", js)
+        out = self.run_page(STALE)
+        self.assertEqual(out["durs"], ["1 min", "3 h 5 min", "30 h 0 min", "6 días"])
+        self.assertEqual(out["ago_old"], "hace 6 días")
+        for k in ("fresh", "old"):
+            self.assertIn("<h1", out[k])
+            self.assertIn("<table", out[k])
+            self.assertIn("<ol", out[k])
+        self.assertIn("hace 10 min", out["fresh"])
+        self.assertIn("data-turn=", out["fresh"])  # turns amber once 6 h pass
+        self.assertNotIn('class="warn stale-age"', out["fresh"])
+        self.assertIn('class="warn stale-age"', out["old"])
+        self.assertIn("hace 6 días", out["old"])
+        self.assertIn("puede estar desfasado", out["old"])
+        self.assertNotIn("hace 143 h", out["old"])
