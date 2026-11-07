@@ -480,6 +480,21 @@ def deny(
     return hit
 
 
+_GIT_OPTS = re.compile(r"^((?:\S*/)?git)(?:\s+-[Cc]\s+\S+)+(?=\s)")  # `git -C DIR -c K=V push …` → `git push …`
+
+
+def parts(pats: Sequence[str], cmd: str) -> list[str]:
+    """Every text of the command (as deny compares it, without resolving pushes) that runs one of the patterns, in
+    order and whole (not shortened): what a question about the command shows instead of its start. A text is also
+    compared without git's own `-C DIR` and `-c KEY=VALUE` (what resolving its push would find). [] when none
+    matches or the line cannot be read."""
+    try:
+        texts = [text for text, *_ in _texts(cmd, 0, True)]
+    except Exception:  # noqa: BLE001 (only words for a question: unreadable gives none)
+        return []
+    return [x for x in texts if any(re.search(p, x) or re.search(p, _GIT_OPTS.sub(r"\1", x)) for p in pats)]
+
+
 def _start(at: gitpush.Resolver | None) -> At | None:
     return (at, at.start, gitpush.NONE) if at else None
 

@@ -47,7 +47,6 @@ import json
 import os
 import re
 import secrets
-import shlex
 import shutil
 import sys
 import threading
@@ -514,35 +513,6 @@ def project_state(project: Project, lock_list: list[Status]) -> Obj:
     }
 
 
-_SHELL_CHARS = set(";&|<>`$()\n\r{}*?~!#")
-
-
-def grant_say(command: str) -> dict[str, Any] | None:
-    """What a pending command does, for the page's plain words, or None when it is not one of a few plain shapes (the
-    page then names the group). Conservative on purpose, as the owner's yes rests on it: any shell operator or
-    expansion, any option, a `:ref` or `+ref` (deletes, forces) gives None.
-    `git push REMOTE [REF…]` → {kind: push, refs, to: REMOTE} (push_all with no refs);
-    `gh release create TAG` → release; `make|npm|yarn|pnpm|just [run] deploy` → deploy."""
-    if not command or _SHELL_CHARS & set(command):
-        return None
-    try:
-        w = shlex.split(command)
-    except ValueError:
-        return None
-    if any(x.startswith("-") for x in w[1:]):
-        return None
-    if w[:2] == ["git", "push"] and len(w) >= 3:
-        refs = w[3:]
-        if any(r[:1] in (":", "+") or ":" in r for r in refs):
-            return None
-        return {"kind": "push", "to": w[2], "refs": refs} if refs else {"kind": "push_all", "to": w[2]}
-    if w[:3] == ["gh", "release", "create"] and len(w) == 4:
-        return {"kind": "release", "what": w[3]}
-    if w[0] in ("make", "npm", "yarn", "pnpm", "just") and w[1:] in (["deploy"], ["run", "deploy"]):
-        return {"kind": "deploy"}
-    return None
-
-
 def grant_requests(project: Project) -> list[Obj]:
     """The owner's grants of an active product with `[deny.grants]` (grants.py), for the You tab: each request the
     hooks module's question left unanswered and still pending (`pending`: group, command, at, expires, orchestrator,
@@ -558,7 +528,7 @@ def grant_requests(project: Project) -> list[Obj]:
             "pending": True,
             "command": r.get("command") or "",
             "summary": r.get("summary") or "",
-            "say": grant_say(str(r.get("command") or "")),
+            "say": grants.say(str(r.get("command") or "")),
             "orchestrator": r.get("orchestrator") or "",
             "at": r.get("at"),
             "expires": r["expires"],

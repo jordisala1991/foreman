@@ -661,7 +661,7 @@ function renderYou(d){
 // command (`say`: a push, a release, a deploy; null when it is none of those, the title then names the group).
 function grantSay(x){
   if(x.summary) return esc(x.summary);
-  const k = x.say;   // read from the command by panel.grant_say (conservative: null for anything unusual)
+  const k = x.say;   // read from the command by grants.say (conservative: null for anything unusual)
   if(!k) return null;
   if(k.kind === 'push') return t('grant_say_push', {what: k.refs.map(esc).join(t('grant_and')), to: esc(k.to)});
   if(k.kind === 'push_all') return t('grant_say_push_all', {to: esc(k.to)});

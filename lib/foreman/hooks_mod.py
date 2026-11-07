@@ -121,7 +121,10 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     matched (i18n grant_question_tool), and a reserved file it writes asks nothing ({}). When the one
     thing missing is a grant (why=grant), or the command passes on a live grant of grants.json, it answers {group,
     live: bool, question, yes, no, header (i18n grant_*, the project's language), ask_ms ([deny] ask_minutes; 0: no
-    limit), waiting (i18n grant_denied_waiting), until (when live)}. After the owner's no, while the group cools down
+    limit), waiting (i18n grant_denied_waiting), until (when live)}. The question (i18n grant_question) says what the
+    command will do in plain words (_words: the one part of the command that runs the group, read by grants.say; a
+    generic phrase otherwise), never the group's name, and shows that part, not the command's start, as a detail.
+    After the owner's no, while the group cools down
     in this session (grants.COOLDOWN_S), {group, deny} (i18n grant_denied_cooldown) and no question. A command
     whose every grant the owner gave from foreman's panel (grants.from_panel: via "panel", its signature verified
     with the panel's grant key) answers {}: the module never heard that yes, and the panel's approval stands. Otherwise
@@ -137,20 +140,21 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     permission callback) and `dismissed` otherwise (Esc, «Chat about this», a host that refuses); the timer is
     `timeout`. Neither the surfaces nor `isInteractive` decide whether to ask: they cannot tell a hosted session
     with a person behind it (the desktop app, an SDK host, the phone) from none. An answer that asks also carries
-    `notice` (i18n grant_notice: who asks, the project and the group, never the command, as it goes to a system
-    channel, and that the request moves to the panel after ask_minutes; grant_notice_chat, the chat only, with no
-    limit): right after raising the question the module raises it with `$.ui.notify(notice, {title: header})`,
-    without waiting on it, and the answer phase carries how it went as `notified`: `sent:<channel>`, `no:<reason>`
-    (no terminal, notifications off…), `error` (it rejected, or this Claude Code has no $.ui.notify) or `unknown`
-    (not settled within 2 s of the answer).
+    `notice` (i18n grant_notice: the project and the question's words without the command's own (no ref, no tag),
+    as it goes to a system channel, and that the request moves to the panel after ask_minutes; grant_notice_chat,
+    the chat only, with no limit): right after raising the question the module raises it with
+    `$.ui.notify(notice, {title: header})`, without waiting on it, and the answer phase carries how it went as
+    `notified`: `sent:<channel>`, `no:<reason>` (no terminal, notifications off…), `error` (it rejected, or this
+    Claude Code has no $.ui.notify) or `unknown` (not settled within 2 s of the answer).
   - stdin {phase: "answer", cwd, session, group, answer: yes|no|dismissed|timeout|unavailable, surfaces, command (or
     tool and input), tool_use_id, late?}; for another tool the record's `command` is `<tool> <place or command>` (judged
     again) and it carries `tool`. On yes, when the session is still the marked one and this call runs in the mark's
     `claude` process: the grant (grants.give, [deny] grant_minutes), a line in approved.jsonl (verdict grant) and a
     note; {granted: true, until, log}. A yes from another session or process grants nothing ({granted: false, deny}).
     Any other answer: {granted: false, deny} (i18n grant_denied_ANSWER) and a line (verdict deny); a no starts the
-    cooldown; a timeout keeps the request pending for the panel (grants.pend, with the mark's pid and start time; the
-    owner approves it there: grants.approve). With `late` true (the answer came after the timeout refused the call):
+    cooldown; a timeout keeps the request pending for the panel (grants.pend, with the mark's pid and start time and
+    `summary`, the question's words, when it had some and the command fits approved.COMMAND_CHARS; the owner
+    approves it there: grants.approve). With `late` true (the answer came after the timeout refused the call):
     a yes to the request that very question left pending (grants.take_late: the same tool_use_id, still pending and
     younger than grants.PENDING_H, the session answering is the marked one that made it, from the mark's process, and
     this call runs in that process) is that grant, from now for grant_minutes: a line (verdict grant, `late`,
@@ -661,8 +665,69 @@ def _tool_call(project: Project, ev: Event, ctx: Any) -> tuple[Any, str]:
     return v, f"{tool} {call}" if call else ""
 
 
+HOSTS = {"github.com": "GitHub", "gitlab.com": "GitLab", "bitbucket.org": "Bitbucket"}  # a push's words name these
+
+
+def _host(folder: str | None, remote: str) -> str:
+    """The well-known host a push to `remote` goes to (HOSTS), read from the remote's URL in `folder` (or `remote`
+    itself when it is a URL), else "": the words then name the remote as written."""
+    from . import util
+
+    url = remote if "/" in remote or ":" in remote else ""
+    if not url and folder:
+        url = util.git(folder, "remote", "get-url", "--push", remote, check=False, timeout=2)
+    m = re.match(r"(?:[a-z+]+://)?(?:[^@/]+@)?([^/:]+)", url)
+    return HOSTS.get(m.group(1).lower(), "") if m and url else ""
+
+
+def _words(project: Project, t: dict[str, str], group: str, cmd: str, cwd: Any) -> tuple[str, str, str]:
+    """What a Bash command of `group` will do, in plain words for the owner: (words, brief, part). `part` is what of
+    the command runs the group (guard.parts; the whole command, flat, when it cannot be told), shown as a detail
+    instead of the command's start. `words` read from it (grants.say) only when exactly one part runs the group and
+    it has a plain shape (or is foreman's own group, grants.INTERNAL), else ""; `brief` the same without the
+    command's own words (refs, tags), for a system notice, else the generic grant_words_any. The push's folder is
+    its `-C` (absolute), or `cwd` when the command is that part alone; its remote is named by host when the URL is a
+    well-known one, and a single ref that is a branch there as the branch."""
+    from . import grants, guard
+
+    flat = " ".join(cmd.split())
+    found = guard.parts(grants.groups(project, True).get(group, []), cmd)
+    part = " · ".join(found) if found else flat
+    say = grants.say(found[0]) if len(found) == 1 else None
+    own = grants.INTERNAL["permissions"] if group == "permissions" else []
+    if say is None and len(found) == 1 and any(re.search(p, found[0]) for p in own):
+        return t["grant_words_permissions"], t["grant_words_permissions"], part  # foreman's own: its words are known
+    if say is None:
+        return "", t["grant_words_any"], part
+    if say["kind"] == "release":
+        return t["grant_words_release"].format(what=say["what"]), t["grant_words_release_brief"], part
+    if say["kind"] == "deploy":
+        return t["grant_words_deploy"], t["grant_words_deploy"], part
+    folder = say.get("in")
+    if folder is not None:
+        folder = folder if os.path.isabs(folder) else None
+    elif part == flat and isinstance(cwd, str) and os.path.isdir(cwd):
+        folder = cwd
+    host = _host(folder, say["to"])
+    refs = say.get("refs") or []
+    what = t["grant_words_and"].join(refs) if refs else t["grant_words_changes"]
+    if (
+        len(refs) == 1
+        and folder
+        and util.git(folder, "rev-parse", "--verify", "-q", f"refs/heads/{refs[0]}", check=False, timeout=2)
+    ):
+        what = t["grant_words_branch"].format(name=refs[0])
+
+    def push(what: str) -> str:
+        if host:
+            return t["grant_words_push"].format(what=what, host=host)
+        return t["grant_words_push_remote"].format(what=what, to=say["to"])
+
+    return push(what), push(t["grant_words_changes"]), part
+
+
 def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
-    from . import grants, guard, orchestrator
+    from . import grants, guard
 
     if ev.get("tool") in guard.FILE_TOOLS and _path(ev):
         out = _file_check(project, session, ev)
@@ -701,18 +766,19 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
         return {}
     minutes = grants.minutes(project, "grant_minutes", 30)
     ask = grants.minutes(project, "ask_minutes", 5)
-    o = orchestrator.current(project) or {}
-    who = o.get("name") or session[:8]
+    if tool:  # another tool: the place or command it names, no words drawn from it
+        words, brief, part = "", t["grant_words_tool"].format(tool=tool), " ".join(cmd[len(tool) + 1 :].split())
+    else:
+        words, brief, part = _words(project, t, group, cmd, ev.get("cwd"))
     out = {
         "group": group,
         "live": live,
         "question": t["grant_question_tool" if tool else "grant_question"].format(
-            orchestrator=who,
             project=project.name,
-            group=group,
+            words=words or t["grant_words_any"],
             minutes=minutes,
             tool=tool,
-            command=" ".join(cmd[len(tool) + 1 if tool else 0 :].split())[:200],
+            command=part[:200],
         ),
         "yes": t["grant_yes"].format(minutes=minutes),
         "no": t["grant_no"],
@@ -720,9 +786,7 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
         "ask_ms": ask * 60_000,
         "waiting": t["grant_denied_waiting"].format(group=group, owner=project.owner),
         # the request reaches the panel only at the question's time limit (none with ask_minutes 0)
-        "notice": t["grant_notice" if ask else "grant_notice_chat"].format(
-            orchestrator=who, project=project.name, group=group, ask=ask
-        ),
+        "notice": t["grant_notice" if ask else "grant_notice_chat"].format(project=project.name, words=brief, ask=ask),
     }
     if live:
         out["until"] = (grants.live(project, group) or {}).get("until")
@@ -785,6 +849,8 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
         extra["cooldown_until"] = grants.cool(project, group, session)
     if answer == "timeout":  # a no for this call; the request waits for the owner in foreman's panel
         mark = orchestrator.record(project)
+        # the question's own words, for the panel; none for another tool, or for a command cut in the record (F9)
+        words = _words(project, t, group, cmd, ev.get("cwd"))[0] if tool is None else ""
         grants.pend(
             project,
             group,
@@ -795,6 +861,7 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
                 "orchestrator": rec["orchestrator"],
                 "command": rec["command"],
                 "tool_use_id": tid,
+                **({"summary": words} if words and len(cmd) < approved.COMMAND_CHARS else {}),
                 **_notified(ev),
             },
         )

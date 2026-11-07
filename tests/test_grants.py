@@ -411,9 +411,9 @@ class ModTest(GrantCase):
     def test_check(self):
         q = self.mod(phase="check", command=DEPLOY, tool_use_id="T1")
         self.assertEqual((q["group"], q["live"], q["ask_ms"]), ("deploy", False, 300_000))
-        self.assertIn("fake-1, the orchestrator of fake", q["question"])
-        self.assertIn("«deploy»", q["question"])
-        self.assertIn(DEPLOY, q["question"])
+        self.assertEqual(
+            q["question"], f"The orchestrator wants to start the deploy. Allow it for 30 min? Command: `{DEPLOY}`"
+        )
         self.assertEqual((q["yes"], q["no"], q["header"]), ("Yes, for 30 min", "No", "foreman"))
         self.assertIn("already waiting for Owner's answer", q["waiting"])
         # nothing to ask: refused anyway ([deny] patterns), not a group command
@@ -443,7 +443,10 @@ class ModTest(GrantCase):
         read = {"tool": "Read", "input": {"file_path": place}}
         q = self.mod(phase="check", **read)
         self.assertEqual((q["group"], q["live"]), ("deploy", False))
-        self.assertIn(f"wants to use Read on `{place}`, which the group «deploy» covers", q["question"])
+        self.assertEqual(
+            q["question"],
+            f"The orchestrator wants to use Read on `{place}`, which needs your yes. Allow it for 30 min?",
+        )
         self.assertEqual(q["group"], self.mod(phase="check", command=f"cat {place}")["group"])  # the same as in Bash
         q = self.mod(phase="check", tool="Monitor", input={"command": DEPLOY, "description": "x"})
         self.assertIn(f"wants to use Monitor on `{DEPLOY}`", q["question"])
@@ -574,8 +577,8 @@ class NoticeTest(GrantCase):
         q = self.mod(phase="check", command=DEPLOY, tool_use_id="T1")
         self.assertEqual(
             q["notice"],
-            "fake-1, the orchestrator of fake, asks for your yes to «deploy»: answer in the chat; with no answer in "
-            "5 min the request moves to foreman's panel.",
+            "The orchestrator of fake wants to start the deploy: answer in the chat; with no answer in 5 min the "
+            "request moves to foreman's panel.",
         )
         place = "/srv/prod-api/config.json"
         q = self.mod(phase="check", tool="Read", input={"file_path": place})
@@ -587,8 +590,8 @@ class NoticeTest(GrantCase):
         q = self.mod(phase="check", command=STORE)
         self.assertEqual(
             q["notice"],
-            "fake-1, el orquestador de fake, pide tu sí para «stores»: contesta en el chat; si no contestas en 5 min, "
-            "la petición pasa al panel de foreman.",
+            "El orquestador de fake quiere ejecutar una orden que necesita tu sí: contesta en el chat; si no "
+            "contestas en 5 min, la petición pasa al panel de foreman.",
         )
         # ask_minutes = 0: the question never times out, so the request never reaches the panel: the chat only
         self.write_toml(
@@ -597,11 +600,13 @@ class NoticeTest(GrantCase):
             )
         )
         q = self.mod(phase="check", command=STORE)
-        self.assertEqual(q["notice"], "fake-1, el orquestador de fake, pide tu sí para «stores»: contesta en el chat.")
+        self.assertEqual(
+            q["notice"], "El orquestador de fake quiere ejecutar una orden que necesita tu sí: contesta en el chat."
+        )
         self.write_toml(TOML.replace("ask_minutes = 5", "ask_minutes = 0"))
         q = self.mod(phase="check", command=STORE)
         self.assertEqual(
-            q["notice"], "fake-1, the orchestrator of fake, asks for your yes to «stores»: answer in the chat."
+            q["notice"], "The orchestrator of fake wants to run a command that needs your yes: answer in the chat."
         )
 
     def test_the_notice_tells_where_the_request_is_when_it_is_sent(self):
@@ -855,8 +860,8 @@ class PanelApproveTest(PendCase):
         self.pend()
         (r,) = state()
         self.assertEqual(
-            (r["group"], r["pending"], r["command"], r["orchestrator"], r["minutes"]),
-            ("deploy", True, DEPLOY, "fake-1", 30),
+            (r["group"], r["pending"], r["command"], r["orchestrator"], r["minutes"], r["summary"]),
+            ("deploy", True, DEPLOY, "fake-1", 30, "start the deploy"),
         )
         self.assertEqual(r["expires"], grants.pending(self.project)["deploy"]["expires"])
         # without the key, or with GET: nothing
@@ -919,13 +924,17 @@ class PanelApproveTest(PendCase):
         self.assertEqual(grants.read(self.project)["cooldowns"], {})
 
     def test_plain_words_are_conservative(self):
-        """panel.grant_say: words only for plain shapes; options, :ref/+ref and shell operators give none."""
-        from foreman.panel import grant_say
-
+        """grants.say (the panel's `say`): words only for plain shapes; options, :ref/+ref and shell operators give
+        none; git's -C and a push's -u change nothing pushed."""
+        grant_say = grants.say
         self.assertEqual(
             grant_say("git push origin release v1.4.0"), {"kind": "push", "to": "origin", "refs": ["release", "v1.4.0"]}
         )
         self.assertEqual(grant_say("git push origin"), {"kind": "push_all", "to": "origin"})
+        self.assertEqual(
+            grant_say("git -C /x push -u origin main"), {"kind": "push", "to": "origin", "refs": ["main"], "in": "/x"}
+        )
+        self.assertEqual(grant_say("git push --set-upstream origin"), {"kind": "push_all", "to": "origin"})
         self.assertEqual(grant_say("gh " + "release create v1.4.0"), {"kind": "release", "what": "v1.4.0"})
         self.assertEqual(grant_say("make deploy"), {"kind": "deploy"})
         self.assertEqual(grant_say("npm run deploy"), {"kind": "deploy"})
@@ -951,6 +960,9 @@ class PanelApproveTest(PendCase):
             "make clean deploy",
             "echo deploy",
             "git push",
+            "git -C /x -c a=b push origin main",
+            "git -C /x push --force origin main",
+            "git -C /x",
             "",
         ):
             self.assertIsNone(grant_say(cmd), cmd)
@@ -1339,6 +1351,120 @@ class LateAnswerTest(PendCase):
         self.assertIn("for up to 24 h", out["deny"])
         self.assertIn("comes to your inbox", out["deny"])
         self.assertIn("foreman permissions grants off deploy --pending", out["deny"])
+
+
+# A group that covers a push (the owner's own case: publish), with the push out of the plain [deny] patterns.
+PUBLISH = (
+    TOML.replace(f'patterns = ["{PUSH}", "{PUB}"]', f'patterns = ["{PUB}"]')
+    + f'publish = ["(^|\\\\s){PUSH}", "gh release create"]\n'
+)
+BRANCH = "fo191/plain-ask"
+
+
+class PlainWordsTest(PendCase):
+    """What a group's question, its notice and its pending request say: what the command will do in plain words
+    (the part of the command that needs the yes, never its start), no internal group name, the orchestrator named
+    once; the raw part only as a detail. A request whose stored command was cut gets no words (F9)."""
+
+    toml = PUBLISH
+
+    def setUp(self):
+        super().setUp()
+        self.repo = helpers.make_repo(self.tmp / "repo")
+        helpers.git(self.repo, "branch", BRANCH)
+        helpers.git(self.repo, "remote", "add", "origin", "https://github.com/owner/repo.git")
+        helpers.git(self.repo, "remote", "add", "lab", "git@gitlab.example:owner/repo.git")
+        git, push = PUSH.split()
+        self.push = f"{git} -C {self.repo} {push} origin {BRANCH}"
+        self.compound = f'foreman backlog edit AB-1 --detail "{"x" * 40}" && {self.push}'
+
+    def timeout(self, group, command, tid):
+        return self.mod(phase="answer", group=group, answer="timeout", surfaces=[], command=command, tool_use_id=tid)
+
+    def spanish(self):
+        self.write_toml(PUBLISH.replace('owner = "Owner"', 'owner = "Owner"\nlanguage = "es"'))
+
+    def test_the_question_says_what_the_push_does_not_the_start_of_the_command(self):
+        self.spanish()
+        q = self.mod(phase="check", command=self.compound, tool_use_id="T1")
+        self.assertEqual(q["group"], "publish")
+        self.assertEqual(
+            q["question"],
+            f"El orquestador quiere subir la rama {BRANCH} a GitHub. ¿Le dejas durante 30 min? Orden: `{self.push}`",
+        )
+        self.assertEqual(
+            q["notice"],
+            "El orquestador de fake quiere subir cambios a GitHub: contesta en el chat; si no contestas en 5 min, "
+            "la petición pasa al panel de foreman.",
+        )
+        for text in (q["question"], q["notice"]):
+            self.assertNotIn("«publish»", text)
+            self.assertNotIn("fake-1", text)
+            self.assertNotIn("foreman backlog", text)
+        self.assertNotIn(BRANCH, q["notice"])  # a system channel: never the command's words
+
+    def test_the_words_follow_the_command(self):
+        self.write_toml(PUBLISH)
+        say = lambda cmd: self.mod(phase="check", command=cmd)["question"]  # noqa: E731
+        self.assertTrue(say(self.push).startswith(f"The orchestrator wants to push the branch {BRANCH} to GitHub. "))
+        self.assertTrue(
+            say(self.push.replace("origin", "lab")).startswith(
+                f"The orchestrator wants to push the branch {BRANCH} to the remote «lab». "
+            )
+        )
+        self.assertTrue(
+            say(self.push.replace(BRANCH, "main v9")).startswith(
+                "The orchestrator wants to push main and v9 to GitHub. "
+            )
+        )
+        self.assertTrue(
+            say("gh release create v1.4.0").startswith("The orchestrator wants to publish release v1.4.0 on GitHub. ")
+        )
+        # a force push: no words drawn from it, the part shown as it is
+        forced = self.push.replace(" origin", " --force origin")
+        self.assertEqual(
+            say(forced),
+            f"The orchestrator wants to run a command that needs your yes. Allow it for 30 min? Command: `{forced}`",
+        )
+        # two parts of the group in one command: no words for one of them
+        both = f"{self.push} && gh release create v1"
+        self.assertTrue(say(both).startswith("The orchestrator wants to run a command that needs your yes. "))
+        self.assertIn("gh release create v1", say(both))
+        # another group, no plain shape: the same generic words, no group name
+        q = self.mod(phase="check", command=STORE)
+        self.assertEqual(
+            q["question"],
+            f"The orchestrator wants to run a command that needs your yes. Allow it for 30 min? Command: `{STORE}`",
+        )
+        self.assertEqual(
+            q["notice"],
+            "The orchestrator of fake wants to run a command that needs your yes: answer in the chat; with no answer "
+            "in 5 min the request moves to foreman's panel.",
+        )
+
+    def test_the_pending_request_carries_the_same_words_for_the_panel(self):
+        from foreman import panel
+
+        self.spanish()
+        self.mod(phase="check", command=self.compound, tool_use_id="T1")
+        self.timeout("publish", self.compound, "T1")
+        self.assertEqual(grants.pending(self.project)["publish"]["summary"], f"subir la rama {BRANCH} a GitHub")
+        (r,) = [r for r in panel.grant_requests(self.project) if r["pending"]]
+        self.assertEqual(r["summary"], f"subir la rama {BRANCH} a GitHub")
+        # no shape: no summary (the panel names the request its own way)
+        self.timeout("stores", STORE, "T2")
+        self.assertNotIn("summary", grants.pending(self.project)["stores"])
+
+    def test_a_cut_command_gets_no_words(self):
+        """F9: the stored command keeps approved.COMMAND_CHARS characters; past that, no words from it."""
+        long = f'foreman note t "{"x" * approved.COMMAND_CHARS}" && {self.push}'
+        self.timeout("publish", long, "T1")
+        r = grants.pending(self.project)["publish"]
+        self.assertEqual(len(r["command"]), approved.COMMAND_CHARS)
+        self.assertNotIn("summary", r)
+        plain = f"{PUSH} origin " + "b" * approved.COMMAND_CHARS
+        self.assertIsNone(grants.say(plain[: approved.COMMAND_CHARS]))
+        self.assertEqual(grants.say(f"{PUSH} origin main")["kind"], "push")
 
 
 ORCH = "S-orch"  # the session the contract's grant cases mark
