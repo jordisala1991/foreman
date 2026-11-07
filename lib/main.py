@@ -29,7 +29,7 @@ if need and sys.version_info[:2] < tuple(int(x) for x in need.split(".")):
 
 if sys.argv[1:2] == ["hook"] and sys.argv[2:3] != ["mod"]:
     # Claude Code's classic hooks (hooks/classic.json), `hook guard` on every tool call: straight to hooks.run, as
-    # cli.main would, without importing the CLI (argparse and the commands' modules cost ~8 ms a call).
+    # cli.main would, without importing the CLI (argparse and what the commands import: ~5 ms a call).
     from foreman import hooks
 
     sys.exit(hooks.run(sys.argv[2] if len(sys.argv) > 2 else ""))
