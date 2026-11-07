@@ -370,13 +370,60 @@ class NextPageTest(ProjectCase):
     }
 
     def metrics(self, days):
+        """What /api/metrics gives for the real week of 1-7 Nov (the mockups' figures), over `days` days."""
         ds = [f"2026-10-{d:02d}" for d in range(9, 32)] + [f"2026-11-0{d}" for d in range(1, 8)]
         ds = ds[-days:]
-        cost = {d: zero_day() for d in ds}
-        cost["2026-11-01"] = {"opus": 211.1, "sonnet": 8.1, "haiku": 0, "other": 0, "usd": 219.2}
-        cost["2026-11-05"] = {"opus": 47.4, "sonnet": 0.7, "haiku": 0, "other": 0, "usd": 48.1}
-        cost["2026-11-07"] = {"opus": 60.8, "sonnet": 13.0, "haiku": 0.5, "other": 0, "usd": 74.3}
-        return {"days": ds, "cost": cost, "total": 341.6, "since": {"cost": "2026-11-01", "deliveries": None}}
+        cost = {d: {**zero_day(), "cheap_share": None} for d in ds}
+        cost["2026-11-01"] = {"opus": 211.1, "sonnet": 8.1, "haiku": 0, "other": 0, "usd": 219.2, "cheap_share": 0.061}
+        cost["2026-11-05"] = {"opus": 47.4, "sonnet": 0.7, "haiku": 0, "other": 0, "usd": 48.1, "cheap_share": 0.016}
+        cost["2026-11-07"] = {"opus": 60.8, "sonnet": 13.0, "haiku": 0.5, "other": 0, "usd": 74.3, "cheap_share": 0.239}
+        week = {  # day: integrated, measured, complete, partly, failed
+            "01": (71, 0, 76, 0, 0),
+            "02": (66, 1, 66, 3, 0),
+            "03": (24, 0, 27, 1, 0),
+            "04": (0, 0, 0, 0, 0),
+            "05": (15, 2, 19, 0, 0),
+            "06": (51, 1, 97, 2, 0),
+            "07": (29, 3, 51, 2, 1),
+        }
+        keys = ("integrated", "measured", "ok", "partial", "failed")
+        deliveries = {d: dict.fromkeys(keys, 0) for d in ds}
+        for d, v in week.items():
+            if f"2026-11-{d}" in deliveries:
+                deliveries[f"2026-11-{d}"] = dict(zip(keys, v))
+        reviews = {d: {"clean": 0, "back": 0} for d in ds}
+        reviews["2026-11-06"] = {"clean": 5, "back": 12}
+        reviews["2026-11-07"] = {"clean": 8, "back": 2}
+        guard = {d: {"agent": 0, "orchestrator": 0, "other": 0} for d in ds}
+        for d, v in {"02": (4, 2, 0), "03": (6, 2, 0), "05": (4, 1, 0), "06": (7, 4, 0), "07": (11, 3, 4)}.items():
+            guard[f"2026-11-{d}"] = dict(zip(("agent", "orchestrator", "other"), v))
+        return {
+            "days": ds,
+            "cost": cost,
+            "total": 341.6,
+            "top_issues": [
+                {"issue": "AB-1", "short": "Guardián sin agujeros", "usd": 75.5, "runs": 12},
+                {"issue": "AB-2", "short": "Código más simple", "usd": 48.3, "runs": 8},
+            ],
+            "by_type": [
+                {"type": "dev", "usd": 595.0, "runs": 90},
+                {"type": "reviewer", "usd": 43.5, "runs": 30},
+                {"type": "weird", "usd": 5.0, "runs": 1},
+            ],
+            "deliveries": deliveries,
+            "reviews": reviews,
+            "rounds": {"1": 11, "2": 15, "3": 4},
+            "guard": guard,
+            "guard_rules": [
+                {"rule": "state files", "band": "never", "n": 9},
+                {"rule": "(^|\\s)release now", "band": "orchestrator", "n": 4},
+            ],
+            "since": {"cost": "2026-11-01", "deliveries": "2026-10-31", "reviews": "2026-11-06", "guard": "2026-11-02"},
+            "quota": [
+                {"kind": "five_hour", "percent_used": 30, "resets_at": "2030-01-15T22:00:00Z"},
+                {"kind": "seven_day", "percent_used": 85.4, "resets_at": "2030-01-15T22:00:00Z"},
+            ],
+        }
 
     def how(self, **extra):
         answers = {"/api/projects": self.PROJECTS, "/api/metrics?p=alpha&days=7": self.metrics(7)}
@@ -427,15 +474,191 @@ class NextPageTest(ProjectCase):
         self.assertEqual(
             [(c["day"][-2:], c["top"]) for c in g1["columns"] if c["top"]], [("01", "$219"), ("07", "$74")]
         )
-        self.assertEqual([c["kind"] for c in g1["columns"]], ["cost", "zero", "zero", "zero", "cost", "zero", "cost"])
+        self.assertEqual([c["kind"] for c in g1["columns"]], ["data", "zero", "zero", "zero", "data", "zero", "data"])
         self.assertIn("dom 1 $219, lun 2 $0", g1["aria"])
         self.assertEqual(g1["tip"], "")
+
+    def charts(self, **extra):
+        return {c["name"]: c for c in self.how(**extra)["charts"]}
+
+    def test_all_eight_charts_in_the_order_of_the_mockup(self):
+        out = self.how()
+        self.assertEqual([c["name"] for c in out["charts"]], ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"])
+        self.assertEqual(
+            [c["title"] for c in out["charts"]],
+            [
+                "Coste por día y modelo",
+                "Ritmo de entregas",
+                "Cómo acaban los agentes",
+                "Revisiones devueltas",
+                "Parte en modelos baratos",
+                "Dónde se va el coste",
+                "Bloqueos del guardián",
+                "Cuota ahora",
+            ],
+        )
+
+    def test_the_delivery_pace(self):
+        g2 = self.charts()["g2"]
+        self.assertEqual(g2["figure"], "256 cambios en main en 7 días · 37 al día · 7 medidas")
+        self.assertEqual(g2["legend"], ["Cambios integrados", "2 Medidas cerradas"])
+        # the measures closed that day sit on the bar as a pill
+        self.assertEqual(
+            [(c["day"][-2:], c["top"]) for c in g2["columns"] if c["top"]],
+            [("02", "1"), ("05", "2"), ("06", "1"), ("07", "3")],
+        )
+        self.assertEqual(g2["columns"][0]["segs"], [["integrated", 71]])
+        self.assertEqual(g2["columns"][3]["kind"], "zero")  # tue 4: nothing, but the data had begun
+        self.assertIn("mar 3 24, mié 4 0", g2["aria"])
+
+    def test_figures_on_narrow_bars_never_touch(self):
+        answers = {"/api/metrics?p=alpha&days=30": self.metrics(30)}
+        g = self.charts(click="30 días", answers=answers, width=300)
+        for name in ("g2", "g4"):
+            tops = [(c["day"][-2:], c["top"]) for c in g[name]["columns"] if c["top"]]
+            self.assertEqual(tops[-1][0], "07", name)  # today's is always kept
+            self.assertLess(len(tops), 4, name)  # the neighbours that would overlap it are left out
+        self.assertEqual([c["top"] for c in g["g2"]["columns"] if c["top"]][-1], "3")
+
+    def test_how_the_agents_end(self):
+        g3 = self.charts()["g3"]
+        self.assertEqual(g3["legend"], ["Completas", "A medias", "Fallidas"])
+        self.assertEqual(
+            g3["figure"], "97 % completas · 336 de 345, 1 fallidas"
+        )  # complete 76+66+27+19+97+51, plus 6 partly and 1 failed
+        sat = g3["columns"][-1]
+        self.assertEqual(sat["segs"], [["ok", 51], ["partial", 2], ["failed", 1]])  # complete at the bottom
+        self.assertEqual([c["top"] for c in g3["columns"] if c["top"]], ["54"])  # today's total only
+
+    def test_reviews_sent_back(self):
+        g4 = self.charts()["g4"]
+        self.assertEqual(g4["figure"], "52 % 14 de 27 pidieron cambios, desde el vie 6")
+        self.assertEqual(
+            [(c["day"][-2:], c["top"]) for c in g4["columns"] if c["top"]],
+            [("06", "12/17"), ("07", "2/10")],  # a phone: the short form, or they overlap
+        )
+        wide = self.charts(width=900)["g4"]  # room enough: in words
+        self.assertEqual([c["top"] for c in wide["columns"] if c["top"]], ["12 de 17", "2 de 10"])
+        self.assertEqual([c["kind"] for c in g4["columns"]], ["none"] * 5 + ["data", "data"])
+        self.assertEqual(g4["columns"][5]["segs"], [["clean", 5], ["back", 12]])  # sent back on top, amber
+        self.assertEqual(g4["empty"], "Aún no hay datos de esto")  # said over the five days without data
+        self.assertEqual(
+            self.charts(
+                answers={
+                    "/api/metrics?p=alpha&days=7": {
+                        **self.metrics(7),
+                        "reviews": {},
+                        "since": {**self.metrics(7)["since"], "reviews": None},
+                    }
+                }
+            )["g4"]["empty"],
+            "Aún no hay datos de esto",
+        )
+
+    def test_the_share_on_cheaper_models(self):
+        g5 = self.charts()["g5"]
+        self.assertEqual(g5["figure"], "23.9 % hoy · el dom 1, 6.1 %")
+        self.assertEqual(g5["dots"], ["2026-11-01", "2026-11-05", "2026-11-07"])
+        self.assertEqual(g5["ylabels"][0], "0 %")
+        self.assertEqual(g5["xlabels"][-1], "sáb 7")
+        # a day without work (tue 4) cuts the line: two runs of days with data when thu 6 has some too
+        m = self.metrics(7)
+        m["cost"]["2026-11-06"] = {
+            "opus": 132.7,
+            "sonnet": 7.5,
+            "haiku": 0,
+            "other": 0,
+            "usd": 140.2,
+            "cheap_share": 0.076,
+        }
+        g5 = self.charts(answers={"/api/metrics?p=alpha&days=7": m})["g5"]
+        self.assertEqual(len(g5["line"]), 2)  # sun 1 alone, and thu 5..sat 7: tue 4 cuts the line
+        self.assertEqual(len(g5["line"][-1].split()), 3)
+
+    def test_where_the_cost_goes(self):
+        g6 = self.charts()["g6"]
+        self.assertEqual(g6["figure"], "$75.5 la tarea más cara del periodo")
+        self.assertEqual(g6["tasks"], ["Guardián sin agujeros · AB-1 $75.5", "Código más simple · AB-2 $48.3"])
+        self.assertEqual([float(x.rstrip("%")) for x in g6["bars"][:2]], [100, 63.97350993377483])  # to the dearest
+        # the kinds of agent in words; a kind foreman does not know shows as it is
+        self.assertEqual(g6["types"], ["desarrollo $595.0", "revisores $43.5", "weird $5.0"])
+
+    def test_the_guard_refusals(self):
+        g7 = self.charts()["g7"]
+        self.assertEqual(g7["figure"], "48 bloqueos desde el 2 nov · 18 hoy")
+        self.assertEqual(g7["legend"], ["A agentes", "Al orquestador", "A otras sesiones"])
+        self.assertEqual(g7["columns"][0]["kind"], "none")  # sun 1: before the guard's log starts
+        self.assertEqual(g7["columns"][-1]["segs"], [["agent", 11], ["orchestrator", 3], ["other", 4]])
+        self.assertEqual(g7["empty"], "")  # one day before the log: nothing written over it
+        self.assertEqual(
+            g7["rules"], ["Prohibido siempre · state files · 9", "Reservado al orquestador · release now · 4"]
+        )
+        self.assertIn("Datos desde el lun 2", self.how()["text"])
+
+    def test_the_quota_now(self):
+        g8 = self.charts()["g8"]
+        self.assertEqual(g8["figure"], "85 % de la semana usado")
+        five, week = g8["meters"]
+        self.assertEqual((five["kind"], five["width"], five["fill"]), ("five_hour", "30%", "fill"))
+        self.assertIn("se renueva el mar 15 a las 23:00", five["text"])
+        self.assertEqual((week["width"], week["fill"]), ("85.4%", "fill warn"))  # from 80 %, amber
+        none = self.charts(answers={"/api/metrics?p=alpha&days=7": {**self.metrics(7), "quota": []}})["g8"]
+        self.assertEqual(none["figure"], "— Aún no hay una medida de la cuota")
+        self.assertEqual(none["meters"], [])
+
+    def test_a_series_without_data_says_so_and_the_rest_still_draw(self):
+        m = self.metrics(7)
+        blank = {
+            "cost": {d: {**zero_day(), "cheap_share": None} for d in m["days"]},
+            "total": 0.0,
+            "top_issues": [],
+            "by_type": [],
+            "since": {**m["since"], "deliveries": None, "reviews": None, "guard": None},
+            "reviews": {},
+            "guard": {},
+            "deliveries": {},
+            "guard_rules": [],
+            "rounds": {},
+            "quota": [],
+        }
+        out = self.how(answers={"/api/metrics?p=alpha&days=7": {**m, **blank}})
+        self.assertEqual(len(out["charts"]), 8)
+        g = {c["name"]: c for c in out["charts"]}
+        self.assertEqual(g["g2"]["figure"], "0 cambios en main en 7 días · 0 al día · 0 medidas")
+        self.assertEqual(g["g5"]["figure"], "— Aún no hay datos de esto")  # no line, no dots
+        self.assertEqual(g["g5"]["dots"], [])
+        self.assertEqual(g["g6"]["figure"], "— Aún no hay datos de esto")
+        self.assertEqual(g["g4"]["empty"], "Aún no hay datos de esto")
+        self.assertEqual({c["kind"] for c in g["g7"]["columns"]}, {"none"})
+
+    def test_it_is_read_again_and_the_connection_dropping_keeps_the_charts_dimmed(self):
+        url = "/api/metrics?p=alpha&days=7"
+        out = self.how(tick=1)
+        self.assertEqual(out["fetched"].count(url), 2)  # read again at the tick
+        self.assertEqual(out["offline"], "")
+        self.assertFalse(out["dim"])
+        out = self.how(tick=1, fail=[url])
+        self.assertRegex(out["offline"], r"^Sin conexión · reintentando datos de las \d\d:\d\d$")
+        self.assertTrue(out["dim"])
+        self.assertEqual(len(out["charts"]), 8)  # the charts stay
+
+    def test_a_first_failed_read_heals_at_the_next_periodic_read(self):
+        url = "/api/metrics?p=alpha&days=7"
+        out = self.how(down=[url], tick=1, heal=[url])
+        self.assertNotIn("No se ha podido cargar", out["text"])
+        self.assertEqual(len(out["charts"]), 8)
+        self.assertEqual(out["offline"], "")
 
     def test_tapping_a_day_shows_its_detail(self):
         g1 = self.how(tap="2026-11-07")["charts"][0]
         self.assertEqual(g1["tip"], "sáb 7 · hoy Haiku $0.5 Sonnet $13.0 Opus $60.8 Total $74.3")
         g1 = self.how(tap="2026-11-03")["charts"][0]
         self.assertEqual(g1["tip"], "mar 3 sin trabajo")
+
+    def test_the_delivery_average_divides_by_the_days_with_data(self):
+        # 30 days, deliveries known since 31 Oct: 8 days (31 Oct .. 7 Nov), 256 integrated -> 32 a day, not 256/30
+        g2 = self.charts(answers={"/api/metrics?p=alpha&days=30": self.metrics(30)}, click="30 días")["g2"]
+        self.assertEqual(g2["figure"], "256 cambios en main desde el 31 oct · 32 al día · 7 medidas")
 
     def test_thirty_days(self):
         answers = {"/api/metrics?p=alpha&days=30": self.metrics(30)}
@@ -445,7 +668,7 @@ class NextPageTest(ProjectCase):
         self.assertTrue(g1["figure"].startswith("$342 desde el 1 nov · "), g1["figure"])
         kinds = [c["kind"] for c in g1["columns"]]
         self.assertEqual(kinds[:23], ["none"] * 23)  # before the data starts: no data, not a day without work
-        self.assertEqual(kinds[23:], ["cost", "zero", "zero", "zero", "cost", "zero", "cost"])
+        self.assertEqual(kinds[23:], ["data", "zero", "zero", "zero", "data", "zero", "data"])
         # a narrow chart: one label in three, counted back from today, so today keeps its label
         self.assertEqual(g1["xlabels"][-1], "7")
         self.assertEqual(sum(1 for x in g1["xlabels"] if x), 10)
