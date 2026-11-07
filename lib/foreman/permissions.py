@@ -920,19 +920,7 @@ def log_refusal(project: Project, ev: Event, verdict: guard.Verdict) -> None:
 def refusals(project: Project, since: datetime) -> list[dict[str, Any]]:
     """The log's lines at or after since (naive local time), oldest first; unreadable lines are skipped."""
     cut = since.strftime("%Y-%m-%dT%H:%M:%S")
-    try:
-        text = log_file(project).read_text(errors="replace")
-    except OSError:
-        return []
-    out = []
-    for ln in text.splitlines():
-        try:
-            rec = json.loads(ln)
-        except ValueError:
-            continue
-        if isinstance(rec, dict) and str(rec.get("at", "")) >= cut:
-            out.append(rec)
-    return out
+    return [rec for rec in util.read_jsonl(log_file(project)) if str(rec.get("at", "")) >= cut]
 
 
 def _key(band: str, rule: object, owner: object) -> tuple[str, str, str]:
@@ -1064,8 +1052,7 @@ def machine_candidate(path: PathLike) -> tuple[dict[str, Any], int, dict[str, Pr
             code = max(code, 1)
             continue
         loaded[live.name] = live
-        d = diff(live, cand)
-        d["opens"] = opens(live, cand, d)
+        d, verdict = judge(live, cand)
         d["inherited"] = {
             "before": inherited(live, rules(live))["rules"],
             "after": inherited(cand, rules(cand))["rules"],
@@ -1075,9 +1062,9 @@ def machine_candidate(path: PathLike) -> tuple[dict[str, Any], int, dict[str, Pr
         d["more_groups"] = more_groups(live, cand, rows)
         d["warnings"] = [w for w in cand.warnings if w not in live.warnings]
         products.append(d)
-        if d["table_error"]:
+        if verdict == "broken":
             code = 2
-        elif d["table_failures"] or d["lifeline"]["failures"] or d["warnings"]:
+        elif verdict == "fails" or d["warnings"]:
             code = max(code, 1)
     outside = _outside(cand_reg)
     out = {
