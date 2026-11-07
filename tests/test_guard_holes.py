@@ -452,6 +452,10 @@ class ProgramHolesTest(BashWriteCase):
             # os under another name (review T4 round 1, F2)
             "python3 -c \"import os as o; t = 'foreman.toml'; o.replace('x', t)\"": "file:config",
             "python3 -c \"t = 'foreman.toml'; __import__('os').replace('x', t)\"": "file:config",
+            # os spelled in pieces (review T4 round 2, F7)
+            "python3 -c \"import importlib; m = importlib.import_module('o' + 's'); t = 'foreman.toml'; "
+            "m.replace('x', t)\"": "file:config",
+            "python3 -c \"m = __import__('o' + 's'); t = 'foreman.toml'; m.replace('x', t)\"": "file:config",
             "python3 -c \"import sys; from pathlib import Path; t = 'foreman.toml'; Path('x').replace(t)\"": (
                 "file:config"
             ),

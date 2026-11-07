@@ -1,216 +1,121 @@
 """The command guard (Claude Code PreToolUse hook): what a session of a registered project may not run or reach.
 
-Forked from an earlier in-house version (a fixed list of build and engine commands). Two lists, both from
-foreman.toml:
-- per resource, `guard`: command prefixes that must go through `foreman lock RESOURCE run …` in the same call (or
-  match one of its `allow` regexes, e.g. a CI script that takes the lock itself);
-- `[deny] patterns`: regexes of what is never run without the owner (deploys, releases, sends to real users…);
-- `[deny.grants]`: groups of regexes of what only the marked orchestrator runs, after the owner's yes (below).
+Its lists come from foreman.toml: per resource, `guard`, command prefixes that must go through `foreman lock RESOURCE
+run …` in the same call (or match one of its `allow` regexes, e.g. a CI script that takes the lock itself); `[deny]
+patterns`, regexes of what is never run without the owner (deploys, releases, sends to real users…); `[deny.grants]`,
+groups of regexes that only the marked orchestrator runs, after the owner's yes. The built-in rules are below.
 
-How the deny regexes read a command. A lexer reads it the way bash does: words with their quotes, escapes and
-`\\`+newline, comments, redirections, heredocs, and the separators && || ; | |& & newline ( ). Every segment (one
-simple command) is compared as its raw text, quotes included (so `bash -c "x"` is still seen), and every command
-substitution ($(…), backquotes, <(…), >(…), also inside double quotes and inside an unquoted heredoc) is compared
-again as a command of its own, so an anchored regex finds the command at its start. The only text left out is the
-value of a data argument of a closed list of commands that never run their arguments (TEXT_ARGS: foreman note,
-progress, guard, inbox, backlog, the messages of integrate, the label of `lock … run`, and git commit -m; and
-data_tokens(): every argument of echo and printf but `printf -v`, the pattern of grep, egrep, fgrep, rg and git grep
-with their options in a closed list, gh pr|issue --title/--body and git tag -m), when the segment does not pipe into
-anything but a plain filter: those values are compared as "". A printer may also write to files and pipe into tee
-while every file the line writes is a literal path, not a device, /proc or .git (written()); when the line may run
-a file it writes (read_back()), what printers print is compared as a command.
-What runs inside a command is a command of its own too, read again by the same check (runs()): the string of
-`sh|bash|zsh… -c` (behind env, sudo, nice, timeout, foreman lock … run…), the words of eval, ssh
-HOST, watch, su -c and env -S, the command of xargs and of find -exec, a heredoc or here-string a shell (or eval,
-source, xargs, ssh) reads, and what a pipe feeds into one (its heredocs, and its arguments as a command: `echo "x" |
-sh`); a $(…) in the program's place or a <(…) given to a shell runs its output; so does `trap ACTION`, and a command
-inside `{ …; }`. Two cases reach past one segment (unbounded()). When the output or input of a group, a compound, a
-function or alias defined in the line, >(…) or a coprocess reaches something that reads it as a program (`{ …; } |
-sh`, `if …; fi | sh`, `echo x | if …; then sh; fi`, `{ sh; } <<< x`, `f(){ sh; }; echo x | f`), the whole line is
-read as if it went to a shell: no exemption, and every segment's arguments, inputs and assigned values are compared
-as commands. When a variable runs (in the program's place, or in sh -c, eval, xargs, a heredoc or pipe into a shell
-or a substitution, with a value the line can give it), the values the line gives its variables are compared as
-commands: assignments (also `export`, `local`, `${x:=…}`, arrays), `printf -v`, `for|select … in`, the input of
-`read|mapfile` (and what pipes into it), `set` and the arguments of a function defined in the line, and for `$_` the
-last argument of each command; their substitutions run. Data values keep their exemption there (they reach a
-variable only through `$_` or `| read`, both compared). A heredoc to an interpreter that is not a shell (python,
-perl, node…) is compared raw, except a python program read from one heredoc that cannot start a process (pyscript:
-an allow-list gate of imports and names), compared with its comments and its prose literals blanked, one-word
-literals kept; raw again when its output runs, the line writes to something else than a plain file, the program
-writes a file it cannot name or a module it would import, or the line may run a file it writes (_python()). Any
-other heredoc body is text (only its substitutions run when the delimiter is unquoted), except a heredoc to cat or
-tee writing a file the line may run (runs_written()): then it is compared as a command, or raw when only an
-interpreter that is not a shell runs it. If the lexer cannot
-read the command or a string inside it (an unclosed quote, $'…', $((…)), nesting deeper than 4, a control character)
-the whole text is compared with no exemption, raw and with quotes and parentheses turned into spaces, so a failure
-only blocks more. check() never raises: a hook that raised would let the command through.
-A `git push` is also compared as git would do it (gitpush.py): for each segment that runs one, from the folders it
-may run in (ctx cwd, then the line's cd/pushd and git -C), a text `<assignments and wrappers> git push <URL>
-<src>:<dst> [--force] [--delete]` per ref it would push, after every other text, so a command that already matched
-keeps its pattern and where; where = resolved, or unknown when the folder cannot be named (every repo of the project
-is tried: it only blocks more). Config the line changes before the push (`git -c`, `--git-dir`, GIT_DIR, an
-earlier `git config` or `git remote set-url`) and git aliases are resolved too; what cannot be read counts as an
-unknown folder; a `!` alias is compared as a command of its own. A line the lexer cannot read that has `git … push`
-is compared as a push of every branch and tag from the event's folder and every repo of the project. All three lists
-see it (deny(…, at)). A failure of the resolver is a deny. A ctx without the cwd key compares only the text; a table
-run gives each row its @DIR, else the project's home.
-One reading per check (_Check): those texts are read once with the pushes resolved and once without (for the two
-built-in lists), and each list is compared with them (an empty list is not); each line the command runs is read once
-(_read) for those texts and for the rules below (_walk: the command and each line nested in it as sh -c, eval, $(…),
-a heredoc or a pipe into a shell, xargs and find -exec run it, not what ssh runs; each segment with the folders it may
-run in, gitpush.folders from the event's cwd, else the process's, with the values the line gives its variables); the
-registry, whether the caller is an agent and what git says of a folder (the Resolver, shared by the pushes and the
-main-checkout rule), once each. A rule below that fails compares the line's text only (_either): a failure of
-foreman blocks only what that text names.
-What the guard does not see: a script written to a file and run later (or read as code by another program by its
-own convention, a shell's startup file), a forbidden command built inside a program
-(python -c, `os.system("x")` in a heredoc to python, for an anchored pattern; a python program that passes the gate
-and still reaches a process through a path the gate does not know, or a module file left in the folder by an
-earlier call), shell aliases and functions from
-outside the command, a variable whose value comes from outside the line (the environment, an earlier call) and a
-command assembled from pieces (`a=gi; b="t x"; $a$b`).
+How the deny regexes read a command (_texts). The lexer (shell.py) reads it the way bash does; each simple command is
+compared as its raw text, quotes included (so `bash -c "x"` is still seen), and so is each line nested in it, as a
+command of its own (an anchored regex finds it at its start): every command substitution ($(…), backquotes, <(…),
+>(…), also inside double quotes and an unquoted heredoc) and what a command runs (shell.runs(): sh -c, eval, ssh HOST,
+watch, su -c, env -S, xargs, find -exec, trap, `{ …; }`, a heredoc, here-string or pipe into a shell, behind env,
+sudo, timeout, foreman lock … run…). Only the data arguments of a closed list of commands that never run them
+(shell.data_tokens(): TEXT_ARGS of foreman, git commit|tag -m, gh pr|issue messages, echo and printf, a search
+pattern) are compared as "", and only while nothing that may run them reads the segment's output or a file the line
+writes (filters_only(), written(), read_back(), runs_written(): then what it prints is a command). When what runs
+reaches past one segment (shell.unbounded(): a group, compound, function or alias of the line, >(…) or a coprocess
+feeding something that reads a program), the whole line is read as if it went to a shell, with no exemption; when a
+variable runs with a value the line can give it, every value the line gives its variables (shell.values()) is
+compared as a command. A heredoc to an interpreter that is not a shell is compared raw, except a python program that
+passes pyscript's gate, compared with its prose blanked (_python()). A text the lexer cannot read (an unclosed quote,
+$'…', $((…)), nesting deeper than 4, a control character) is compared whole, with quotes and parentheses also turned
+into spaces and no exemption (_whole): a failure only blocks more. check() never raises: a hook that raised would let
+the command through.
+A `git push` is also compared as git would do it (gitpush.py): a text `<assignments and wrappers> git push <URL>
+<src>:<dst> [--force] [--delete]` per ref, from each folder it may run in (where = resolved), or from every repo of
+the project when the folder cannot be named (unknown), after every other text, so a command that already matched
+keeps its pattern; a line the lexer cannot read that has `git … push`, as a push of every branch and tag. All three
+lists see it; a failure of the resolver is a deny. A ctx without the cwd key compares only the text.
+One reading per check (_Check): the texts are read once with the pushes resolved and once without; each line the
+command runs is read once (_read) for them and for the rules below, which take every line _walk gives (the command
+and each line nested in it, not what ssh runs; each segment with the folders it may run in, gitpush.folders, and the
+values the line gives its variables); the registry, the caller and what git says of a folder (the Resolver), once
+each. A rule that fails compares the line's text only (_either): a failure of foreman blocks only what it names.
+Not seen: a script written to a file and run later (or read as code by another program by its own convention), a
+command built inside a program (python -c, `os.system("x")` in a heredoc to python; a python program that passes the
+gate and reaches a process by a path it does not know, or a module file left by an earlier call), shell aliases and
+functions from outside the command, a variable whose value comes from outside the line, a command assembled from
+pieces (`a=gi; b="t x"; $a$b`).
 
-Who calls (check()'s ctx, from the hook event). A command that matches a `[deny.grants]` group (and no `patterns`,
-which win for everyone) passes only for the main thread of the marked orchestrator's session (the event's session_id
-is the one in <state>/session and it carries no agent_id: never a subagent, which shares its parent's session id, nor
-another session). It must run under the marked session's own `claude` process, the one that marked itself
-(procs.py: the nearest `claude` above the hook is the mark's pid with the same start time; without a recorded
-process, or without `ps`, it does not pass): a copy started with the session's id (`claude -p --resume ID`) sends the
-same session_id and no agent_id. And it needs a live grant of its group (grants.py: the owner's own yes to the
-question foreman's hooks module asks, for that session and process, for [deny] grant_minutes); a command of two
-groups needs both.
-Otherwise the verdict is ("orchestrator", hit) with hit.why = agent | session | process | grant (checked in that
-order; the process after the session, as it runs `ps`, and the grant last, so the module asks the owner only about a
-call that nothing else refuses; hit.group names the group without a grant). A table run and `guard --as` compare no
-process and take every group as granted. No ctx, or one with only cwd (a table's agent run), is an agent. A command
-that passes leaves the hit in ctx["passed"] (hit.grant: {group, via, at, answer} of each live grant it used): the
-hook writes it down (approved.py: a line in approved.jsonl and a note).
+Who calls (Ctx). A command of a `[deny.grants]` group (and no `patterns`, which win for everyone) passes only for the
+main thread of the marked orchestrator's session (session_id is the one in <state>/session, no agent_id: never a
+subagent, nor another session), run under that session's own `claude` process (procs.py: the nearest `claude` above
+the hook is the mark's pid with the same start time; a copy started with `claude -p --resume ID` is not), with a live
+grant of each of its groups (grants.py: the owner's yes to the hooks module's question, for that session and process,
+for [deny] grant_minutes). Otherwise the verdict is ("orchestrator", hit) with hit.why = agent | session | process |
+grant, checked in that order so the owner is asked only about a call nothing else refuses (hit.group: the group
+without a grant). A table run and `guard --as` compare no process and take every group as granted; no ctx, or one
+with only cwd, is an agent. A command that passes leaves its hit in ctx["passed"] (hit.grant: {group, via, at,
+answer} of each grant used), which the hook writes down (approved.py).
 
-A built-in rule, before `[deny] patterns` and for everyone (the orchestrator included): a Bash call that runs
-`foreman hook mod` is refused (HOOK_MOD). Its ops are for foreman's hooks module, which runs them as a process the
-guard never sees; through Bash, a caller could hand `hook mod grant` an answer the owner never gave. Likewise a Bash
-call that reaches the panel's endpoint approving a pending grant request (PANEL_GRANT, `api/grants/approve` in a
-URL): the owner approves from the page, never a command.
-One built-in rule for the orchestrator only (PERMISSIONS_APPLY, after those two): `foreman permissions apply`, which
-rewrites the product's foreman.toml and guard table (permissions.py), passes only for the marked orchestrator's main
-thread in its own process (the agent, session and process checks of a group, without a grant), whatever the
-product's lists say; the owner's yes is in the chat. When it carries `--opens` (the change allows something that was
-not allowed before) it is also in the internal group `permissions` (grants.INTERNAL), so it needs the owner's own yes
-to the hooks module's question, like any group; so does `foreman integrate … --opens` (a branch that changes a live
-foreman.toml or guard table that way, integrate.py). The internal group is compared only for a command that names
-them (names_internal).
+Built-in rules, before `[deny] patterns` and for everyone: a Bash call that runs `foreman hook mod` (HOOK_MOD: its ops
+are the hooks module's, and `hook mod grant` could be handed an answer the owner never gave) or reaches the panel's
+endpoint that approves a grant (PANEL_GRANT). Then PERMISSIONS_APPLY: `foreman permissions apply` passes only for the
+marked orchestrator's main thread in its own process, whatever the lists say. With `--opens` it is also in the
+internal group `permissions` (grants.INTERNAL), as is `foreman integrate … --opens`, so it needs the owner's yes like
+any group (compared only for a command that names them, names_internal).
+For an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups, why=agent; the orchestrator and the
+owner's other sessions pass), in every line _walk gives:
+- INTEGRATE: a segment whose program is foreman (shell.foreman_call) running `integrate` without --help, -h or --check
+  as a word of its own (the regex, for a text the lexer cannot read).
+- MAIN_CHECKOUT: a git that rewrites a main checkout of any product of the registry (main_checkouts(): the checkout,
+  the nearest folder up with a `.git` entry, of each live config and guard table and of each [repos.*] path; a
+  worktree or a submodule has its own `.git` file). Its folder is its segment's with -C, --work-tree and GIT_WORK_TREE
+  applied (gitpush.moved); one the line cannot name passes unless the line names such a checkout as text
+  (_names_top). What rewrites is _git_rewrites()'s: a subcommand that changes the whole copy, or a path that reaches
+  a live file (_reaches); reading, commit, add, branch, worktree, fetch and a soft or mixed reset pass. An alias is
+  read in that folder's config (gitpush.aliased): to a git command, as that command; `!`, as a shell command from
+  the folder; a subcommand the line computes rewrites, but a function's "$@" (gitpush.called). A text the lexer
+  cannot read is refused when it has `git … SUB` (GIT_REWRITE_TEXT) and names such a checkout or runs in one. Not
+  seen: a write of .git/config or .git/hooks (the git class of the reserved files), update-ref, branch -f, patch, tar
+  or unzip over it, git run by a program.
+- HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product that
+  exists; with none, only `foreman holdout` is compared), for an agent holdout_reader refuses (all but a planner, an
+  unknown type too): `foreman holdout` but --help or -h; a line that names such a folder as text; a word or a
+  redirection's file (also `--opt=VALUE`'s value) that, expanded and joined to each folder its segment may run in,
+  reaches one (_holdout_reach: a wildcard that may match it; for a program that walks, _walks, a folder that holds
+  one, and given no path, the folder it runs in); a segment that runs in one; a Grep or Glob that walks one. Not
+  seen: a path a program builds, a variable from outside the line, a link to a folder above walked by a program that
+  follows links.
 
-Three built-in rules for an agent only (AGENT_ONLY, after `[deny] patterns` and before the groups; _agent_only), each
-("orchestrator", Hit) with why=agent; the orchestrator and the other sessions of the product (the owner's chats) pass,
-and only a caller that _who calls an agent (no process is compared) is checked. INTEGRATE: a segment whose program is
-foreman (shell.foreman_call: bare, a path, `python3 bin/foreman`, --project P, behind the wrappers runs() skips) running
-`integrate` in any line _walk gives (the regex for a text the lexer cannot read), in any folder and any product, but
-with --help, -h or --check as a word of its own (argparse takes no abbreviation; --check stops before anything is
-written); the text of a note, a commit message, a sed script or a heredoc to an interpreter is never such a call.
-MAIN_CHECKOUT: a git that rewrites a main checkout of any product of the registry: the checkout (the nearest folder up
-with a `.git` entry, a stat per level, never git) of its live config or guard table, and that of each of its [repos.*]
-paths that exists (a home outside its code repo leaves that repo in), for an agent only (main_checkouts; a worktree
-outside it, one nested in .claude/worktrees and a submodule have their own `.git` file, so they are not it). The folder
-of each git, in every line _walk gives, is its segment's with its -C applied (gitpush.moved: one the line cannot name
-keeps the one before), plus a --work-tree or GIT_WORK_TREE the line gives. Only a folder it cannot name passes unless
-the line names such a checkout as text (_names_top). What rewrites it (_git_rewrites): merge, pull, rebase, cherry-pick,
-revert, am, switch, clean, filter-branch and checkout-index always; bisect but log|view|visualize; read-tree -u|--reset;
-sparse-checkout but list; submodule update; apply but --check|--stat|--numstat|--summary|--cached; reset
---hard|--merge|--keep; stash with no subcommand, push without paths, save, pop, apply, branch; checkout of a branch or a
-commit (-b, -B, --orphan, --detach, -f alone, `X --`, one word that is no path in that folder); and, by paths, when one
-reaches a live file (_reaches: the file, a folder that holds it, a .claude folder or settings file of the checkout; a
-path with a variable or a wildcard, when a live file lies under the folder of its literal start; a `:` pathspec):
-checkout -- PATHS (or TREE PATHS), restore (but --staged alone), rm (but --cached), mv (sources and destination), stash
-push -- PATHS. Everything else passes: reading (log, diff, show, status, stash list|show…), commit (a commit on main in
-a main checkout is not seen: the projects' rules keep it), add, branch, worktree, fetch, reset --soft and a mixed reset
-(the index only). A git alias is read in that folder's config (and the line's -c; gitpush.aliased): to a git command, as
-that command; `!`, as a shell command from the same folder; a subcommand the line computes (`git $C`) rewrites, but a
-function's "$@" (gitpush.called). A line the lexer cannot read is refused when it has `git [options] SUB` with SUB one
-of those (GIT_REWRITE_TEXT) and names such a checkout or runs in one. A failure of the rule refuses only a line that has
-such a `git SUB` and names such a checkout as text. Not seen: a git command that writes the shared .git/config or
-.git/hooks (`git config`, `git remote add`; their writes by name are the git class of the reserved files, below), a
-branch moved without touching files (update-ref, branch -f: the copy is then dirty and integrate stops), patch, tar or
-unzip over it, git run by a program or a script, a variable from outside the line.
-HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product of the
-registry that exists: none, and only `foreman holdout` is compared), for an agent holdout_reader refuses (every type
-but a planner's: the ctx's agent_type, else <state>/agents.json; an unknown one is refused). Refused: `foreman
-holdout` as INTEGRATE reads it but with --help or -h; a line that names such a folder as text (`~`, $HOME); a word
-of a segment (also a redirection's file, the value of `--opt=VALUE`, in every line _walk gives) that, expanded
-and joined to each folder the segment may run in, reaches one (_holdout_reach: the real path in or at the folder; a
-wildcard that may match it, `**` any depth; with a program that walks, _walks: WALKERS or WALK_FLAGS, a folder that
-holds it, and given no existing path, the folder it runs in); a segment that runs inside one. Any other tool: its
-places as `cat PLACE` (so a Read, Write or Edit in it), and a Grep whose path (else the call's cwd) holds one or a
-Glob whose pattern may reach one. Not seen: a path a program builds, a variable from outside the line, a link to a
-folder above walked by a program that follows links.
+For the resource prefixes quoted strings are dropped (a note that mentions `make up` is not a command), the command is
+split at && || ; | newlines and $(, and leading VAR=value, env, time, nice, exec, command, sudo and the time-limit
+wrappers are skipped (shell.words()). Exit 2 = rejected, with the reason on stderr for the agent (message()).
 
-For the resource prefixes quoted strings are dropped (a note that mentions `make up` is not a command); the
-command is split at && || ; | newlines and $(; leading VAR=value, env, time, nice, exec, command, sudo and the
-time-limit wrappers are skipped. Exit 2 = rejected, with the reason on stderr for the agent.
+Any other tool (check_tool; check_call dispatches): one rule, with no list of tools, judges what the call names
+(tool_texts()). A string under a field whose name ends in one of PLACE_WORDS (file_path, path, url, cwd, files…), or
+in a list or map under one, is a place: it gets the verdict check() gives `cat PLACE` (and `cat ~/…` for a path under
+$HOME), never a lock. A string under `command` or `cmd` gets the verdict check() gives it in Bash. Every other string
+is free text, not compared. A FILE_TOOLS call goes through check_file first, so writing a secret gets the verdict of
+reading it. A failure of check() on a place compares its raw text (_whole); any other failure lets the call through.
+Not seen: a tool that runs code under another key (script, code), a glob's `pattern`.
 
-Any other tool (check_tool, the same hook on every tool but Bash; check_call dispatches; a FILE_TOOLS call after
-check_file, so writing a secret gets the verdict of reading it, as `echo x > .env` does in Bash): one rule,
-with no list of tools, judges what the call names. tool_texts walks its input (TOOL_DEPTH levels, TOOL_STRINGS
-strings): a string under a field whose name ends, split at `_` and camelCase, in one of PLACE_WORDS (file_path,
-notebook_path, path, url, cwd, root, files, glob, targetPath…), or inside a list or map under one, is a place; a
-string under `command` or `cmd` is a command. A command gets the verdict check() gives it in Bash (the pause of the
-hook too); a place, the one check() gives `cat PLACE`, and for an absolute path under $HOME also `cat ~/…` (Read
-names absolute paths, rules are often written with `~`), never a lock (a place runs nothing). The first refusal wins;
-a place's Hit has where=tool and part `<tool> <place>`, and every Hit of such a call its tool and call. Every other
-string (content, old_string, prompt, message, query, pattern…) is free text and is not compared, as the text of a
-note is not. Reading a reserved file stays free. A failure of check() on a place compares its raw text (_whole);
-any other failure lets the call through: a failure of foreman never stops a Read. Not seen: a tool that runs code
-under another key (script, code), a glob's `pattern`.
-
-The reserved files (check_file, the same hook on Write, Edit, MultiEdit and NotebookEdit): the files no tool call
-writes, the same for every product and computed at each call (reserved()): config, the live foreman.toml of every
-project of the registry; table, the live guard table of each ([check] guard_table); state, the whole state root and
-the [paths] state of a project that lies outside it; registry, the registry file (with the default one, its whole
-folder ~/.config/foreman, which holds the lock's busy scripts); claude, Claude Code's own folder (~/.claude, and
-$CLAUDE_CONFIG_DIR) but its projects/ (transcripts and memory) and plans/, ~/.claude.json, and any settings.json or
-settings.local.json of a folder named .claude; git (AGENT_KINDS, git_entries), what git runs or reads as
-instructions in a protected repo (protected_repos: the checkout, gitdir.checkout_of, of each live config and guard
-table, and each [repos.*] path of every project), found on the disk without git (gitdir.common_dir: the `.git`
-folder, or a worktree's `.git` file and its commondir, so a worktree outside or nested reaches the same one): its
-common git directory's hooks/ and info/, config and config.worktree, every worktree's worktrees/*/config.worktree (a
-pattern, WORKTREE_CONFIG), and what those configs name (an absolute core.hooksPath, include.path and
-includeIf.*.path, followed into the included files, gitdir.config_paths); and the machine's git config:
-~/.gitconfig, $XDG_CONFIG_HOME/git/ (else ~/.config/git/) and the file each link in it reaches, $GIT_CONFIG_GLOBAL
-and $GIT_CONFIG_SYSTEM when set, /etc/gitconfig, /opt/homebrew/etc/gitconfig and /usr/local/etc/gitconfig, with what
-they name. Its files are reserved as the file they reach and as the link itself. Not objects/, refs/, logs/, HEAD,
-index or the rest of worktrees/, which a commit or `git worktree add` writes. A path is compared as the file it
-reaches: `~` expanded, joined to the ctx's cwd when relative, os.path.realpath (symbolic links, also of the folders
-of a path that does not exist yet, and `..`), case-folded on macOS (APFS ignores case); a file that exists with more
-than one hard link is also compared by (device, inode) with each reserved file. Nobody passes, the orchestrator
-neither (`foreman permissions apply` changes the config and the table, and Python writes them, which the guard does
-not see), with two exceptions: the git class refuses only an agent (_who says agent; the orchestrator and the
-owner's other sessions write it, as they run git), and the product's own board (Project.board) for the marked
-orchestrator's session and main thread (no process is compared: it is its own slate). The verdict is ("file", Hit)
-with the Hit "file:<class>", where "file", kind the class, path the file as written, name the project it belongs to
-(git: the repo's product, "" for the machine's) and why agent | session | "" (the orchestrator). If the check itself
-fails, it denies only a path that looks reserved as text (under one of the reserved folders, or named foreman.toml,
-guard.tsv, projects.toml, settings.json or settings.local.json), never one of the git class (O8: a failure of
-git_entries gives no entry): a failure of foreman never stops the agents' writes.
-A Bash command that writes one of them by name gets the same verdict (_bash_file, in check() after the built-in rules
-and PERMISSIONS_APPLY, before [deny] patterns), with hit.bash set and hit.part the command around the name: the files
-shell.writes() reads in the line (redirections, tee, the destination of cp/mv/ln/install/rsync/ditto/scp and the sources
-of mv, sed -i, gsed -i, perl -i, rm, rmdir, unlink, truncate, touch, shred, chmod, chown, chgrp, chflags, dd of=, curl
--o, wget -O, a find that deletes), behind the wrappers runs() skips, in every line _walk gives, and the files the code
-of an interpreter (python -c, node -e, a heredoc to perl…) may write (_code_writes: Python that passes pyscript's gate
-by what it writes, other code by the quoted literals in the arguments of a call that writes; from the segment's folders
-and from HOME, `~` expanded). A target is expanded (`~` when unquoted, $HOME and the line's own literal assignments) and
-joined to each folder the segment may run in, then compared as check_file does, also as the link itself (rm, mv, ln -sf
-change a link); a copy into a folder also as each source's name in it; a recursive one (rm -r, chmod -R, cp -R, rsync
--a, ditto, the source of mv) also when a reserved file or folder lies under it. A target still not known (an expansion,
-a glob, a folder the line cannot name) is reserved only when its text names a reserved path (_names); a text the lexer
-cannot read, only when it also looks like a write (WRITE_WORDS). A failure of the rule denies only such a text. Not
-seen: a script file that writes it (python x.py), code piped into an interpreter (`echo … | python3`), git checkout or
-restore in the main checkout (an agent's: MAIN_CHECKOUT above), an archive unpacked over it, `find … -exec rm {}` below
-a folder that is not itself reserved, a variable from outside the line or set by a loop.
-The owner's one-off yes: a call of the main thread (no agent_id) of any session of the product that writes
-a file of ONCE_KINDS (claude, registry) passes when grants.json holds the owner's one-use yes for that very call
-(grants.take_once: the ctx's session and tool_use_id, and the same real path, or the same command for Bash), which it
-spends. foreman's hooks module asks for it before the call (`hook mod grant`, hooks_mod.py); an agent's call is never
-asked and never passes. config and table change only through `foreman permissions apply`; state, never.
+The reserved files (reserved(); check_file, on Write, Edit, MultiEdit and NotebookEdit): what no tool call writes,
+the same for every product: config, the live foreman.toml of every project of the registry; table, the live guard
+table of each; state, the state root and a [paths] state outside it; registry, the registry file (the default one:
+its whole folder, which holds the lock's busy scripts); claude, Claude Code's folder (~/.claude, $CLAUDE_CONFIG_DIR)
+but projects/ and plans/, ~/.claude.json, and any .claude/settings.json or settings.local.json; git (git_entries()),
+what git runs or reads as instructions in a protected repo (protected_repos(), found on the disk without git: hooks/,
+info/, config, config.worktree and each worktree's config.worktree of its common git directory, and the files those
+configs name) and the machine's git config (_machine_git()). A path is compared as the file it reaches (`~` expanded,
+joined to the cwd, its real path, case-folded on macOS), as the link itself and as a hard link of one. Nobody passes,
+the orchestrator neither, with two exceptions: the git class refuses only an agent, and the product's own board
+passes for the marked orchestrator's main thread. The verdict is ("file", Hit "file:<class>"). If the check fails it
+denies only a path that looks reserved as text (LOOKS_RESERVED, a reserved folder), never one of the git class.
+A Bash command that writes one by name gets the same verdict (_bash_file, after the built-in rules and
+PERMISSIONS_APPLY, before [deny] patterns; hit.bash, hit.part the command around the name): the files shell.writes()
+reads (redirections, tee, cp, mv, ln, rsync…, sed -i, rm, chmod, dd of=, curl -o, a find that deletes) and those the
+code of an interpreter may write (_code_writes()), in every line _walk gives, expanded and joined to each folder the
+segment may run in, then compared as check_file does; a recursive write also when a reserved file lies under it. A
+target still not known (an expansion, a glob, a folder the line cannot name) is reserved only when its text names a
+reserved path (_names); a text the lexer cannot read, only when it also looks like a write (WRITE_WORDS). Not seen: a
+script file that writes it, code piped into an interpreter, an archive unpacked over it, `find … -exec rm {}` below a
+folder that is not reserved, a variable from outside the line or set by a loop.
+The owner's one-off yes: a main-thread call that writes a file of ASK_KINDS (claude, registry) passes when grants.json
+holds the owner's one-use yes for that very call (grants.take_once: its session and tool_use_id, and the same path or
+command), which it spends; the hooks module asks for it (`hook mod grant`); an agent's call never passes. config and
+table change only through `foreman permissions apply`; state, never.
 """
 
 from __future__ import annotations
@@ -226,41 +131,8 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from . import gitdir, gitpush, pyscript
-from .shell import (
-    ASSIGN,
-    CODE_OPTS,
-    RAW_INTERPRETERS,
-    Runs,
-    Seg,
-    Tok,
-    Unparsed,
-    Write,
-    data_tokens,
-    feeders,
-    filters_only,
-    foreman_call,
-    heredoc_files,
-    heredoc_writer,
-    inputs,
-    lex,
-    may_run,
-    piece,
-    pipelines,
-    printer,
-    quoted_segments,
-    read_back,
-    runs,
-    runs_written,
-    segments,
-    strip_heredocs,
-    strip_quotes,
-    unbounded,
-    values,
-    words,
-    writes,
-    written,
-)
+from . import gitdir, gitpush, pyscript, shell
+from .shell import Runs, Seg, Tok, Unparsed, Write
 
 if TYPE_CHECKING:
     from .config import Project, Table
@@ -283,15 +155,11 @@ Verdict = tuple[str, Any]  # check()'s answer: ("deny" | "orchestrator", Hit) or
 
 
 class Ctx(TypedDict, total=False):
-    """Who runs a command (check()'s ctx): the hook event's session_id and agent_id (None: the main thread). marked:
-    the orchestrator's session to compare with, given only by a table run or `guard --as` (else <state>/session; with
-    it no process is compared and every [deny.grants] group counts as granted). cwd: the folder the command runs in
-    (the event's cwd; `guard --cwd`): with the key, each `git push` is also compared as git would do it (gitpush.py;
-    None: an unknown folder); without it, only as written (a table run gives each row its @DIR or the home).
-    passed: set by check(), the orchestrator-only pattern of a command it let through. agent_type: the event's (a
-    subagent's type; else <state>/agents.json's, holdout_reader). tool_use_id: the call's, given
-    only by the guard hook: with it, a main-thread write of Claude Code's settings or the registry may spend the
-    owner's one-use yes for that call (grants.take_once)."""
+    """Who runs a command (check()'s ctx): the event's session_id and agent_id (None: the main thread); marked, the
+    orchestrator's session, given only by a table run or `guard --as` (else <state>/session); cwd, the event's folder
+    (with the key, each `git push` is also resolved, gitpush.py; None: unknown); passed, set by check() (the group's
+    pattern a command passed); agent_type (else <state>/agents.json's); tool_use_id, given only by the hook, for the
+    owner's one-use yes (grants.take_once)."""
 
     session: str | None
     agent: str | None
@@ -318,16 +186,13 @@ def as_role(role: str, cwd: str | None = None) -> Ctx | None:
 
 # ---------- the deny check ----------
 
-# Where a pattern matched (Hit.where), each with its sentence in the refusal (i18n guard_where_*): the text of a
-# command, inline code of an interpreter (python -c, node -e), a sed or awk script, a loop or a test, the script an
-# interpreter reads (heredoc, pipe), what a shell runs from a pipe or a $(…), a value given to a variable that runs,
-# text written to a file the line then runs (a printer or a heredoc to cat|tee), the whole text when the lexer
-# cannot read it, and a `git push` as git would do it from its folder (resolved) or from a repo of the project when
-# the folder cannot be known (unknown; gitpush.py; i18n guard_how_resolved says how to name the push). The refusal
-# says how to write code apart for these (i18n guard_how_code):
+# Where a pattern matched (Hit.where: command, code, sed, loop, script, piped, variable, written, whole, resolved,
+# unknown, tool, file), each with its sentence in the refusal (i18n guard_where_*); for these the refusal says how to
+# write code apart (i18n guard_how_code):
 CODE_WHERE = ("code", "sed", "loop", "script", "written")
 EDITORS = ("sed", "gsed", "awk", "gawk", "mawk", "nawk")
 EXPECTS = ("allow", "deny", "orchestrator")  # a table row's expectation, besides lock:RESOURCE
+ROLES = ("agent", "orchestrator")  # a table row is checked as each
 LOOPS = ("for", "select", "case", "if", "elif", "while", "until", "[", "[[", "test")
 EXCERPT = 80  # characters of the matched text the refusal quotes
 
@@ -403,7 +268,7 @@ def _where(w: Sequence[Tok], prog: int) -> str:
         return "loop"
     if name in EDITORS:
         return "sed"
-    if RAW_INTERPRETERS.fullmatch(name):
+    if shell.RAW_INTERPRETERS.fullmatch(name):
         return "code"
     return "command"
 
@@ -426,7 +291,7 @@ def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequen
     if not re.search(r"['\"\\]", ins[0].raw) and re.search(r"[$`\\]", body):
         return None
     got = pyscript.read(body)
-    files = written(segs, info) if got else None
+    files = shell.written(segs, info) if got else None
     if got is None or got.writes is None or files is None:
         return None
     paths = [*got.writes, *(str(t.value) for t in files)]
@@ -434,13 +299,8 @@ def _python(segs: Sequence[Seg], info: Sequence[Runs], words_of: Sequence[Sequen
         return None
     names = {PurePath(x).name or x for x in paths}
     if len(segs) > 1:
-        rest = "\n".join(
-            f"{t.raw}\n{t.value if isinstance(t.value, str) else ''}\n{t.body or ''}"
-            for j, other in enumerate(segs)
-            if j != k
-            for t in other.toks
-        )
-        if may_run(segs, info, {n for n in names if n in rest}, k):
+        rest = shell.toks_text(t for j, other in enumerate(segs) if j != k for t in other.toks)
+        if shell.may_run(segs, info, {n for n in names if n in rest}, k):
             return None
     return got.text
 
@@ -453,10 +313,10 @@ At = tuple[gitpush.Resolver, frozenset[str], gitpush.Changes]  # the resolver of
 def _read(cmd: str, depth: int) -> tuple[list[Seg], Any, list[list[Tok]], list[Runs]]:
     """(segments, the lexer, the words of each, what each runs) of a line (shell.lex, pipelines, runs): read once
     for _texts and _walk alike (nothing changes them once read). Raises Unparsed."""
-    segs, lx = lex(cmd, depth)
-    segs = pipelines(segs)
+    segs, lx = shell.lex(cmd, depth)
+    segs = shell.pipelines(segs)
     words_of = [[t for t in s.toks if t.kind == "word"] for s in segs]
-    return segs, lx, words_of, [runs(w) for w in words_of]
+    return segs, lx, words_of, [shell.runs(w) for w in words_of]
 
 
 def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | None = None) -> Generator[Text, None, str]:
@@ -480,41 +340,41 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
     reach: dict[int, str] = {}  # segment index -> what runs its output: "shell" | "raw"
     for j, r in enumerate(info):
         if r.stdin:
-            for k in feeders(segs, j):
+            for k in shell.feeders(segs, j):
                 reach[k] = max(reach.get(k, ""), r.stdin)  # "shell" wins over "raw"
-    vals = values(segs, info)
-    mode = unbounded(segs, info, vals, reach)
+    vals = shell.values(segs, info)
+    mode = shell.unbounded(segs, info, vals, reach)
     feeds = feeds or mode == "shell"  # what runs cannot be bounded: read all of it as if it went to a shell
     var = mode == "var"  # a variable runs: the values the line gives its variables are commands (a data value
     exempt = exempt and not lx.redefines and not feeds  # reaches one only through $_ or `| read`, both compared)
     if feeds:
         reach = dict.fromkeys(range(len(segs)), "shell")
-    printers = {k for k, w in enumerate(words_of) if printer(w)}
-    writers = {k for k, (s, r) in enumerate(zip(segs, info)) if heredoc_writer(s, r)}  # cat|tee <<EOF
-    files = written(segs, info) if printers or writers else []
+    printers = {k for k, w in enumerate(words_of) if shell.printer(w)}
+    writers = {k for k, (s, r) in enumerate(zip(segs, info)) if shell.heredoc_writer(s, r)}  # cat|tee <<EOF
+    files = shell.written(segs, info) if printers or writers else []
     back: set[int] = set()  # segments whose output goes to a file the line may run (where = "written")
-    if printers and (files is None or files) and read_back(segs, info, files or []):  # it may run what one prints
+    if printers and (files is None or files) and shell.read_back(segs, info, files or []):  # it may run what one prints
         back |= {k for k in printers if k not in reach}
         reach.update(dict.fromkeys(back, "shell"))
-    run_by, ran = runs_written(segs, info, files or []) if writers and (files is None or files) else (None, None)
+    run_by, ran = shell.runs_written(segs, info, files or []) if writers and (files is None or files) else (None, None)
     if run_by:  # a heredoc written to a file the line runs: its text is a command (or a script, for python…)
         for k in writers - reach.keys():
-            mine = heredoc_files(segs, info, k)
+            mine = shell.heredoc_files(segs, info, k)
             if ran is None or mine is None or mine & ran:
                 reach[k] = run_by
                 back.add(k)
     texts: list[tuple[str, str]] = []  # (text, where it comes from)
     if var:
         reach.update(dict.fromkeys(range(vals.fed), "shell"))  # `echo "x" | read v; $v`
-        texts += [(x, "variable") for v in vals.texts for x in (v, *segments(v))]
+        texts += [(x, "variable") for v in vals.texts for x in (v, *shell.segments(v))]
     nested: list[tuple[str, bool, bool, str, At | None]] = [(c, False, False, "", at) for c in lx.body_subs]
     resolved: dict[str, str] = {}  # a push as git would do it -> its folder ("?" + a repo: the folder is unknown)
     repl: list[tuple[int, int, str]] = []
     for k, seg in enumerate(segs):
         w, r = words_of[k], info[k]
         prints = k in printers  # a printer keeps its data when the line writes only to plain files (also a group's)
-        ex = exempt and k not in reach and not (prints and files is None) and filters_only(segs, k, prints)
-        data = (data_tokens(w) if ex else None) or {}
+        ex = exempt and k not in reach and not (prints and files is None) and shell.filters_only(segs, k, prints)
+        data = (shell.data_tokens(w) if ex else None) or {}
         swap: dict[Tok, str] = {}
         prog = w[r.prog] if r.prog < len(w) else None
         remote = prog is not None and prog.literal and PurePath(prog.value).name == "ssh"  # runs elsewhere
@@ -527,16 +387,10 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
         nested += [(" ".join(t.raw for t in toks), False, False, "", sub(k, execdir)) for toks in r.cmds]
         mark = "written" if k in back else ""
         py = None  # a python program that cannot start processes (pyscript): compared with its prose blanked
-        if (
-            r.stdin == "raw"
-            and exempt
-            and k not in reach
-            and len(cmd) <= pyscript.MAX_LINE
-            and filters_only(segs, k, True)
-        ):
-            py = _python(segs, info, words_of, k)
+        if r.stdin == "raw" and exempt and k not in reach and len(cmd) <= pyscript.MAX_LINE:
+            py = _python(segs, info, words_of, k) if shell.filters_only(segs, k, True) else None
         for kind, own in ((r.stdin, True), (reach.get(k), False)):
-            for text in inputs(seg) if kind else ():
+            for text in shell.inputs(seg) if kind else ():
                 if kind == "shell":
                     nested.append((text, ex and own, False, "" if own else mark, None if remote else sub(k)))
                 else:
@@ -544,8 +398,8 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
                     texts += [(x, ("" if own else mark) or "script") for x in (read, *read.split("\n"))]
         if k in reach:  # what it prints is run: its arguments (and every value it assigns) are commands
             run = [" ".join(t.value for t in w[r.prog + 1 :]), " ".join(t.value for t in w)]
-            run += [t.value.partition("=")[2] for t in w if ASSIGN.match(t.raw)]
-            texts += [(x, mark or "piped") for v in run for x in (v, *segments(v))]
+            run += [t.value.partition("=")[2] for t in w if shell.ASSIGN.match(t.raw)]
+            texts += [(x, mark or "piped") for v in run for x in (v, *shell.segments(v))]
         if at and prog is not None and prog.literal and PurePath(prog.value).name == "git":
             try:
                 shells: list[tuple[str, frozenset[str], gitpush.Changes]] = []
@@ -576,7 +430,8 @@ def _texts(cmd: str, depth: int, exempt: bool, feeds: bool = False, at: At | Non
     blanked = cmd
     for a, b, new in sorted(repl, reverse=True):
         blanked = blanked[:a] + new + blanked[b:]
-    texts += [(x, "command") for x in quoted_segments(strip_heredocs(blanked))]  # the old guard's texts, minus data
+    # the old guard's texts, minus data
+    texts += [(x, "command") for x in shell.quoted_segments(shell.strip_heredocs(blanked))]
     texts += [(t, "unknown" if d.startswith("?") else "resolved") for t, d in resolved.items()]  # after all of them
     yield from _items(texts, {t: d.lstrip("?") for t, d in resolved.items()})
     for content, ex, fd, mark, inner in nested:
@@ -589,10 +444,10 @@ def _whole(cmd: str) -> Iterator[Text]:
     """The texts of a command the lexer cannot read: all of it, no exemption."""
     spaced = re.sub(r"[\"'`()$\\]", " ", cmd)
     texts = [
-        *quoted_segments(strip_heredocs(cmd)),
-        *quoted_segments(cmd),
-        *segments(cmd),
-        *segments(spaced),
+        *shell.quoted_segments(shell.strip_heredocs(cmd)),
+        *shell.quoted_segments(cmd),
+        *shell.segments(cmd),
+        *shell.segments(spaced),
         *cmd.split("\n"),
         *spaced.split("\n"),
         cmd,
@@ -653,19 +508,23 @@ def uses_lock(cmd: str, name: str, res: Table) -> bool:
     return any(re.search(a, cmd) for a in res.get("allow", []))
 
 
-def names_apply(cmd: str) -> bool:
-    """Whether a command may run `foreman permissions apply`: its text, without quotes, backslashes and line
-    continuations, has both words (PERMISSIONS_APPLY is compared only then)."""
+def _mentions(cmd: str, *words: str) -> bool:
+    """Whether the command's text, without quotes, backslashes and line continuations, has all these words: a loose
+    reading, so that a rule's regex is compared only then (the regex decides)."""
     flat = re.sub(r"\\\n|[\\'\"]", "", cmd)
-    return "permissions" in flat and "apply" in flat
+    return all(w in flat for w in words)
+
+
+def names_apply(cmd: str) -> bool:
+    """Whether a command may run `foreman permissions apply` (PERMISSIONS_APPLY is compared only then)."""
+    return _mentions(cmd, "permissions", "apply")
 
 
 def names_internal(cmd: str) -> bool:
     """Whether a command may run one of foreman's own group (grants.INTERNAL): `foreman permissions apply`, or
     `foreman integrate … --opens` (a branch that changes a live foreman.toml or guard table so that it allows
-    something new, integrate.py). The same loose reading as names_apply; the group's patterns decide."""
-    flat = re.sub(r"\\\n|[\\'\"]", "", cmd)
-    return names_apply(cmd) or ("integrate" in flat and "--opens" in flat)
+    something new, integrate.py)."""
+    return names_apply(cmd) or _mentions(cmd, "integrate", "--opens")
 
 
 def _who(project: Project, ctx: Ctx | None, process: bool = True) -> str:
@@ -692,9 +551,8 @@ class _Check:
 
     def __init__(self, project: Project, cmd: str, ctx: Ctx | None, projects: Sequence[Project] | None) -> None:
         self.project, self.cmd, self.ctx = project, cmd, ctx
-        cwd = (ctx or {}).get("cwd")
-        self.given = cwd
-        self.git = gitpush.Resolver(project, cwd)
+        self.given = (ctx or {}).get("cwd")
+        self.git = gitpush.Resolver(project, self.given)
         self.at = self.git if ctx is not None and "cwd" in ctx else None  # without the key: the text only
         self.kept: dict[Any, tuple[Any, Exception | None]] = {}
         if projects is not None:
@@ -801,14 +659,14 @@ def check(
                 return "orchestrator", hit
             if ctx is not None:
                 ctx["passed"] = hit
-        no_heredoc = strip_heredocs(cmd)
-        plain = strip_quotes(no_heredoc)
+        no_heredoc = shell.strip_heredocs(cmd)
+        plain = shell.strip_quotes(no_heredoc)
         for name, res in project.resources.items():
             pats = res.get("guard", [])
             if not pats or uses_lock(no_heredoc, name, res):
                 continue
-            for seg in segments(plain):
-                w = words(seg)
+            for seg in shell.segments(plain):
+                w = shell.words(seg)
                 for pat in pats:
                     if matches_prefix(w, pat):
                         return "lock", (name, " ".join(w)[:80])
@@ -898,24 +756,17 @@ def _live(project: Project, projects: Sequence[Project]) -> list[tuple[str, str,
     """[(class, real path, project name)] of the config and the guard table of each project, then those of
     `project`'s own home (reserved())."""
     out: list[tuple[str, str, str]] = []
-    for p in projects:
-        out.append(("config", os.path.realpath(p.config_file or p.home / "foreman.toml"), p.name))
+    for p, config in [*((p, p.config_file or p.home / "foreman.toml") for p in projects), (project, None)]:
+        out.append(("config", os.path.realpath(config or p.home / "foreman.toml"), p.name))
         table = p.section("check").get("guard_table")
-        if table:
-            out.append(("table", os.path.realpath(p.path(table)), p.name))
-    out.append(("config", os.path.realpath(project.home / "foreman.toml"), project.name))
-    table = project.section("check").get("guard_table")
-    if table:
-        out.append(("table", os.path.realpath(project.path(table)), project.name))
+        out += [("table", os.path.realpath(p.path(table)), p.name)] if table else []
     return out
 
 
 def reserved(project: Project, projects: Sequence[Project] | None = None) -> list[Reserved]:
-    """Every reserved file and folder (module doc), the most precise first: the config and the guard table of each
-    project of the registry (`projects`, else config.registered_projects()), and those of `project`'s own home too
-    (its home/foreman.toml, not a candidate's file: a check run from a copy of the home, as `foreman integrate` does in
-    a worktree, judges its rows as the live home would; the hook always passes the registered project), each
-    project's state, then the machine's."""
+    """Every reserved file and folder (module doc), the most precise first: the config and guard table of each
+    project of the registry, and of `project`'s own home (a check run from a copy of the home, as `foreman integrate`
+    does, judges as the live home would), each project's state, then the machine's."""
     projects = _projects(project, projects)
     live = _live(project, projects)
     out: list[Reserved] = [(kind, _fold(path), False, name) for kind, path, name in live]
@@ -984,10 +835,8 @@ def _machine_git() -> list[tuple[str, bool]]:
 def git_entries(
     project: Project, projects: Sequence[Project], live: Sequence[tuple[str, str, str]] | None = None
 ) -> list[tuple[str, bool, str]]:
-    """[(path, a folder?, the project or "")] of the git class (module doc), real paths not case-folded: of each
-    protected repo's common git directory, hooks/, info/, config, config.worktree, each worktree's config.worktree
-    (a pattern) and what those configs name (an absolute core.hooksPath, included files); then the machine's git
-    config. A failure gives [] (O8: it never stops a write)."""
+    """[(path, a folder?, the project or "")] of the git class (module doc), real paths not case-folded. A failure
+    gives [] (O8: it never stops a write)."""
     try:
         out: list[tuple[str, bool, str]] = []
         reals: dict[str, str] = {}
@@ -1142,7 +991,7 @@ JOINED = re.compile(r"\b([A-Za-z_]\w*)\s*[/,+]\s*\Z")  # a literal joined onto a
 ASSIGNED = re.compile(r"(?<![\w.])\$?([A-Za-z_]\w*)\s*=(?!=)\s*([^;\n]*)")  # NAME = what (to `;` or a line's end)
 IN_LITERAL = re.compile(r"\$?\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")  # a name inside a literal: f"{base}/x", "$base/x"
 STATEMENT = re.compile(r"(^|[;{}\n])\s*\Z")  # the start of a statement, before a call
-OS_WORD = re.compile(r"\bos\b")  # os.replace, also as `import os as o` or __import__('os')
+OS_WORD = re.compile(r"\bos\b|\bimportlib\b|__import__")  # os.replace, as `import os as o` or by a built name
 MAX_PIECES = 8
 VAR = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 NOT_LITERAL = re.compile(r"[$`*?\[]")  # what is left after expanding: the path is not known, only its text
@@ -1192,7 +1041,7 @@ def _assigned(words_of: Sequence[Sequence[Tok]], info: Sequence[Runs], env: dict
     for w, r in zip(words_of, info):
         decl = r.prog < len(w) and w[r.prog].literal and w[r.prog].value in DECLARERS
         for i, t in enumerate(w):
-            if not ASSIGN.match(t.raw) or not (i < r.prog or decl or r.prog >= len(w)):
+            if not shell.ASSIGN.match(t.raw) or not (i < r.prog or decl or r.prog >= len(w)):
                 continue
             name = re.split(r"[\[+=]", t.raw, maxsplit=1)[0]
             raw_value = t.raw.partition("=")[2]
@@ -1211,7 +1060,7 @@ def _cd_known(
             t = w[p + 1]
             got = _expand(str(t.value), False, env, t.raw.startswith("~"))
             if len(got) == 1 and not NOT_LITERAL.search(got[0]):
-                w[p + 1] = piece(t, got[0])
+                w[p + 1] = shell.piece(t, got[0])
                 w[p + 1].literal = True
         out.append(w)
     return out
@@ -1223,10 +1072,8 @@ Line = tuple[str, list[Seg], list[list[Tok]], list[Runs], list[frozenset[str]], 
 
 
 def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int) -> list[Line | str]:
-    """Every line the command runs, in order, from the folders each segment may run in (the line's cd and pushd,
-    gitpush.folders, with the values the line gives its variables): the command itself, then what is nested in it
-    (sh -c, eval, $(…), a heredoc or a pipe into a shell, xargs and find -exec; not what ssh runs); a text the lexer
-    cannot read (the command itself, or one nested) is given as its str."""
+    """Every line the command runs (module doc: the command, then each line nested in it), with the folders each
+    segment may run in and the values the line gives its variables; a text the lexer cannot read, as its str."""
     try:
         segs, lx, words_of, info = _read(cmd, depth)
     except Unparsed:
@@ -1237,7 +1084,7 @@ def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int
     here = gitpush.folders(segs, known, info, start, exists=False)
     out: list[Line | str] = [(cmd, segs, words_of, info, here, env)]
     nested: list[tuple[str, frozenset[str]]] = [(c, start) for c in lx.body_subs]
-    printers = {k for k, w in enumerate(words_of) if printer(w)}
+    printers = {k for k, w in enumerate(words_of) if shell.printer(w)}
     for k, (seg, r) in enumerate(zip(segs, info)):
         w = words_of[k]
         name = PurePath(str(w[r.prog].value)).name if r.prog < len(w) and w[r.prog].literal else ""
@@ -1246,8 +1093,8 @@ def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int
         nested += [(" ".join(t.raw for t in toks), here[k]) for toks in r.cmds]
         nested += [(c, here[k]) for t in seg.toks for _, c in t.subs]
         if r.stdin == "shell" and name not in SKIP_STDIN:
-            nested += [(text, here[k]) for text in inputs(seg)]
-            for f in feeders(segs, k) if printers else ():  # `echo "cp a b" | sh`: a printer piped into a shell
+            nested += [(text, here[k]) for text in shell.inputs(seg)]
+            for f in shell.feeders(segs, k) if printers else ():  # `echo "cp a b" | sh`: a printer piped into a shell
                 if f in printers:  # (once: a long pipeline of shells would read it once per shell)
                     printers.discard(f)
                     fw = words_of[f]
@@ -1265,10 +1112,11 @@ def _code_writes(seg: Seg, w: Sequence[Tok], prog: int) -> list[str]:
     hold a name (a call with parentheses, or one without them at a statement's start or after a `.`; not a string's
     `.replace(a, b)`) or it is a Path's method, every literal of the code, run on as a path's pieces (_pieces)."""
     name = PurePath(str(w[prog].value)).name if prog < len(w) and w[prog].literal else ""
-    if not RAW_INTERPRETERS.fullmatch(name):
+    if not shell.RAW_INTERPRETERS.fullmatch(name):
         return []
-    opts = (*CODE_OPTS, "-r") if name.startswith("php") else CODE_OPTS
-    codes = inputs(seg) + [str(b.value) for a, b in zip(w[prog + 1 :], w[prog + 2 :]) if a.literal and a.value in opts]
+    opts = (*shell.CODE_OPTS, "-r") if name.startswith("php") else shell.CODE_OPTS
+    codes = [str(b.value) for a, b in zip(w[prog + 1 :], w[prog + 2 :]) if a.literal and a.value in opts]
+    codes = shell.inputs(seg) + codes  # its heredoc or here-string, then its -c/-e words
     out: list[str] = []
     for text in codes:
         tree = pyscript.gate(text) if pyscript.PYTHON.fullmatch(name) else None
@@ -1346,7 +1194,7 @@ def _targets(lines: Iterable[Line | str]) -> Iterator[_Target]:
             yield _Target([line], frozenset(), Write(-1, Tok("word", 0)), line)
             continue
         _cmd, segs, words_of, info, here, env = line
-        for wr in writes(segs, info):
+        for wr in shell.writes(segs, info):
             t = wr.tok
             yield _Target(_expand(str(t.value), t.literal, env, t.raw.startswith("~")), here[wr.seg], wr, t.raw)
         for k, (seg, w) in enumerate(zip(segs, words_of)):
@@ -1442,9 +1290,7 @@ def _target_hits(t: _Target, entries: Sequence[Reserved]) -> Iterable[tuple[Rese
 
 
 def _bash_file(chk: _Check) -> Hit | None:
-    """The reserved file a Bash command writes by name (module doc), as check_file's Hit with bash set, or None.
-    The orchestrator's own board passes for its main thread. Never raises: a failure denies only a line that looks
-    like a write and names a reserved path as text."""
+    """The reserved file a Bash command writes by name (module doc), as check_file's Hit with bash set, or None."""
 
     def rule() -> Hit | None:
         out = list(_targets(chk.lines()))
@@ -1565,14 +1411,12 @@ def _git_rewrites(sub: str, args: Sequence[Tok], folder: str) -> bool | list[Tok
     (_reaches decides), False when it changes no file (it reads, or touches only the index)."""
     if sub in GIT_WHOLE:
         return True
-    if sub == "bisect":
-        a = _Args(args)
-        return not (a.pos and a.pos[0].literal and a.pos[0].value in ("log", "view", "visualize"))
+    if sub in ("bisect", "sparse-checkout"):  # but those that only read
+        first = _Args(args).pos[:1]
+        reads = ("log", "view", "visualize") if sub == "bisect" else ("list",)
+        return not (first and first[0].literal and first[0].value in reads)
     if sub == "read-tree":
         return bool(_Args(args, "", ("--prefix", "--index-output")).opts & {"-u", "--reset"})
-    if sub == "sparse-checkout":
-        a = _Args(args)
-        return not (a.pos and a.pos[0].literal and a.pos[0].value == "list")
     if sub == "submodule":
         a = _Args(args)
         return any(not t.literal or t.value == "update" for t in a.pos)
@@ -1775,16 +1619,9 @@ def holdout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None:
     return _holdout(_Check(project, cmd, {"cwd": cwd} if cwd else None, None))
 
 
-def names_integrate(cmd: str) -> bool:
-    """Whether a command may run `foreman integrate` (the loose reading of names_apply; INTEGRATE decides)."""
-    return "integrate" in re.sub(r"\\\n|[\\'\"]", "", cmd)
-
-
 def _agent_only(chk: _Check) -> Hit | None:
-    """The built-in rules for an agent only (module doc): its `foreman integrate` (but --help, -h, --check), its
-    git that rewrites a main checkout (a repo or a live home), and what reaches the hidden acceptance checks
-    (_holdout: a planner passes). Only an agent (_who, no process) is compared."""
-    integrate, git = names_integrate(chk.cmd), bool(GIT_WORDS.search(chk.cmd))
+    """The built-in rules for an agent only (module doc); only an agent (_who, no process) is compared."""
+    integrate, git = _mentions(chk.cmd, "integrate"), bool(GIT_WORDS.search(chk.cmd))
     if chk.who() != "agent":
         return None
     hit = _integrates(chk) if integrate else None
@@ -1796,10 +1633,7 @@ def _agent_only(chk: _Check) -> Hit | None:
 
 
 def _integrates(chk: _Check) -> Hit | None:
-    """The INTEGRATE Hit of a line that runs `foreman integrate` without --help, -h or --check as a word of its own:
-    a segment whose program is foreman (shell.foreman_call), also nested (_walk); a text the lexer cannot read, by the
-    regex (also when the walk fails). Values of foreman note, git commit -m, a heredoc to an interpreter are never
-    commands here."""
+    """The INTEGRATE Hit of a line that runs `foreman integrate` but --help, -h or --check (module doc)."""
 
     def whole(text: str) -> Hit | None:
         return Hit(INTEGRATE, "whole", text) if re.search(INTEGRATE, text) else None
@@ -1811,7 +1645,7 @@ def _integrates(chk: _Check) -> Hit | None:
                     return whole(line)
                 continue
             for w, r in zip(line[2], line[3]):
-                got = foreman_call([str(t.value) for t in w[r.prog :]]) if r.prog < len(w) else None
+                got = shell.foreman_call([str(t.value) for t in w[r.prog :]]) if r.prog < len(w) else None
                 if got and got[1] == "integrate" and not set(got[2]) & set(INTEGRATE_FREE):
                     return Hit(INTEGRATE, "command", " ".join(t.raw for t in w))
         return None
@@ -1922,12 +1756,8 @@ def _walks(name: str, args: Sequence[str]) -> bool:
 
 
 def _holdout(chk: _Check) -> Hit | None:
-    """The HOLDOUT Hit of an agent's line (module doc), or None: `foreman holdout` but --help or -h; a line that names
-    a folder of hidden checks as text; a word (also a redirection's file, `--opt=VALUE`'s value, nested commands)
-    that is, resolved from each folder the segment may run in, such a folder or a path in it, or a folder that holds
-    one for a program that walks it (_walks; given no existing path, the folder it runs in); a segment that runs in
-    one. Only for a caller holdout_reader refuses, and only while such a folder exists. Never raises: a failure
-    compares the line's text only."""
+    """The HOLDOUT Hit of an agent's line (module doc), or None; only for a caller holdout_reader refuses (with no
+    such folder, only `foreman holdout` is compared)."""
     project, cmd = chk.project, chk.cmd
     try:
         dirs = holdout_dirs(project, chk.projects())
@@ -1941,7 +1771,7 @@ def _holdout(chk: _Check) -> Hit | None:
     def line_hit(segs: list[Seg], words_of: list[list[Tok]], info: list[Runs], here: Any, env: Any) -> Hit | None:
         for k, (seg, w, r) in enumerate(zip(segs, words_of, info)):
             values = [str(t.value) for t in w[r.prog :]]
-            got = foreman_call(values) if r.prog < len(w) else None
+            got = shell.foreman_call(values) if r.prog < len(w) else None
             if got and got[1] == "holdout" and not set(got[2]) & set(HOLDOUT_FREE):
                 return _holdout_hit(("", "", project.name), "command", " ".join(t.raw for t in w))
             if not dirs:
@@ -1990,9 +1820,8 @@ def _holdout(chk: _Check) -> Hit | None:
 def _holdout_tool(
     project: Project, tool: str | None, tool_input: Any, ctx: Ctx | None, projects: Sequence[Project] | None = None
 ) -> Hit | None:
-    """The HOLDOUT Hit of a Grep or Glob call that walks a folder holding hidden checks (Grep: its `path`, else the
-    call's cwd; Glob: its pattern from there), for a caller holdout_reader refuses; a place in or under such a folder is
-    check()'s (`cat PLACE`). Never raises."""
+    """The HOLDOUT Hit of a Grep or Glob call that walks a folder of hidden checks (its `path`, else the call's cwd;
+    Glob: its pattern from there); a place in such a folder is check()'s (`cat PLACE`). Never raises."""
     try:
         if tool not in WALK_TOOLS or not isinstance(tool_input, dict):
             return None
@@ -2002,16 +1831,14 @@ def _holdout_tool(
         cwd = (ctx or {}).get("cwd") or os.getcwd()
         base = os.path.join(cwd, os.path.expanduser(str(tool_input.get("path") or cwd)))
         pattern = tool_input.get("pattern")
-        places = [base]  # Grep walks its folder; Glob, what its pattern reaches from it
+        place = base  # Grep walks its folder; Glob, what its pattern reaches from it
         if tool == "Glob" and isinstance(pattern, str) and pattern:
-            places = [os.path.join(base, os.path.expanduser(pattern))]
-        for place in places:
-            d = _holdout_reach(place, dirs, True)
-            if d is not None:
-                hit = _holdout_hit(d, "tool", f"{tool} {place}")
-                hit.tool, hit.call = str(tool), place
-                return hit
-        return None
+            place = os.path.join(base, os.path.expanduser(pattern))
+        d = _holdout_reach(place, dirs, True)
+        hit = _holdout_hit(d, "tool", f"{tool} {place}") if d is not None else None
+        if hit is not None:
+            hit.tool, hit.call = str(tool), place
+        return hit
     except Exception:  # noqa: BLE001 (a failure of foreman never stops a call of another tool)
         return None
 
@@ -2047,9 +1874,7 @@ def _key_kind(key: str) -> str:
 
 
 def tool_texts(tool: str | None, tool_input: Any) -> tuple[list[str], list[str]]:
-    """(places, commands) a call of a tool names (module doc): a string under a field whose name ends in one of
-    PLACE_WORDS, or inside one (a list or a map under it), is a place; a string under `command` or `cmd` is a command
-    (not for Bash, whose command check() reads). Every other string is free text and is not compared. Walks at most
+    """(places, commands) a call of a tool names (module doc; a command of Bash is check()'s), walking at most
     TOOL_DEPTH levels and TOOL_STRINGS strings."""
     places: list[str] = []
     commands: list[str] = []
@@ -2097,11 +1922,8 @@ def check_tool(
     ctx: Ctx | None = None,
     projects: Sequence[Project] | None = None,
 ) -> Verdict | None:
-    """The verdict of a call of any tool but Bash by what it names (tool_texts): each command as check() would give
-    it in Bash, each place as check() gives `cat PLACE` (and `cat ~/…` for a path under $HOME), the first refusal
-    winning; a place's Hit says where=tool, part `<tool> <place>`, tool and call. A place never gets a lock verdict
-    (it runs nothing). A failure of check() on a place compares its raw text with the deny lists (_whole), so a
-    failure of foreman never refuses a call that names nothing they match. Never raises."""
+    """The verdict of a call of any tool but Bash by what it names (module doc); the first refusal wins, and a place's
+    Hit says where=tool, part `<tool> <place>`, tool and call. Never raises."""
     try:
         places, commands = tool_texts(tool, tool_input)
         before = (ctx or {}).get("passed")
@@ -2118,11 +1940,7 @@ def check_tool(
                 return v
             _mark_passed(ctx, before, tool, cmd)
         for place in places:
-            texts = ["cat " + shlex.quote(place)]
-            home = _home_form(place)
-            if home:
-                texts.append("cat " + home)
-            for text in texts:
+            for text in ["cat " + x for x in (shlex.quote(place), _home_form(place)) if x]:
                 v = check(project, text, ctx, projects)
                 if v is None or v[0] == "lock":
                     _mark_passed(ctx, before, tool, place, where="tool")
@@ -2168,9 +1986,8 @@ def check_call(
     ctx: Ctx | None = None,
     projects: Sequence[Project] | None = None,
 ) -> Verdict | None:
-    """The guard's verdict on a call of any tool (the hook and a table's `tool:` row): Bash by its command
-    (check()); a FILE_TOOLS tool by the file it writes (check_file), then as any other tool, so writing a file gets
-    the verdict of reading it; any other tool by what it names (check_tool)."""
+    """The guard's verdict on a call of any tool (the hook and a table's `tool:` row): Bash by check(), FILE_TOOLS by
+    check_file and then as any other tool, any other tool by check_tool."""
     ti = tool_input if isinstance(tool_input, dict) else {}
     if tool in (None, "Bash"):
         cmd = ti.get("command")
@@ -2205,13 +2022,8 @@ def row_text(project: Project, text: str) -> str:
     command)."""
     from . import config
 
-    for key, value in (
-        ("{state}", project.state),
-        ("{state_root}", config.state_root()),
-        ("{registry}", config.registry_path()),
-    ):
-        text = text.replace(key, str(value))
-    return text
+    text = text.replace("{state}", str(project.state)).replace("{state_root}", str(config.state_root()))
+    return text.replace("{registry}", str(config.registry_path()))
 
 
 def _how(where: str) -> str:
@@ -2223,81 +2035,43 @@ def _how(where: str) -> str:
     return "guard_how_code" if where in CODE_WHERE else "guard_how_text"
 
 
+# The refusal's head of each built-in rule of the orchestrator's (the [deny.grants] ones: guard_orchestrator_<why>)
+HEADS = {MAIN_CHECKOUT: "guard_main_checkout", HOLDOUT: "guard_holdout", INTEGRATE: "guard_integrate_agent"}
+HEADS[PERMISSIONS_APPLY] = "guard_permissions_apply"
+
+
 def message(project: Project, verdict: Verdict) -> str:
-    from . import i18n
+    """The refusal the agent reads (i18n guard_*): what was refused, where it matched, and how to do without."""
+    from . import i18n, orchestrator
 
     s = i18n.for_project(project)
-    kind, detail = verdict
-    if kind == "file":
-        how = {"config": "perms", "table": "perms", "state": "state", "git": "git"}.get(detail.kind, "owner")
-        if how == "perms" and not detail.why:
-            how = "perms_orchestrator"
-        elif how == "owner" and detail.why != "agent":
-            how = "owner_ask"  # a main thread: the owner's yes for one change (hooks_mod, grants.give_once)
-        fields = {"project": detail.name or project.name, "owner": project.owner}
-        machine = "_machine" if detail.kind == "git" and not detail.name else ""  # the machine's git config
-        what = s[f"guard_file_what_{detail.kind}{machine}"].format(**fields)
-        agent = "_agent" if detail.kind in AGENT_KINDS else ""  # refused to an agent only
-        head = (
-            s[f"guard_file_bash{agent}"].format(path=detail.path, what=what, part=detail.part)
-            if detail.bash
-            else s[f"guard_file{agent}"].format(path=detail.path, what=what)
+    kind, d = verdict
+    if kind == "lock":
+        return s["guard_lock"].format(resource=d[0], what=f"`{d[1]}`")
+    named = kind == "file" or (kind == "orchestrator" and str(d) in (MAIN_CHECKOUT, HOLDOUT))  # names its project
+    f = {"pattern": d, "owner": project.owner, "project": (d.name if named else "") or project.name}
+    f.update({k: getattr(d, k, "") for k in ("group", "dir", "part", "path")}, sub=getattr(d, "kind", ""))
+    if kind == "file":  # a reserved file: its class, and how it changes for this caller
+        how = {"config": "perms", "table": "perms", "state": "state", "git": "git"}.get(d.kind, "owner")
+        how += (
+            "_orchestrator" if how == "perms" and not d.why else "_ask" if how == "owner" and d.why != "agent" else ""
         )
-        return " ".join([head, s[f"guard_file_how_{how}"].format(**fields)])
+        f["what"] = s[f"guard_file_what_{d.kind}{'_machine' if d.kind == 'git' and not d.name else ''}"].format(**f)
+        head = s[f"guard_file{'_bash' if d.bash else ''}{'_agent' if d.kind in AGENT_KINDS else ''}"].format(**f)
+        return f"{head} {s[f'guard_file_how_{how}'].format(**f)}"
+    where = getattr(d, "where", "")  # a plain string when the guard itself failed
     if kind == "orchestrator":
-        from . import orchestrator
-
-        o = orchestrator.current(project) or {}
-        if isinstance(detail, Hit) and detail == MAIN_CHECKOUT:
-            return " ".join(
-                [
-                    s["guard_main_checkout"].format(sub=detail.kind, dir=detail.dir, project=detail.name),
-                    s["guard_where_command"].format(part=detail.part),
-                ]
-            )
-        if isinstance(detail, Hit) and detail == HOLDOUT:
-            return s["guard_holdout"].format(project=detail.name or project.name, part=detail.part)
-        if isinstance(detail, Hit) and detail == INTEGRATE:
-            return " ".join(
-                [
-                    s["guard_integrate_agent"].format(project=project.name, orchestrator=o.get("name") or "?"),
-                    s[f"guard_where_{detail.where}"].format(part=detail.part, dir=detail.dir),
-                ]
-            )
-        if isinstance(detail, Hit) and detail == PERMISSIONS_APPLY:
-            return " ".join(
-                [
-                    s["guard_permissions_apply"].format(
-                        owner=project.owner, project=project.name, orchestrator=o.get("name") or "?"
-                    ),
-                    s[f"guard_where_{detail.where}"].format(part=detail.part, dir=detail.dir),
-                ]
-            )
-        out = [
-            s[f"guard_orchestrator_{detail.why}"].format(
-                pattern=detail,
-                owner=project.owner,
-                project=project.name,
-                orchestrator=o.get("name") or "?",
-                group=detail.group,
-            ),
-            s[f"guard_where_{detail.where}"].format(part=detail.part, dir=detail.dir),
-        ]
-        if detail.why == "agent":
-            out.append(s[_how(detail.where)])
-        return " ".join(out)
-    if kind == "deny" and isinstance(detail, Hit) and detail in BUILTIN:
-        return " ".join([s[BUILTIN[detail]], s[f"guard_where_{detail.where}"].format(part=detail.part)])
-    if kind == "deny":
-        out = [s["guard_deny"].format(pattern=detail, owner=project.owner, project=project.name)]
-        where = getattr(detail, "where", None)  # a Hit; a plain string when the guard itself failed
-        if where:
-            out.append(s[f"guard_where_{where}"].format(part=detail.part, dir=detail.dir))
-            out.append(s[_how(where)])
-        extra = project.section("deny").get("message")
-        return " ".join(out + ([extra] if extra else []))
-    name, what = detail
-    return s["guard_lock"].format(resource=name, what=f"`{what}`")
+        f["orchestrator"] = (orchestrator.current(project) or {}).get("name") or "?"
+        key = HEADS.get(d) or f"guard_orchestrator_{d.why}"
+    else:
+        key = BUILTIN.get(d, "guard_deny")
+    out = [s[key].format(**f)]
+    if where and key != "guard_holdout":
+        out.append(s[f"guard_where_{'command' if key == 'guard_main_checkout' else where}"].format(**f))
+    if where and key in ("guard_deny", "guard_orchestrator_agent"):
+        out.append(s[_how(where)])
+    extra = project.section("deny").get("message") if key == "guard_deny" else None
+    return " ".join(out + ([extra] if extra else []))
 
 
 def parse_table(text: str, base: PathLike | None = None) -> list[tuple[int, str, str, str | None]]:
@@ -2355,15 +2129,11 @@ Row = tuple[int, str, str, "str | None", str, str]
 
 
 def table_verdicts(project: Project, path: Path, base: PathLike | None = None) -> list[Row]:
-    """Every row of a guard table with what the project says of it: (line, expect, command, DIR or None, the verdict
-    as an agent, the verdict as the marked orchestrator's main thread with every group granted), each verdict allow,
-    deny or lock:R. The orchestrator's is computed only when the project has [deny.grants] groups or the row may run
-    `foreman permissions apply` or `foreman integrate … --opens` (names_internal; else it is the agent's: nothing else
-    tells them apart). Each row runs in its @DIR (a relative one joined to `base`, else to the table's folder: a copy
-    of a table read from git keeps the live one's), else in the project's home (so a `git push` is compared as git
-    would do it from there, gitpush.py). A row `file:PATH` is a write of a Write/Edit call to that file (row_path,
-    check_file), and a row `tool:NAME JSON` a call of that tool (row_tool, check_call; its JSON text with the same
-    placeholders), both in both roles. Raises OSError or ValueError (parse_table)."""
+    """Every row of a guard table: (line, expect, command, DIR or None, the verdict as an agent, as the marked
+    orchestrator's main thread with every group granted), each allow, deny or lock:R. The orchestrator's is computed
+    only when something may tell them apart ([deny.grants] groups, names_internal, a reserved file, an agent's rule).
+    A row runs in its @DIR (relative: joined to `base`, else to the table's folder), else in the project's home; a
+    `file:` or `tool:` row is check_file's or check_call's. Raises OSError or ValueError (parse_table)."""
     from . import config, grants
 
     rows = parse_table(path.read_text(), base if base is not None else path.resolve().parent)
@@ -2377,16 +2147,13 @@ def table_verdicts(project: Project, path: Path, base: PathLike | None = None) -
     out: list[Row] = []
     for n, expect, cmd, folder in rows:
         cwd = folder or str(project.home)
-        if cmd.startswith("file:"):  # a reserved file (check_file): always both roles
-            f = row_path(project, cmd, cwd)
-            agent = _got(check_file(project, f, as_role("agent", cwd), projects))
-            orch = _got(check_file(project, f, as_role("orchestrator", cwd), projects))
-            out.append((n, expect, cmd, folder, agent, orch))
-            continue
-        if cmd.startswith("tool:"):  # a call of any tool (check_call): always both roles
-            name, ti = row_tool(row_text(project, cmd))
-            agent = _got(check_call(project, name, ti, as_role("agent", cwd), projects))
-            orch = _got(check_call(project, name, ti, as_role("orchestrator", cwd), projects))
+        if cmd.startswith(("file:", "tool:")):  # a reserved file (check_file) or a call of any tool (check_call)
+            if cmd.startswith("file:"):
+                f = row_path(project, cmd, cwd)
+                agent, orch = (_got(check_file(project, f, as_role(r, cwd), projects)) for r in ROLES)
+            else:
+                name, ti = row_tool(row_text(project, cmd))
+                agent, orch = (_got(check_call(project, name, ti, as_role(r, cwd), projects)) for r in ROLES)
             out.append((n, expect, cmd, folder, agent, orch))
             continue
         text = row_text(project, cmd)
