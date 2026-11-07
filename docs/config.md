@@ -240,7 +240,7 @@ name = "example"            # required: lowercase, digits, . _ -
 owner = "owner"             # who decides; named in decisions and guard messages
 language = "en"             # en | es: backlog texts, notes heading, guard and resume texts
 rules = "rules.md"          # the project's rules, read by the orchestrator and every agent
-config_schema = 22          # the foreman.toml schema the file is written for (below); default: this foreman's
+config_schema = 23          # the foreman.toml schema the file is written for (below); default: this foreman's
 owner_knows = []            # terms the owner knows, never flagged by those checks: ["CI", "PR"]
 
 [paths]
@@ -270,6 +270,8 @@ ready_target = 2            # unblocked ready issues it asks for
 production_types = ["dev"]  # agent types that count as production (fallback; `dev` always does; a plugin-qualified
                             # type matches its bare name: `foreman:dev` counts for "dev")
 production_worktree = ""    # fallback: or a path prefix in the brief (default: the worktrees folder)
+sessions = false            # true: `foreman launch --session` starts an agent as a Claude Code session of its own
+                            # (`claude --bg`); false: it refuses and names this key (the product's own, not the machine's)
 stalled_min = 20            # quiet minutes without a lock before an agent is reported (stalled_agents,
                             # the panel's «maybe stuck»): since its last tool call or transcript write
 

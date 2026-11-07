@@ -21,6 +21,7 @@ worktree REPO NAME BRANCH [BASE] | worktree --list   a worktree on a new branch 
                                    it also records a launch and prints its line (as `launch`, without issue)
 launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch BRANCH [--base BASE]] [--type T]
        [--model M] [--production | --no-production] [--no-backlog] [--despite DID --why TEXT] [--json]
+       [--session [--brief-file F]]
        | launch NAME --review REPO:BRANCH [--issue ID [--sub Tn]] | launch NAME --cancel
                                    records an agent's identity before launching it (<state>/launches.json) and
                                    prints the launch line, the first line of its brief: `[foreman launch TOKEN]
@@ -37,7 +38,11 @@ launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch 
                                    --why TEXT, recorded in the launch and the notes, with a line for the owner.
                                    Production work of an issue (a production type, --production, or a mechanic)
                                    without --repo/--branch is exit 2: give it its worktree, or --no-production if
-                                   it changes no code
+                                   it changes no code. --session starts the agent as a Claude Code session of its
+                                   own (`claude --bg` in its worktree; the prompt is the launch line, then
+                                   --brief-file's text) that outlives the orchestrator's session; only with
+                                   `[agents] sessions = true` (else exit 2 naming it), and not while the product is
+                                   paused (with --repo)
 integrate REPO BRANCH "ID [Tn]" … [--title T] [--body B | --body-file F] [--sub Tn] [--note N] [--report PATH]
           [--result R] [--verdict V] [--rebase-from REF] [--approved A] [--ci ARGS]… [--no-ci] [--no-review WHY]
           [--opens] [--check] [--measure] [--keep-branch]   (foreman integrate --help says what each does)
@@ -350,7 +355,7 @@ def launch_held_text(name: str, held: list[dict[str, Any]], what: str) -> str:
 def launch_command(p: Project, args: argparse.Namespace) -> int:
     """`foreman launch`: exit 0 recorded (a backlog that could not be updated is a warning), 1 the worktree could
     not be made, 2 bad arguments or a NAME already in use."""
-    from . import backlog, identity, worktree
+    from . import backlog, identity, pause, sessionlaunch, worktree
 
     def fail(msg: object, rc: int = 2) -> int:
         print(f"foreman launch: {msg}", file=sys.stderr)
@@ -370,6 +375,27 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         return fail("--sub needs --issue")
     if args.kind and not args.sub:
         return fail("--kind needs --issue and --sub (it marks the sub-issue)")
+    if args.brief_file and not args.session:
+        return fail("--brief-file goes with --session")
+    brief = ""
+    if args.session:
+        if not sessionlaunch.enabled(p):
+            return fail(
+                "--session needs [agents] sessions = true in this product's foreman.toml (it is false): "
+                "agents launch through the Agent tool until the owner turns it on"
+            )
+        held_at = pause.since(p) if args.repo else None
+        if held_at:
+            return fail(pause.guard_message(p, (p, held_at, "launch")))
+        if args.brief_file:
+            try:
+                brief = Path(args.brief_file).read_text()
+            except OSError as e:
+                return fail(f"--brief-file {args.brief_file}: {e.strerror or e}")
+        try:
+            sessionlaunch.find_claude()
+        except sessionlaunch.SessionError as e:
+            return fail(e, 1)
     rec_repo, rec_branch = args.repo, args.branch  # what the launch records (a reviewer's: --review)
     if args.review is not None:
         rkey, _, rbranch = args.review.partition(":")
@@ -453,7 +479,18 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
         despite=[{"decision": d["id"], "why": why} for d in held],
         review=args.review is not None,
         planned=planned,
+        kind=identity.SESSION_KIND if args.session else None,
     )
+    session: dict[str, str | None] | None = None
+    if args.session:
+        line0 = identity.launch_line(token, rec)
+        prompt = line0 + ("\n\n" + brief if brief else "")
+        try:
+            short, sid = sessionlaunch.start(p, token, rec, prompt, str(wt or p.home))
+        except sessionlaunch.SessionError as e:
+            identity.cancel(p, args.name)
+            return fail(f"{e}; the launch was dropped", 1)
+        session = {"id": short, "session_id": sid}
     if update:
         try:
             launch_backlog(p, args.issue, args.sub, args.name, args.branch, kind=args.kind)
@@ -462,12 +499,20 @@ def launch_command(p: Project, args: argparse.Namespace) -> int:
     tell = launch_despite_note(p, args.name, held, what, why) if held else None
     line = identity.launch_line(token, rec)
     if args.json:
-        out = {"token": token, "line": line, **rec, **({"tell_owner": tell} if tell else {})}
+        out = {
+            "token": token,
+            "line": line,
+            **rec,
+            **({"session": session} if session else {}),
+            **({"tell_owner": tell} if tell else {}),
+        }
         print(json.dumps(out, ensure_ascii=False, indent=1))
     else:
         if tell:
             print(f"tell the owner in the chat: {tell}")
         print(line)
+        if session:
+            print(f"started as session {session['session_id'] or session['id']} (claude agents; Remote Control is off)")
     return 0
 
 
@@ -709,6 +754,12 @@ def build_parser(only: str | None = None) -> argparse.ArgumentParser:
     a.add_argument("--why", help="why it is launched despite the pending decisions (recorded, and told to the owner)")
     a.add_argument("--json", action="store_true", help="{token, line, name, issue, …}")
     a.add_argument("--cancel", action="store_true", help="drop the pending launches of NAME (no agent took them)")
+    a.add_argument(
+        "--session",
+        action="store_true",
+        help="start the agent as a Claude Code session of its own (claude --bg); needs [agents] sessions = true",
+    )
+    a.add_argument("--brief-file", metavar="F", help="with --session: the brief that follows the launch line")
     a = sp.add_parser(
         "guard", help="what the command guard would say about a command or a file write, or check a table of commands"
     )

@@ -2,7 +2,7 @@
 $ foreman --project faro check
 [exit 0]
 faro: <TMP>/faro (active); state <TMP>/state/faro
-  config schema 22 (this foreman knows 22): ok
+  config schema 23 (this foreman knows 23): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo app: <TMP>/faro-app merge=squash
@@ -18,7 +18,7 @@ harbor	active	<TMP>/harbor
 $ foreman check
 [exit 0]
 faro: <TMP>/faro (active); state <TMP>/state/faro
-  config schema 22 (this foreman knows 22): ok
+  config schema 23 (this foreman knows 23): ok
   inherited from the machine (registry [machine]): 0 settings, 0 deny rules
   claude code 2.1.300 (foreman needs >= 2.1.299): ok
   repo app: <TMP>/faro-app merge=squash
@@ -125,6 +125,7 @@ worktree REPO NAME BRANCH [BASE] | worktree --list   a worktree on a new branch 
                                    it also records a launch and prints its line (as `launch`, without issue)
 launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch BRANCH [--base BASE]] [--type T]
        [--model M] [--production | --no-production] [--no-backlog] [--despite DID --why TEXT] [--json]
+       [--session [--brief-file F]]
        | launch NAME --review REPO:BRANCH [--issue ID [--sub Tn]] | launch NAME --cancel
                                    records an agent's identity before launching it (<state>/launches.json) and
                                    prints the launch line, the first line of its brief: `[foreman launch TOKEN]
@@ -141,7 +142,11 @@ launch NAME [--issue ID [--sub Tn [--kind measure|code]]] [--repo REPO --branch 
                                    --why TEXT, recorded in the launch and the notes, with a line for the owner.
                                    Production work of an issue (a production type, --production, or a mechanic)
                                    without --repo/--branch is exit 2: give it its worktree, or --no-production if
-                                   it changes no code
+                                   it changes no code. --session starts the agent as a Claude Code session of its
+                                   own (`claude --bg` in its worktree; the prompt is the launch line, then
+                                   --brief-file's text) that outlives the orchestrator's session; only with
+                                   `[agents] sessions = true` (else exit 2 naming it), and not while the product is
+                                   paused (with --repo)
 integrate REPO BRANCH "ID [Tn]" … [--title T] [--body B | --body-file F] [--sub Tn] [--note N] [--report PATH]
           [--result R] [--verdict V] [--rebase-from REF] [--approved A] [--ci ARGS]… [--no-ci] [--no-review WHY]
           [--opens] [--check] [--measure] [--keep-branch]   (foreman integrate --help says what each does)
@@ -470,7 +475,7 @@ usage: foreman launch [-h] [--issue ISSUE] [--sub SUB] [--kind {measure,code}]
                       [--type AGENT_TYPE] [--review REPO:BRANCH]
                       [--model MODEL] [--production] [--no-production]
                       [--no-backlog] [--despite DID] [--why WHY] [--json]
-                      [--cancel]
+                      [--cancel] [--session] [--brief-file F]
                       name
 
 positional arguments:
@@ -500,6 +505,9 @@ options:
                         (recorded, and told to the owner)
   --json                {token, line, name, issue, …}
   --cancel              drop the pending launches of NAME (no agent took them)
+  --session             start the agent as a Claude Code session of its own
+                        (claude --bg); needs [agents] sessions = true
+  --brief-file F        with --session: the brief that follows the launch line
 $ foreman nope
 [exit 2]
 --- stderr
