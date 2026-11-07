@@ -34,8 +34,9 @@ values the line gives its variables); the registry, the caller and what git says
 each. A rule that fails compares the line's text only (_either): a failure of foreman blocks only what it names.
 Not seen: a script written to a file and run later (or read as code by another program by its own convention), a
 command built inside a program (python -c, `os.system("x")` in a heredoc to python; a python program that passes the
-gate and reaches a process by a path it does not know, or a module file left by an earlier call), shell aliases and functions from outside the command, a variable whose value comes from outside
-the line, a command assembled from pieces (`a=gi; b="t x"; $a$b`).
+gate and reaches a process by a path it does not know, or a module file left by an earlier call), shell aliases and
+functions from outside the command, a variable whose value comes from outside the line, a command assembled from
+pieces (`a=gi; b="t x"; $a$b`).
 
 Who calls (Ctx). A command of a `[deny.grants]` group (and no `patterns`, which win for everyone) passes only for the
 main thread of the marked orchestrator's session (session_id is the one in <state>/session, no agent_id: never a
@@ -70,12 +71,13 @@ owner's other sessions pass), in every line _walk gives:
   seen: a write of .git/config or .git/hooks (the git class of the reserved files), update-ref, branch -f, patch, tar
   or unzip over it, git run by a program.
 - HOLDOUT (_holdout, _holdout_tool): the folders of hidden acceptance checks ([paths] holdout of every product that
-  exists; with none, only `foreman holdout` is compared), for an agent holdout_reader refuses (all but a planner, an unknown type too): `foreman holdout` but
-  --help or -h; a line that names such a folder as text; a word or a redirection's file (also `--opt=VALUE`'s value)
-  that, expanded and joined to each folder its segment may run in, reaches one (_holdout_reach: a wildcard that may
-  match it; for a program that walks, _walks, a folder that holds one, and given no path, the folder it runs in); a
-  segment that runs in one; a Grep or Glob that walks one. Not seen: a path a program builds, a variable from outside
-  the line, a link to a folder above walked by a program that follows links.
+  exists; with none, only `foreman holdout` is compared), for an agent holdout_reader refuses (all but a planner, an
+  unknown type too): `foreman holdout` but --help or -h; a line that names such a folder as text; a word or a
+  redirection's file (also `--opt=VALUE`'s value) that, expanded and joined to each folder its segment may run in,
+  reaches one (_holdout_reach: a wildcard that may match it; for a program that walks, _walks, a folder that holds
+  one, and given no path, the folder it runs in); a segment that runs in one; a Grep or Glob that walks one. Not
+  seen: a path a program builds, a variable from outside the line, a link to a folder above walked by a program that
+  follows links.
 
 For the resource prefixes quoted strings are dropped (a note that mentions `make up` is not a command), the command is
 split at && || ; | newlines and $(, and leading VAR=value, env, time, nice, exec, command, sudo and the time-limit
