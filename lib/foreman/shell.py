@@ -20,34 +20,16 @@ from typing import Any
 
 WRAPPERS = ("time", "nice", "exec", "env", "command", "sudo", "nohup", "(", "{", "then", "do", "else")
 
-# The commands whose data arguments are not compared with [deny] (their values never run). "all" = every argument
-# after the subcommand that is not an option name; "after-action" = the same after the first argument (inbox
+# The foreman commands whose data arguments are not compared with [deny] (their values never run). "all" = every
+# argument after the subcommand that is not an option name; "after-action" = the same after the first argument (inbox
 # ACTION, backlog SUB); integrate: the values of these options and the 4th positional (the merge message); lock:
-# only the "what" of `lock RESOURCE run "what" command…` (the command after it is compared as it is); git commit: the
-# values of -m / --message (also -am, -m=…, --message=…).
+# only the "what" of `lock RESOURCE run "what" command…` (the command after it is compared as it is). git commit and
+# tag: the values of -m / --message (also -am, -m=…, --message=…).
 TEXT_ARGS = {
-    ("foreman", "note"): "all",
-    ("foreman", "progress"): "all",
-    ("foreman", "guard"): "all",
-    ("foreman", "inbox"): "after-action",
-    ("foreman", "backlog"): "after-action",
-    ("foreman", "integrate"): ("title", "body", "note", "result", "verdict", "approved"),
-    ("foreman", "lock"): "what",
-    ("git", "commit"): ("-m", "--message"),
-}
-INTEGRATE_VALUES = (
-    "title",
-    "body",
-    "body-file",
-    "sub",
-    "note",
-    "report",
-    "result",
-    "verdict",
-    "rebase-from",
-    "approved",
-    "ci",
-)
+    "note": "all", "progress": "all", "guard": "all", "inbox": "after-action", "backlog": "after-action",
+    "integrate": ("title", "body", "note", "result", "verdict", "approved"), "lock": "what",
+}  # fmt: skip
+INTEGRATE_VALUES = tuple("title body body-file sub note report result verdict rebase-from approved ci".split())
 INTEGRATE_FLAGS = ("no-ci", "check", "opens")
 # Commands whose data is not a TEXT_ARGS value. Printers: every argument is data (not `printf -v`, which assigns a
 # variable). Search commands: the pattern (the value of -e/--regexp, or the first operand without -e/-f) is data, its
@@ -55,170 +37,58 @@ INTEGRATE_FLAGS = ("no-ci", "check", "opens")
 # (`rg --pre CMD`, `git grep -O`, which run a program) leaves no exemption. Messages: the values of these options.
 # The program is named bare or by a system path: `./echo` or `/tmp/grep` may be a script of anything.
 PRINTERS = ("echo", "printf")
-SEARCHES: dict[str, tuple[str, str, tuple[str, ...], tuple[str, ...]]] = {  # name: (short flags, short with value,
-    "grep": (  # long flags, long with value)
+
+
+def _long(names: str) -> tuple[str, ...]:
+    return tuple("--" + n for n in names.split())
+
+
+# A search command's options: (short flags, short with value, long flags, long with value)
+Search = tuple[str, str, tuple[str, ...], tuple[str, ...]]
+SEARCHES: dict[str, Search] = {
+    "grep": (
         "0123456789abcEFGHhIiLlnoPqRrsTUvwxZz",
         "ABCefm",
-        (
-            "--line-number",
-            "--ignore-case",
-            "--no-ignore-case",
-            "--recursive",
-            "--dereference-recursive",
-            "--files-with-matches",
-            "--files-without-match",
-            "--count",
-            "--invert-match",
-            "--word-regexp",
-            "--line-regexp",
-            "--extended-regexp",
-            "--fixed-strings",
-            "--basic-regexp",
-            "--perl-regexp",
-            "--no-messages",
-            "--quiet",
-            "--silent",
-            "--no-filename",
-            "--with-filename",
-            "--only-matching",
-            "--text",
-            "--null",
-            "--null-data",
-            "--byte-offset",
-            "--initial-tab",
-            "--color",
-            "--colour",
+        _long(
+            "line-number ignore-case no-ignore-case recursive dereference-recursive files-with-matches "
+            "files-without-match count invert-match word-regexp line-regexp extended-regexp fixed-strings basic-regexp "
+            "perl-regexp no-messages quiet silent no-filename with-filename only-matching text null null-data "
+            "byte-offset initial-tab color colour"
         ),
-        (
-            "--max-count",
-            "--after-context",
-            "--before-context",
-            "--context",
-            "--include",
-            "--exclude",
-            "--exclude-dir",
-            "--regexp",
-            "--file",
-            "--color",
-            "--colour",
-        ),
+        _long("max-count after-context before-context context include exclude exclude-dir regexp file color colour"),
     ),
     "rg": (
         "0.acFHhIiLlNnoPpqSsUuvwx",
         "ABCdEefgjMmrTt",
-        (
-            "--hidden",
-            "--no-ignore",
-            "--no-ignore-vcs",
-            "--files-with-matches",
-            "--files-without-match",
-            "--count",
-            "--count-matches",
-            "--fixed-strings",
-            "--ignore-case",
-            "--smart-case",
-            "--case-sensitive",
-            "--word-regexp",
-            "--line-regexp",
-            "--line-number",
-            "--no-line-number",
-            "--heading",
-            "--no-heading",
-            "--with-filename",
-            "--no-filename",
-            "--only-matching",
-            "--quiet",
-            "--text",
-            "--follow",
-            "--multiline",
-            "--pcre2",
-            "--vimgrep",
-            "--json",
-            "--files",
-            "--stats",
-            "--unrestricted",
-            "--invert-match",
-            "--null",
-            "--trim",
-            "--column",
-            "--no-messages",
-            "--glob-case-insensitive",
+        _long(
+            "hidden no-ignore no-ignore-vcs files-with-matches files-without-match count count-matches fixed-strings "
+            "ignore-case smart-case case-sensitive word-regexp line-regexp line-number no-line-number heading "
+            "no-heading with-filename no-filename only-matching quiet text follow multiline pcre2 vimgrep json files "
+            "stats unrestricted invert-match null trim column no-messages glob-case-insensitive"
         ),
-        (
-            "--glob",
-            "--iglob",
-            "--type",
-            "--type-not",
-            "--max-count",
-            "--max-depth",
-            "--after-context",
-            "--before-context",
-            "--context",
-            "--regexp",
-            "--file",
-            "--color",
-            "--colors",
-            "--sort",
-            "--sortr",
-            "--replace",
-            "--max-columns",
-            "--threads",
-            "--encoding",
+        _long(
+            "glob iglob type type-not max-count max-depth after-context before-context context regexp file color "
+            "colors sort sortr replace max-columns threads encoding"
         ),
     ),
     "git grep": (
         "0123456789acEFGHhIiLlnopqvWwz",
         "ABCefm",
-        (
-            "--cached",
-            "--untracked",
-            "--no-index",
-            "--exclude-standard",
-            "--no-exclude-standard",
-            "--line-number",
-            "--ignore-case",
-            "--files-with-matches",
-            "--name-only",
-            "--files-without-match",
-            "--count",
-            "--invert-match",
-            "--word-regexp",
-            "--extended-regexp",
-            "--fixed-strings",
-            "--basic-regexp",
-            "--perl-regexp",
-            "--full-name",
-            "--column",
-            "--heading",
-            "--break",
-            "--show-function",
-            "--function-context",
-            "--only-matching",
-            "--null",
-            "--all-match",
-            "--and",
-            "--or",
-            "--not",
-            "--quiet",
-            "--text",
+        _long(
+            "cached untracked no-index exclude-standard no-exclude-standard line-number ignore-case "
+            "files-with-matches name-only files-without-match count invert-match word-regexp extended-regexp "
+            "fixed-strings basic-regexp perl-regexp full-name column heading break show-function function-context "
+            "only-matching null all-match and or not quiet text"
         ),
-        (
-            "--max-count",
-            "--max-depth",
-            "--threads",
-            "--context",
-            "--after-context",
-            "--before-context",
-            "--regexp",
-            "--file",
-        ),
+        _long("max-count max-depth threads context after-context before-context regexp file"),
     ),
 }
 SEARCHES["egrep"] = SEARCHES["fgrep"] = SEARCHES["grep"]
 NO_PATTERN = ("--files",)  # rg lists the files it would search: every operand is a path
 MESSAGES = {("gh", "pr"), ("gh", "issue")}
 MESSAGE_ACTIONS = ("create", "edit", "comment", "review")
-MESSAGE_OPTS = ("--title", "-t", "--body", "-b")
+MESSAGE_OPTS = re.compile(r"--title|-t|--body|-b")
+COMMIT_OPTS = re.compile(r"--message|-[asnvqe]*m")  # git commit|tag: -m, -am…
 SYSTEM_BIN = ("/bin/", "/usr/bin/", "/usr/local/bin/", "/opt/homebrew/bin/")
 # Where a printer may write and keep its exemption: a literal path that is not a device (/dev/fd/3, /dev/tcp/…)
 # other than these, nor under /proc or inside a .git folder (its hooks and config run).
@@ -361,26 +231,16 @@ class Tok:
     sees)."""
 
     __slots__ = ("kind", "start", "end", "raw", "subs", "oneword", "literal", "value", "body")
-    value: Any  # the characters read (a list) while lexing, then the word (a str)
-    kind: str
-    start: int
-    end: int
-    raw: str
-    subs: list[tuple[str, str]]
-    oneword: bool
-    literal: bool
-    body: str | None
 
     def __init__(self, kind: str, start: int) -> None:
-        self.kind, self.start, self.end, self.raw = kind, start, start, ""
-        self.subs, self.oneword, self.literal, self.value = [], True, True, []
-        self.body = None  # a heredoc operator: the text of its body
+        self.kind, self.start, self.end, self.raw, self.oneword, self.literal = kind, start, start, "", True, True
+        self.subs: list[tuple[str, str]] = []
+        self.value: Any = []  # the characters read (a list) while lexing, then the word (a str)
+        self.body: str | None = None  # a heredoc operator: the text of its body
 
 
 class Seg:
     __slots__ = ("toks", "sep")
-    toks: list[Tok]
-    sep: str
 
     def __init__(self, toks: list[Tok], sep: str) -> None:
         self.toks, self.sep = toks, sep
@@ -677,12 +537,18 @@ def _lit(toks: Sequence[Tok], k: int) -> str | None:
     return toks[k].value if k < len(toks) and toks[k].literal else None
 
 
-def data_tokens(toks: Sequence[Tok]) -> dict[Tok, int] | None:
-    """{token: offset} of the data arguments of a text command (offset: how much of the raw token stays, 0 = all
-    of it is data), or None if the words are not a TEXT_ARGS command."""
+def _program_at(toks: Sequence[Tok]) -> int:
+    """Where a text command's program is: past SAFE_ASSIGN assignments and PREFIX_WORDS."""
     i = 0
     while i < len(toks) and (SAFE_ASSIGN.match(toks[i].raw) or toks[i].raw in PREFIX_WORDS):
         i += 1
+    return i
+
+
+def data_tokens(toks: Sequence[Tok]) -> dict[Tok, int] | None:
+    """{token: offset} of the data arguments of a text command (offset: how much of the raw token stays, 0 = all
+    of it is data), or None if the words are not a TEXT_ARGS command."""
+    i = _program_at(toks)
     path = _lit(toks, i)
     if path is None:
         return None
@@ -697,7 +563,7 @@ def data_tokens(toks: Sequence[Tok]) -> dict[Tok, int] | None:
             if _lit(toks, j + 1) is None:
                 return None
             j += 2
-        spec = TEXT_ARGS.get(("foreman", _lit(toks, j) or ""))  # no key has an empty word
+        spec = TEXT_ARGS.get(_lit(toks, j) or "")
         if spec == "all":
             return _all_data(toks, j + 1)
         if spec == "after-action":
@@ -720,7 +586,7 @@ def data_tokens(toks: Sequence[Tok]) -> dict[Tok, int] | None:
             j += 2
         sub = _lit(toks, j)
         if sub in ("commit", "tag"):  # the values of -m/--message
-            return _commit(toks, j + 1)
+            return _valued(toks, j + 1, COMMIT_OPTS, ("-m=", "--message="))
         if sub == "grep" and system and all(_lit(toks, n) == "-C" for n in range(i + 1, j, 2)):  # not -c (config)
             return _search(toks, j + 1, SEARCHES["git grep"])
         return None
@@ -731,16 +597,13 @@ def data_tokens(toks: Sequence[Tok]) -> dict[Tok, int] | None:
     if prog in SEARCHES:
         return _search(toks, i + 1, SEARCHES[prog])
     if (prog, _lit(toks, i + 1)) in MESSAGES and _lit(toks, i + 2) in MESSAGE_ACTIONS:
-        return _messages(toks, i + 3)
+        return _valued(toks, i + 3, MESSAGE_OPTS, ("--title=", "--body="))
     return None
 
 
 def printer(toks: Sequence[Tok]) -> bool:
     """True if the words (word tokens of a simple command) run echo or printf, named as data_tokens() reads them."""
-    i = 0
-    while i < len(toks) and (SAFE_ASSIGN.match(toks[i].raw) or toks[i].raw in PREFIX_WORDS):
-        i += 1
-    path = _lit(toks, i)
+    path = _lit(toks, _program_at(toks))
     return path is not None and PurePath(path).name in PRINTERS and ("/" not in path or path.startswith(SYSTEM_BIN))
 
 
@@ -755,9 +618,7 @@ def _printed(toks: Sequence[Tok], k: int, prog: str) -> dict[Tok, int] | None:
     return dict.fromkeys(toks[k:], 0)
 
 
-def _search(
-    toks: Sequence[Tok], k: int, spec: tuple[str, str, tuple[str, ...], tuple[str, ...]]
-) -> dict[Tok, int] | None:
+def _search(toks: Sequence[Tok], k: int, spec: Search) -> dict[Tok, int] | None:
     """The pattern of a search command (spec: an entry of SEARCHES) read like its option parser: the values of
     -e/--regexp, or else the first operand. None at an option outside the closed list, at a word bash would split
     or glob, and at -e/-f after an operand (GNU grep reads them as options, BSD grep as paths)."""
@@ -823,9 +684,10 @@ def _search(
     return out
 
 
-def _messages(toks: Sequence[Tok], k: int) -> dict[Tok, int] | None:
-    """The values of --title/-t and --body/-b (also --title=…, --body=…) of `gh pr|issue create|edit|comment|review`;
-    every other word is still compared (--body-file is a path)."""
+def _valued(toks: Sequence[Tok], k: int, opts: re.Pattern[str], given: tuple[str, ...]) -> dict[Tok, int] | None:
+    """The values of the options opts matches (the next word; or after `=`, the options in given): the messages of
+    `gh pr|issue create|edit|comment|review` (--body-file is a path) and of `git commit|tag`; every other word is
+    still compared."""
     if any(not t.oneword for t in toks[k:]):
         return None
     out: dict[Tok, int] = {}
@@ -835,11 +697,11 @@ def _messages(toks: Sequence[Tok], k: int) -> dict[Tok, int] | None:
         v = t.value if t.literal and t.raw == t.value else None
         if v == "--":
             break
-        if v in MESSAGE_OPTS and m + 1 < len(toks):
+        if v is not None and opts.fullmatch(v) and m + 1 < len(toks):
             out[toks[m + 1]] = 0
             m += 2
             continue
-        if t.raw.startswith(("--title=", "--body=")):
+        if t.raw.startswith(given):
             out[t] = t.raw.index("=") + 1
         m += 1
     return out
@@ -890,26 +752,6 @@ def _integrate(toks: Sequence[Tok], k: int, data_opts: Iterable[str]) -> dict[To
         elif pos > 3:
             return None
         pos, m = pos + 1, m + 1
-    return out
-
-
-def _commit(toks: Sequence[Tok], k: int) -> dict[Tok, int] | None:
-    if any(not t.oneword for t in toks[k:]):
-        return None
-    out: dict[Tok, int] = {}
-    m = k
-    while m < len(toks):
-        t = toks[m]
-        v = t.value if t.literal and t.raw == t.value else None
-        if v == "--":
-            break
-        if v is not None and (v == "--message" or re.fullmatch(r"-[asnvqe]*m", v)) and m + 1 < len(toks):
-            out[toks[m + 1]] = 0
-            m += 2
-            continue
-        if t.raw.startswith(("-m=", "--message=")):
-            out[t] = t.raw.index("=") + 1
-        m += 1
     return out
 
 
@@ -1235,61 +1077,14 @@ RAW_INTERPRETERS = re.compile(
 # Words that come before the program: keywords and wrappers that run the rest; the letters are their short options
 # that take a value (getopt style: attached or the next word).
 PREFIX = {
-    "!": "",
-    "if": "",
-    "elif": "",
-    "while": "",
-    "until": "",
-    "then": "",
-    "do": "",
-    "else": "",
-    "{": "",
-    "time": "",
-    "builtin": "",
-    "nohup": "",
-    "command": "",
-    "exec": "a",
-    "env": "uCSP",
-    "sudo": "ugCDhpRrTtU",
-    "doas": "uC",
-    "nice": "n",
-    "stdbuf": "ioe",
-    "caffeinate": "tw",
-    "setsid": "",
-    "chronic": "",
-    "unbuffer": "",
-    "busybox": "",
-}
-LONG_WITH_VALUE = (
-    "--user",
-    "--group",
-    "--chdir",
-    "--unset",
-    "--split-string",
-    "--adjustment",
-    "--prompt",
-    "--host",
-    "--role",
-    "--type",
-    "--signal",
-    "--kill-after",
-    "--input",
-    "--output",
-    "--error",
-    "--arg-file",
-    "--delimiter",
-    "--eof",
-    "--replace",
-    "--max-lines",
-    "--max-args",
-    "--max-procs",
-    "--max-chars",
-    "--process-slot-var",
-    "--interval",
-    "--command",
-    "--shell",
-    "--rcfile",
-    "--init-file",
+    "!": "", "if": "", "elif": "", "while": "", "until": "", "then": "", "do": "", "else": "", "{": "", "time": "",
+    "builtin": "", "nohup": "", "command": "", "exec": "a", "env": "uCSP", "sudo": "ugCDhpRrTtU", "doas": "uC",
+    "nice": "n", "stdbuf": "ioe", "caffeinate": "tw", "setsid": "", "chronic": "", "unbuffer": "", "busybox": "",
+}  # fmt: skip
+LONG_WITH_VALUE = _long(
+    "user group chdir unset split-string adjustment prompt host role type signal kill-after input output error "
+    "arg-file delimiter eof replace max-lines max-args max-procs max-chars process-slot-var interval command shell "
+    "rcfile init-file"
 )
 ASSIGN = re.compile(r"[A-Za-z_]\w*(\[[^]]*\])?\+?=")
 
