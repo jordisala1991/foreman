@@ -1,58 +1,51 @@
 """What a `git push` would do (guard.py's resolved texts): the folder it runs in, that repo's remote and the refs.
 
 A [deny] pattern written for a publish (`git push .*some-org`, `git push … main`) matches the text of a command, and
-the text of `git push` alone names neither the remote nor the branch: those come from the folder it runs in. So the
-guard compares one more text per `git push` a line runs, behind every text of today, built from what git would do:
+`git push` alone names neither the remote nor the branch: they come from the folder it runs in. So the guard compares
+one more text per `git push` a line runs, after every other text, built from what git would do:
 
     <the segment's assignments and wrappers> git push <push URL> <src>:<dst> [--force] [--delete] [--mirror]
 
 one per destination ref (branches short, `main:main`; `refs/tags/*:refs/tags/* --tags` for --tags, --follow-tags
-and push.followTags; a deletion as `:dst --delete`), and a second one with the `https://host/path` form of an ssh or
-scp URL, so a pattern written for one form matches both.
+and push.followTags; a deletion as `:dst --delete`), and again with the `https://host/path` form of an ssh or scp URL.
 
-The folder. A line starts in the hook event's cwd (Ctx.cwd); a `cd`/`pushd` before the segment moves it, and each
-`git -C DIR` applies after (moved()). Where a `cd` may or may not have run or arrived (inside a group, a branch,
-after `||`, a pipe, `;` after a folder that does not exist) the segment may run in either folder and both are
-resolved: the guard blocks when any of them matches (folders()). A folder the line cannot name (`cd "$X"`, `git -C
-"$X"`, `cd -`, `popd`, a folder that does not exist, an event without cwd) or one where git does not answer in time is
-UNKNOWN, and the folder before it stays (an empty "$X" is the current folder): the push is resolved against every repo
-of the project (its home and each `[repos.*] path`) with that repo's main branch as the current one, so an unknown
-folder only blocks more.
+The folder (folders()). A line starts in the event's cwd; a `cd`/`pushd` before the segment moves it, then each `git
+-C DIR` (moved()). A `cd` that may not have run or arrived (in a group or a branch, after `||`, a pipe, `;` after a
+folder that does not exist) adds its folder: each is resolved, and the guard blocks when any matches. A folder the
+line cannot name (`cd "$X"`, `cd -`, popd, a folder that does not exist, no cwd) or where git does not answer in time
+is UNKNOWN, besides the folder before it: the push is resolved against every repo of the project (its home and each
+`[repos.*] path`) with that repo's main branch as the current one, so an unknown folder only blocks more.
 
-What git says. For each folder, once per check (the Resolver's cache, which the main-checkout rule shares):
-`symbolic-ref -q HEAD` (which also says whether it is a repo) and `config --list -z`, with no pager, no prompt, no
-optional locks, no fsmonitor, and TIMEOUT seconds each. None of them runs a hook or a filter. A folder that is not a
-repo has no remote: the text keeps the remote as written (git would fail anyway); its config is the global and system
-one (their aliases).
+What git says (read_repo(), once per folder and check, in the Resolver the main-checkout rule shares):
+`symbolic-ref -q HEAD` and `config --list -z`, with no pager, prompt, optional locks or fsmonitor, TIMEOUT seconds
+each; neither runs a hook or a filter. Outside a repo there is no remote (the text keeps it as written) and the config
+is the global and system one (their aliases).
 
-The remote: the first argument (or --repo), else branch.<b>.pushRemote, remote.pushDefault, branch.<b>.remote and
-origin; its pushurls (insteadOf applied) or else its urls (pushInsteadOf, else insteadOf); a name that is no
-configured remote is a URL or a path, rewritten the same way. The refs: the explicit refspecs (`+`, HEAD and @, `src`
-alone, `:dst`, `tag NAME`), else remote.<name>.push, else push.default (simple and current: the current branch to the
-same name; upstream: to branch.<b>.merge; matching: the main branch and the current one; nothing: none). --all,
---branches, --mirror and a glob refspec add the main branch; a detached HEAD, or a word the line computes
-(`$BRANCH`), counts as the main branch too. The current branch is the one git says, unless a `git switch` or `git
-checkout -b` earlier on the line, in the same folder, surely ran before the push (only && between them, outside any
-group or compound): then it is that one; one that may not have run adds its branch (branches()).
+The remote: the first argument (or --repo), else branch.<b>.pushRemote, remote.pushDefault, branch.<b>.remote,
+origin; its pushurls (insteadOf applied), else its urls (pushInsteadOf, else insteadOf); a name that is no remote is a
+URL or a path, rewritten the same way. The refs (refspecs()): the explicit refspecs (`+`, HEAD and @, `src` alone,
+`:dst`, `tag NAME`), else remote.<name>.push, else push.default (simple, current: the current branch to the same
+name; upstream: to branch.<b>.merge; matching: the main branch and the current one; nothing: none). --all,
+--branches, --mirror and a glob add the main branch; so do a detached HEAD and a word the line computes. The current
+branch is git's, unless a `git switch` or `git checkout -b` earlier on the line, in the same folder, surely ran
+before (only && between them, outside any group): then it is that one; one that may not have run adds its branch
+(branches()).
 
-Config changed on the same line (Changes). What git reads is what the hook reads, plus what the line changes before the
-push runs, which the hook cannot read yet: the push's own `git -c KEY=VALUE` and the line's earlier `git config KEY
-VALUE`, `git remote add|set-url NAME URL` (a value is added to what git says: both are tried), `git config --unset`,
-`git remote remove` (the key is dropped). A change that may not have run (the reading of a cd in folders()), or that ran
-in another folder than the push's or in more than one (its -C, a cd, --git-dir), keeps the config before it too: the
-push is resolved with each config git may read (overlay()). `--git-dir DIR` and a `GIT_DIR=DIR` in front of the push
-read the repo of DIR instead of the folder's. What cannot be read that way makes the push UNKNOWN too, besides its
-folder: a value the line computes, `--config-env`, `GIT_CONFIG*`, `GIT_COMMON_DIR`, `HOME` or `XDG_CONFIG_HOME` in front
-of the push or exported earlier on the line, an `include.*` key, `git config --file|--edit|--rename-section`, `git
-remote rename|set-url --delete`, an upstream set on the line (`git branch -u`, `--track`). `--work-tree` and
-`GIT_WORK_TREE` change neither the repo nor its config: they are ignored.
+Config the line changes before the push (Changes, changes()): its own `git -c KEY=VALUE`, an earlier `git config KEY
+VALUE` or `git remote add|set-url NAME URL` (added to what git says: both are tried), `git config --unset`, `git
+remote remove` (the key dropped). One that may not have run, or ran in another folder or in more than one, keeps the
+config before it too: the push is resolved with each config git may read (overlay()). `--git-dir DIR` and `GIT_DIR=`
+read the repo of DIR. What cannot be read makes the push UNKNOWN too: a value the line computes, `--config-env`,
+`GIT_CONFIG*`, `GIT_COMMON_DIR`, `HOME` or `XDG_CONFIG_HOME` given to it or exported before, an `include.*` key, `git
+config --file|--edit|--rename-section`, `git remote rename|set-url --delete`, an upstream set on the line (`git
+branch -u`, `--track`). `--work-tree` and `GIT_WORK_TREE` change neither the repo nor its config.
 
-Git aliases. A subcommand that is no git command is looked up in alias.<name> (with the line's changes): an alias to
-`push` (through other aliases too) is resolved as that push; one that starts with `!` is a shell command, compared as a
-command of its own (guard.py, from the same folder; under --git-dir or GIT_DIR, which git hands to it, from an unknown
-folder). A subcommand the line computes (`git $CMD`) counts as a push, except a function's quoted "$@" or "$1" when the
-line defines the function and calls it only with a literal first argument (called(): from the folders of the body and of
-the call). The strings of `ssh HOST` run on another machine and are not resolved.
+Git aliases (aliased(), expand()): a subcommand that is no git command is looked up in alias.<name>, with the line's
+changes: to `push` (through other aliases too), resolved as that push; `!…`, a shell command compared as a command of
+its own (guard.py; from the same folder, or from an unknown one under --git-dir or GIT_DIR). A subcommand the line
+computes (`git $CMD`) counts as a push, but a function's quoted "$@" or "$1" when the line defines it and calls it only
+with a literal first argument (called(): from the folders of the body and of the call). What `ssh HOST` runs is not
+resolved.
 """
 
 from __future__ import annotations

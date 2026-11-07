@@ -187,15 +187,11 @@ Verdict = tuple[str, Any]  # check()'s answer: ("deny" | "orchestrator", Hit) or
 
 
 class Ctx(TypedDict, total=False):
-    """Who runs a command (check()'s ctx): the hook event's session_id and agent_id (None: the main thread). marked:
-    the orchestrator's session to compare with, given only by a table run or `guard --as` (else <state>/session; with
-    it no process is compared and every [deny.grants] group counts as granted). cwd: the folder the command runs in
-    (the event's cwd; `guard --cwd`): with the key, each `git push` is also compared as git would do it (gitpush.py;
-    None: an unknown folder); without it, only as written (a table run gives each row its @DIR or the home).
-    passed: set by check(), the orchestrator-only pattern of a command it let through. agent_type: the event's (a
-    subagent's type; else <state>/agents.json's, holdout_reader). tool_use_id: the call's, given
-    only by the guard hook: with it, a main-thread write of Claude Code's settings or the registry may spend the
-    owner's one-use yes for that call (grants.take_once)."""
+    """Who runs a command (check()'s ctx): the event's session_id and agent_id (None: the main thread); marked, the
+    orchestrator's session, given only by a table run or `guard --as` (else <state>/session); cwd, the event's folder
+    (with the key, each `git push` is also resolved, gitpush.py; None: unknown); passed, set by check() (the group's
+    pattern a command passed); agent_type (else <state>/agents.json's); tool_use_id, given only by the hook, for the
+    owner's one-use yes (grants.take_once)."""
 
     session: str | None
     agent: str | None
@@ -553,19 +549,23 @@ def uses_lock(cmd: str, name: str, res: Table) -> bool:
     return any(re.search(a, cmd) for a in res.get("allow", []))
 
 
-def names_apply(cmd: str) -> bool:
-    """Whether a command may run `foreman permissions apply`: its text, without quotes, backslashes and line
-    continuations, has both words (PERMISSIONS_APPLY is compared only then)."""
+def _mentions(cmd: str, *words: str) -> bool:
+    """Whether the command's text, without quotes, backslashes and line continuations, has all these words: a loose
+    reading, so that a rule's regex is compared only then (the regex decides)."""
     flat = re.sub(r"\\\n|[\\'\"]", "", cmd)
-    return "permissions" in flat and "apply" in flat
+    return all(w in flat for w in words)
+
+
+def names_apply(cmd: str) -> bool:
+    """Whether a command may run `foreman permissions apply` (PERMISSIONS_APPLY is compared only then)."""
+    return _mentions(cmd, "permissions", "apply")
 
 
 def names_internal(cmd: str) -> bool:
     """Whether a command may run one of foreman's own group (grants.INTERNAL): `foreman permissions apply`, or
     `foreman integrate … --opens` (a branch that changes a live foreman.toml or guard table so that it allows
-    something new, integrate.py). The same loose reading as names_apply; the group's patterns decide."""
-    flat = re.sub(r"\\\n|[\\'\"]", "", cmd)
-    return names_apply(cmd) or ("integrate" in flat and "--opens" in flat)
+    something new, integrate.py)."""
+    return names_apply(cmd) or _mentions(cmd, "integrate", "--opens")
 
 
 def _who(project: Project, ctx: Ctx | None, process: bool = True) -> str:
@@ -806,11 +806,9 @@ def _live(project: Project, projects: Sequence[Project]) -> list[tuple[str, str,
 
 
 def reserved(project: Project, projects: Sequence[Project] | None = None) -> list[Reserved]:
-    """Every reserved file and folder (module doc), the most precise first: the config and the guard table of each
-    project of the registry (`projects`, else config.registered_projects()), and those of `project`'s own home too
-    (its home/foreman.toml, not a candidate's file: a check run from a copy of the home, as `foreman integrate` does in
-    a worktree, judges its rows as the live home would; the hook always passes the registered project), each
-    project's state, then the machine's."""
+    """Every reserved file and folder (module doc), the most precise first: the config and guard table of each
+    project of the registry, and of `project`'s own home (a check run from a copy of the home, as `foreman integrate`
+    does, judges as the live home would), each project's state, then the machine's."""
     projects = _projects(project, projects)
     live = _live(project, projects)
     out: list[Reserved] = [(kind, _fold(path), False, name) for kind, path, name in live]
@@ -879,10 +877,8 @@ def _machine_git() -> list[tuple[str, bool]]:
 def git_entries(
     project: Project, projects: Sequence[Project], live: Sequence[tuple[str, str, str]] | None = None
 ) -> list[tuple[str, bool, str]]:
-    """[(path, a folder?, the project or "")] of the git class (module doc), real paths not case-folded: of each
-    protected repo's common git directory, hooks/, info/, config, config.worktree, each worktree's config.worktree
-    (a pattern) and what those configs name (an absolute core.hooksPath, included files); then the machine's git
-    config. A failure gives [] (O8: it never stops a write)."""
+    """[(path, a folder?, the project or "")] of the git class (module doc), real paths not case-folded. A failure
+    gives [] (O8: it never stops a write)."""
     try:
         out: list[tuple[str, bool, str]] = []
         reals: dict[str, str] = {}
@@ -1118,10 +1114,8 @@ Line = tuple[str, list[Seg], list[list[Tok]], list[Runs], list[frozenset[str]], 
 
 
 def _walk(cmd: str, start: frozenset[str], env: dict[str, list[str]], depth: int) -> list[Line | str]:
-    """Every line the command runs, in order, from the folders each segment may run in (the line's cd and pushd,
-    gitpush.folders, with the values the line gives its variables): the command itself, then what is nested in it
-    (sh -c, eval, $(…), a heredoc or a pipe into a shell, xargs and find -exec; not what ssh runs); a text the lexer
-    cannot read (the command itself, or one nested) is given as its str."""
+    """Every line the command runs (module doc: the command, then each line nested in it), with the folders each
+    segment may run in and the values the line gives its variables; a text the lexer cannot read, as its str."""
     try:
         segs, lx, words_of, info = _read(cmd, depth)
     except Unparsed:
@@ -1337,9 +1331,7 @@ def _target_hits(t: _Target, entries: Sequence[Reserved]) -> Iterable[tuple[Rese
 
 
 def _bash_file(chk: _Check) -> Hit | None:
-    """The reserved file a Bash command writes by name (module doc), as check_file's Hit with bash set, or None.
-    The orchestrator's own board passes for its main thread. Never raises: a failure denies only a line that looks
-    like a write and names a reserved path as text."""
+    """The reserved file a Bash command writes by name (module doc), as check_file's Hit with bash set, or None."""
 
     def rule() -> Hit | None:
         out = list(_targets(chk.lines()))
@@ -1670,16 +1662,9 @@ def holdout_hit(project: Project, cmd: str, cwd: str | None) -> Hit | None:
     return _holdout(_Check(project, cmd, {"cwd": cwd} if cwd else None, None))
 
 
-def names_integrate(cmd: str) -> bool:
-    """Whether a command may run `foreman integrate` (the loose reading of names_apply; INTEGRATE decides)."""
-    return "integrate" in re.sub(r"\\\n|[\\'\"]", "", cmd)
-
-
 def _agent_only(chk: _Check) -> Hit | None:
-    """The built-in rules for an agent only (module doc): its `foreman integrate` (but --help, -h, --check), its
-    git that rewrites a main checkout (a repo or a live home), and what reaches the hidden acceptance checks
-    (_holdout: a planner passes). Only an agent (_who, no process) is compared."""
-    integrate, git = names_integrate(chk.cmd), bool(GIT_WORDS.search(chk.cmd))
+    """The built-in rules for an agent only (module doc); only an agent (_who, no process) is compared."""
+    integrate, git = _mentions(chk.cmd, "integrate"), bool(GIT_WORDS.search(chk.cmd))
     if chk.who() != "agent":
         return None
     hit = _integrates(chk) if integrate else None
@@ -1691,10 +1676,7 @@ def _agent_only(chk: _Check) -> Hit | None:
 
 
 def _integrates(chk: _Check) -> Hit | None:
-    """The INTEGRATE Hit of a line that runs `foreman integrate` without --help, -h or --check as a word of its own:
-    a segment whose program is foreman (shell.foreman_call), also nested (_walk); a text the lexer cannot read, by the
-    regex (also when the walk fails). Values of foreman note, git commit -m, a heredoc to an interpreter are never
-    commands here."""
+    """The INTEGRATE Hit of a line that runs `foreman integrate` but --help, -h or --check (module doc)."""
 
     def whole(text: str) -> Hit | None:
         return Hit(INTEGRATE, "whole", text) if re.search(INTEGRATE, text) else None
@@ -1817,12 +1799,8 @@ def _walks(name: str, args: Sequence[str]) -> bool:
 
 
 def _holdout(chk: _Check) -> Hit | None:
-    """The HOLDOUT Hit of an agent's line (module doc), or None: `foreman holdout` but --help or -h; a line that names
-    a folder of hidden checks as text; a word (also a redirection's file, `--opt=VALUE`'s value, nested commands)
-    that is, resolved from each folder the segment may run in, such a folder or a path in it, or a folder that holds
-    one for a program that walks it (_walks; given no existing path, the folder it runs in); a segment that runs in
-    one. Only for a caller holdout_reader refuses, and only while such a folder exists. Never raises: a failure
-    compares the line's text only."""
+    """The HOLDOUT Hit of an agent's line (module doc), or None; only for a caller holdout_reader refuses, and only
+    while such a folder exists."""
     project, cmd = chk.project, chk.cmd
     try:
         dirs = holdout_dirs(project, chk.projects())
@@ -1885,9 +1863,8 @@ def _holdout(chk: _Check) -> Hit | None:
 def _holdout_tool(
     project: Project, tool: str | None, tool_input: Any, ctx: Ctx | None, projects: Sequence[Project] | None = None
 ) -> Hit | None:
-    """The HOLDOUT Hit of a Grep or Glob call that walks a folder holding hidden checks (Grep: its `path`, else the
-    call's cwd; Glob: its pattern from there), for a caller holdout_reader refuses; a place in or under such a folder is
-    check()'s (`cat PLACE`). Never raises."""
+    """The HOLDOUT Hit of a Grep or Glob call that walks a folder of hidden checks (its `path`, else the call's cwd;
+    Glob: its pattern from there); a place in such a folder is check()'s (`cat PLACE`). Never raises."""
     try:
         if tool not in WALK_TOOLS or not isinstance(tool_input, dict):
             return None
@@ -1942,9 +1919,7 @@ def _key_kind(key: str) -> str:
 
 
 def tool_texts(tool: str | None, tool_input: Any) -> tuple[list[str], list[str]]:
-    """(places, commands) a call of a tool names (module doc): a string under a field whose name ends in one of
-    PLACE_WORDS, or inside one (a list or a map under it), is a place; a string under `command` or `cmd` is a command
-    (not for Bash, whose command check() reads). Every other string is free text and is not compared. Walks at most
+    """(places, commands) a call of a tool names (module doc; a command of Bash is check()'s), walking at most
     TOOL_DEPTH levels and TOOL_STRINGS strings."""
     places: list[str] = []
     commands: list[str] = []
@@ -1992,11 +1967,8 @@ def check_tool(
     ctx: Ctx | None = None,
     projects: Sequence[Project] | None = None,
 ) -> Verdict | None:
-    """The verdict of a call of any tool but Bash by what it names (tool_texts): each command as check() would give
-    it in Bash, each place as check() gives `cat PLACE` (and `cat ~/…` for a path under $HOME), the first refusal
-    winning; a place's Hit says where=tool, part `<tool> <place>`, tool and call. A place never gets a lock verdict
-    (it runs nothing). A failure of check() on a place compares its raw text with the deny lists (_whole), so a
-    failure of foreman never refuses a call that names nothing they match. Never raises."""
+    """The verdict of a call of any tool but Bash by what it names (module doc); the first refusal wins, and a place's
+    Hit says where=tool, part `<tool> <place>`, tool and call. Never raises."""
     try:
         places, commands = tool_texts(tool, tool_input)
         before = (ctx or {}).get("passed")
@@ -2063,9 +2035,8 @@ def check_call(
     ctx: Ctx | None = None,
     projects: Sequence[Project] | None = None,
 ) -> Verdict | None:
-    """The guard's verdict on a call of any tool (the hook and a table's `tool:` row): Bash by its command
-    (check()); a FILE_TOOLS tool by the file it writes (check_file), then as any other tool, so writing a file gets
-    the verdict of reading it; any other tool by what it names (check_tool)."""
+    """The guard's verdict on a call of any tool (the hook and a table's `tool:` row): Bash by check(), FILE_TOOLS by
+    check_file and then as any other tool, any other tool by check_tool."""
     ti = tool_input if isinstance(tool_input, dict) else {}
     if tool in (None, "Bash"):
         cmd = ti.get("command")
@@ -2207,15 +2178,11 @@ Row = tuple[int, str, str, "str | None", str, str]
 
 
 def table_verdicts(project: Project, path: Path, base: PathLike | None = None) -> list[Row]:
-    """Every row of a guard table with what the project says of it: (line, expect, command, DIR or None, the verdict
-    as an agent, the verdict as the marked orchestrator's main thread with every group granted), each verdict allow,
-    deny or lock:R. The orchestrator's is computed only when the project has [deny.grants] groups or the row may run
-    `foreman permissions apply` or `foreman integrate … --opens` (names_internal; else it is the agent's: nothing else
-    tells them apart). Each row runs in its @DIR (a relative one joined to `base`, else to the table's folder: a copy
-    of a table read from git keeps the live one's), else in the project's home (so a `git push` is compared as git
-    would do it from there, gitpush.py). A row `file:PATH` is a write of a Write/Edit call to that file (row_path,
-    check_file), and a row `tool:NAME JSON` a call of that tool (row_tool, check_call; its JSON text with the same
-    placeholders), both in both roles. Raises OSError or ValueError (parse_table)."""
+    """Every row of a guard table: (line, expect, command, DIR or None, the verdict as an agent, as the marked
+    orchestrator's main thread with every group granted), each allow, deny or lock:R. The orchestrator's is computed
+    only when something may tell them apart ([deny.grants] groups, names_internal, a reserved file, an agent's rule).
+    A row runs in its @DIR (relative: joined to `base`, else to the table's folder), else in the project's home; a
+    `file:` or `tool:` row is check_file's or check_call's. Raises OSError or ValueError (parse_table)."""
     from . import config, grants
 
     rows = parse_table(path.read_text(), base if base is not None else path.resolve().parent)
