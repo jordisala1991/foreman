@@ -9,6 +9,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.67.0] - 2026-11-07
+
 ### Added
 
 - The new panel's «Home» and «Needs you» screens: permissions to approve or deny (with the time left), questions with their options, the recommended one marked and what each option changes, «Another answer…» in the owner's own words, the orchestrator's unread messages with «Mark as read» and a box to write to it, who is working now, today in figures (cost, integrated, quota, reviews sent back) and the latest lines of the agents. The picker gains «All products»: the figures are summed with a bar per product. The «Needs you» count now includes the permissions waiting (`permissions` in `/api/projects`); `POST /api/message/read` marks an orchestrator's message as read. The orchestrator's replies (`foreman inbox reply`) are now stored unread, so the panel's count and «Mark as read» have something to show; the orchestrator's own inbox is unchanged. Approving a permission asks to confirm first, as today's panel does.
