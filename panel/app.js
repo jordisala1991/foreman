@@ -867,11 +867,32 @@ function feedThread(d){
     .sort((a,b) => b.h.localeCompare(a.h));
 }
 const lastHourHtml = thread => sect(t('last_hour'), list(thread.map((x, i) => lrow({k: 'feed', key: i, id: x.h, name: ptag(x.p) + aname(x.who), title: inline(x.t)})).join('') || empty(t('nothing_last_hour'))), thread.length || null);
+// «See conversation» of a session agent (its own Claude Code session): the server turns Remote Control on for it (seconds;
+// it pushes the owner's phone, so only this click does it) and answers its link, which opens in the Claude app. The
+// window is opened by the click itself (a browser blocks one opened after the wait) and pointed at the link when it comes.
+const WATCHING = new Set();
+const watchButton = a => a.session && canWrite(a.p)
+  ? `<button class="sec sm" data-id="${esc(a.id)}" data-p="${esc(a.p)}" title="${esc(t('watch_tip'))}"${WATCHING.has(a.id) ? ' disabled' : ''} onclick="watchAgent(this)">${t(WATCHING.has(a.id) ? 'watch_busy' : 'watch_btn')}</button>` : '';
+async function watchAgent(b){
+  const id = b.dataset.id, p = b.dataset.p; if(WATCHING.has(id)) return;
+  const w = window.open('', '_blank'); WATCHING.add(id); b.disabled = true; b.textContent = t('watch_busy'); $('err').textContent = '';
+  let link = '', err = '';
+  try{
+    const r = await fetch(api(`/api/agent/watch?id=${encodeURIComponent(id)}&p=${encodeURIComponent(p)}`), {method:'POST'}), j = await r.json().catch(() => ({}));
+    if(r.ok) link = j.link; else err = j.error || `${r.status}`;
+  }catch(e){ err = t('no_connection'); }
+  WATCHING.delete(id);
+  if(!link && w) w.close();
+  else if(link && w) w.location.href = link;
+  lastSignature = null; lastEtag = null; await load();   // (load clears the message: it comes after)
+  if(link && !w) $('err').innerHTML = `${esc(t('watch_blocked'))}: <a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a>`;
+  else if(!link) $('err').textContent = t('error', {text: err});
+}
 function renderWork(d){
   const alive = d.agents.filter(a => !a.end).length;
   $('agents').innerHTML = sect(t('agents'), list(d.agents.map(a => { const w = agentWhat(a);
     return lrow({k: 'ag', key: a.id, icon: sdot(a), cls: 'two', attrs: ` title="${esc(`${a.name} · ${w.tip}`)}"`,
-      title: `<span class="what">${ptag(a.p)}${esc(w.text)}</span><span class="state muted">${agentState(a)}</span>`}); }).join('') || empty(t('none_m'))),
+      title: `<span class="what">${ptag(a.p)}${esc(w.text)}</span><span class="state muted">${agentState(a)}</span>`, meta: watchButton(a)}); }).join('') || empty(t('none_m'))),
     alive ? t('n_running', {n: alive}) : null);
   $('worklast').innerHTML = lastHourHtml(feedThread(d));
   // a repository shows only what it has: branches as a kanban (with an agent, with a PR, ready, in main today) and its
@@ -1196,6 +1217,7 @@ const VIEWS = {
         [t('context'), a.context ? t('tokens', {n: ktok(a.context)}) : ''],
         !a.end && [t('tool'), esc(a.tool)],
         a.outcome && [t('delivery_outcome'), `<span class="${a.outcome === 'ok' ? '' : 'bad'}">${esc(t('outcome_' + a.outcome))}</span>`],
+        a.session && [t('watch_link'), `${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.link)}</a>` : `<span class="muted">${t('never')}</span>`} ${watchButton(a)}`],
         [t('branch'), a.branch ? branchLink(a.branch) : ''],
         [t('last_commit'), a.commit ? `<code>${esc(a.commit.split(' ')[0])}</code> ${esc(a.commit.split(' ').slice(1).join(' '))}` : ''],
         a.commit && [t('uncommitted'), a.uncommitted ? t('n_files', {n: a.uncommitted}) : t('nothing')],

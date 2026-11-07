@@ -71,6 +71,7 @@ from . import (
     notes,
     orchestrator,
     pause,
+    remotecontrol,
     transcripts,
     util,
     versions,
@@ -176,6 +177,10 @@ def agents(project: Project, lock_list: list[Status], branch_of_agent: dict[str,
             "task": short.strip()[:200],
             "transcript": path,
             "outcome": h.get("outcome") if state == "delivered" else None,
+            # a session agent (its own Claude Code session): its conversation can be opened (/api/agent/watch); `link`
+            # is the one it last gave, which only holds while Remote Control stays on
+            "session": bool(h.get(identity.SESSION_MARK)) and state != "stopped",
+            "link": h.get("link") if h.get(identity.SESSION_MARK) else None,
         }
         last = agents_mod.last_sign(h)
         a["activity_ts"] = None if last is None else int(last)
@@ -776,6 +781,8 @@ def act(path: str, q: Query, body: str) -> Obj:
         return grant_approve(p, arg("g"))
     if path == "/api/grants/deny":
         return grant_deny(p, arg("g"))
+    if path == "/api/agent/watch":
+        return agent_watch(p, arg("id"))
     if path == "/api/approve":
         repo, branch = arg("repo"), arg("branch")
         if repo not in p.repos or not branch:
@@ -856,6 +863,18 @@ def act(path: str, q: Query, body: str) -> Obj:
             f.unlink()
         return {"paused": f.exists()}
     raise ValueError(f"no endpoint {path}")
+
+
+def agent_watch(p: Project, aid: str) -> Obj:
+    """/api/agent/watch: the owner asks to see the conversation of a session agent: Remote Control is turned on for its
+    session (remotecontrol.connect; it sends his phone a push, which is why only this click does it) and the link
+    comes back. Takes seconds. A failure is a 400 with the reason."""
+    if not aid:
+        raise ValueError("an agent id is required")
+    try:
+        return {"link": remotecontrol.connect(p, aid)}
+    except remotecontrol.RemoteError as e:
+        raise ValueError(str(e)) from e
 
 
 def stamp(fmt: str = "%Y-%m-%d %H:%M") -> str:
