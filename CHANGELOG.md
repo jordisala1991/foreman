@@ -9,6 +9,12 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.67.2] - 2026-11-07
+
+### Fixed
+
+- The new panel no longer flickers: it is built with the React Compiler, a refresh redraws only when the answer changed, and a screen you go back to keeps what it showed instead of «Loading…».
+
 ## [0.67.1] - 2026-11-07
 
 ### Fixed
