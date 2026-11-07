@@ -1208,6 +1208,70 @@ class GuardFailsClosedTest(ProjectCase):
                     self.assertEqual(hooks.run("guard"), want)
                 self.assertEqual(reg.call_count, 1)
 
+    def entry(self, event, blocked=()):
+        """`lib/main.py hook guard` in a fresh process from this project's folder, with the foreman modules `blocked`
+        missing: (exit code, the foreman modules it loaded)."""
+        import subprocess
+        import sys
+
+        code = (
+            f"import io, json, runpy, sys\nsys.path.insert(0, {str(ROOT / 'lib')!r})\n"
+            f"for m in {list(blocked)!r}:\n    sys.modules[m] = None\n"
+            f"sys.argv = [{str(ROOT / 'lib/main.py')!r}, 'hook', 'guard']\n"
+            f"sys.stdin = io.StringIO({json.dumps({'cwd': str(self.home), **event})!r})\n"
+            "rc = 0\ntry:\n    runpy.run_path(sys.argv[0], run_name='__main__')\n"
+            "except SystemExit as e:\n    rc = e.code\n"
+            "except BaseException:\n    rc = 1\n"
+            "sys.__stdout__.write(json.dumps([rc, sorted(m for m in sys.modules if m.startswith('foreman.'))]))\n"
+        )
+        r = subprocess.run([sys.executable, "-c", code], env=self.env, capture_output=True, text=True, check=False)
+        rc, mods = json.loads(r.stdout.splitlines()[-1])
+        return rc, {m.removeprefix("foreman.") for m in mods}
+
+    def test_light_path_in_a_project(self):
+        """The guard's whole path in a product (`ls`, an allowed Read, a refusal) loads none of what only the other
+        hooks or the CLI use (transcripts and notes come with identity and orchestrator, which it uses)."""
+        write = {"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": "a1"}
+        write["tool_input"] = {"file_path": str(self.home / "foreman.toml"), "content": "x"}
+        read = {"hook_event_name": "PreToolUse", "tool_name": "Read", "agent_id": "a1"}
+        read["tool_input"] = {"file_path": str(self.home / "rules.md")}
+        for ev, want in ((self.bash("ls"), 0), (read, 0), (self.bash("make deploy"), 2), (write, 2)):
+            with self.subTest(ev=ev):
+                rc, got = self.entry(ev)
+                self.assertEqual(rc, want)
+                self.assertIn("guard", got)
+                self.assertFalse(got & {"cli", "loop", "delivery", "holdout", "backlog", "hooks_mod"}, got)
+                if not want:
+                    self.assertFalse(got & {"approved", "permissions"}, got)
+
+    def test_missing_module_at_the_top(self):
+        """The module doc's limit: a module hooks.py imports at the top, missing, fails as Python does (exit 1, before
+        any registry is read); one imported where it is used refuses (exit 2)."""
+        self.assertEqual(self.entry(self.bash("make deploy"), ["foreman.pause"])[0], 1)
+        self.assertEqual(self.entry(self.bash("make deploy"), ["foreman.permissions", "foreman.approved"])[0], 2)
+
+    def test_pass_survives_its_record(self):
+        """A call the guard let through (a [deny.grants] pass) stays a pass when its record cannot be written."""
+        import contextlib
+        import sys
+        from unittest import mock
+
+        import foreman
+
+        def passes(project, cmd, ctx=None, projects=None):
+            ctx["passed"] = guard.Hit("make deploy")  # what check() leaves for a granted command
+            return None
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(sys.modules, {"foreman.approved": None}))
+            if hasattr(foreman, "approved"):
+                stack.enter_context(mock.patch.object(foreman, "approved"))
+                delattr(foreman, "approved")
+            stack.enter_context(mock.patch.object(guard, "check", passes))
+            rc, err = self.run_hook("guard", self.bash("make deploy"))
+        self.assertEqual(rc, 0)
+        self.assertIn("could not record this pass", err)
+
     def test_missing_foreman_module_refuses_only_in_the_guard(self):
         from unittest import mock
 

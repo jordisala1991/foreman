@@ -4,9 +4,12 @@ instead: hooks_mod.py.
 
 Every hook first finds the project of the session by the event's `cwd` in the registry and does nothing (exit 0,
 no output) unless it is an `active` project: with the plugin enabled for a user, sessions elsewhere are untouched.
-No hook ever fails the call: any error ends in exit 0, except the guard's deliberate rejection (exit 2) and a
-missing foreman module on the guard's path (exit 2 too: the guard cannot judge the call). lib/main.py runs this
-module without foreman.cli, and it imports at the top only what the guard needs (each tool call starts it).
+No hook ever fails the call: any error ends in exit 0, except the guard's deliberate rejection (exit 2) and, in the
+guard, a missing foreman module that this module imports where it uses it (exit 2 too: run). One imported at the top
+(config, guard, i18n, identity, pause, util) or this module itself, missing, fails as Python does in lib/main.py
+(exit 1, which Claude Code does not block on): there no registry is read yet, so refusing would block every
+session of the plugin. lib/main.py runs this module without foreman.cli; it imports at the top only what the guard
+needs (each tool call starts it).
 The registry is read tolerantly (config.py): a project with warnings (unknown keys, a newer config schema) still gets
 every hook, and `who` and the loop pass name the warnings. A project whose config does not load gets no hook at all:
 the guard fails open; `who` and the loop pass say so (config.broken_for_cwd), the others keep quiet.
@@ -103,7 +106,8 @@ from typing import TYPE_CHECKING, Any
 
 # Only what the guard needs to reach its verdict is imported here: `hook guard` runs on every tool call, so the rest
 # (approved, delivery, loop, orchestrator, transcripts, …) is imported where it is used (lib/main.py runs this module
-# without foreman.cli). A missing foreman module on the guard's path refuses the call (run).
+# without foreman.cli). In the guard, one of those missing refuses the call (run); for one of these, see the
+# module doc.
 from . import config, guard, i18n, identity, pause, util
 
 if TYPE_CHECKING:
@@ -529,11 +533,16 @@ def _guard_ctx(ev: Event) -> guard.Ctx:
 
 
 def _passed(project: Project, ev: Event, ctx: guard.Ctx) -> None:
-    """A [deny.grants] command that passed with the owner's yes goes to approved.jsonl and today's notes."""
-    if "passed" in ctx:
+    """A [deny.grants] command that passed with the owner's yes goes to approved.jsonl and today's notes. The call
+    passed already: a failure here (its import too) does not turn it into a refusal."""
+    if "passed" not in ctx:
+        return
+    try:
         from . import approved
 
         approved.decided(project, ev, ctx["passed"], allowed=True)
+    except Exception as e:  # noqa: BLE001 (a pass stays a pass)
+        print(f"foreman: the guard could not record this pass ({type(e).__name__}: {e})", file=sys.stderr)
 
 
 def _refuse(project: Project, ev: Event, verdict: guard.Verdict) -> int:
