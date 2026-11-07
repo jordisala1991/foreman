@@ -404,3 +404,17 @@ body.broken .tab, body.broken #nav{display:none}
 .busyout{margin:0;font:12px/1.45 var(--mono);color:var(--fg);background:var(--chip);border-radius:var(--r-s);padding:6px 8px;white-space:pre;overflow-x:auto;max-width:100%}
 .busymore{font-size:var(--fs-xs);margin-top:3px}
 .busyd{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:var(--sp3);margin:0 0 10px}
+/* the backlog on a phone: the title has its own line and wraps; under it, in grey, the code, the sub-issues and the
+   project; the priority slot goes (the list is in priority order already) */
+@media(max-width:699px){
+.lrow.story{display:grid;grid-template-columns:14px auto minmax(0,1fr);column-gap:var(--sp2);row-gap:2px;align-items:start;padding-top:9px;padding-bottom:9px}
+.lrow.story.drag{grid-template-columns:30px 14px auto minmax(0,1fr)}
+.lrow.story .prio{display:none}
+.lrow.story .grip{grid-column:1;grid-row:1/3}
+.lrow.story>.sico,.lrow.story>.bico{grid-column:1;grid-row:1;margin-top:3px}
+.lrow.story .tt{grid-row:1;grid-column:2/-1;white-space:normal;overflow:visible;line-height:1.3}
+.lrow.story .id{grid-column:2;grid-row:2;min-width:0;font-size:var(--fs-xs)}
+.lrow.story .meta{grid-column:3;grid-row:2;white-space:normal;flex-wrap:wrap;min-width:0;font-size:var(--fs-xs)}
+.lrow.story.drag>.sico,.lrow.story.drag>.bico{grid-column:2}
+.lrow.story.drag .tt{grid-column:3/-1}.lrow.story.drag .id{grid-column:3}.lrow.story.drag .meta{grid-column:4}
+}

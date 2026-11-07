@@ -263,7 +263,7 @@ function lrow({k, key, lead='', icon='', id='', name='', title='', meta='', cls=
 }
 // collapsible group (folding is remembered per scope and key; Archive and «In main today» start folded)
 const FOLD = (() => { try { return JSON.parse(lsGet('folded', '{}')) || {}; } catch(e) { return {}; } })();
-const FOLDED_BY_DEFAULT = new Set(['archive', 'canceled', 'duplicate', 'triage', 'main']);
+const FOLDED_BY_DEFAULT = new Set(['archive', 'canceled', 'duplicate', 'triage', 'done', 'main']);
 const isFolded = (scope, key) => FOLD[scope+':'+key] ?? FOLDED_BY_DEFAULT.has(key);
 function toggleGroup(scope, key, el){
   FOLD[scope+':'+key] = !isFolded(scope, key); lsSet('folded', JSON.stringify(FOLD));
@@ -302,12 +302,12 @@ const ecol = e => { const m = String(e).match(/^(?:.*·)?[A-Z]+(\d+)$/); return 
 const BLOCK_ICON = () => `<svg class="bico" width="14" height="14" viewBox="0 0 14 14" aria-label="${esc(t('blocked_lc'))}"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="var(--bad)"/><path d="M4 7h6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const PLAN_ICON = () => `<svg class="pico" width="13" height="13" viewBox="0 0 14 14" aria-label="${esc(t('with_plan'))}"><title>${esc(t('with_plan'))}</title><path d="M3.5 1.5h5l3 3v8h-8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5.5 7.5h4M5.5 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
 // Linear-style urgency, at the left of the id: a warn square with «!» for urgent, three rising bars (filled up to
-// the level) for the others, and a muted «—» for 'none', a missing field or an unknown value; always 14 px wide, so
+// the level) for the others, and nothing (an empty slot) for 'none', a missing field or an unknown value; always 14 px wide, so
 // the ids of the list stay aligned in a column
 const PRIO_ICON = p => {
   if(!['urgent', 'high', 'medium', 'low'].includes(p)) p = 'none';
   const lbl = esc(`${t('priority_lbl')}: ${t('priorities.' + p)}`);
-  const body = p==='none' ? '<path d="M3 7h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".6"/>'
+  const body = p==='none' ? ''
     : p==='urgent'
     ? '<rect x="1" y="1" width="12" height="12" rx="3" fill="var(--warn)"/><path d="M7 3.5v4.2" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="7" cy="10.2" r="1" fill="#fff"/>'
     : [[1.5, 8], [5.5, 5], [9.5, 2]].map(([x, y], n) =>
@@ -856,7 +856,7 @@ function renderAbout(){
 // Tapping a project opens its page (a view in the modal stack) with its issues grouped by status; the active ones are
 // reordered by dragging. An issue with sub-issues carries a done/total chip that folds them out under its row. The
 // server moves it in the backlog file and leaves the move in the inbox.
-const LANES = ['in progress','ready','refining','backlog','done','canceled','duplicate','triage','archive'];
+const LANES = ['in progress','ready','refining','backlog','triage','done','canceled','duplicate','archive'];
 const laneName = l => t('lanes.' + l);
 const isActive = c => !['done','canceled','duplicate','archive','triage'].includes(c.lane);
 // WIP targets of the product ([agents] production_slots and ready_target); none in the joint view
@@ -962,7 +962,7 @@ async function reject(b){
 // in the triage group, the issues the owner asked for carry a small tag
 const WANT_TAG = c => c.wanted && c.lane==='triage' ? `<span class="wtag">${t('wanted_tag')}</span>` : '';
 const storyRow = (c, drag, withEpic) => lrow({k: 'h', key: c.id, lead: (drag ? GRIP() : '') + PRIO_ICON(c.priority), icon: isBlocked(c) ? BLOCK_ICON() : sico(c.lane), id: c.id,
-  title: esc(c.title), attrs: drag ? ' data-drag' : '',
+  title: esc(c.title), attrs: drag ? ' data-drag' : '', cls: 'story' + (drag ? ' drag' : ''),
   meta: subToggle(c) + WANT_TAG(c) + (withEpic && c.eid ? elabel(c.epic, c.epic_t) : '') + (c.agent ? dot(acol(c.agent), c.agent) : '') + (c.plan.length ? PLAN_ICON() : '')})
   + ((c.subs || []).length && SUB_OPEN.has(c.id) ? subRows(c) : '');
 // status groups; scope 'all' (global list, project label on each row, no dragging) or the project id (its page)
