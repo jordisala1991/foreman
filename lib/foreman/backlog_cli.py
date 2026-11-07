@@ -498,7 +498,7 @@ def show_review(b: Backlog, data: Data, as_json: bool = False) -> str:
             extra += [b.s[f"undo_{x['undo']}"]] if x.get("undo") in UNDO else []
             if x.get("effect") or extra:
                 block.append(
-                    f"     {x.get('effect') or '(no effect given)'}" + (f" ({'; '.join(extra)})" if extra else "")
+                    "     " + " ".join(filter(None, [x.get("effect"), f"({'; '.join(extra)})" if extra else ""]))
                 )
         if d["recommendation"]:
             block.append(f"  recommendation: {d['recommendation']}")

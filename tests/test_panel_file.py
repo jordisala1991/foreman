@@ -147,27 +147,28 @@ class PanelDecisionFieldsTest(PanelCase):
         self.assertEqual(j2["holds"], [{"ref": "PF-1 T1", "title": "Issue 1"}, {"ref": "PF-3", "title": "Issue 3"}])
         self.assertEqual(
             sorted(dec["Area J1"]),
-            sorted(["id", "title", "text", "lead", "recommendation", "recommended", "options", "date", "answer"]),
+            sorted(
+                ["id", "title", "text", "lead", "recommendation", "recommended", "options", "date", "answer", "holds"]
+            ),
         )
         # its page is a document the panel shows
         self.assertEqual(self.req(f"/api/doc?p=fake&path={page}")[0], 200)
 
     def test_page_shows_the_extras_only_when_there(self):
         js = (ROOT / "panel/app.js").read_text()
-        more = js[js.index("const decisionMore") : js.index("// A question that says what each option changes")]
-        self.assertIn("x.answer || !((x.unanswered && x.unanswered.waits) || x.page) ? ''", more)
+        for gone in ("hasDetails", "decisionActions", "decisionMore", "decWaits", "optLabel"):
+            self.assertNotIn(gone, js)
         dec = js[js.index("  dec(key){") : js.index("  msg(key, obj){")]
-        # with what each option changes, told in order; without, as before (options and recommendation in the table)
-        self.assertIn("(rich ? decDetailRich(x) : props([", dec)
-        self.assertIn("[t('options'), x.options.map(o => optLabel(x, o)).join(' · ')]", dec)
-        self.assertIn('(x.page ? `<div id="mpage"', dec)
-        self.assertIn("mdFull(rich ? r.md.replace(", dec)
+        self.assertIn("decDetailRich(x)", dec)
+        self.assertIn("mdFull(r.md.replace(", dec)
         you = js[js.index("function renderYou") : js.index("function renderGrants")]
-        self.assertIn("card(hasDetails(x) ? decCardRich(x) :", you)
+        self.assertIn("card(decCardRich(x))", you)
         for lang in ("en", "es"):
             st = self.req(f"/api/strings?lang={lang}")[1]
-            for k in ("dec_waits_by", "dec_see_page", "dec_if_none", "dec_holds_n", "chip_undo_no", "dec_back"):
+            for k in ("dec_if_none", "dec_holds_n", "chip_undo_no", "dec_back"):
                 self.assertIn(k, st)
+            for k in ("dec_waits", "dec_see_page", "waits_answer", "recommended_mark"):
+                self.assertNotIn(k, st)
 
     def rich(self, script):
         """The output of node running the panel's decision code with `script` (stubs for the rest of the page)."""
@@ -179,7 +180,7 @@ class PanelDecisionFieldsTest(PanelCase):
             js[js.index(a) : js.index(z)]
             for a, z in (
                 ("const esc =", "const lsGet"),
-                ("const decisionActions", "// ---- Trabajo"),
+                ("const decisionSent", "// ---- Trabajo"),
             )
         )
         strings = json.loads((ROOT / "panel/strings.en.json").read_text())
@@ -361,7 +362,7 @@ console.log(JSON.stringify({card: decCardRich(x), detail: decDetailRich(x)}));
         )
         self.assertEqual(out["card"].count('<button class="sec oline"'), 2)
         self.assertEqual(out["detail"].count('<div class="oeff"></div>'), 2)
-        self.assertEqual(out["detail"].count("onclick=\"decideOpt(this)\""), 2)
+        self.assertEqual(out["detail"].count('onclick="decideOpt(this)"'), 2)
         self.assertIn('data-undo=""', out["detail"])
 
     def test_document_images(self):
