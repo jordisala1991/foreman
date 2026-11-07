@@ -38,8 +38,10 @@ while a grants.json written by hand is still asked again (the module's second ch
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
+from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -121,15 +123,25 @@ def _empty() -> dict[str, dict[str, Any]]:
     return {"grants": {}, "cooldowns": {}, "pending": {}, "once": {}}
 
 
-def read(project: Project) -> dict[str, dict[str, Any]]:
-    """grants.json as {grants, cooldowns, pending, once}, each a dict (an unreadable file reads empty)."""
-    d = util.read_json(file(project), {})
+def _norm(d: Any) -> dict[str, dict[str, Any]]:
     out = _empty()
     if isinstance(d, dict):
         for k in out:
             if isinstance(d.get(k), dict):
                 out[k] = {g: e for g, e in d[k].items() if isinstance(e, dict)}
     return out
+
+
+def read(project: Project) -> dict[str, dict[str, Any]]:
+    """grants.json as {grants, cooldowns, pending, once}, each a dict (an unreadable file reads empty)."""
+    return _norm(util.read_json(file(project), {}))
+
+
+@contextlib.contextmanager
+def _locked(project: Project) -> Iterator[dict[str, dict[str, Any]]]:
+    """Under grants.json's lock (waits for ever, as file_lock), yields read(project) for the caller to _write back."""
+    with util.locked_json(file(project), {}) as raw:
+        yield _norm(raw)
 
 
 def _write(project: Project, d: dict[str, Any]) -> None:
@@ -181,10 +193,7 @@ def give(
     """Records a grant of `group` for the mark (orchestrator.record: session, pid, pid_start) for [deny]
     grant_minutes; clears the group's cooldown and pending request. Returns the grant."""
     g = _entry(project, mark, via, surfaces, tool_use_id)
-    f = file(project)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    with util.file_lock(f):
-        d = read(project)
+    with _locked(project) as d:
         _put(d, group, g)
         _write(project, d)
     return g
@@ -217,10 +226,7 @@ def _entry(
 def cool(project: Project, group: str, session: str) -> str:
     """The owner said no: no question for `group` in `session` for COOLDOWN_S. Returns its end (local ISO)."""
     until = (util.now() + timedelta(seconds=COOLDOWN_S)).strftime(ISO)
-    f = file(project)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    with util.file_lock(f):
-        d = read(project)
+    with _locked(project) as d:
         d["cooldowns"][group] = {"session": session, "until": until}
         _write(project, d)
     return until
@@ -228,10 +234,7 @@ def cool(project: Project, group: str, session: str) -> str:
 
 def pend(project: Project, group: str, req: dict[str, Any]) -> None:
     """Keeps the group's unanswered request (the last one) for the owner to approve later from the panel."""
-    f = file(project)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    with util.file_lock(f):
-        d = read(project)
+    with _locked(project) as d:
         d["pending"][group] = {"at": _now(), **req}
         _write(project, d)
 
@@ -273,11 +276,8 @@ def approve(project: Project, group: str) -> tuple[dict[str, Any], dict[str, Any
     lock. Returns (grant, request); raises NotApproved."""
     from . import orchestrator, procs
 
-    f = file(project)
-    f.parent.mkdir(parents=True, exist_ok=True)
     key = panel_key(create=True)
-    with util.file_lock(f):
-        d = read(project)
+    with _locked(project) as d:
         r = d["pending"].get(group)
         if r is None:
             raise NotApproved("none", f"no request of the group {group!r} waits")
@@ -318,10 +318,7 @@ def give_once(
     if kind not in ONCE_KINDS:
         raise ValueError(f"no one-use grant for the class {kind!r}")
     g = {"session": session, "kind": kind, "path": path, "command": command, "at": _now()}
-    f = file(project)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    with util.file_lock(f):
-        d = read(project)
+    with _locked(project) as d:
         d["once"] = {t: e for t, e in d["once"].items() if _fresh(e)}
         d["once"][tool_use_id] = g
         _write(project, d)
@@ -346,9 +343,7 @@ def take_once(
         return None
     if tool_use_id not in read(project)["once"]:  # the usual case, without the lock
         return None
-    f = file(project)
-    with util.file_lock(f):
-        d = read(project)
+    with _locked(project) as d:
         e = d["once"].get(tool_use_id)
         if e is None or e.get("session") != session:
             return None
@@ -410,8 +405,7 @@ def revoke(project: Project, group: str | None = None) -> list[str]:
     f = file(project)
     if not f.exists():
         return []
-    with util.file_lock(f):
-        d = read(project)
+    with _locked(project) as d:
         names = [g for g in d["grants"] if group is None or g == group]
         for g in names:
             del d["grants"][g]
