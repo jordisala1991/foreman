@@ -13,6 +13,7 @@ from collections.abc import Callable, Collection, Iterable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from . import issue_docs
 from .backlog import CLOSED, STATUS_CATEGORY, Backlog, BacklogError
 from .panel_cache import memo, page_version
 from .panel_registry import REG
@@ -162,6 +163,7 @@ def backlog_cards(project: Project) -> Cards:
             return {"projects": [], "archive": [], "decisions": [], "counts": {}, "missing": True}
         data = b.load()
         ix = doc_index(project)
+        rev_files = issue_docs.review_files(project)
 
         def sub(s: Record) -> dict[str, Any]:
             out = {
@@ -209,6 +211,7 @@ def backlog_cards(project: Project) -> Cards:
                 "subs": [sub(s) for s in i.get("subs", [])],
                 "plan": plan,
                 "reports": reports(i, plan),
+                "docs": issue_docs.issue_docs(project, data, i, rev_files, lambda p: doc_ref(project, p, ix)),
             }
             h = i.get("acceptance")
             if h:

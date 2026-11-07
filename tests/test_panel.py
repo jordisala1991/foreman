@@ -470,7 +470,7 @@ class PanelTest(PanelCase):
             b.add_issue(data, "A1", "PF-4", "Issue 4", status="backlog", criterion="it works")
             b.set_status(data, "PF-4", "canceled", result="Not needed", verdict="not met")
             b.archive(data, "PF-4")
-        closed = ("detail", "result", "outcome", "reports", "relations", "assignee", "closed")
+        closed = ("detail", "result", "outcome", "reports", "docs", "relations", "assignee", "closed")
         for name, bl in (
             ("fake", self.backlog("fake")),
             ("*", next(x["backlog"] for x in self.req("/api/backlog?p=*")[1]["projects"] if x["name"] == "fake")),
