@@ -2223,81 +2223,43 @@ def _how(where: str) -> str:
     return "guard_how_code" if where in CODE_WHERE else "guard_how_text"
 
 
+# The refusal's head of each built-in rule of the orchestrator's (the [deny.grants] ones: guard_orchestrator_<why>)
+HEADS = {MAIN_CHECKOUT: "guard_main_checkout", HOLDOUT: "guard_holdout", INTEGRATE: "guard_integrate_agent"}
+HEADS[PERMISSIONS_APPLY] = "guard_permissions_apply"
+
+
 def message(project: Project, verdict: Verdict) -> str:
-    from . import i18n
+    """The refusal the agent reads (i18n guard_*): what was refused, where it matched, and how to do without."""
+    from . import i18n, orchestrator
 
     s = i18n.for_project(project)
-    kind, detail = verdict
-    if kind == "file":
-        how = {"config": "perms", "table": "perms", "state": "state", "git": "git"}.get(detail.kind, "owner")
-        if how == "perms" and not detail.why:
-            how = "perms_orchestrator"
-        elif how == "owner" and detail.why != "agent":
-            how = "owner_ask"  # a main thread: the owner's yes for one change (hooks_mod, grants.give_once)
-        fields = {"project": detail.name or project.name, "owner": project.owner}
-        machine = "_machine" if detail.kind == "git" and not detail.name else ""  # the machine's git config
-        what = s[f"guard_file_what_{detail.kind}{machine}"].format(**fields)
-        agent = "_agent" if detail.kind in AGENT_KINDS else ""  # refused to an agent only
-        head = (
-            s[f"guard_file_bash{agent}"].format(path=detail.path, what=what, part=detail.part)
-            if detail.bash
-            else s[f"guard_file{agent}"].format(path=detail.path, what=what)
+    kind, d = verdict
+    if kind == "lock":
+        return s["guard_lock"].format(resource=d[0], what=f"`{d[1]}`")
+    named = kind == "file" or (kind == "orchestrator" and str(d) in (MAIN_CHECKOUT, HOLDOUT))  # names its project
+    f = {"pattern": d, "owner": project.owner, "project": (d.name if named else "") or project.name}
+    f.update({k: getattr(d, k, "") for k in ("group", "dir", "part", "path")}, sub=getattr(d, "kind", ""))
+    if kind == "file":  # a reserved file: its class, and how it changes for this caller
+        how = {"config": "perms", "table": "perms", "state": "state", "git": "git"}.get(d.kind, "owner")
+        how += (
+            "_orchestrator" if how == "perms" and not d.why else "_ask" if how == "owner" and d.why != "agent" else ""
         )
-        return " ".join([head, s[f"guard_file_how_{how}"].format(**fields)])
+        f["what"] = s[f"guard_file_what_{d.kind}{'_machine' if d.kind == 'git' and not d.name else ''}"].format(**f)
+        head = s[f"guard_file{'_bash' if d.bash else ''}{'_agent' if d.kind in AGENT_KINDS else ''}"].format(**f)
+        return f"{head} {s[f'guard_file_how_{how}'].format(**f)}"
+    where = getattr(d, "where", "")  # a plain string when the guard itself failed
     if kind == "orchestrator":
-        from . import orchestrator
-
-        o = orchestrator.current(project) or {}
-        if isinstance(detail, Hit) and detail == MAIN_CHECKOUT:
-            return " ".join(
-                [
-                    s["guard_main_checkout"].format(sub=detail.kind, dir=detail.dir, project=detail.name),
-                    s["guard_where_command"].format(part=detail.part),
-                ]
-            )
-        if isinstance(detail, Hit) and detail == HOLDOUT:
-            return s["guard_holdout"].format(project=detail.name or project.name, part=detail.part)
-        if isinstance(detail, Hit) and detail == INTEGRATE:
-            return " ".join(
-                [
-                    s["guard_integrate_agent"].format(project=project.name, orchestrator=o.get("name") or "?"),
-                    s[f"guard_where_{detail.where}"].format(part=detail.part, dir=detail.dir),
-                ]
-            )
-        if isinstance(detail, Hit) and detail == PERMISSIONS_APPLY:
-            return " ".join(
-                [
-                    s["guard_permissions_apply"].format(
-                        owner=project.owner, project=project.name, orchestrator=o.get("name") or "?"
-                    ),
-                    s[f"guard_where_{detail.where}"].format(part=detail.part, dir=detail.dir),
-                ]
-            )
-        out = [
-            s[f"guard_orchestrator_{detail.why}"].format(
-                pattern=detail,
-                owner=project.owner,
-                project=project.name,
-                orchestrator=o.get("name") or "?",
-                group=detail.group,
-            ),
-            s[f"guard_where_{detail.where}"].format(part=detail.part, dir=detail.dir),
-        ]
-        if detail.why == "agent":
-            out.append(s[_how(detail.where)])
-        return " ".join(out)
-    if kind == "deny" and isinstance(detail, Hit) and detail in BUILTIN:
-        return " ".join([s[BUILTIN[detail]], s[f"guard_where_{detail.where}"].format(part=detail.part)])
-    if kind == "deny":
-        out = [s["guard_deny"].format(pattern=detail, owner=project.owner, project=project.name)]
-        where = getattr(detail, "where", None)  # a Hit; a plain string when the guard itself failed
-        if where:
-            out.append(s[f"guard_where_{where}"].format(part=detail.part, dir=detail.dir))
-            out.append(s[_how(where)])
-        extra = project.section("deny").get("message")
-        return " ".join(out + ([extra] if extra else []))
-    name, what = detail
-    return s["guard_lock"].format(resource=name, what=f"`{what}`")
+        f["orchestrator"] = (orchestrator.current(project) or {}).get("name") or "?"
+        key = HEADS.get(d) or f"guard_orchestrator_{d.why}"
+    else:
+        key = BUILTIN.get(d, "guard_deny")
+    out = [s[key].format(**f)]
+    if where and key != "guard_holdout":
+        out.append(s[f"guard_where_{'command' if key == 'guard_main_checkout' else where}"].format(**f))
+    if where and key in ("guard_deny", "guard_orchestrator_agent"):
+        out.append(s[_how(where)])
+    extra = project.section("deny").get("message") if key == "guard_deny" else None
+    return " ".join(out + ([extra] if extra else []))
 
 
 def parse_table(text: str, base: PathLike | None = None) -> list[tuple[int, str, str, str | None]]:
