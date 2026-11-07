@@ -220,15 +220,16 @@ console.log(JSON.stringify({card: decCardRich(x), easy: decCardRich(easy), detai
         )
         card, easy, detail = out["card"], out["easy"], out["detail"]
         # the card: the title, one situation line, each option one full-width button in the order written with its
-        # letter and name, ★ at the end of the recommended one, ⊘ before the one that cannot be undone (which asks for
-        # the confirmation: data-undo="no"); no chips (they stay in the detail); a grey line with what it holds and the
-        # reminder's day
+        # letter and name, «Recommended» at the end of the recommended one, ⊘ before the one that cannot be undone
+        # (which asks for the confirmation: data-undo="no"); no chips (they stay in the detail); a grey
+        # line with what it holds and the reminder's day
         name = [card.index(f'<span class="olt">{o}</span>') for o in ("A: app", "B: mail", "C: retry")]
         self.assertEqual(name, sorted(name))
         self.assertEqual(card.count('<button class="sec oline"'), 3)
-        self.assertEqual(card.count("★"), 1)
-        self.assertLess(name[0], card.index("★"))
-        self.assertLess(card.index("★"), name[1])
+        self.assertEqual(card.count("★"), 0)
+        self.assertEqual(card.count('class="orec"'), 1)
+        self.assertLess(name[0], card.index('class="orec"'))
+        self.assertLess(card.index('class="orec"'), name[1])
         self.assertEqual(card.count("⊘"), 1)
         self.assertLess(name[1], card.index("⊘"))
         self.assertLess(card.index("⊘"), name[2])
@@ -243,7 +244,7 @@ console.log(JSON.stringify({card: decCardRich(x), easy: decCardRich(easy), detai
         self.assertNotIn("Asked", detail)
         self.assertNotIn("waits for your answer", detail)
         self.assertLess(detail.index("Situation."), detail.index("If you do not answer: nothing changes"))
-        self.assertIn("I will remind you on 2026-11-12.", detail)
+        self.assertIn("I will remind you on Nov 12.", detail)
         self.assertIn("Holds 2 tasks", detail)
         self.assertIn("Warn the customer", detail)
         self.assertIn("Support panel", detail)

@@ -69,6 +69,7 @@ nav button.on{color:var(--acc)}
 /* card with a title that opens a detail (decisions) */
 .ctitle{display:flex;align-items:center;gap:var(--sp2);font-size:var(--fs-l);font-weight:600;cursor:pointer}.ctitle span:first-child{flex:1;min-width:0}
 .csub{color:var(--muted);font-size:var(--fs-s)}
+.dcode{flex:none;color:var(--muted);font-size:var(--fs-s);font-weight:400;white-space:nowrap}.stt .dcode{margin-left:var(--sp2)}
 .clead{margin-top:2px;font-size:var(--fs-m)}
 .answered{margin-top:var(--sp2);font-size:var(--fs-m)}
 .free{margin-top:var(--sp2)}.free textarea{min-height:56px}.answered.warn{margin-bottom:-4px}
@@ -87,7 +88,7 @@ nav button.on{color:var(--acc)}
 .olead{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .olines{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .oline{display:flex;align-items:center;gap:6px;width:100%;min-height:44px;text-align:left;font-weight:500;padding:8px 12px;border:1px solid var(--line);border-radius:var(--r-s)}
-.oline .olt{flex:1;min-width:0}.oline .bad{color:var(--bad)}.oline .ostar{color:var(--acc);font-size:var(--fs-l);line-height:1}
+.oline .olt{flex:1;min-width:0}.oline .bad{color:var(--bad)}.oline .orec{flex:none;color:var(--acc);font-size:var(--fs-s);font-weight:600}
 .olines+.btns{margin-top:var(--sp2)}.olines+.csub,.olines+.btns+.csub{margin-top:var(--sp2)}
 .otxt{flex:1;min-width:0}
 .ochosen{display:flex;align-items:center;gap:var(--sp3);margin-top:var(--sp2);font-size:var(--fs-m)}.ochosen button{flex:none}
