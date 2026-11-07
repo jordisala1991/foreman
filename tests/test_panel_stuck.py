@@ -11,6 +11,8 @@ import unittest
 from helpers import ROOT
 from test_panel import PanelCase
 
+from foreman.backlog import Backlog
+
 BACK = """
 const x = {p: 'fake', title: 'Q', id: 'Q1', options: ['A: a', 'C: c'],
   details: {'C: c': {undo: 'no', effect: 'e', cost: 'c'}}};
@@ -98,6 +100,77 @@ class StuckTest(PanelCase):
         rule = narrow[: narrow.index("}\n}") + 1]
         self.assertIn(".lrow.prow .meta{", rule)
         self.assertIn("white-space:normal", rule)
+
+
+BROKEN_BACKLOG = """
+await settle(800);
+const out = {issues: $('board').innerHTML, system: $('errs').innerHTML};
+blView = 'projects'; renderBacklog(lastData); out.projects = $('board').innerHTML;
+return out;
+"""
+OFFLINE = """
+await settle(800);
+const out = {before: $('err').textContent}, real = fetch;
+window.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
+await load();
+out.banner = $('err').textContent; out.stale = document.body.classes.has('stale');
+window.fetch = real; await load();
+out.after = $('err').textContent; out.stale_after = document.body.classes.has('stale');
+// opened offline: the strings never loaded, still no raw key
+S = {}; lsSet('lang', 'es');
+out.no_strings = [t('no_connection'), t('offline_none'), t('wiki_failed', {text: 'x'})];
+return out;
+"""
+WIKI_RETRY = """
+await settle(1000);
+const real = fetch, out = {};
+WIKI.list = null; window.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
+await renderWiki();
+out.failed = $('wtree').innerHTML;
+window.fetch = real; await load(); await settle(2000);
+out.retried = $('wtree').innerHTML;
+return out;
+"""
+
+
+class ErrorsShownTest(PanelCase):
+    run_page = StuckTest.run_page
+
+    def test_unreadable_backlog_shows_its_error_in_its_tab_and_in_sistema(self):
+        """A backlog.json that does not parse is not «Sin backlog.»: the tab says so in plain words with the
+        file's own error as the detail, and so does Sistema (under «Algo no va bien»)."""
+        Backlog(self.project).data_path.write_text("{ not json")
+        out = self.run_page(BROKEN_BACKLOG)
+        for k in ("issues", "projects", "system"):
+            self.assertIn("No se puede leer el backlog", out[k], k)
+        self.assertNotIn("Sin backlog", out["issues"])
+        self.assertIn("Detalle:", out["issues"])
+        self.assertIn("Detalle:", out["system"])
+
+    def test_a_missing_backlog_is_still_just_empty(self):
+        Backlog(self.project).data_path.unlink()
+        out = self.run_page(BROKEN_BACKLOG)
+        self.assertNotIn("No se puede leer el backlog", out["issues"])
+
+    def test_offline_banner_marks_the_data_stale_until_a_pass_succeeds(self):
+        out = self.run_page(OFFLINE)
+        self.assertEqual(out["before"], "")
+        self.assertIn("Sin conexión con el panel", out["banner"])
+        self.assertIn("hace", out["banner"])
+        self.assertNotIn("Failed to fetch", out["banner"])
+        self.assertTrue(out["stale"])
+        self.assertEqual((out["after"], out["stale_after"]), ("", False))
+        self.assertEqual(out["no_strings"][0], "Sin conexión")
+        self.assertTrue(all(" " in x and "_" not in x for x in out["no_strings"]), out["no_strings"])
+
+    def test_wiki_error_is_translated_and_retried_by_the_next_good_pass(self):
+        (self.ohome / "wiki/models").mkdir()
+        (self.ohome / "wiki/models/m-one.md").write_text("---\ntype: model\n---\n# Model One\n")
+        out = self.run_page(WIKI_RETRY, product="other", tab="wiki")
+        self.assertIn("No se pudo cargar la wiki", out["failed"])
+        self.assertNotIn("wiki_failed", out["failed"])
+        self.assertNotIn("Failed to fetch", out["failed"])
+        self.assertIn("Model One", out["retried"])
 
 
 if __name__ == "__main__":
