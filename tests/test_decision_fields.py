@@ -128,10 +128,12 @@ class DecisionFieldsTest(ProjectCase):
         self.assertNotIn("can be undone", lst)
 
     def test_a_decision_of_before_is_written_and_shown_as_before(self):
-        r = self.add("--option", "yes", "--option", "no", "--recommend", "yes, it is cheap", "--date", "2026-11-01")
+        r = self.add(
+            *("--option", "yes", "--option", "no", "--recommend", "yes, it is cheap", "--date", "2026-11-01", "--as-is")
+        )
         self.assertEqual(r.returncode, 0, r.stderr)
         d = self.b.load()["decisions"][0]
-        self.assertEqual(list(d), ["id", "title", "date", "text", "options", "recommendation"])
+        self.assertEqual(list(d), ["id", "title", "date", "text", "options", "recommendation", "as_is"])
         line = backlog_text.render_decision(self.b, d)
         self.assertEqual(
             line,
@@ -158,12 +160,12 @@ class DecisionFieldsTest(ProjectCase):
         self.assertNotIn("if no answer", lst)
         self.assertIn("  2. no\n  recommendation: yes, it is cheap", lst)
         raw = json.loads((self.home / "backlog.json").read_text())["decisions"][0]
-        self.assertEqual(list(raw), ["id", "title", "date", "text", "options", "recommendation"])
+        self.assertEqual(list(raw), ["id", "title", "date", "text", "options", "recommendation", "as_is"])
 
     # ---------- warnings: never blocking ----------
 
     def test_an_option_without_effect_warns(self):
-        r = self.add("--option", "yes", "--effect", "they see it", "--option", "no", "--undo", "no")
+        r = self.add("--option", "yes", "--effect", "they see it", "--option", "no", "--undo", "no", "--as-is")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(
             self.warnings(r),
@@ -175,6 +177,22 @@ class DecisionFieldsTest(ProjectCase):
         self.assertEqual(
             self.b.load()["decisions"][0]["details"], {"yes": {"effect": "they see it"}, "no": {"undo": "no"}}
         )
+
+    def test_an_option_without_effect_is_refused_and_named(self):
+        r = self.add("--option", "yes", "--effect", "they see it", "--option", "no", "--undo", "no")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("an option has no --effect", r.stderr)
+        self.assertIn("option 2 («no»)", r.stderr)
+        self.assertNotIn("option 1", r.stderr)
+        self.assertEqual(self.b.load()["decisions"], [])
+        r = self.add("--option", "yes", "--effect", "they see it", "--option", "no", "--effect", " ")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("option 2 («no»)", r.stderr)
+
+    def test_as_is_lets_an_option_without_effect_pass(self):
+        r = self.add("--option", "yes", "--effect", "they see it", "--option", "no", "--as-is")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.b.load()["decisions"]), 1)
 
     def test_two_questions_in_one_warn_and_a_quoted_one_does_not(self):
         self.assertEqual(Backlog.question_count(TWO_QUESTIONS["text"]), 2)
@@ -275,14 +293,19 @@ class DecisionFieldsTest(ProjectCase):
 
     def test_bad_values_are_refused(self):
         self.assert_refused(self.add("--effect", "x", "--option", "a"), "--effect goes after the --option it describes")
-        self.assert_refused(self.add("--option", "a", "--cost", "x", "--cost", "y"), "--cost given twice for option 1")
-        self.assert_refused(self.add("--option", "a", "--undo", "maybe"), "invalid choice: 'maybe'")
         self.assert_refused(
-            self.add("--option", "a", "--if-no-answer", "it waits", "--answer-by", "2026-13-01"), "is not a date"
+            self.add("--option", "a", "--effect", "e", "--cost", "x", "--cost", "y"), "--cost given twice for option 1"
         )
-        self.assert_refused(self.add("--option", "a", "--answer-by", later(3)), "--answer-by needs --if-no-answer")
+        self.assert_refused(self.add("--option", "a", "--effect", "e", "--undo", "maybe"), "invalid choice: 'maybe'")
+        self.assert_refused(
+            self.add("--option", "a", "--effect", "e", "--if-no-answer", "it waits", "--answer-by", "2026-13-01"),
+            "is not a date",
+        )
+        self.assert_refused(
+            self.add("--option", "a", "--effect", "e", "--answer-by", later(3)), "--answer-by needs --if-no-answer"
+        )
         for page in ("../x.md", "/tmp/x.md", "pages/decisions.md", "reviews/x.txt", "reviews/../pages/x.md"):
-            self.assert_refused(self.add("--option", "a", "--page", page), "--page ")
+            self.assert_refused(self.add("--option", "a", "--effect", "e", "--page", page), "--page ")
         self.assert_refused(
             self.cli("backlog", "decision", "resolve", "AB-1 J1", "--option", "a", "--effect", "x"),
             "unrecognized arguments: --effect x",

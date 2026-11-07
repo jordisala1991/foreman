@@ -185,6 +185,7 @@ USAGE = """\
                                      marks. Texts that name ids or internal names
                                      without explaining them (foreman plain) are refused (exit 2) unless --as-is,
                                      which records it anyway and marks it ("as_is": true, a warning in check).
+                                     An --option without --effect is refused too (exit 2, naming it) unless --as-is.
                                      --blocks: what waits for the answer while it is pending (none by default):
                                      Tn or "issue" relative to --issue, or "ISSUE" / "ISSUE Tn"
                                      Each --option is a short answer (a button); after it, --effect what the
@@ -193,7 +194,7 @@ USAGE = """\
                                      until the owner answers (foreman never answers for them); --answer-by: the
                                      day to remind them. --page: a .md under the reviews or notes folders
                                      (screenshots, tables) that explains the question. Warnings on stderr, never
-                                     blocking: an option without --effect, two questions in one, a reminder date
+                                     blocking: two questions in one, a reminder date
                                      in the past, a page that is missing, larger than 400 KB or not written
                                      for the question (over 60 lines, another question's page, a report or a
                                      plan, or names left unexplained: docs/owner.md «Question page»)
@@ -374,6 +375,27 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     a.add_argument("--project", required=True)
     a.add_argument("--prefix", required=True)
     a.add_argument("--status", default="backlog")
+
+
+def missing_effects(options: list[str], details: list[dict[str, str]]) -> list[tuple[int, str]] | None:
+    """The (number, text) of each --option given without --effect, None when there is none."""
+    out = [(n, o) for n, (o, det) in enumerate(zip(options, details), 1) if not (det.get("effect") or "").strip()]
+    return out or None
+
+
+def refuse_no_effect(lacking: list[tuple[int, str]]) -> int:
+    """`decision add` with an option that does not say what it changes: name each one, how to fix it, exit 2."""
+    import sys
+
+    print("foreman backlog: decision not recorded: an option has no --effect:", file=sys.stderr)
+    for n, o in lacking:
+        print(f"  option {n} («{o}»)", file=sys.stderr)
+    print(
+        "Say what the owner will see or do differently with each one: --effect right after its --option. "
+        "Or add --as-is to record it as it is.",
+        file=sys.stderr,
+    )
+    return 2
 
 
 def refuse_decision(bad: list[tuple[str, list[Finding]]]) -> int:
@@ -583,6 +605,8 @@ def run(project: Project, args: argparse.Namespace) -> int:
             )
             if bad:
                 return refuse_decision(bad)
+            if (lacking := missing_effects(args.option, args.details)) is not None:
+                return refuse_no_effect(lacking)
         if d == "resolve":
             check_resolve_args(args)
         if d == "blocks" and bool(args.refs) == args.none:
@@ -605,6 +629,11 @@ def run(project: Project, args: argparse.Namespace) -> int:
                 if "/" not in args.ref and was not in CLOSED:
                     freed = b.released(data, b.resolve(data, args.ref))
             elif c == "sub":
+                if args.report and not args.remove:
+                    from . import delivery
+
+                    if w := delivery.name_warning(args.report, args.id):
+                        advice.append(w)
                 b.set_sub(
                     data,
                     args.id,

@@ -1668,8 +1668,12 @@ console.log(JSON.stringify(out));
             "Both work today. The first is smaller.",
             "--option",
             "the small copy",
+            "--effect",
+            "x",
             "--option",
             "the full copy",
+            "--effect",
+            "x",
             "--recommend",
             "the second one: it has everything",
         ]

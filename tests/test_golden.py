@@ -425,8 +425,12 @@ def build_backlog(case, name, reads=True):
         x["qt"],
         "--option",
         x["o1"],
+        "--effect",
+        "the first copy stays",
         "--option",
         x["o2"],
+        "--effect",
+        "the second copy stays",
         "--recommend",
         x["rec"],
         "--recommend-option",
@@ -540,11 +544,27 @@ def decision_fields(case, name):
         *("--option", x["o2"], "--effect", x["e2"], "--undo", "hard"),
         *("--recommend-option", x["o1"], "--if-no-answer", x["waits"], "--answer-by", "2020-01-26", "--page", page),
     )
-    b("decision", "add", "--title", x["two"], "--option", x["o1"], "--option", x["o2"], "--undo", "no")
+    b("decision", "add", "--title", x["q"], "--option", x["o1"], "--effect", x["e1"], "--option", x["o2"])
+    b(
+        "decision",
+        "add",
+        "--title",
+        x["two"],
+        "--option",
+        x["o1"],
+        "--effect",
+        x["e1"],
+        "--option",
+        x["o2"],
+        "--effect",
+        x["e2"],
+        "--undo",
+        "no",
+    )
     b("decision", "add", "--title", x["quoted"], "--option", x["o1"], "--effect", x["e1"], "--date", "2020-01-19")
     b("decision", "add", "--title", x["q"], "--effect", x["e1"], "--option", x["o1"])
-    b("decision", "add", "--title", x["q"], "--option", x["o1"], "--page", "../x.md")
-    b("decision", "add", "--title", x["q"], "--option", x["o1"], "--answer-by", "2020-01-26")
+    b("decision", "add", "--title", x["q"], "--option", x["o1"], "--effect", x["e1"], "--page", "../x.md")
+    b("decision", "add", "--title", x["q"], "--option", x["o1"], "--effect", x["e1"], "--answer-by", "2020-01-26")
     b("show", f"{P}-2 J2")
     b("show", f"{P}-2 J2", "--json")
 
