@@ -136,7 +136,12 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     `unavailable` when nobody can be asked (`no tool named "AskUserQuestion"`: a -p run, an SDK host without a
     permission callback) and `dismissed` otherwise (Esc, «Chat about this», a host that refuses); the timer is
     `timeout`. Neither the surfaces nor `isInteractive` decide whether to ask: they cannot tell a hosted session
-    with a person behind it (the desktop app, an SDK host, the phone) from none.
+    with a person behind it (the desktop app, an SDK host, the phone) from none. An answer that asks also carries
+    `notice` (i18n grant_notice: who asks, the project and the group, never the command, as it goes to a system
+    channel): right after raising the question the module raises it with `$.ui.notify(notice, {title: header})`,
+    without waiting on it, and the answer phase carries how it went as `notified`: `sent:<channel>`, `no:<reason>`
+    (no terminal, notifications off…), `error` (it rejected, or this Claude Code has no $.ui.notify) or `unknown`
+    (not settled within 2 s of the answer).
   - stdin {phase: "answer", cwd, session, group, answer: yes|no|dismissed|timeout|unavailable, surfaces, command (or
     tool and input), tool_use_id, late?}; for another tool the record's `command` is `<tool> <place or command>` (judged
     again) and it carries `tool`. On yes, when the session is still the marked one and this call runs in the mark's
@@ -159,7 +164,9 @@ tests only, the module reads neither: `min` (start) and `due` (tick).
     lets the call on to the classic guard, which finds the grant; otherwise it refuses the call with `deny`. After a
     timeout it keeps listening to the question, still drawn: its late answer (or dismissal) goes here with `late` true
     and the timed-out call's input, `log` is shown, and the group's question is closed. A call that fails (either phase)
-    is a status line and lets the call on: the classic guard refuses a group's command with no grant.
+    is a status line and lets the call on: the classic guard refuses a group's command with no grant. A `notified`
+    in stdin (NOTIFIED; anything else is dropped) goes to every line the answer writes in approved.jsonl and to the
+    request a timeout leaves pending.
   - A reserved file of Claude Code's settings or the registry (guard.ASK_KINDS): the owner's yes for one
     call. The module also checks, in any session of the project (marked or not) and only in its main loop, a
     Write, Edit, MultiEdit or NotebookEdit call whose file (`file_path`, or `notebook_path`) reads as one of those
@@ -193,6 +200,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import sys
 import time
 from collections.abc import Iterable
@@ -623,6 +631,9 @@ def grant(ev: Event) -> dict[str, Any]:
 
 FILE_GROUP = "file:"  # the module's key for a question about a reserved file: file:<class>
 FILE_COMMAND_CHARS = 300  # a Bash command longer than this is not asked about: the owner must see all of it
+# How the module's $.ui.notify of a question's `notice` went, as it sends it back (`notified`): sent by a channel,
+# not sent and why, failed, or not settled in time; anything else is not recorded.
+NOTIFIED = re.compile(r"sent:[a-z0-9_]+|no:[a-z-]+|error|unknown")
 
 
 def _command(ev: Event) -> str:
@@ -689,11 +700,12 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
         return {}
     minutes = grants.minutes(project, "grant_minutes", 30)
     o = orchestrator.current(project) or {}
+    who = o.get("name") or session[:8]
     out = {
         "group": group,
         "live": live,
         "question": t["grant_question_tool" if tool else "grant_question"].format(
-            orchestrator=o.get("name") or session[:8],
+            orchestrator=who,
             project=project.name,
             group=group,
             minutes=minutes,
@@ -705,10 +717,17 @@ def _grant_check(project: Project, session: str, ev: Event) -> dict[str, Any]:
         "header": t["grant_header"],
         "ask_ms": grants.minutes(project, "ask_minutes", 5) * 60_000,
         "waiting": t["grant_denied_waiting"].format(group=group, owner=project.owner),
+        "notice": t["grant_notice"].format(orchestrator=who, project=project.name, group=group),
     }
     if live:
         out["until"] = (grants.live(project, group) or {}).get("until")
     return out
+
+
+def _notified(ev: Event) -> dict[str, str]:
+    """The answer's `notified` as a record's field ({} when the module sent none or anything but NOTIFIED)."""
+    v = ev.get("notified")
+    return {"notified": v} if isinstance(v, str) and NOTIFIED.fullmatch(v) else {}
 
 
 def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
@@ -738,6 +757,7 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
         **({"tool": tool} if tool is not None else {}),
         "command": cmd[: approved.COMMAND_CHARS],
         "tool_use_id": tid,
+        **_notified(ev),
     }
     fmt = {"group": group, "owner": project.owner, "orchestrator": who, "answer": answer}
     if ev.get("late") is True:  # the question had timed out and the call was refused
@@ -770,6 +790,7 @@ def _grant_answer(project: Project, session: str, ev: Event) -> dict[str, Any]:
                 "orchestrator": rec["orchestrator"],
                 "command": rec["command"],
                 "tool_use_id": tid,
+                **_notified(ev),
             },
         )
         extra["pending"] = True

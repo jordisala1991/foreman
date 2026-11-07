@@ -72,6 +72,7 @@
   "grant_yes": "Sí, {minutes} min",
   "grant_no": "No",
   "grant_header": "foreman",
+  "grant_notice": "{orchestrator}, el orquestador de {project}, pide tu sí para «{group}»: contesta en el chat o en el panel de foreman.",
   "grant_denied_no": "Bloqueado: {owner} dijo que no al grupo «{group}». No lo intentes otra vez hasta que {owner} lo diga en el chat; durante {minutes} minutos foreman no volverá a preguntar.",
   "grant_denied_dismissed": "Bloqueado: {owner} cerró la pregunta sobre el grupo «{group}» sin decir que sí. No lo intentes otra vez hasta que {owner} lo diga en el chat.",
   "grant_denied_timeout": "Bloqueado: {owner} no contestó a tiempo la pregunta sobre el grupo «{group}». La petición espera a {owner} en el panel de foreman hasta {hours} h, y también vale su respuesta tardía en el chat: cuando {owner} conteste, te llegará un mensaje suyo a la bandeja. No lo intentes otra vez hasta entonces; si deja de hacer falta, retírala con `foreman permissions grants off {group} --pending`.",

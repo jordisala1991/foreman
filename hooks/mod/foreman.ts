@@ -103,6 +103,7 @@ type GrantCheck = {
   header?: string
   ask_ms?: number
   waiting?: string
+  notice?: string
 }
 
 // What `hook mod grant` answers an answer.
@@ -132,6 +133,9 @@ const TICK_MS = 60000 // lib/foreman/heartbeat.py TICK_S
 // How $.ui.ask fails where nobody can be asked (a -p run, an SDK host with no permission callback): checked live in
 // Claude Code 2.1.316. Any other rejection is a dismissal.
 const NO_ASK = 'no tool named "AskUserQuestion"'
+// How long an answer waits for the question's notice to settle before it goes as `unknown`: $.ui.notify returns as
+// soon as the channel writes (or a Notification hook ends), well before anyone answers.
+const NOTIFY_MS = 2000
 
 // What the session is for foreman, set at each session.start: the other hooks act only when 'active'.
 let mode: Mode = 'inert'
@@ -648,6 +652,32 @@ function meaning(asked: Asked, yes: string): string {
   return 'timeout' in asked ? 'timeout' : asked.rejected
 }
 
+// The question's notice raised through the person's own notification channel ($.ui.notify, headed `title`), resolving
+// to how it went as `hook mod grant` records it (`notified`): sent:<channel>, no:<reason>, or error when it rejected
+// (a hook's deny, a failed write) or this Claude Code has no $.ui.notify. Never rejects.
+function notify($: EngineInterface, text: string, title: string | undefined): Promise<string> {
+  try {
+    return $.ui.notify(text, title ? { title } : {}).then(
+      r => (r.isSent ? `sent:${r.channel}` : `no:${r.reason}`),
+      () => 'error',
+    )
+  } catch {
+    return Promise.resolve('error')
+  }
+}
+
+// How the notice went, waiting for it at most NOTIFY_MS (then `unknown`): the answer is not held by a hung channel.
+async function notified($: EngineInterface, notifying: Promise<string>): Promise<string> {
+  let expire: (v: string) => void = () => {}
+  const bound = new Promise<string>(resolve => {
+    expire = resolve
+  })
+  const timer = $.clock.after(NOTIFY_MS, () => expire('unknown'))
+  const out = await Promise.race([notifying, bound])
+  timer.cancel()
+  return out
+}
+
 // `hook mod grant`'s answer phase: what it answered applied (a grant kept in memory, its `log` shown). Resolves to the
 // refusal for the call, or null when it may go on (the classic guard still decides; it finds the grant Python wrote).
 async function answered($: EngineInterface, group: string, input: Record<string, unknown>): Promise<string | null> {
@@ -758,6 +788,8 @@ async function grantFor($: EngineInterface, what: Record<string, unknown>, toolU
       return { rejected: why.includes(NO_ASK) ? 'unavailable' : 'dismissed' }
     },
   )
+  // the notice, once the question is up: the owner may be away from this chat
+  const notifying = typeof q.notice === 'string' && q.notice ? notify($, q.notice, q.header) : null
   const ms = typeof q.ask_ms === 'number' && q.ask_ms > 0 ? q.ask_ms : 0
   let outcome: Asked
   if (ms) {
@@ -771,7 +803,13 @@ async function grantFor($: EngineInterface, what: Record<string, unknown>, toolU
   } else {
     outcome = await asked
   }
-  const input = { phase: 'answer', ...call, group, surfaces }
+  const input = {
+    phase: 'answer',
+    ...call,
+    group,
+    surfaces,
+    ...(notifying === null ? {} : { notified: await notified($, notifying) }),
+  }
   if ('timeout' in outcome) {
     // The question stays drawn and its answer still comes, marked late: Python applies a yes or a no to the request
     // this question left pending (only for the marked session, in its own process) and records anything else. It

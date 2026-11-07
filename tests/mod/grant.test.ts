@@ -1,13 +1,16 @@
 // The owner's yes for a [deny.grants] group: a main-loop Bash call is checked with `hook mod grant`, and when the one
 // thing it lacks is that yes, the module asks with $.ui.ask while the call waits. First every `grant` case of
 // contract.ts (what the module sends, whether it asks, what it does with the answer); then what lives only in the
-// module: the grants it heard given, one question per group, the time limit, a late answer. The test's own
-// `tool.call` hook on AskUserQuestion stands for the person (or the host) answering the question. No process runs.
+// module: the grants it heard given, one question per group, the time limit, a late answer, the notice raised as it
+// asks. The test's own `tool.call` hook on AskUserQuestion stands for the person (or the host) answering the
+// question, and its `ui.notify` hook for the person's notification channel. No process runs.
 import { expect, mock, test } from 'claude-code/testing'
 import cases from './contract.ts'
 
 type Run = { exitCode?: number; stdout?: string; stderr?: string; reject?: string }
 type Ask = { answer?: string; reject?: string; timeout?: boolean }
+type Notify = { isSent: true; channel: string } | { isSent: false; reason: string } | { reject: string }
+type Notified = { text: string; title?: string }
 
 type Case = {
   name: string
@@ -27,6 +30,7 @@ type Case = {
     agentId?: string
     check?: string
     ask?: Ask
+    notify?: Notify
   }
   stdin: Record<string, unknown> | null
   run: Run | null
@@ -47,6 +51,14 @@ const TICKED = '{"marked": true}\n'
 const UNTIL = '2026-11-01T10:30:00'
 const GRANTED = JSON.stringify({ granted: true, log: '«deploy» allowed for orq until 10:30', until: UNTIL })
 const WAITING = 'Blocked: a question about the group «deploy» is already waiting for Owner.'
+const NOTICE = 'orq asks for your yes to «deploy»'
+const NO_SURFACE: Notify = { isSent: false, reason: 'no-surface' }
+const NOTIFY_MS = 2000
+
+// How the test's ui.notify hook answers: as the channel (`isSent`), or refusing with `reject` (a hook's deny).
+function notifying(n: Notify) {
+  return 'reject' in n ? { deny: n.reject } : { value: n }
+}
 
 function reply(run: Run) {
   if (run.reject !== undefined) {
@@ -63,13 +75,15 @@ function reply(run: Run) {
   }
 }
 
-// What the check answers about the group: the question (`live` and `until` when grants.json holds a grant).
+// What the check answers about the group: the question and its notice (`live` and `until` when grants.json holds a
+// grant).
 function question(ms = ASK_MS, live?: string): string {
   return JSON.stringify({
     ask_ms: ms,
     group: 'deploy',
     header: 'foreman',
     no: 'No',
+    notice: NOTICE,
     question: 'May orq run «deploy» for 30 minutes?',
     waiting: WAITING,
     yes: 'Yes, for 30 min',
@@ -97,7 +111,8 @@ function answering(q: Question, a: Ask) {
 // The engine of one session in a project with groups: `start` answers ACTIVE, each grant check the next of `checks`
 // (the last one again), each grant answer the next of `answers` (REFUSED when none is left); each question the next
 // of `asks`, a promise for one the test answers later; each tick the next of `ticks` (the last one again, TICKED
-// when none).
+// when none); each notification the next of `notifies` (no terminal when none is left), a promise for one that
+// settles when the test says.
 function engine(
   on: On,
   checks: string[],
@@ -105,11 +120,13 @@ function engine(
   asks: (Ask | Promise<Ask>)[],
   start = ACTIVE,
   ticks: string[] = [],
+  notifies: (Notify | Promise<Notify>)[] = [],
 ) {
   const grants: Input[] = []
   const questions: Question[] = []
   const statuses: (string | undefined)[] = []
   const logs: string[] = []
+  const notified: Notified[] = []
   const asked = later<void>()
   const clock = mock.clock(on)
   const id = { value: 'S-orch' } // $.session.id(): a test may change it (a /clear in the same process)
@@ -149,9 +166,13 @@ function engine(
     logs.push(e.text)
     return { value: undefined }
   })
+  on('ui.notify', async (_, e) => {
+    notified.push({ text: e.text, ...(e.title === undefined ? {} : { title: e.title }) })
+    return notifying(await (notifies.shift() ?? NO_SURFACE))
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
-  return { grants, questions, statuses, logs, clock, id, asked: asked.promise }
+  return { grants, questions, statuses, logs, notified, clock, id, asked: asked.promise }
 }
 
 function phases(grants: Input[]): unknown[] {
@@ -165,6 +186,7 @@ for (const c of (cases as Case[]).filter(c => c.op === 'grant')) {
     const questions: Question[] = []
     const statuses: (string | undefined)[] = []
     const logs: string[] = []
+    const notified: Notified[] = []
     const ownPhase = c.stdin?.phase
     on('session.id', () => ({ value: c.engine.session }))
     on('session.version', () => ({ value: { version: c.engine.version, base: c.engine.version } }))
@@ -204,6 +226,10 @@ for (const c of (cases as Case[]).filter(c => c.op === 'grant')) {
     on('ui.log', (_, e) => {
       logs.push(e.text)
       return { value: undefined }
+    })
+    on('ui.notify', (_, e) => {
+      notified.push({ text: e.text, ...(e.title === undefined ? {} : { title: e.title }) })
+      return notifying(c.engine.notify ?? NO_SURFACE)
     })
     on('session.start', (_, e) => ({ cwd: e.cwd }))
 
@@ -253,6 +279,9 @@ for (const c of (cases as Case[]).filter(c => c.op === 'grant')) {
       expect(q.header).toBe(check.header as string)
       expect(q.options.map(o => o.label)).toEqual([check.yes, check.no])
     }
+    // With the question, its notice: one $.ui.notify headed as the question
+    const notice = asks && typeof check.notice === 'string' ? check.notice : null
+    expect(notified).toEqual(notice === null ? [] : [{ text: notice, title: check.header as string }])
     let deny: string | undefined
     if (ownPhase === 'answer') {
       deny = out.granted === true ? undefined : (out.deny as string)
@@ -362,6 +391,7 @@ test('past ask_ms the call is refused, the question stays open; its late answer 
   answer.settle({ answer: 'Yes, for 30 min' })
   await w.clock.advance(0)
   expect(phases(w.grants)).toEqual(['check', 'timeout', 'check', 'late'])
+  expect(w.grants[1]!.notified).toBe('no:no-surface') // the pending request knows nobody was told
   expect(w.grants[3]).toEqual({ ...w.grants[1], answer: 'yes', late: true })
   expect(w.logs).toEqual(['late: nothing granted'])
   // the question is closed: the next call asks again
@@ -416,6 +446,56 @@ test('a late dismissal (Esc on the old question) is recorded as late too', async
   await w.clock.advance(0)
   expect(phases(w.grants)).toEqual(['check', 'timeout', 'late'])
   expect(w.grants[2]!.answer).toBe('dismissed')
+})
+
+test('the question raises its notice at once, not waiting for the answer, and the answer carries how it went', async ($, on) => {
+  const answer = later<Ask>()
+  const w = engine(on, [question()], [GRANTED], [answer.promise], ACTIVE, [], [{ isSent: true, channel: 'iterm2' }])
+  await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
+  const call = $.tool.call({ tool: 'Bash', command: DEPLOY })
+  await w.asked
+  await w.clock.advance(0)
+  expect(w.notified).toEqual([{ text: NOTICE, title: 'foreman' }])
+  expect(phases(w.grants)).toEqual(['check'])
+  answer.settle({ answer: 'Yes, for 30 min' })
+  expect((await call).result).toBe('ok')
+  expect(w.grants[1]!.notified).toBe('sent:iterm2')
+})
+
+test('a notice refused or turned off is recorded so, and the question goes on as ever', async ($, on) => {
+  const w = engine(on, [question()], [], [{ answer: 'No' }, { answer: 'No' }], ACTIVE, [], [
+    { reject: 'a hook refused it' },
+    { isSent: false, reason: 'disabled' },
+  ])
+  await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
+  expect((await $.tool.call({ tool: 'Bash', command: DEPLOY })).deny).toBeDefined()
+  expect((await $.tool.call({ tool: 'Bash', command: DEPLOY })).deny).toBeDefined()
+  expect(w.questions.length).toBe(2)
+  expect(w.notified.length).toBe(2)
+  expect(phases(w.grants)).toEqual(['check', 'no', 'check', 'no'])
+  expect([w.grants[1]!.notified, w.grants[3]!.notified]).toEqual(['error', 'no:disabled'])
+})
+
+test('a notice that never settles holds the answer at most NOTIFY_MS, recorded as unknown', async ($, on) => {
+  const hung = new Promise<Notify>(() => {})
+  const w = engine(on, [question()], [GRANTED], [{ answer: 'Yes, for 30 min' }], ACTIVE, [], [hung])
+  await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
+  const call = $.tool.call({ tool: 'Bash', command: DEPLOY })
+  await w.asked
+  await w.clock.advance(NOTIFY_MS - 1)
+  expect(phases(w.grants)).toEqual(['check'])
+  await w.clock.advance(1)
+  expect((await call).result).toBe('ok')
+  expect(w.grants[1]!.notified).toBe('unknown')
+})
+
+test('a check without a notice raises none and sends no notified', async ($, on) => {
+  const plain = JSON.stringify({ ...JSON.parse(question()), notice: undefined })
+  const w = engine(on, [plain], [GRANTED], [{ answer: 'Yes, for 30 min' }])
+  await $.session.start({ cwd: '/p', surface: 'desktop', isInteractive: true })
+  expect((await $.tool.call({ tool: 'Bash', command: DEPLOY })).result).toBe('ok')
+  expect(w.notified).toEqual([])
+  expect('notified' in w.grants[1]!).toBe(false)
 })
 
 test('ask_ms 0: the question waits with no limit of the module', async ($, on) => {

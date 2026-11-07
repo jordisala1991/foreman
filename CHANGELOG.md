@@ -12,6 +12,7 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 ### Changed
 
 - A permission request the owner did not answer in time now waits up to 24 hours (it expired after `grant_minutes`), and a late yes or no on the question still drawn in the chat applies to that very request: a yes opens the group for `grant_minutes` from the yes, only for the marked session in the same Claude Code process that asked (a /clear in that process carries the request along); a no drops it and starts the cooldown. Both leave the orchestrator an inbox message that brings its next pass within a minute. A request of an orchestrator process that has since restarted is never granted, only dropped. `foreman permissions grants off [GROUP] --pending` withdraws only the requests.
+- A group's permission question now also raises a short notice through Claude Code's notification channel (a terminal that notifies, or the owner's own `Notification` hooks), without the command; whether it was sent, and why not, is recorded with the answer in `approved.jsonl` and with the pending request (`notified`).
 
 ## [0.63.0] - 2026-11-07
 
