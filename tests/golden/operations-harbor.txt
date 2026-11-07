@@ -687,6 +687,8 @@ Acceptance criterion: a card payment goes through
 Result: a booking takes 40 s
 relations: blocked by HB-1 · related HB-3
   T1 Form ✓ ba1cd92 agent ag6, branch `hb2/t1` report reviews/2020-01-20-hb2-t1.md
+documents:
+  report T1: reviews/2020-01-20-hb2-t1.md
 
 ######## harbor: locks, waits and time limits
 $ FOREMAN_WHO=ag1 foreman --project harbor lock widget acquire "a test"

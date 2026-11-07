@@ -84,6 +84,9 @@ relations: blocks FA-2
 plan: reviews/2020-01-10-plan-FA-1.md
   T1 Lector de cartas ✓ abc1234 agente ag1, rama `a1/t1` informe reviews/2020-01-12-fa1-t1.md
   T2 Pruebas del lector ✓ def5678
+documents:
+  plan: reviews/2020-01-10-plan-FA-1.md
+  report T1: reviews/2020-01-12-fa1-t1.md
 detail: Nota añadida al detalle.
 $ foreman --project faro backlog show A1
 [exit 0]
@@ -400,6 +403,9 @@ relations: blocks FA-2
 plan: reviews/2020-01-10-plan-FA-1.md
   T1 Lector de cartas ✓ abc1234 agente ag1, rama `a1/t1` informe reviews/2020-01-12-fa1-t1.md
   T2 Pruebas del lector ✓ def5678
+documents:
+  plan: reviews/2020-01-10-plan-FA-1.md
+  report T1: reviews/2020-01-12-fa1-t1.md
 detail: Nota añadida al detalle.
 $ foreman --project faro backlog show FA-1 --json
 [exit 0]
