@@ -6,7 +6,8 @@ import re
 
 from helpers import ProjectCase, make_repo
 
-from foreman import identity, loop, pause, transcripts, util
+from foreman import agents as agents_mod
+from foreman import identity, pause, transcripts, util
 from foreman.backlog import Backlog
 
 TOML = """
@@ -317,7 +318,7 @@ class LaunchTest(ProjectCase):
                     },
                 )
                 self.assertEqual(self.launches()[token]["agent"], aid)
-                self.assertEqual(loop.agent_state(a), "working")
+                self.assertEqual(agents_mod.agent_state(a), "working")
 
     def test_production_decided_by_the_type_when_the_launch_did_not_say(self):
         _token, line = self.launch("plan3")

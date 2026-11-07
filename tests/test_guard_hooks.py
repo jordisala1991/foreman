@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from helpers import ROOT, ProjectCase
 
+from foreman import agents as agents_mod
 from foreman import guard, loop, notes, notices, pause, pyscript, shell
 from foreman.backlog import Backlog
 
@@ -979,23 +980,23 @@ class HooksTest(ProjectCase):
 
     def test_agents_hook(self):
         self.hook("agents", self.agent_event("SubagentStart"))
-        a = loop.agents(self.project)["abc123"]
+        a = agents_mod.agents(self.project)["abc123"]
         self.assertEqual((a["type"], a["name"], a["transcript"]), ("dev", "zed7", str(self.transcript)))
         self.hook("agents", self.agent_event("PostToolUse", tool_name="Bash"))
-        self.assertEqual(loop.agents(self.project)["abc123"]["tool"], "Bash")
+        self.assertEqual(agents_mod.agents(self.project)["abc123"]["tool"], "Bash")
         self.assertEqual([h["id"] for h in loop.live_agents(self.project)], ["abc123"])
         self.hook("agents", self.agent_event("SubagentStop", last_assistant_message="done"))
-        self.assertEqual(loop.agents(self.project)["abc123"]["final"], "done")
+        self.assertEqual(agents_mod.agents(self.project)["abc123"]["final"], "done")
         # outside the project: nothing written anywhere
         self.hook("agents", {**self.agent_event("SubagentStart"), "agent_id": "zzz"}, cwd=self.tmp)
-        self.assertNotIn("zzz", loop.agents(self.project))
+        self.assertNotIn("zzz", agents_mod.agents(self.project))
         # untyped flashes are skipped
         self.hook("agents", {"hook_event_name": "SubagentStart", "agent_id": "flash"})
-        self.assertNotIn("flash", loop.agents(self.project))
+        self.assertNotIn("flash", agents_mod.agents(self.project))
 
     def test_stop_agent_and_stalled(self):
         self.hook("agents", self.agent_event("SubagentStart"))
-        f = loop.agents_file(self.project)
+        f = agents_mod.agents_file(self.project)
         d = json.loads(f.read_text())
         d["abc123"]["start"] = d["abc123"]["activity"] = time.strftime(
             "%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 3600)
@@ -1003,7 +1004,7 @@ class HooksTest(ProjectCase):
         f.write_text(json.dumps(d))
         os.utime(self.transcript, (time.time() - 3600,) * 2)
         self.assertEqual(loop.stalled(self.project), ["zed7 (60 min)"])
-        self.assertEqual(loop.stop_agent(self.project, "zed7"), ["abc123"])
+        self.assertEqual(agents_mod.stop_agent(self.project, "zed7"), ["abc123"])
         self.assertEqual(loop.live_agents(self.project), [])
 
     def test_resume_only_in_orchestrator_session(self):

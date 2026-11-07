@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from . import agents as agents_mod
 from . import backlog_text, i18n, identity, lock, loop, notes, orchestrator, pause, transcripts, util
 from .backlog import Backlog, BacklogError
 
@@ -162,7 +163,7 @@ def agents_now(project: Project) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for h in s.live:
         ident = identity.of(project, h)  # reads the brief only when the entry lacks something
-        sid = loop.session_of(h)
+        sid = agents_mod.session_of(h)
         out.append(
             {
                 "id": h["id"],

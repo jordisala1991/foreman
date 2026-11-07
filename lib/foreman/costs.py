@@ -129,10 +129,10 @@ def of_entry(h: dict[str, Any], aid: str, outcome: str | None) -> Run | None:
 
 def record(project: Project, aid: str | None, name: str | None, outcome: str | None) -> None:
     """At `progress --done`: the delivering agent's line. Never raises (a cost is no reason to refuse a delivery)."""
-    from . import loop
+    from . import agents as agents_mod
 
     try:
-        d = loop.agents(project)
+        d = agents_mod.agents(project)
         mine = [k for k, h in d.items() if k == aid or (not aid and name and h.get("name") == name)]
         if mine:
             k = max(mine, key=lambda k: str(d[k].get("start") or ""))
@@ -145,16 +145,16 @@ def record(project: Project, aid: str | None, name: str | None, outcome: str | N
 def sweep(project: Project) -> None:
     """In the pass: a line for each agent tied to an issue that is not working and has none yet (it stopped without
     delivering, or its delivery came without an id). Never raises."""
-    from . import loop
+    from . import agents as agents_mod
 
     try:
         have = {r.get("agent") for r in runs(project)}
         todo = [
             (aid, h)
-            for aid, h in loop.agents(project).items()
-            if h.get("issue") and aid not in have and loop.agent_state(h) not in loop.LIVE_STATES
+            for aid, h in agents_mod.agents(project).items()
+            if h.get("issue") and aid not in have and agents_mod.agent_state(h) not in agents_mod.LIVE_STATES
         ]
-        made = [of_entry(h, aid, "stopped" if loop.agent_state(h) == "stopped" else None) for aid, h in todo]
+        made = [of_entry(h, aid, "stopped" if agents_mod.agent_state(h) == "stopped" else None) for aid, h in todo]
         store(project, [r for r in made if r])
     except Exception:  # noqa: BLE001
         pass

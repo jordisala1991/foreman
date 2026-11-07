@@ -34,6 +34,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from . import agents as agents_mod
 from . import backlog, delivery, grants, i18n, identity, loop, orchestrator, start, timeline, util
 
 if TYPE_CHECKING:
@@ -264,7 +265,11 @@ def running_part(
         iid = a.get("issue") or ""
         if iid:
             busy.add(iid)
-        ref = timeline.where(project.state / "progress.jsonl", p[0]) if p else timeline.where(loop.agents_file(project))
+        ref = (
+            timeline.where(project.state / "progress.jsonl", p[0])
+            if p
+            else timeline.where(agents_mod.agents_file(project))
+        )
         out.append(
             item(
                 started,
@@ -400,7 +405,7 @@ def wrong_part(
         iid, sid = h.get("issue") or "", h.get("sub") or ""
         if not iid:  # an agent without an issue is not production work
             continue
-        ref = timeline.where(loop.agents_file(project))
+        ref = timeline.where(agents_mod.agents_file(project))
         inc = h.get("delivery_incomplete")
         if isinstance(inc, dict) and not h.get("stopped"):
             missing = ", ".join(map(str, inc.get("missing") or [])) or "?"
@@ -418,9 +423,9 @@ def wrong_part(
             )
             continue
         end = timeline.when(h.get("end"))
-        if not end or loop.agent_state(h, until.timestamp()) != "stopped":
+        if not end or agents_mod.agent_state(h, until.timestamp()) != "stopped":
             continue
-        gone = end + timedelta(seconds=loop.WAIT_LIMIT)  # when a stop without delivery stops counting as waiting
+        gone = end + timedelta(seconds=agents_mod.WAIT_LIMIT)  # when a stop without delivery stops counting as waiting
         if not (since <= end < until or since <= gone < until):
             continue
         if delivery.delivery(project, aid, h)[0]:
