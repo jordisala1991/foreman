@@ -13,6 +13,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 - The panel shows a «See conversation» button for each session agent (in its row and its detail): it turns Remote Control on for that session only when clicked (`claude attach` on a pseudo-terminal, `/remote-control`, then Enter on the dialog it leaves open; the session is not stopped, so no turn is cut and no copy is made) and opens the claude.ai/code link of its conversation in the Claude app. It sends the owner's phone a push on that click, never at launch. A failure says why and the button can be pressed again (`POST /api/agent/watch`, same key and project rules as the other writes).
 
+### Fixed
+
+- `foreman agents --stop` on a session agent gives `claude stop` the short session id (the 8 characters `claude agents --json` shows as `id`); with the whole id Claude Code answered «No job matching…» and the session kept running.
+
 ## [0.65.0] - 2026-11-07
 
 ### Added

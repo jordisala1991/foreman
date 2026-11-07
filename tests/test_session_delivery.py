@@ -303,8 +303,17 @@ class StopCommandTest(SessionLifecycle):
     def test_agents_stop_runs_claude_stop_on_the_session(self):
         r = self.cli("agents", "--stop", "s1", env={"PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}"})
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.argv(), ["stop", SID])
+        self.assertEqual(self.argv(), ["stop", SID[:8]])
         self.assertEqual(self.state(), "stopped")
+
+    def test_stop_gives_claude_the_short_id_and_a_full_id_is_rejected(self):
+        f = self.bin / "claude"
+        f.write_text(
+            '#!/bin/sh\nif [ "$1" = stop ] && [ "${#2}" -ne 8 ]; then\n'
+            "  echo \"No job matching '$2'. Run 'claude agents' to list running sessions.\" >&2\n  exit 1\nfi\nexit 0\n"
+        )
+        r = self.cli("agents", "--stop", "s1", env={"PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}"})
+        self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_a_claude_that_fails_is_reported_and_the_mark_stays(self):
         self.fake(tail="exit 0")
