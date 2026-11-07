@@ -9,6 +9,10 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+### Added
+
+- The new panel's «Agents» screen (`/next/#/agents`): a card for each agent running (what it works on, its state and how long it has been at it, its last words, red when it may be stuck, «See conversation» for a session agent), the agents that finished today with their result, time, model and list-price cost, and, in the product picker, «All» to see the agents of every product with the new panel, each with its product's tag. It asks `/api/agents?p=NAME` (`*` for all) again every 10 s. A finished agent counts only when its issue is one of the product's, as the charts do.
+
 ## [0.66.0] - 2026-11-07
 
 ### Added

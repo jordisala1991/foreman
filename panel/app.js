@@ -869,24 +869,26 @@ function feedThread(d){
 const lastHourHtml = thread => sect(t('last_hour'), list(thread.map((x, i) => lrow({k: 'feed', key: i, id: x.h, name: ptag(x.p) + aname(x.who), title: inline(x.t)})).join('') || empty(t('nothing_last_hour'))), thread.length || null);
 // «See conversation» of a session agent (its own Claude Code session): the server turns Remote Control on for it (seconds;
 // it pushes the owner's phone, so only this click does it) and answers its link, which opens in the Claude app. The
-// window is opened by the click itself (a browser blocks one opened after the wait) and pointed at the link when it comes.
+// tab is opened by the click itself (a browser blocks one opened after the wait) on the waiting page of the server.
 const WATCHING = new Set();
 const watchButton = a => a.session && canWrite(a.p)
-  ? `<button class="sec sm" data-id="${esc(a.id)}" data-p="${esc(a.p)}" title="${esc(t('watch_tip'))}"${WATCHING.has(a.id) ? ' disabled' : ''} onclick="watchAgent(this)">${t(WATCHING.has(a.id) ? 'watch_busy' : 'watch_btn')}</button>` : '';
+  ? `<button class="sec sm" data-id="${esc(a.id)}" data-p="${esc(a.p)}" data-name="${esc(agentWhat(a).text)}" title="${esc(t('watch_tip'))}"${WATCHING.has(a.id) ? ' disabled' : ''} onclick="watchAgent(this)">${t(WATCHING.has(a.id) ? 'watch_busy' : 'watch_btn')}</button>` : '';
 async function watchAgent(b){
-  const id = b.dataset.id, p = b.dataset.p; if(WATCHING.has(id)) return;
-  const w = window.open('', '_blank'); WATCHING.add(id); b.disabled = true; b.textContent = t('watch_busy'); $('err').textContent = '';
+  const id = b.dataset.id, p = b.dataset.p, name = b.dataset.name || ''; if(WATCHING.has(id)) return;
+  const q = `id=${encodeURIComponent(id)}&p=${encodeURIComponent(p)}`;
+  // the tab opens on the server's waiting page, which turns Remote Control on, goes to the link and says why if it fails
+  if(window.open(api(`/agent/wait?${q}&name=${encodeURIComponent(name)}`), '_blank')) return;
+  // a browser that blocks the tab: ask from here and show the link
+  WATCHING.add(id); b.disabled = true; b.textContent = t('watch_busy'); $('err').textContent = '';
   let link = '', err = '';
   try{
-    const r = await fetch(api(`/api/agent/watch?id=${encodeURIComponent(id)}&p=${encodeURIComponent(p)}`), {method:'POST'}), j = await r.json().catch(() => ({}));
+    const r = await fetch(api(`/api/agent/watch?${q}`), {method:'POST'}), j = await r.json().catch(() => ({}));
     if(r.ok) link = j.link; else err = j.error || `${r.status}`;
   }catch(e){ err = t('no_connection'); }
   WATCHING.delete(id);
-  if(!link && w) w.close();
-  else if(link && w) w.location.href = link;
   lastSignature = null; lastEtag = null; await load();   // (load clears the message: it comes after)
-  if(link && !w) $('err').innerHTML = `${esc(t('watch_blocked'))}: <a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a>`;
-  else if(!link) $('err').textContent = t('error', {text: err});
+  if(link) $('err').innerHTML = `${esc(t('watch_blocked'))}: <a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a>`;
+  else $('err').textContent = t('error', {text: err});
 }
 function renderWork(d){
   const alive = d.agents.filter(a => !a.end).length;
