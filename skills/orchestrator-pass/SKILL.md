@@ -57,7 +57,8 @@ project's rules win. Whatever you tell the owner (chat, decisions, inbox replies
      with the previous review in its brief. A branch whose only reason is its size and that is a mechanical change
      proven by its tests (a split checked by the golden corpus) may go in with `foreman integrate … --no-review
      "why"` instead; never one that touches delicate paths or was delivered `partial`.
-   - *Review findings* (`review_findings`), round 1: send the H and M back to the agent that made the branch, with
+   - *Review findings* (`review_findings`), round 1 (keep the agent that made the branch alive from its delivery until
+     its review is over; never stop it in between): send the H and M back to the agent that made the branch, with
      SendMessage to the id the line gives: the review's path and «fix or refute each H and M with proof, a "Review,
      round 1" section in your report, commit, `foreman progress --done` again». Do not fix nor drop findings
      yourself; if you think one is wrong, say so in the message: the agent refutes it with proof and the reviewer
