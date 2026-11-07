@@ -20,6 +20,7 @@
  "load_failed": "Could not load.",
  "retry": "Retry",
  "loading": "Loading…",
+ "chart_missing": "The chart could not be loaded; reload the page.",
  "no_data": "No data for this yet.",
  "period": "Period",
  "n_days": "{n} days",

@@ -47,9 +47,16 @@ export function chartConfig(m, theme) {
   });
   const label = (iso, i) =>
     i === today ? t("today") : long ? dayLabel(iso, { weekday: "short", day: "numeric" }) : dayLabel(iso, { day: "numeric" });
+  const labels = m.days.map(label);
+  // Chart.js's own label skipping can drop «today»; on a narrow chart with many days, show every third label
+  // counted back from today instead, so «today» is always there.
+  const tick = function (v, i) {
+    const narrow = m.days.length > 7 && ((this && this.chart && this.chart.width) || 0) < 700;
+    return !narrow || (today - i) % 3 === 0 ? labels[i] : "";
+  };
   return {
     type: "bar",
-    data: { labels: m.days.map(label), datasets },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -74,7 +81,8 @@ export function chartConfig(m, theme) {
           ticks: {
             color: (c) => (c.index === today ? ink.text : ink.muted),
             font: (c) => ({ weight: c.index === today ? "600" : "400" }),
-            autoSkip: true,
+            autoSkip: false,
+            callback: tick,
             maxRotation: 0,
           },
         },
@@ -91,6 +99,7 @@ export function chartConfig(m, theme) {
 
 export function CostChart({ m, theme }) {
   const canvas = useRef(null);
+  const missing = !window.Chart;
   useEffect(() => {
     if (!window.Chart || !canvas.current) return undefined;
     const chart = new window.Chart(canvas.current, chartConfig(m, theme));
@@ -111,7 +120,9 @@ export function CostChart({ m, theme }) {
     <ul class="legend">
       ${fams.map((f) => html`<li><i class=${"sw " + f}></i>${name(f)} <span>${usd(by(f))}</span></li>`)}
     </ul>
-    <div class=${"plot" + (m.days.length > 7 ? " wide" : "")}><canvas ref=${canvas} role="img" aria-label=${said}></canvas></div>
+    ${missing
+      ? html`<p class="quiet">${t("chart_missing")}</p>`
+      : html`<div class=${"plot" + (m.days.length > 7 ? " wide" : "")}><canvas ref=${canvas} role="img" aria-label=${said}></canvas></div>`}
     <p class="note">${t("g1_note")}${since ? " · " + since : ""}</p>
     <details class="table">
       <summary>${t("see_table")}</summary>

@@ -68,6 +68,7 @@ const document = {
 const store = {};
 const on = {};
 const charts = [];
+const ticks = [];
 const fetched = [];
 Object.assign(globalThis, {
   document, window: globalThis,
@@ -76,12 +77,16 @@ Object.assign(globalThis, {
   matchMedia: () => ({ matches: false, addEventListener() {} }),
   addEventListener: (t, f) => { on[t] = f; }, removeEventListener() {},
   requestAnimationFrame: (f) => setTimeout(f, 0), cancelAnimationFrame: clearTimeout,
-  Chart: class { constructor(canvas, cfg) { charts.push(cfg); } destroy() {} },
+  Chart: scenario.noChart ? undefined : class { constructor(canvas, cfg) { charts.push(cfg); } destroy() {} },
   fetch: async (url) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
     let body;
     if (p.startsWith("/next/")) body = JSON.parse(fs.readFileSync(path.join(dir, p.slice(6)), "utf8"));
-    else { fetched.push(p); body = scenario.answers[p]; }
+    else {
+      fetched.push(p);
+      if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
+      body = scenario.answers[p];
+    }
     return { ok: body !== undefined, status: body === undefined ? 404 : 200, json: async () => body };
   },
 });
@@ -121,6 +126,9 @@ function exercise(cfg) {
     o.plugins.tooltip.filter(items[0]);
   }
   o.scales.y.ticks.callback(10);
+  // the x labels as Chart.js would ask for them on a narrow and on a wide chart
+  const at = (w) => cfg.data.labels.map((_, i) => o.scales.x.ticks.callback.call({ chart: { width: w } }, i, i));
+  ticks.push({ narrow: at(390), wide: at(1000) });
 }
 charts.forEach(exercise);
 
@@ -136,5 +144,6 @@ console.log(JSON.stringify({
     type: c.type, labels: c.data.labels, stacked: c.options.scales.x.stacked,
     datasets: c.data.datasets.map((d) => ({ label: d.label, data: d.data })),
   })),
+  ticks,
   fetched,
 }));

@@ -11,6 +11,7 @@ export function How({ product, theme }) {
   useEffect(() => {
     let live = true;
     setFailed(false);
+    setM(null);
     api(`/api/metrics?p=${encodeURIComponent(product)}&days=${days}`)
       .then((x) => live && setM(x))
       .catch(() => live && setFailed(true));

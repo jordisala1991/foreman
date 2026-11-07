@@ -20,6 +20,7 @@
  "load_failed": "No se ha podido cargar.",
  "retry": "Reintentar",
  "loading": "Cargando…",
+ "chart_missing": "No se pudo cargar la gráfica; recarga la página.",
  "no_data": "Aún no hay datos de esto.",
  "period": "Periodo",
  "n_days": "{n} días",

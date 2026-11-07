@@ -236,6 +236,38 @@ class NextPageTest(ProjectCase):
         self.assertEqual(stubs[:23], [None] * 23)  # before the data starts: no bar, it is not a day without work
         self.assertEqual(stubs[23:], [0, 0, 0, 0, None, 0, None])  # from 1 nov: a thin bar on days without cost
 
+    def test_today_stays_on_the_axis_of_a_narrow_chart(self):
+        answers = {"/api/projects": self.PROJECTS, "/api/metrics?p=alpha&days=30": self.metrics(30)}
+        out = self.mount(
+            {
+                "hash": "#/how",
+                "click": "30 días",
+                "answers": {**answers, "/api/metrics?p=alpha&days=7": self.metrics(7)},
+            }
+        )
+        ticks = out["ticks"][-1]
+        self.assertEqual(ticks["narrow"][-1], "hoy")
+        self.assertEqual(sum(1 for x in ticks["narrow"] if x), 10)  # one label in three, counted back from today
+        self.assertTrue(all(ticks["wide"]))  # a wide chart shows every day
+
+    def test_changing_the_period_drops_the_old_chart_until_the_answer_comes(self):
+        out = self.mount(
+            {
+                "hash": "#/how",
+                "click": "30 días",
+                "hang": ["/api/metrics?p=alpha&days=30"],
+                "answers": {"/api/projects": self.PROJECTS, "/api/metrics?p=alpha&days=7": self.metrics(7)},
+            }
+        )
+        self.assertIn("Cargando", out["text"])
+        self.assertNotIn("Coste por día", out["text"])
+
+    def test_a_missing_chart_library_says_so(self):
+        answers = {"/api/projects": self.PROJECTS, "/api/metrics?p=alpha&days=7": self.metrics(7)}
+        out = self.mount({"hash": "#/how", "noChart": True, "answers": answers})
+        self.assertIn("No se pudo cargar la gráfica", out["text"])
+        self.assertIn("$122", out["text"])  # the figures are still there
+
     def test_no_product_with_the_new_panel_says_how_to_turn_it_on(self):
         none = {**self.PROJECTS, "projects": [{**p, "next": False} for p in self.PROJECTS["projects"]]}
         out = self.mount({"hash": "#/how", "answers": {"/api/projects": none}})
