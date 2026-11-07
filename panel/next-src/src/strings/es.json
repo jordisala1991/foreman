@@ -23,6 +23,7 @@
   "none_title": "Ningún producto tiene el panel nuevo",
   "none_how": "Se enciende por producto, en su foreman.toml:",
   "load_failed": "No se ha podido cargar.",
+  "screen_failed": "La pantalla ha fallado.",
   "retry": "Reintentar",
   "loading": "Cargando…",
   "no_data": "Aún no hay datos de esto",

@@ -79,7 +79,7 @@ function Watch({ agent }: { agent: AgentCard }) {
 }
 
 function Card({ a, now, tag, one }: { a: AgentCard; now: number; tag: string | null; one: boolean }) {
-  const s = STATE[a.status];
+  const s = STATE[a.status] ?? { tone: "wait" as Tone, text: a.status as Key }; // a status the server adds shows as it is
   const stuck = s.tone === "stuck";
   const quiet = a.sign ? Math.round((now - a.sign) / 60) : 0;
   const msg = stuck && quiet > 0 ? t("no_signs", { time: duration(quiet) }) : a.msg;
@@ -118,7 +118,7 @@ const clock = (epoch: number): string =>
 const byStuck = (a: AgentCard, b: AgentCard): number =>
   Number(b.status === "maybe stuck") - Number(a.status === "maybe stuck");
 
-const RESULT = { ok: "res_ok", partial: "res_partial", failed: "res_failed" } as const;
+const RESULT: Record<string, Key> = { ok: "res_ok", partial: "res_partial", failed: "res_failed", stopped: "res_stopped" };
 
 export function Agents({ product, titles }: { product: Product; titles: Record<string, string> }) {
   const [data, setData] = useState<AgentsData | null>(null);
@@ -229,7 +229,7 @@ export function Agents({ product, titles }: { product: Product; titles: Record<s
                     </span>
                     <span className="facts">
                       <span className={`res ${d.outcome ?? "stopped"}`}>
-                        {t(d.outcome ? RESULT[d.outcome] : "res_stopped")}
+                        {t((d.outcome && RESULT[d.outcome]) || "res_stopped")}
                       </span>
                       {d.minutes !== null ? <span>{duration(d.minutes)}</span> : null}
                       <Chip family={d.family} />

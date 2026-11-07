@@ -376,7 +376,8 @@ class NextPageTest(ProjectCase):
         )
         self.assertEqual(r.returncode, 0, r.stderr)
         out = json.loads(r.stdout.strip().splitlines()[-1])
-        self.assertEqual(out["errors"], [])
+        if not scenario.get("crash_expected"):
+            self.assertEqual(out["errors"], [])
         return out
 
     ALPHA: ClassVar[dict] = {
@@ -768,6 +769,34 @@ class NextPageTest(ProjectCase):
         self.assertIn("Coste a precio de lista de la API", out["text"])
         self.assertEqual(out["current"], ["3 Agentes"])
         self.assertEqual(out["fetched"], ["/api/projects", "/api/agents?p=alpha"])
+
+    def test_finished_runs_the_way_the_real_state_has_them(self):
+        # the server sends outcome "stopped" (a reviewer or a plain subagent that ended without
+        # `progress --done`), None (older runs), and entries without type, family or minutes; none may blank the screen
+        done = [
+            self.finished(agent="r1", task="Revisión", type="reviewer", outcome="stopped"),
+            self.finished(agent="r2", task="Antiguo", type=None, outcome=None, family=None, minutes=None),
+            self.finished(agent="r3", task="Libre", type="general-purpose", outcome="stopped", family="sonnet"),
+        ]
+        out = self.agents([], done)
+        self.assertEqual(len(out["done"]), 3)
+        self.assertIn("Parado", out["done"][0])
+        self.assertIn("Parado", out["done"][1])
+        self.assertIn("3 terminados hoy", out["text"])
+
+    def test_an_unknown_status_still_draws(self):
+        out = self.agents([self.card(status="paused")], [])
+        self.assertEqual(len(out["agents"]), 1)
+        self.assertEqual(out["agents"][0]["state"].split(" ·")[0], "paused")
+
+    def test_a_crashing_screen_shows_retry_and_keeps_the_shell(self):
+        # a field of a shape nobody foresaw (here a task that is not text) throws while drawing: only the screen is
+        # replaced, by a message with «Reintentar»; the navigation stays
+        out = self.agents([self.card(task=7)], [], crash_expected=True)
+        self.assertTrue(any("screen crashed" in e for e in out["errors"]))
+        self.assertIn("La pantalla ha fallado. Reintentar", out["text"])
+        self.assertIn("Agentes", out["text"])  # the shell's tabs are still there
+        self.assertNotIn("Nadie en marcha", out["text"])
 
     def test_nobody_running_says_when_the_next_pass_is(self):
         later = time.time() + 3600
