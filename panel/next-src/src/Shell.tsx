@@ -2,10 +2,11 @@
 // four sections with their badges, the «More» group); on the phone the picker and the product's status pill on top
 // and a bottom bar of five tabs. The theme follows the system (app.css); there is no switch.
 import { useEffect, useState } from "react";
+import { Agents } from "./Agents";
 import { How } from "./How";
 import { Home } from "./Home";
 import { Needs } from "./Needs";
-import { ScreenHead, StatusPill } from "./head";
+import { ScreenHead, StatusPill, productState } from "./head";
 import { Chevron, Icon } from "./icons";
 import { api, oldPanel, t, type Key, type Product, type Projects } from "./lib";
 
@@ -82,6 +83,22 @@ export function None() {
 
 const KEPT = "next-product";
 
+// the «All» entry of the Agents screen (it asks /api/agents with name «*»): the sums of the products, and a pill that counts those with an orchestrator running
+function joint(products: Product[]): Product {
+  const sum = (k: "decisions" | "unread" | "agents") => products.reduce((n, x) => n + (x[k] ?? 0), 0);
+  const running = products.filter((x) => productState(x) === "running").length;
+  const pill = running === 1 ? t("pill_all_1") : t("pill_all", { n: running });
+  return {
+    name: ALL,
+    title: t("all"),
+    next: true,
+    decisions: sum("decisions"),
+    unread: sum("unread"),
+    agents: sum("agents"),
+    ...(running ? { orchestrator_health: { verdict: "ok" }, pill } : {}),
+  };
+}
+
 const REFRESH_MS = 10_000;
 
 export function Shell({ all: initial }: { all: Product[] }) {
@@ -128,6 +145,11 @@ export function Shell({ all: initial }: { all: Product[] }) {
       <Needs key={scope.map((x) => x.name).join()} scope={scope} all={everyone} />
     ) : tab === "how" ? (
       everyone ? <Soon tab={tab} product={p} all /> : <How product={p} />
+    ) : tab === "agents" ? (
+      <Agents
+        product={everyone ? joint(products) : p}
+        titles={Object.fromEntries(products.map((x) => [x.name, x.title]))}
+      />
     ) : tab === "more" ? (
       <More product={p} />
     ) : (

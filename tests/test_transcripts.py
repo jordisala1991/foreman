@@ -145,7 +145,15 @@ class TranscriptsTest(unittest.TestCase):
         self.assertIsNone(transcripts.parse_call(None))
         self.assertIsNone(transcripts.parse_call(b'\xff"usage"'))
 
+    def test_last_model_is_the_model_of_the_end(self):
+        """What the agents screen asks every 10 s of a growing transcript: the model of the end, not a scan of it."""
+        filler = [rec(f"x{i}", text="y" * 2000, model="<synthetic>") for i in range(400)]  # past the first window
+        f = self.write([rec("a", model="claude-haiku-5-5"), *filler, rec("z", model="claude-opus-5-5"), *filler[:3]])
+        self.assertEqual(transcripts.last_model(f), "claude-opus-5-5")
+        self.assertIsNone(transcripts.last_model(self.write([rec("a", model="<synthetic>")], "y.jsonl")))
+
     def test_model_is_the_last_real_one(self):
+
         f = self.write(
             [
                 rec("a", model="claude-haiku-5-5"),
@@ -157,6 +165,8 @@ class TranscriptsTest(unittest.TestCase):
         )
         self.assertEqual(transcripts.model(f), "claude-opus-5-5")
         self.assertIsNone(transcripts.model(self.write([rec("a", model="<synthetic>")], "x.jsonl")))
+        self.assertEqual(transcripts.last_model(f), "claude-opus-5-5")
+        self.assertIsNone(transcripts.last_model(self.tmp / "none.jsonl"))
         self.assertEqual(identity.transcript_model({"transcript": str(f)}), "claude-opus-5-5")
         self.assertEqual(identity.transcript_head({"transcript": str(f)}, 10), rec("a", model="claude-haiku-5-5")[:10])
 

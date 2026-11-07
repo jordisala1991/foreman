@@ -3,7 +3,6 @@ allow-list of panel/next/, the old page (/) untouched, no request off the machin
 their source (panel/next/BUILD, without node), and the shell and the «How it goes» screen of the built bundle
 mounted in node over a minimal DOM (tests/next_dom.mjs; skipped without node)."""
 
-import datetime
 import gzip
 import hashlib
 import http.client
@@ -12,12 +11,17 @@ import os
 import re
 import shutil
 import subprocess
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import ClassVar
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from helpers import ROOT, ProjectCase, config_problems
 from test_panel import PanelCase
 
+from foreman import agents as agents_mod
 from foreman import panel
 from foreman.panel_cache import STATIC, page_version
 
@@ -175,6 +179,109 @@ class NextServeTest(PanelCase):
         with mock.patch.object(metrics, "build", side_effect=ValueError("corrupt line")):
             code, _ = self.req("/api/metrics?p=fake&days=7")
         self.assertEqual(code, 500)
+
+
+class NextAgentsApiTest(PanelCase):
+    """/api/agents: the agents screen's data: who is running, who finished today (costs.jsonl), the next pass."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_toml(self.project_toml() + "\n[panel]\nnext = true\n")
+        panel.REG.__init__()
+
+    def project_toml(self):
+        return (self.home / "foreman.toml").read_text()
+
+    def run_line(self, agent, issue, end, **extra):
+        return {
+            "agent": agent, "name": agent, "issue": issue, "sub": "T1", "type": "dev", "model": "claude-opus-4-7",
+            "outcome": "ok", "start": end[:11] + "09:00", "end": end, "minutes": 8.0, "usd": 3.4, **extra,
+        }  # fmt: skip
+
+    def write_costs(self, *lines):
+        from foreman.backlog import Backlog
+
+        f = Backlog(self.project).data_path.parent / "costs.jsonl"
+        f.write_text("".join(json.dumps(x) + "\n" for x in lines))
+
+    def test_the_running_agent_comes_with_its_task_and_state(self):
+        code, d = self.req("/api/agents?p=fake")
+        self.assertEqual(code, 200, d)
+        (a,) = d["live"]
+        self.assertEqual(
+            (a["p"], a["name"], a["issue"], a["sub"], a["type"]), ("fake", "ag1", "PF-1", None, "dev")
+        )  # sub: the brief names none
+        self.assertEqual(a["task"], "Issue 1")  # the issue's short name, not the brief
+        self.assertEqual(a["status"], "holds a lock")
+        self.assertEqual(a["msg"], "done for now")
+        self.assertFalse(a["session"])  # a subagent: no conversation to open
+        self.assertNotIn("link", a)  # the click asks for it: Remote Control holds it only while it is on
+        self.assertIsInstance(a["since"], int)
+        self.assertIsInstance(a["sign"], int)  # its last sign of life: the screen says «no signs for 25 min»
+
+    def test_finished_today_come_from_the_cost_file(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.write_costs(
+            self.run_line("d1", "PF-1", f"{today} 10:30"),
+            self.run_line("d2", "PF-2", f"{today} 11:45", outcome="partial", model="claude-sonnet-4-6", usd=1.25),
+            self.run_line("old", "PF-1", "2020-01-01 10:00"),  # not today
+            self.run_line("alien", "ZZ-9", f"{today} 12:00"),  # an issue of no backlog of this product
+            self.run_line("a1", "PF-1", f"{today} 12:30"),  # running now: it is in `live`, not here
+        )
+        code, d = self.req("/api/agents?p=fake")
+        self.assertEqual(code, 200, d)
+        self.assertEqual([x["agent"] for x in d["done"]], ["d2", "d1"])  # the latest first
+        d2 = d["done"][0]
+        self.assertEqual(
+            (d2["task"], d2["issue"], d2["sub"], d2["outcome"], d2["minutes"], d2["family"], d2["usd"], d2["end"]),
+            ("Issue 2", "PF-2", "T1", "partial", 8.0, "sonnet", 1.25, f"{today} 11:45"),
+        )
+
+    def test_the_poll_does_not_read_a_whole_big_transcript_each_time(self):
+        """A running agent's transcript grows all the time, so its cache never holds: the screen's poll (every 10 s,
+        each open tab) must read its end only, not tens of MB of it."""
+        f = Path(agents_mod.agents(self.project)["a1"]["transcript"])
+        said = {"id": "m", "model": "claude-opus-4-7", "role": "assistant", "usage": {"input_tokens": 1},
+                "content": [{"type": "text", "text": "x" * 3000}]}  # fmt: skip
+        line = json.dumps({"type": "assistant", "message": said}) + "\n"
+        with f.open("a") as w:
+            w.write(line * 15000)  # 45 MB
+        self.assertGreater(f.stat().st_size, 40_000_000)
+        self.req("/api/agents?p=fake")
+        with f.open("a") as w:
+            w.write(line)  # the agent said one more thing: every cache of this file is stale
+        t0 = time.perf_counter()
+        code, d = self.req("/api/agents?p=fake")
+        took = time.perf_counter() - t0
+        self.assertEqual(code, 200, d)
+        self.assertEqual(d["live"][0]["family"], "opus")
+        self.assertLess(took, 0.5, f"the poll took {took:.2f} s with a 45 MB transcript")
+
+    def test_only_products_with_the_new_panel_and_all_of_them_with_a_star(self):
+        self.assertEqual(self.req("/api/agents?p=other")[0], 404)
+        self.assertEqual(self.req("/api/agents?p=nope")[0], 404)
+        self.assertEqual(self.req("/api/agents")[0], 404)
+        code, d = self.req("/api/agents?p=*")
+        self.assertEqual(code, 200, d)
+        self.assertEqual({a["p"] for a in d["live"]}, {"fake"})  # `other` has no [panel] next
+        self.assertEqual(d["projects"], ["fake"])
+
+    def test_next_pass_is_the_last_pass_plus_the_period(self):
+        from foreman import orchestrator, util
+
+        d = self.req("/api/agents?p=fake")[1]
+        # this product has a [loop] prompt and a pass just now: due one period later
+        last = util.iso_epoch(orchestrator.last_pass(self.project))
+        self.assertEqual(d["next_pass"], int(last + orchestrator.every_min(self.project) * 60))
+        self.assertGreater(d["next_pass"], last + 59 * 60)
+
+    def test_an_error_inside_is_a_500_not_a_dropped_connection(self):
+        from unittest import mock
+
+        from foreman import agents_screen
+
+        with mock.patch.object(agents_screen, "build", side_effect=ValueError("corrupt")):
+            self.assertEqual(self.req("/api/agents?p=fake")[0], 500)
 
 
 class NextFilesTest(PanelCase):
@@ -379,6 +486,151 @@ class NextPageTest(ProjectCase):
         self.assertIn("No se ha podido cargar.", out["text"])
         self.assertIn("Reintentar", out["buttons"])
 
+    # ---------- the agents screen ----------
+    BETA: ClassVar[dict] = {**ALPHA, "name": "beta", "title": "Beta", "decisions": 0, "unread": 0, "agents": 1}
+
+    def card(self, **extra):
+        now = time.time()
+        return {
+            "id": "a1", "p": "alpha", "name": "ag1", "task": "Agentes que ves desde la app", "issue": "PF-7",
+            "sub": "T1", "type": "foreman:dev", "family": "opus", "status": "working", "since": int(now - 25 * 60),
+            "sign": int(now - 60), "msg": "El guardián ya trata como agente una sesión.", "session": True,
+            "link": None, **extra,
+        }  # fmt: skip
+
+    def finished(self, **extra):
+        return {
+            "agent": "d1", "p": "alpha", "task": "Plan de «Agentes»", "issue": "PF-7", "sub": None,
+            "type": "foreman:planner", "outcome": "ok", "minutes": 8.0, "family": "opus", "usd": 3.4,
+            "end": "2026-11-07 10:30", **extra,
+        }  # fmt: skip
+
+    def agents(self, live, done, next_pass=None, **extra):
+        data = {"projects": ["alpha"], "live": live, "done": done, "next_pass": next_pass}
+        answers = {"/api/projects": self.PROJECTS, "/api/agents?p=alpha": data, **extra.pop("answers", {})}
+        return self.mount({"hash": "#/agents", "answers": answers, **extra})
+
+    def test_the_agents_cards_and_the_finished_list(self):
+        stuck = self.card(
+            id="a2", task="Contador de avisos", issue="AP-1", sub=None, type="foreman:mechanic", family="sonnet",
+            status="maybe stuck", since=int(time.time() - 48 * 60), sign=int(time.time() - 25 * 60), session=False,
+        )  # fmt: skip
+        lock = self.card(id="a3", task="Revisión de la rama", issue=None, type="foreman:reviewer", family="sonnet",
+                         status="waiting for a lock", session=False, msg=None, sub=None)  # fmt: skip
+        partial = self.finished(agent="d2", task="Agentes", sub="T0", type="foreman:dev", outcome="partial")
+        done = [self.finished(), {**partial, "minutes": 75, "family": "sonnet", "usd": 9.1}]
+        out = self.agents([self.card(), lock, stuck], done)
+        s, a, w = out["agents"]  # the stuck one first, then as the server gave them
+        self.assertEqual((a["avatar"], a["task"], a["id"]), ("AD", "Agentes que ves desde la app", "PF-7"))
+        self.assertEqual(a["meta"], "T1 · desarrollo Opus")
+        self.assertEqual(a["state"], "Trabajando · lleva 25 min")
+        self.assertEqual(a["stateTone"], "dot ok")
+        self.assertEqual(a["msg"], "El guardián ya trata como agente una sesión.")
+        self.assertTrue(a["watch"])  # a session agent: its conversation can be opened
+        self.assertEqual(
+            (w["state"], w["stateTone"], w["id"], w["watch"]),
+            ("Esperando un turno de un recurso · lleva 25 min", "dot wait", "", False),
+        )
+        self.assertEqual(w["meta"], "revisión Sonnet")
+        self.assertEqual(w["msg"], "")  # nothing to say: no empty line
+        # stuck: red card, how long without signs instead of the last words, and no button for a subagent
+        self.assertEqual((s["cls"], s["stateTone"], s["watch"]), ("agent stuck", "dot stuck", False))
+        self.assertEqual(s["state"], "Puede estar atascado · lleva 48 min")
+        self.assertEqual(s["msg"], "Sin señales desde hace 25 min")
+        self.assertEqual(out["done"], [
+            "Plan de «Agentes» · plan Completa ✓ 8 min Opus $3.40",
+            "Agentes · T0 · desarrollo A medias 1 h 15 min Sonnet $9.10",
+        ])  # fmt: skip
+        self.assertIn("3 en marcha · 2 terminados hoy", out["text"])
+        self.assertIn("Coste a precio de lista de la API", out["text"])
+        self.assertEqual(out["current"], ["3 Agentes"])
+        self.assertEqual(out["fetched"], ["/api/projects", "/api/agents?p=alpha"])
+
+    def test_nobody_running_says_when_the_next_pass_is(self):
+        later = time.time() + 3600
+        out = self.agents([], [self.finished()], next_pass=int(later))
+        hhmm = datetime.fromtimestamp(int(later), ZoneInfo("Europe/Madrid")).strftime("%H:%M")  # node runs in Madrid
+        self.assertIn("Nadie trabajando ahora", out["nobody"])
+        self.assertIn(f"El siguiente repaso, a las {hhmm}", out["nobody"])
+        self.assertEqual(out["agents"], [])
+        self.assertIn("Nadie en marcha · 1 terminado hoy", out["text"])
+        due = self.agents([], [], next_pass=int(time.time() - 60))
+        self.assertIn("El siguiente repaso toca ya", due["nobody"])
+        self.assertIn("Aún no ha terminado nadie hoy", due["text"])
+
+    def test_all_products_with_their_tags(self):
+        both = {"projects": [self.ALPHA, self.BETA], "language": "es"}
+        both["projects"][1] = {**self.BETA, "next": True}
+        data = {
+            "projects": ["alpha", "beta"],
+            "live": [self.card(), self.card(id="b1", p="beta", task="Caché de prefijo", issue=None, session=False)],
+            "done": [self.finished(p="beta")], "next_pass": None,
+        }  # fmt: skip
+        out = self.mount({
+            "hash": "#/agents", "store": {"next-product": "*"},
+            "answers": {"/api/projects": both, "/api/agents?p=*": data},
+        })  # fmt: skip
+        self.assertEqual(out["products"], ["Todos los productos", "Alpha", "Beta"])
+        self.assertEqual(out["fetched"], ["/api/projects", "/api/agents?p=*"])
+        self.assertIn("2 en marcha en 2 productos · 1 terminado hoy", out["text"])
+        self.assertEqual(out["pills"], [["pill running", "2 productos en marcha"]] * 2)
+        self.assertEqual(
+            [a["meta"] for a in out["agents"]], ["T1 · desarrollo Opus Alpha", "T1 · desarrollo Opus Beta"]
+        )
+        self.assertTrue(out["done"][0].endswith("$3.40 Beta"), out["done"])
+
+    def test_all_on_the_charts_screen_asks_for_one_product(self):
+        both = {"projects": [self.ALPHA, {**self.BETA, "next": True}], "language": "es"}
+        out = self.mount({"hash": "#/how", "store": {"next-product": "*"}, "answers": {"/api/projects": both}})
+        self.assertEqual(out["products"], ["Todos los productos", "Alpha", "Beta"])
+        self.assertIn("Elige un producto para ver esto.", out["text"])  # the charts are of one product
+        self.assertEqual(out["fetched"], ["/api/projects"])
+
+    def test_the_stuck_agent_comes_first(self):
+        stuck = self.card(
+            id="a9", task="Atascado", status="maybe stuck", since=int(time.time() - 10 * 60), session=False
+        )
+        out = self.agents([self.card(), self.card(id="a2", task="Otro"), stuck], [])
+        self.assertEqual([a["task"] for a in out["agents"]], ["Atascado", "Agentes que ves desde la app", "Otro"])
+
+    def test_a_slow_answer_of_the_old_choice_does_not_replace_the_new_ones(self):
+        both = {"projects": [self.ALPHA, {**self.BETA, "next": True}], "language": "es"}
+        everybody = {"projects": ["alpha", "beta"], "done": [], "next_pass": None,
+                     "live": [self.card(), self.card(id="b1", p="beta", task="De beta")]}  # fmt: skip
+        mine = {"projects": ["alpha"], "live": [self.card(task="Solo de alpha")], "done": [], "next_pass": None}
+        out = self.mount({
+            "hash": "#/agents", "store": {"next-product": "*"}, "pick": "alpha", "delay": {"/api/agents?p=*": 250},
+            "answers": {"/api/projects": both, "/api/agents?p=*": everybody, "/api/agents?p=alpha": mine},
+        })  # fmt: skip
+        self.assertEqual([a["task"] for a in out["agents"]], ["Solo de alpha"])
+
+    def test_see_conversation_opens_the_waiting_page_inside_the_click(self):
+        wait = "/agent/wait?id=a1&p=alpha&name=Agentes%20que%20ves%20desde%20la%20app&t=k3y"
+        out = self.agents([self.card()], [], click="Ver conversación")
+        self.assertEqual(out["windows"], [{"href": wait, "closed": False}])  # the page asks and goes to the link
+        self.assertFalse([f for f in out["fetched"] if "agent/watch" in f])  # this page does not ask itself
+
+    def test_a_browser_that_blocks_the_tab_gets_the_link_on_the_card(self):
+        post = "POST /api/agent/watch?id=a1&p=alpha"
+        out = self.agents([self.card()], [], click="Ver conversación", blockPopups=True,
+                          answers={post: {"link": "https://claude.ai/code/session_x"}})  # fmt: skip
+        self.assertIn(post, out["fetched"])
+        self.assertIn(
+            "El navegador ha bloqueado la ventana: abre el enlace : https://claude.ai/code/session_x", out["text"]
+        )
+        out = self.agents([self.card()], [], click="Ver conversación", blockPopups=True)  # the server says no: 404
+        self.assertIn("No se ha podido abrir la conversación: 404", out["text"])
+
+    def test_agents_that_cannot_load_offer_to_retry(self):
+        out = self.mount({"hash": "#/agents", "answers": {"/api/projects": self.PROJECTS}})
+        self.assertIn("No se ha podido cargar.", out["text"])
+        self.assertIn("Reintentar", out["buttons"])
+
+    def test_the_agents_screen_waits_for_the_answer(self):
+        out = self.mount({"hash": "#/agents", "answers": {"/api/projects": self.PROJECTS},
+                          "hang": ["/api/agents?p=alpha"]})  # fmt: skip
+        self.assertIn("Cargando", out["text"])
+
     def test_more_lists_backlog_wiki_and_system(self):
         out = self.mount({"hash": "#/more", "answers": {"/api/projects": self.PROJECTS}})
         self.assertIn("Backlog › Wiki › Sistema ›", out["text"])
@@ -396,7 +648,7 @@ class NextPageTest(ProjectCase):
 
 def soon(minutes):
     """A local ISO time `minutes` from now (a little over, so rounding gives `minutes`)."""
-    return (datetime.datetime.now() + datetime.timedelta(minutes=minutes, seconds=20)).strftime("%Y-%m-%dT%H:%M:%S")
+    return (datetime.now() + timedelta(minutes=minutes, seconds=20)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 QUESTION = {
@@ -428,7 +680,7 @@ AGENT = {
     "sub": "T1",
     "status": "working",
     "last": "El guardián ya trata la sesión como agente.",
-    "start_ts": datetime.datetime.now().timestamp() - 25 * 60,
+    "start_ts": datetime.now().timestamp() - 25 * 60,
     "link": "https://claude.ai/code/x",
 }
 STUCK = {
@@ -615,14 +867,14 @@ class NextHomeTest(NextPageTest):
         self.assertIn("Qué cambia cada opción", quest["text"])
         self.assertIn("Ver las 3", out["text"])  # permission, question and message
         # who is working: the finished one is not here; the stuck one is first and says why
-        self.assertEqual(len(out["agents"]), 2)
-        self.assertTrue(out["agents"][0].startswith("A ap1 PF-200 T1"), out["agents"][0])
-        self.assertIn("Puede estar atascado", out["agents"][0])
-        self.assertIn("Sin señales desde hace 25 min", out["agents"][0])
-        self.assertIn("Agentes que ves PF-197 T1 · desarrollo", out["agents"][1])
-        self.assertIn("Trabajando · lleva 25 min", out["agents"][1])
-        self.assertIn("Ver conversación", out["agents"][1])
-        self.assertNotIn("Ver conversación", out["agents"][0])  # no link: no button
+        self.assertEqual(len(out["agentRows"]), 2)
+        self.assertTrue(out["agentRows"][0].startswith("A ap1 PF-200 T1"), out["agentRows"][0])
+        self.assertIn("Puede estar atascado", out["agentRows"][0])
+        self.assertIn("Sin señales desde hace 25 min", out["agentRows"][0])
+        self.assertIn("Agentes que ves PF-197 T1 · desarrollo", out["agentRows"][1])
+        self.assertIn("Trabajando · lleva 25 min", out["agentRows"][1])
+        self.assertIn("Ver conversación", out["agentRows"][1])
+        self.assertNotIn("Ver conversación", out["agentRows"][0])  # no link: no button
         self.assertEqual(out["latest"], ["5 nov fo197t1 Empieza la parte T1"])
 
     def test_the_wide_home_shows_the_questions_whole(self):

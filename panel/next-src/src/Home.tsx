@@ -51,7 +51,7 @@ function AgentCard({ a, shorts, tag }: { a: Agent; shorts: Record<string, string
   const title = (a.issue && shorts[a.issue]) || a.name;
   const mins = minutesSince(a.start_ts);
   const quiet = minutesSince(a.activity_ts);
-  const msg = st.tone === "stuck" && quiet !== null ? t("no_signs", { n: quiet }) : (a.last ?? "");
+  const msg = st.tone === "stuck" && quiet !== null ? t("no_signs_n", { n: quiet }) : (a.last ?? "");
   const kind = a.type ? KINDS[a.type] : undefined;
   return (
     <article className="card agent">

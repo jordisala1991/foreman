@@ -104,7 +104,10 @@ the day it ended; `total`, `top_issues` and `by_type`; `deliveries` {day: {integ
 (notes headings and `done` lines of `progress.jsonl`); `reviews` {day: {clean, back}} and `rounds`; `guard` {day:
 {agent, orchestrator, other}} and `guard_rules`; `today` (Inicio's figures with their comparison); `since` (the first
 day with data of each series); and `quota`, the account's windows now, never cached. The rest is cached by the files
-it reads. Nothing in
+it reads. `/api/agents?p=NAME|*` (a product with the switch on, or `*` for all of them; none is a 404, a failure a
+500; `agents_screen.py`) gives the Agents screen: `live` (each running or waiting agent of `panel.agents`: product `p`,
+`task` (its issue's short name), `issue`, `sub`, `type`, `family`, `status`, `since`, `sign`, `msg`, `session`), `done` (the runs of `costs.jsonl` that ended today, of the product's own issues, latest first, up to 50, not
+those running again), `projects` and `next_pass` (the last pass plus `[loop] every_min`, for one product). Nothing in
 `panel/next/` names a URL off the machine: no fonts, no CDN.
 
 **Following the installed version.** Python code is loaded once, so a panel keeps running the version it started
@@ -351,7 +354,10 @@ What it changes:
   project rules): only then is Remote Control turned on for that session, with `claude attach` on a pseudo-terminal,
   `/remote-control` and Enter on the dialog it leaves open (the session is not stopped, resumed or copied), and the
   claude.ai/code link comes back. Every connection sends the owner's phone a push, which is why nothing connects at
-  launch. A failure comes back as a 400 with the reason and the button can be pressed again.
+  launch. A failure comes back as a 400 with the reason and the button can be pressed again. Both panels open the click's
+  tab on `GET /agent/wait?id&p&name` (`watchpage.py`: the new panel's look, light and dark by the system, the agent's
+  name, a quiet progress bar): that page makes the POST itself with the key it was opened with, goes to the link, or
+  says why with a button to close the tab. A browser that blocks the tab leaves the panel to ask and show the link.
 
 ## The hidden acceptance checks: the orchestrator's and the planners'
 

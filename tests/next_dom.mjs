@@ -100,6 +100,7 @@ const document = {
 const store = { ...(scenario.store || {}) };
 const fetched = [];
 const posts = [];
+const windows = [];
 class HTMLIFrameElement {}
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
@@ -110,15 +111,25 @@ Object.assign(globalThis, {
   location: { search: "?t=k3y", hash: scenario.hash || "" },
   addEventListener() {}, removeEventListener() {},
   matchMedia: (q) => ({ matches: (scenario.visible || []).includes(q), addEventListener() {}, removeEventListener() {} }),
+  open: (url) => { const w = { location: { href: String(url || "") }, closed: false, close() { w.closed = true; } }; windows.push(w); return scenario.blockPopups ? null : w; },
   fetch: async (url, init) => {
     const p = String(url).replace(/[?&]t=[^&]*/, "").replace(/^([^?]*)&/, "$1?");
     if (init && init.method === "POST") {
       posts.push({ path: p, body: init.body === undefined ? null : init.body });
+      fetched.push("POST " + p);
+      const answer = scenario.answers["POST " + p];
+      // an answered POST says what the scenario says (null: the server fails); an unanswered one succeeds, except on
+      // the Agents screen, where the server not answering is a case (404)
+      if (answer !== undefined || (scenario.hash || "").startsWith("#/agents")) {
+        const missing = answer === undefined || answer === null;
+        return { ok: !missing, status: missing ? 404 : 200, json: async () => answer };
+      }
       const fail = (scenario.post || []).some((x) => p.startsWith(x));
       return { ok: !fail, status: fail ? 400 : 200, json: async () => (fail ? { error: "refused", ...(scenario.why ? { why: scenario.why } : {}) } : {}) };
     }
     fetched.push(p);
     if ((scenario.hang || []).includes(p)) await new Promise(() => {}); // an answer that never comes
+    if ((scenario.delay || {})[p]) await new Promise((r) => setTimeout(r, scenario.delay[p])); // a slow one
     const body = scenario.answers[p];
     const missing = body === undefined || body === null; // null: the server fails on it
     return { ok: !missing, status: missing ? 404 : 200, json: async () => body };
@@ -151,6 +162,12 @@ for (const st of scenario.steps || []) {
   }
   await settle();
 }
+if (scenario.pick) { // the product picker moved to another entry, then the slow answers arrive
+  const sel = one(app, (n) => n.localName === "select");
+  sel.value = scenario.pick;
+  sel.dispatch("change");
+  await new Promise((r) => setTimeout(r, scenario.wait || 300));
+}
 if (scenario.tap) {
   const g = one(app, (n) => n.localName === "g" && n.attributes["data-day"] === scenario.tap);
   if (!g) throw new Error("no column " + scenario.tap);
@@ -180,6 +197,7 @@ const bar = all(app, (n) => n.localName === "a" && cls(n, "tab"));
 const tab = (k) => bar.find((n) => n.attributes.href === "#/" + k);
 const badge = (k) => { const b = tab(k) && one(tab(k), (n) => cls(n, "badge")); return b ? words(b) : null; };
 const side = one(app, (n) => cls(n, "side"));
+const text1 = (a, f) => words(one(a, f) || { nodeType: 3, data: "" }); // a card of the Home screen has fewer parts
 console.log(JSON.stringify({
   text: words(app),
   tabs: bar.map(words),
@@ -191,6 +209,20 @@ console.log(JSON.stringify({
   pills: all(app, (n) => cls(n, "pill")).map((n) => [n.attributes.class, words(n)]),
   buttons: all(app, (n) => n.localName === "button").map(words),
   charts: all(app, (n) => "data-chart" in n.attributes).map(chart),
+  agents: all(app, (n) => n.localName === "article" && cls(n, "agent")).map((a) => ({
+    cls: a.attributes.class,
+    avatar: text1(a, (n) => cls(n, "avatar")),
+    task: text1(a, (n) => n.localName === "h3"),
+    id: words(one(a, (n) => cls(n, "id")) || { nodeType: 3, data: "" }),
+    meta: text1(a, (n) => cls(n, "meta")),
+    state: text1(a, (n) => cls(n, "state")),
+    stateTone: one(a, (n) => cls(n, "dot"))?.attributes.class,
+    msg: words(one(a, (n) => cls(n, "msg")) || { nodeType: 3, data: "" }),
+    watch: !!one(a, (n) => cls(n, "watch")),
+  })),
+  done: all(app, (n) => n.localName === "li" && n.parentNode && cls(n.parentNode, "done")).map(words),
+  nobody: words(one(app, (n) => cls(n, "nobody")) || { nodeType: 3, data: "" }),
+  windows: windows.map((w) => ({ href: w.location.href, closed: w.closed })),
   fetched,
   posts,
   cards: all(app, (n) => "data-kind" in n.attributes).map((n) => ({
@@ -198,10 +230,10 @@ console.log(JSON.stringify({
     buttons: all(n, (b) => b.localName === "button").map(words),
   })),
   tiles: Object.fromEntries(all(app, (n) => "data-tile" in n.attributes).map((n) => [n.attributes["data-tile"], words(n)])),
-  agents: all(app, (n) => cls(n, "agent")).map(words),
+  agentRows: all(app, (n) => cls(n, "agent")).map(words),
   messages: all(app, (n) => cls(n, "msg")).map(words),
   sections: all(app, (n) => n.localName === "section" && "aria-label" in n.attributes).map((n) => n.attributes["aria-label"]),
   latest: all(app, (n) => cls(n, "latest")).flatMap((n) => n.children.map(words)),
   errors,
 }));
-process.exit(0); // the screens poll: nothing else ends the process
+process.exit(0); // the screens poll: their timers would keep node alive

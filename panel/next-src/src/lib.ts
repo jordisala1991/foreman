@@ -23,16 +23,18 @@ export async function api<T>(path: string): Promise<T> {
   return (await r.json()) as T;
 }
 
-// a write of the panel (the same endpoints as today's panel): the answer's `error` is the message, `body` the text
-export async function post(path: string, body?: string): Promise<void> {
+// a write of the panel (the same endpoints as today's panel): the answer's `error` is the message, `body` the text;
+// the answer's JSON comes back for the actions that return something
+export async function post<T = void>(path: string, body?: string): Promise<T> {
   const init: RequestInit = { method: "POST" };
   if (body !== undefined) init.body = body;
   const r = await fetch(withKey(path), init);
+  const j = ((await r.json().catch(() => null)) ?? {}) as { error?: string; why?: string };
   if (!r.ok) {
-    const j = (await r.json().catch(() => ({}))) as { error?: string; why?: string };
     const why = `grant_why_${j.why}`; // a refused grant says why, in the panel's language
     throw new Error(j.why && why in es ? t(why as Key) : (j.error ?? String(r.status)));
   }
+  return j as T;
 }
 
 // the panel of today, at the same key (the screens not built yet send there)
@@ -40,6 +42,7 @@ export const oldPanel = (): string => withKey("/");
 
 // whole dollars ($219), or with one decimal ($60.8) where a detail is read
 export const usd = (x: number): string => "$" + Math.round(x).toString();
+export const usd2 = (x: number): string => "$" + x.toFixed(2);
 export const usd1 = (x: number): string => "$" + x.toFixed(1);
 
 const noon = (iso: string): Date => new Date(iso + "T12:00:00");
@@ -62,6 +65,7 @@ export interface Product {
   agents?: number;
   permissions?: number; // requests to approve or deny (the «Needs you» badge counts them with the questions)
   paused?: string | null;
+  pill?: string; // the status pill's own words (the «All» entry of the picker says how many are running)
   active?: boolean;
   orchestrator_health?: { verdict: string; last_pass?: string | null } | null;
 }
@@ -174,3 +178,44 @@ export function dayWord(s: string): string {
 // whole minutes from `ts` (epoch seconds) to now, or null
 export const minutesSince = (ts: number | null | undefined): number | null =>
   ts == null ? null : Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
+// /api/agents (lib/foreman/agents_screen.py): who is running, who finished today, when the next pass is due
+export interface AgentCard {
+  id: string;
+  p: string; // the product
+  name: string;
+  task: string; // the issue's short name, else the agent's name
+  issue: string | null;
+  sub: string | null;
+  type: string | null;
+  family: Family | null;
+  status: "working" | "holds a lock" | "waiting for a lock" | "waiting for its task" | "maybe stuck";
+  since: number | null; // epoch seconds
+  sign: number | null; // the last sign of life, epoch seconds
+  msg: string | null;
+  session: boolean; // its own Claude Code session: its conversation can be opened
+}
+export interface DoneRun {
+  agent: string;
+  p: string;
+  task: string;
+  issue: string;
+  sub: string | null;
+  type: string | null;
+  outcome: "ok" | "partial" | "failed" | null;
+  minutes: number | null;
+  family: Family | null;
+  usd: number;
+  end: string; // «YYYY-MM-DD HH:MM», local
+}
+export interface AgentsData {
+  projects: string[];
+  live: AgentCard[];
+  done: DoneRun[];
+  next_pass: number | null; // epoch seconds
+}
+
+// «25 min», «1 h 5 min»
+export const duration = (minutes: number): string => {
+  const m = Math.max(0, Math.round(minutes));
+  return m < 60 ? t("min", { n: m }) : t("hour_min", { h: Math.floor(m / 60), m: m % 60 });
+};
