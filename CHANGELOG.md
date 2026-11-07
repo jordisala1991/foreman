@@ -16,6 +16,8 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 ### Fixed
 
 - `foreman agents --stop` on a session agent gives `claude stop` the short session id (the 8 characters `claude agents --json` shows as `id`); with the whole id Claude Code answered «No job matching…» and the session kept running.
+- `foreman launch NAME --review REPO:BRANCH --session` starts the reviewer's session in the reviewed branch's worktree (the repo's main checkout when it has none) instead of the product's home, which Claude Code does not trust («Workspace not trusted»).
+- `foreman integrate` (also `--measure`) stops the session of the branch's session agent once it is integrated, as `foreman agents --stop` does (short id); a failure to stop it is a warning and the integration still closes.
 
 ## [0.65.0] - 2026-11-07
 
