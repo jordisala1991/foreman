@@ -58,12 +58,31 @@ export interface Projects {
   language?: string;
 }
 
-// /api/metrics (lib/foreman/metrics.py `build`): the fields the charts built so far read
+// /api/metrics (lib/foreman/metrics.py `build`, plus the account's `quota`): the fields the charts read
 export type Family = "opus" | "sonnet" | "haiku" | "other";
-export type DayCost = Record<Family | "usd", number>;
+export type DayCost = Record<Family | "usd", number> & { cheap_share?: number | null };
+export interface Delivery {
+  integrated: number;
+  measured: number;
+  ok: number;
+  partial: number;
+  failed: number;
+}
 export interface Metrics {
   days: string[];
   cost: Record<string, DayCost>;
   total: number;
-  since: { cost: string | null } & Record<string, string | null>; // the first day with data of each series
+  top_issues: { issue: string; short: string; usd: number; runs: number }[];
+  by_type: { type: string; usd: number; runs: number }[];
+  deliveries: Record<string, Delivery>;
+  reviews: Record<string, { clean: number; back: number }>;
+  rounds: Record<string, number>;
+  guard: Record<string, { agent: number; orchestrator: number; other: number }>;
+  guard_rules: { rule: string; band: string; n: number }[];
+  // the first day with data of each series (a day, or null)
+  since: { cost: string | null; deliveries: string | null; reviews: string | null; guard: string | null };
+  quota?: { kind: string; percent_used: number; resets_at?: string | null }[];
 }
+
+// «15:20»
+export const clock = (d: Date): string => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
