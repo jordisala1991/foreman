@@ -9,8 +9,11 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-11-07
+
 ### Changed
 
+- The panel shows when each pending permission request was asked and when it expires, with its day; a request of an orchestrator that is no longer running is shown as such with only a Discard button (discarding it no longer returns an error); a request whose notice did not arrive says so.
 - A permission request the owner did not answer in time now waits up to 24 hours (it expired after `grant_minutes`), and a late yes or no on the question still drawn in the chat applies to that very request: a yes opens the group for `grant_minutes` from the yes, only for the marked session in the same Claude Code process that asked (a /clear in that process carries the request along); a no drops it and starts the cooldown. Both leave the orchestrator an inbox message that brings its next pass within a minute. A request of an orchestrator process that has since restarted is never granted, only dropped. `foreman permissions grants off [GROUP] --pending` withdraws only the requests.
 - A group's permission question now also raises a short notice through Claude Code's notification channel (a terminal that notifies, or the owner's own `Notification` hooks), without the command; whether it was sent, and why not, is recorded with the answer in `approved.jsonl` and with the pending request (`notified`).
 - A group's permission question now says in plain words what the command will do («The orchestrator wants to push the branch fix/login to GitHub. Allow this, and the rest of the same permission, for 30 min without asking again?»), names the orchestrator once and never the group, and shows as a detail only the part of the command that needs the yes, not its start (a push's folder and branch are read where the push runs, after a `cd` too). Its notice says the same without the command's own words, and a request left for the panel carries that part (`part`, shown under «see the command») and those words (`summary`), unless the part itself was cut.
