@@ -35,7 +35,8 @@ def plan_section(i: dict[str, Any]) -> str:
     if i.get("plan_file"):
         return (
             f"# The plan\nThe task has a plan: `{i['plan_file']}`. Read it whole and follow it. If it does not hold "
-            "(a file or assumption is wrong, a step cannot be done as written), do not improvise: `fm ask` and end your turn."
+            "on a detail (a name, a line, the order of steps), decide, and list it in your report under «Off the plan» with why; "
+            "if it would change the goal, the criterion, a decision or the out of scope, `fm ask` and end your turn."
         )
     return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and criterion."
 
@@ -157,6 +158,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
     review_file.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
         "round": rnd,
+        "plan": i.get("plan_file", ""),
         "tip": tip,
         "review_file": str(review_file),
         "round2": ROUND2 if rnd > 1 else "",

@@ -90,3 +90,22 @@ class Plan(unittest.TestCase):
     def test_panel_filed_ready_needs_no_plan(self):
         new = panel_actions.add(self.p, '{"title": "p", "criterion": "c"}')["id"]
         self.assert_planless_ready(new)
+
+
+class ReviewerPlan(unittest.TestCase):
+    def brief_of_reviewer(self, **keys):
+        e = Env()
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        backlog.update(e.p, iid, status="in review", worktree=str(e.repo), **keys)
+        agents.launch_reviewer(e.p, e.issue(iid), "abc123")
+        return e, e.calls()[0]["argv"][-1]
+
+    def test_reviewer_gets_the_registered_plan_file(self):
+        e, text = self.brief_of_reviewer(plan_file="/elsewhere/custom-plan.md")
+        self.assertIn("/elsewhere/custom-plan.md", text)
+        self.assertNotIn(str(e.p.home / "plans"), text)
+
+    def test_reviewer_gets_no_plan_path_when_the_task_has_none(self):
+        e, text = self.brief_of_reviewer()
+        self.assertNotIn(str(e.p.home / "plans"), text)
+        self.assertNotIn("plan_file", text)

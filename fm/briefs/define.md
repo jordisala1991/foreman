@@ -16,14 +16,16 @@ Read the project's lessons, `$lessons`.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
 
 # The plan
-Read the code that the task touches (really read it), then write the plan at `$plan`, with these sections:
-- Files touched
-- Steps
-- Decisions: each with the alternatives dropped and why
-- Out of scope
-- Risks
-- Declared risk: which of: sensitive paths or architecture; new dependency or data-format change; open decision; size; or `none`
-
+Read the code the task touches (really read it), then write `$plan` for an implementer who has seen neither this conversation nor this code. A plan is the decisions it cannot make alone, each precise enough that it can write only one reasonable thing; no function bodies unless the algorithm is the decision (a plan longer than the code has written the code). Sections:
+- **Start:** what exists today that the task builds on, with file:line, read today.
+- **Changes:** per file, what changes, with the exact names, signatures, data shapes and user-visible text.
+- **Tests:** for each line or row of the done criterion, the test that shows it: file, name, input, expected value. Expected values come from the criterion, the owner or a worked example, never from running the code. A test checks behaviour (input → result), never fixed text or the shape of a file.
+- **Edge cases:** up to five inputs the criterion does not name but real use will meet (missing, empty, failed or timed out read as «none»; run twice; bad input), each with its expected behaviour and its test.
+- **Decisions:** each with the alternative dropped and why; the owner's answers as he gave them.
+- **Out of scope:** what must not be touched, even if it looks wrong.
+- **Risks:** what could break elsewhere, and which test above catches it (or that none does).
+- **Declared risk:** sensitive paths or architecture; new dependency or data-format change; open decision; size; or none.
+Before `fm ready`, reread it as the implementer: every criterion line has its test; every name is defined once and spelled the same everywhere; no line says «handle», «as needed», «appropriate» or «TBD». Fix it, do not list it.
 A plan that costs a bit more and makes the implementation cheap beats one that needs many rounds. What the owner discussed is context for the plan, not the plan. Only a trivial task may skip it (`--no-plan`).
 
 # The end
