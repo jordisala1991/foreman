@@ -48,6 +48,30 @@ class PlanVsWork(unittest.TestCase):
         self.assertIn("total $3.00", t)
 
 
+class Cost(unittest.TestCase):
+    def test_each_session_is_read_once_and_shared_message_ids_do_not_double_count(self):
+        import json
+
+        e = Env()
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        backlog.update(e.p, iid, sessions=["s1", "s2"], session_kinds={"s1": "define", "s2": "work"})
+        d = e.tmp / "transcripts/proj"
+        d.mkdir(parents=True)
+        rec = {
+            "type": "assistant",
+            "timestamp": "2026-11-07T10:00:00Z",
+            "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 1_000_000, "output_tokens": 0}},
+        }
+        for s in ("s1", "s2"):  # s2 replays s1's message id
+            (d / f"{s}.jsonl").write_text(json.dumps(rec) + "\n")
+        calls = []
+        real = metrics.costs.of_sessions
+        with mock.patch("fm.costs.of_sessions", lambda s: calls.append(s) or real(s)):
+            r = metrics.per_issue(e.p)[0]
+        self.assertEqual(sorted(calls), [["s1"], ["s2"]])
+        self.assertLessEqual(r["plan_usd"] + r["work_usd"], r["usd"])
+
+
 class Recording(unittest.TestCase):
     def test_launch_and_reviewer_record_kinds(self):
         e = Env()

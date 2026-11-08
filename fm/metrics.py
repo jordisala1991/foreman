@@ -17,10 +17,6 @@ def _minutes(a: str | None, b: str | None) -> float | None:
         return None
 
 
-def _usd(sids: list[str]) -> float:
-    return costs.of_sessions(sids)["usd"] if sids else 0.0
-
-
 def per_issue(p: Project) -> list[dict[str, Any]]:
     d = backlog.load(p)
     events = util.read_jsonl(p.state / "events.jsonl")
@@ -34,9 +30,10 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
         check: backlog.Check = i.get("check") or {}
         report: backlog.Report = i.get("report") or {}
         sids = [s for s in i.get("sessions", []) if s]
-        c = costs.of_sessions(sids)
         kinds: dict[str, str] = i.get("session_kinds") or {}
-        by_kind = {k: _usd([s for s in sids if kinds.get(s) == k]) for k in ("define", "work")}
+        per = {s: costs.of_sessions([s]) for s in dict.fromkeys(sids)}  # each transcript is read once
+        by_kind = {k: round(sum(c["usd"] for s, c in per.items() if kinds.get(s) == k), 4) for k in ("define", "work")}
+        c = {k: round(sum(x[k] for x in per.values()), 4) for k in ("usd", "tokens", "minutes")}
         out.append(
             {
                 "id": i["id"],
