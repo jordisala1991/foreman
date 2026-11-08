@@ -8,10 +8,9 @@ Accepting only records the decision; the merge step (`merge_accepted`, through t
 and the issue closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
-from __future__ import annotations
-
 import fnmatch
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +62,7 @@ def tests_at(p: Project, commit: str, name: str) -> str:
 def diff_stat(p: Project, branch: str) -> list[dict[str, Any]]:
     main = p.get("project", "main")
     out = git(p.repo, "diff", "--numstat", "-M", f"{main}...{branch}").stdout
-    rows = []
+    rows: list[dict[str, Any]] = []
     for ln in out.splitlines():
         a, d, path = ln.split("\t", 2)
         rows.append({"path": path, "added": int(a) if a.isdigit() else 0, "deleted": int(d) if d.isdigit() else 0})
@@ -90,35 +89,47 @@ def is_sensitive(path: str, patterns: list[str]) -> bool:
     return False
 
 
-def score(p: Project, *, tests: str, review: str, files: list[dict[str, Any]], deleted: list[str],
-          conflict: bool, commits: int) -> tuple[str, list[str]]:
-    """(risk, reasons): high beats medium beats low; each reason says what raised it."""
-    high, medium = [], []
-    lines = sum(f["added"] + f["deleted"] for f in files)
-    paths = [f["path"] for f in files]
+@dataclass
+class Facts:
+    """What the checks found about a branch: the input of its risk score."""
+
+    tests: str
+    review: str
+    files: list[dict[str, Any]]
+    deleted: list[str]
+    conflict: bool
+    commits: int
+
+
+def _high_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
     sensitive = [x for x in paths if is_sensitive(x, p.get("integrate", "sensitive"))]
-    if commits == 0 or not files:
-        high.append("the branch has no changes")
-    if tests == "fail":
-        high.append("tests fail")
-    if conflict:
-        high.append("conflicts with main")
-    if sensitive:
-        high.append("touches sensitive paths: " + ", ".join(sensitive[:5]))
-    if not review.strip().lower().startswith("clean"):
-        high.append("review not clean: " + (review.strip()[:120] or "no review reported"))
-    if lines > p.get("integrate", "medium_lines"):
-        high.append(f"{lines} lines changed")
-    elif lines > p.get("integrate", "small_lines"):
-        medium.append(f"{lines} lines changed")
-    if tests == "none":
-        medium.append("no test command to run")
-    if deleted:
-        medium.append("deletes files: " + ", ".join(deleted[:5]))
-    if any(fnmatch.fnmatch(Path(x).name, pat) for x in paths for pat in DEPENDENCY_FILES):
-        medium.append("changes dependencies")
-    if len(paths) > 8:
-        medium.append(f"{len(paths)} files")
+    reasons = [
+        (f.commits == 0 or not f.files, "the branch has no changes"),
+        (f.tests == "fail", "tests fail"),
+        (f.conflict, "conflicts with main"),
+        (bool(sensitive), "touches sensitive paths: " + ", ".join(sensitive[:5])),
+        (not f.review.strip().lower().startswith("clean"), "review not clean: " + (f.review.strip()[:120] or "no review reported")),
+        (lines > p.get("integrate", "medium_lines"), f"{lines} lines changed"),
+    ]
+    return [why for hit, why in reasons if hit]
+
+
+def _medium_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
+    reasons = [
+        (p.get("integrate", "small_lines") < lines <= p.get("integrate", "medium_lines"), f"{lines} lines changed"),
+        (f.tests == "none", "no test command to run"),
+        (bool(f.deleted), "deletes files: " + ", ".join(f.deleted[:5])),
+        (any(fnmatch.fnmatch(Path(x).name, pat) for x in paths for pat in DEPENDENCY_FILES), "changes dependencies"),
+        (len(paths) > 8, f"{len(paths)} files"),
+    ]
+    return [why for hit, why in reasons if hit]
+
+
+def score(p: Project, f: Facts) -> tuple[str, list[str]]:
+    """(risk, reasons): high beats medium beats low; each reason says what raised it."""
+    lines = sum(x["added"] + x["deleted"] for x in f.files)
+    paths = [x["path"] for x in f.files]
+    high, medium = _high_risks(p, f, lines, paths), _medium_risks(p, f, lines, paths)
     risk = "high" if high else "medium" if medium else "low"
     return risk, high + medium or ["small, tests green, review clean"]
 
@@ -133,14 +144,22 @@ def check(p: Project, iid: str) -> dict[str, Any]:
     tests = tests_at(p, git(p.repo, "rev-parse", branch).stdout.strip(), iid.lower())
     files = diff_stat(p, branch)
     deleted = deleted_files(p, branch)
-    v = i.get("review") or {}
+    v: backlog.Review | None = i.get("review")
     review = "" if not v else "clean" if v["high"] + v["medium"] == 0 else f"open after round {v['round']}: H {v['high']}, M {v['medium']}"
-    risk, reasons = score(p, tests=tests, review=review, files=files,
-                          deleted=deleted, conflict=conflicts(p, branch), commits=commits)
-    c = {"tests": tests, "files": len(files), "lines": sum(f["added"] + f["deleted"] for f in files),
-         "paths": [f["path"] for f in files][:30], "commits": commits, "risk": risk, "reasons": reasons,
-         "head": git(p.repo, "rev-parse", branch).stdout.strip(), "main": git(p.repo, "rev-parse", main).stdout.strip(),
-         "conflict": conflicts(p, branch), "at": util.now()}
+    risk, reasons = score(p, Facts(tests, review, files, deleted, conflicts(p, branch), commits))
+    c = {
+        "tests": tests,
+        "files": len(files),
+        "lines": sum(f["added"] + f["deleted"] for f in files),
+        "paths": [f["path"] for f in files][:30],
+        "commits": commits,
+        "risk": risk,
+        "reasons": reasons,
+        "head": git(p.repo, "rev-parse", branch).stdout.strip(),
+        "main": git(p.repo, "rev-parse", main).stdout.strip(),
+        "conflict": conflicts(p, branch),
+        "at": util.now(),
+    }
     backlog.update(p, iid, check=c)
     backlog.event(p, iid, f"checked: tests {tests}, {c['files']} files, {c['lines']} lines, risk {risk}")
     return c
@@ -158,7 +177,8 @@ def accept(p: Project, iid: str, by: str = "owner") -> str:
     if i["status"] != "in review":
         raise IntegrateError(f"{iid} is {i['status']}, not in the integration queue")
     head = git(p.repo, "rev-parse", i["branch"]).stdout.strip()
-    if (i.get("check") or {}).get("head") != head:
+    checked: backlog.Check = i.get("check") or {}
+    if checked.get("head") != head:
         raise IntegrateError(f"{i['branch']} moved since it was checked: wait for the next check")
     backlog.update(p, iid, accepted={"by": by, "head": head, "at": util.now()})
     backlog.event(p, iid, f"accepted by {by}: waiting for the merge")
@@ -179,8 +199,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         raise IntegrateError(f"{i['branch']} moved after it was accepted: accept again after the next check")
     change = {"id": iid, "title": i["title"], "branch": i["branch"], "head": head, "merge": i.get("merge", "")}
     if not change["merge"] and i.get("merging"):  # a crash after the merge, before its ref was stored: adopt it
-        found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {iid}: ", f"{i['merging']}..{p.get('project', 'main')}",
-                    check=False).stdout.split()
+        found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {iid}: ", f"{i['merging']}..{p.get('project', 'main')}", check=False).stdout.split()
         if found:
             change["merge"] = found[0]
             backlog.update(p, iid, merge=found[0])
@@ -188,7 +207,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).stdout.strip())
         try:
             ref = provider.merge(change, providers.merge_strategy(p))
-        except Exception as e:  # noqa: BLE001 - a platform's own errors are an integration error
+        except Exception as e:  # a platform's own errors are an integration error
             if isinstance(e, providers.ConfigError):
                 raise
             raise IntegrateError(str(e)) from None
@@ -201,9 +220,17 @@ def merge_accepted(p: Project, iid: str) -> str:
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
     git(p.repo, "branch", "-D", i["branch"], check=False)
     by = acc["by"]
-    backlog.set_status(p, iid, "done", f"integrated, accepted by {by}, as {change['merge'][:9]}",
-                       result=(i.get("report") or {}).get("summary", ""), commit=change["merge"],
-                       acceptance={**(i.get("acceptance") or {}), "verdict": f"accepted by {by}"})
+    report: backlog.Report = i.get("report") or {}
+    acceptance: backlog.Acceptance = i.get("acceptance") or {}
+    backlog.set_status(
+        p,
+        iid,
+        "done",
+        f"integrated, accepted by {by}, as {change['merge'][:9]}",
+        result=report.get("summary", ""),
+        commit=change["merge"],
+        acceptance={**acceptance, "verdict": f"accepted by {by}"},
+    )
     return "done"
 
 
@@ -211,8 +238,10 @@ def close(p: Project, iid: str, status: str, why: str) -> None:
     """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
     removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
-    if (i.get("agent") or {}).get("short") and i["status"] in backlog.RUNNING:
-        sessions.stop(p, i["agent"]["short"])
+    agent: backlog.Agent = i.get("agent") or {}
+    short = agent.get("short")
+    if short and i["status"] in backlog.RUNNING:
+        sessions.stop(p, short)
     for q in backlog.open_questions(backlog.load(p), iid):
         backlog.answer(p, q["id"], f"(the task was {status})")
         backlog.mark_delivered(p, q["id"])

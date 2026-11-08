@@ -1,8 +1,6 @@
 """The panel's server against a temporary project: the key is required, the state reads, the owner's actions write
 through the same functions as `fm`."""
 
-from __future__ import annotations
-
 import json
 import os
 import tempfile
@@ -26,9 +24,8 @@ class PanelTest(unittest.TestCase):
         home = root / "demo"
         home.mkdir()
         # `claude` is /usr/bin/false: no real sessions are listed or stopped
-        (home / "fm.toml").write_text('[project]\nname = "demo"\nprefix = "DE"\nrepo = "repo"\n\n'
-                                      '[agents]\nclaude = "/usr/bin/false"\n', encoding="utf-8")
-        util.write_json(home / "backlog.json", backlog.EMPTY)
+        (home / "fm.toml").write_text('[project]\nname = "demo"\nprefix = "DE"\nrepo = "repo"\n\n[agents]\nclaude = "/usr/bin/false"\n', encoding="utf-8")
+        util.write_json(home / "backlog.json", backlog.empty())
         register(home)
         self.p = Project.load(home)
         self.triage = backlog.add(self.p, "A health finding", status="triage", criterion="it is gone")
@@ -51,11 +48,9 @@ class PanelTest(unittest.TestCase):
                 os.environ[k] = v
         self.tmp.cleanup()
 
-    def call(self, path: str, body: str | None = None, key: bool = True,
-             headers: dict[str, str] | None = None) -> tuple[int, object]:
+    def call(self, path: str, body: str | None = None, key: bool = True, headers: dict[str, str] | None = None) -> tuple[int, object]:
         url = self.base + path + ((("&" if "?" in path else "?") + "key=" + self.key) if key else "")
-        req = urllib.request.Request(url, data=body.encode() if body is not None else None,
-                                     method="POST" if body is not None else "GET", headers=headers or {})
+        req = urllib.request.Request(url, data=body.encode() if body is not None else None, method="POST" if body is not None else "GET", headers=headers or {})
         try:
             with urllib.request.urlopen(req) as r:
                 text = r.read().decode()

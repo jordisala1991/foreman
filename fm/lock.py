@@ -14,8 +14,6 @@ A resource is declared in fm.toml, `[resources.NAME]` with optional `slots` and 
 the machine (`~/.local/state/fm/locks/NAME/`, or $FM_LOCKS), so two projects declaring the same name share its queue.
 """
 
-from __future__ import annotations
-
 import contextlib
 import fcntl
 import json
@@ -23,6 +21,7 @@ import os
 import signal
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +72,7 @@ class Resource:
         with self._state() as d:
             return {"name": self.name, "slots": self.slots, "held": dict(d["held"]), "queue": list(d["queue"])}
 
-    def acquire(self, who: str, what: str, issue: str = "", say: Any = None) -> tuple[str, float]:
+    def acquire(self, who: str, what: str, issue: str = "", say: Callable[[str], object] | None = None) -> tuple[str, float]:
         """Waits for a free slot in arrival order; (slot, seconds waited)."""
         me = {"who": who, "what": what, "issue": issue, "pid": os.getpid(), "since": util.now(), "t": time.time()}
         with self._state() as d:
@@ -91,9 +90,11 @@ class Resource:
                 holders = list(d["held"].values())
             if say and time.time() - said >= 60:
                 said = time.time()
-                say(f"waiting for {self.name}: held by "
+                say(
+                    f"waiting for {self.name}: held by "
                     + ", ".join(f"{h['who']} ({h['what']})" for h in holders)
-                    + (f"; {len(ahead)} ahead in the queue" if ahead else ""))
+                    + (f"; {len(ahead)} ahead in the queue" if ahead else "")
+                )
             time.sleep(POLL_S)
 
     def release(self, slot: str) -> None:
@@ -101,13 +102,12 @@ class Resource:
             if d["held"].get(slot, {}).get("pid") == os.getpid():
                 del d["held"][slot]
 
-    def run(self, who: str, what: str, cmd: list[str], issue: str = "", say: Any = None) -> int:
+    def run(self, who: str, what: str, cmd: list[str], issue: str = "", say: Callable[[str], object] | None = None) -> int:
         """Holds the resource while `cmd` runs (FM_SLOT set), stops it at the time limit, always releases."""
         slot, waited = self.acquire(who, what, issue, say)
         t0, rc, event = time.time(), 1, "use"
         try:
-            p = subprocess.Popen(cmd, env={**os.environ, "FM_SLOT": slot, "FM_RESOURCE": self.name},
-                                 start_new_session=True)
+            p = subprocess.Popen(cmd, env={**os.environ, "FM_SLOT": slot, "FM_RESOURCE": self.name}, start_new_session=True)
             try:
                 rc = p.wait(timeout=self.max_s)
             except subprocess.TimeoutExpired:
@@ -125,18 +125,29 @@ class Resource:
                     say(f"{self.name}: stopped after {self.max_s / 60:.0f} min; split long work into shorter runs")
         finally:
             self.release(slot)
-            util.append_jsonl(self.dir / "uses.jsonl", {
-                "time": util.now(), "event": event, "who": who, "issue": issue, "what": what, "slot": slot,
-                "waited_s": round(waited, 1), "held_s": round(time.time() - t0, 1), "rc": rc})
+            util.append_jsonl(
+                self.dir / "uses.jsonl",
+                {
+                    "time": util.now(),
+                    "event": event,
+                    "who": who,
+                    "issue": issue,
+                    "what": what,
+                    "slot": slot,
+                    "waited_s": round(waited, 1),
+                    "held_s": round(time.time() - t0, 1),
+                    "rc": rc,
+                },
+            )
         return rc
 
 
 def declared(cfg: dict[str, Any]) -> dict[str, Resource]:
     """The project's resources, from `[resources.NAME]` in fm.toml."""
-    out = {}
-    for name, r in (cfg.get("resources") or {}).items():
-        r = r if isinstance(r, dict) else {}
-        out[name] = Resource(name, [str(s) for s in r.get("slots", [])] or None, r.get("max_minutes", 20))
+    out: dict[str, Resource] = {}
+    for name, item in (util.json_object(cfg.get("resources")) or {}).items():
+        r = util.json_object(item) or {}
+        out[name] = Resource(name, [str(s) for s in util.json_list(r.get("slots"))] or None, r.get("max_minutes", 20))
     return out
 
 
@@ -150,10 +161,12 @@ def describe(cfg: dict[str, Any]) -> str:
     if not res:
         return "This project declares no shared resources."
     names = ", ".join(f"`{n}`" + (f" ({len(r.slots)} slots)" if len(r.slots) > 1 else "") for n, r in res.items())
-    return (f"Shared resources of this project: {names}. Anything that uses one runs inside "
-            "`fm lock NAME run \"what\" command…`: it waits its turn, runs, and always releases (the command gets "
-            "FM_SLOT). A run is stopped after its time limit: split long work into shorter runs. Never hold a "
-            "resource while you wait for something else.")
+    return (
+        f"Shared resources of this project: {names}. Anything that uses one runs inside "
+        '`fm lock NAME run "what" command…`: it waits its turn, runs, and always releases (the command gets '
+        "FM_SLOT). A run is stopped after its time limit: split long work into shorter runs. Never hold a "
+        "resource while you wait for something else."
+    )
 
 
 def as_json(r: Resource) -> str:

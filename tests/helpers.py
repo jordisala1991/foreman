@@ -1,8 +1,8 @@
 """A temporary project: a git repo with one commit, a home with fm.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
-from __future__ import annotations
-
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -11,13 +11,12 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+from fm import backlog, util
+from fm.config import Project
+
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
-from fm import backlog, util  # noqa: E402
-from fm.config import Project  # noqa: E402
-
-FAKE = textwrap.dedent('''\
+FAKE = textwrap.dedent("""\
     #!/usr/bin/env python3
     import json, sys, os, hashlib
     d = os.path.dirname(os.path.abspath(__file__))
@@ -36,11 +35,26 @@ FAKE = textwrap.dedent('''\
         rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "state": "working"})
         json.dump(rows, open(os.path.join(d, "agents.json"), "w"))
     print(f"backgrounded · {short} · {name}")
-''')
+""")
 
 
 def git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True).stdout
+
+
+def fm(home: Path, *args: str) -> str:
+    """Run an `fm` command in-process with its output captured and returned, so the test run stays quiet.
+    If the command fails, its output is printed with the error: a failure is never buried."""
+    from fm import cli
+
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            cli.main(["--home", str(home), *args])
+    except BaseException:
+        print(out.getvalue(), file=sys.stderr)
+        raise
+    return out.getvalue()
 
 
 class Env:
@@ -60,21 +74,23 @@ class Env:
         (self.bin / "claude").chmod(0o755)
         self.home = self.tmp / "home"
         self.home.mkdir()
-        (self.home / "fm.toml").write_text(textwrap.dedent(f'''\
+        (self.home / "fm.toml").write_text(
+            textwrap.dedent(f'''\
             [project]
             name = "toy"
             prefix = "TY"
             repo = "{self.repo}"
             [agents]
             slots = {slots}
-            claude = "{self.bin / 'claude'}"
+            claude = "{self.bin / "claude"}"
             [integrate]
             autonomy = "{autonomy}"
             test = "{test}"
             [health]
             loop_seconds = 1
-        '''))
-        util.write_json(self.home / "backlog.json", backlog.EMPTY)
+        ''')
+        )
+        util.write_json(self.home / "backlog.json", backlog.empty())
         self.p = Project.load(self.home)
         os.environ["FM_CLAUDE_PROJECTS"] = str(self.tmp / "transcripts")
 
@@ -91,13 +107,12 @@ class Env:
 
     def review(self, iid: str, high: int = 0, medium: int = 0) -> None:
         """One tick launches the reviewer; then its verdict, as `fm verdict` gives it."""
-        from fm import cli, loop
+        from fm import loop
 
         loop.tick(self.p)
         os.environ["FM_ISSUE"] = iid
         try:
-            cli.main(["--home", str(self.home), "verdict", "--high", str(high), "--medium", str(medium),
-                      "--file", str(self.home / f"reviews/{iid}.md")])
+            fm(self.home, "verdict", "--high", str(high), "--medium", str(medium), "--file", str(self.home / f"reviews/{iid}.md"))
         finally:
             os.environ.pop("FM_ISSUE")
 

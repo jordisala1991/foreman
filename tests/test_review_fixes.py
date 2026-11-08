@@ -1,18 +1,17 @@
 """One test per defect found by the code review (2026-11-08)."""
 
-import json
 import os
 import unittest
 from pathlib import Path
 
-from helpers import Env, git
+from helpers import Env, fm, git
 
-from fm import backlog, cli, guard, health, integrate, loop
+from fm import agents, backlog, guard, health, loop
 
 
 class GuardFalsePositives(unittest.TestCase):
     def check(self, cmd: str, cwd: str = "/h") -> str | None:
-        return guard.check_bash(cmd, cwd, [Path("/w")], "fm/ty-1", Path("/h/fm.toml"), [])
+        return guard.check_bash(cmd, guard.Scope(cwd, [Path("/w")], "fm/ty-1", Path("/h/fm.toml"), []))
 
     def test_reading_the_config_with_redirects_is_not_a_write(self):
         self.assertIsNone(self.check("cat fm.toml 2>/dev/null"))
@@ -53,8 +52,7 @@ class Sessions(unittest.TestCase):
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         a = e.issue(iid)["agent"]
-        backlog.update(e.p, iid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"},
-                       sessions=[])
+        backlog.update(e.p, iid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"}, sessions=[])
         loop.tick(e.p)
         i = e.issue(iid)
         self.assertEqual((i["agent"]["session"], i.get("blocked")), (a["session"], ""))
@@ -74,7 +72,7 @@ class Isolation(unittest.TestCase):
         loop.tick(e.p)  # both reviewers start (two slots)
         for iid in ids:
             os.environ["FM_ISSUE"] = iid
-            cli.main(["--home", str(e.home), "verdict", "--high", "0", "--medium", "0", "--file", "r.md"])
+            fm(e.home, "verdict", "--high", "0", "--medium", "0", "--file", "r.md")
         os.environ.pop("FM_ISSUE")
         backlog.update(e.p, ids[0], branch="no/such-branch")
         loop.tick(e.p)
@@ -88,7 +86,7 @@ class Closed(unittest.TestCase):
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         backlog.ask(e.p, iid, iid.lower(), "A or B?")
-        cli.main(["--home", str(e.home), "cancel", iid])
+        fm(e.home, "cancel", iid)
         d = backlog.load(e.p)
         self.assertEqual(backlog.open_questions(d), [])
         self.assertFalse(Path(e.issue(iid)["worktree"]).exists())
@@ -102,7 +100,7 @@ class Orphans(unittest.TestCase):
         e = Env()
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
-        cli.main(["--home", str(e.home), "pause"])
+        fm(e.home, "pause")
         backlog.set_status(e.p, iid, "ready", "relaunch")
         self.assertEqual(health.orphan_worktrees(e.p), [])
 
@@ -120,7 +118,7 @@ class LaunchRace(unittest.TestCase):
 
         loop.sessions.start = start_and_cancel
         try:
-            loop.launch(e.p, e.issue(iid))
+            agents.launch(e.p, e.issue(iid))
         finally:
             loop.sessions.start = real
         self.assertEqual(e.issue(iid)["status"], "canceled")
@@ -133,13 +131,16 @@ class LaunchRace(unittest.TestCase):
         e = Env()
         os.environ["FM_REGISTRY"] = str(e.tmp / "projects.json")
         try:
-            lock = open(str(e.tmp / "projects.json") + ".loop.lock", "a")
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            r = subprocess.run([sys.executable, str(Path(__file__).parent.parent / "bin/fm"), "--home", str(e.home),
-                                "loop", "--once"], capture_output=True, text=True, env=os.environ)
+            with open(str(e.tmp / "projects.json") + ".loop.lock", "a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                r = subprocess.run(
+                    [sys.executable, str(Path(__file__).parent.parent / "bin/fm"), "--home", str(e.home), "loop", "--once"],
+                    capture_output=True,
+                    text=True,
+                    env=os.environ,
+                )
             self.assertIn("another loop", r.stderr)
         finally:
-            lock.close()
             os.environ.pop("FM_REGISTRY")
 
 

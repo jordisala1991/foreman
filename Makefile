@@ -1,0 +1,41 @@
+# One entry point for the code checks (CI runs `make check`). Dev tools (ruff, pyright, pylint) are the `dev` dependency group in
+# pyproject.toml, locked in uv.lock, and run through `uv run`. Nothing is added to fm's runtime.
+# To change a tool's version: edit pyproject.toml, then `uv lock`.
+# Fail if uv.lock is out of date with pyproject.toml; never rewrite it silently.
+export UV_LOCKED := 1
+
+.PHONY: check fix lint format types size test
+
+# Everything, in this order, stopping at the first failure (even under `make -j`).
+check:
+	@$(MAKE) --no-print-directory lint
+	@$(MAKE) --no-print-directory format
+	@$(MAKE) --no-print-directory types
+	@$(MAKE) --no-print-directory size
+	@$(MAKE) --no-print-directory test
+	@echo "make check: all passed"
+
+# Fix what is mechanical (imports, formatting). What is left is a design signal: refactor, do not silence.
+fix:
+	uv run ruff check --fix .
+	uv run ruff format .
+
+# --ignore-noqa: a rule cannot be turned off with a comment.
+lint:
+	uv run ruff check --ignore-noqa .
+
+format:
+	uv run ruff format --check .
+
+# Strict on fm/ (see [tool.pyright] in pyproject.toml).
+types:
+	uv run pyright
+
+# File length: ruff has no rule for it. fm/ 300 lines (limit in pyproject.toml), tests 600.
+size:
+	uv run pylint fm
+	uv run pylint --max-module-lines=600 tests
+
+# -W error::ResourceWarning: a file or pipe left open is reported loudly (traceback of where it was opened), not swallowed.
+test:
+	python3 -W error::ResourceWarning -m unittest discover -s tests

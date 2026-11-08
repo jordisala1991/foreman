@@ -1,11 +1,13 @@
 import json
 import os
+import tempfile
 import time
 import unittest
+from pathlib import Path
 
-from helpers import Env, git
+from helpers import Env, fm, git
 
-from fm import backlog, health, loop, util
+from fm import agents, backlog, health, loop, util
 
 
 class Health(unittest.TestCase):
@@ -79,33 +81,43 @@ class Metrics(unittest.TestCase):
         backlog.update(e.p, iid, sessions=["s1"])
         d = e.tmp / "transcripts/proj"
         d.mkdir(parents=True)
-        rec = {"type": "assistant", "timestamp": "2026-11-07T10:00:00Z",
-               "message": {"id": "m1", "model": "claude-sonnet-5-5",
-                           "usage": {"input_tokens": 1_000_000, "output_tokens": 0}}}
+        rec = {
+            "type": "assistant",
+            "timestamp": "2026-11-07T10:00:00Z",
+            "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 1_000_000, "output_tokens": 0}},
+        }
         (d / "s1.jsonl").write_text(json.dumps(rec) + "\n" + json.dumps(rec) + "\n")
         self.assertEqual(costs.of_sessions(["s1"])["usd"], 2.0)
         self.assertEqual(metrics.per_issue(e.p)[0]["usd"], 2.0)
 
+    def test_usage_skips_lines_that_are_not_objects(self):
+        from fm import costs
+
+        good = {"type": "assistant", "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 1000, "output_tokens": 0}}}
+        f = Path(tempfile.mkdtemp()) / "s.jsonl"
+        f.write_text("\n".join(["[1, 2]", '"x"', "null", "not json", json.dumps(good)]) + "\n")
+        u = costs.usage([f])
+        self.assertEqual((u["calls"], u["tokens"]), (1, 1000))
 
 
 class Lessons(unittest.TestCase):
     def test_what_misled_an_agent_goes_to_the_lessons_and_none_does_not(self):
-        from fm import cli, loop
+        from fm import loop
 
         e = Env()
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         os.environ.update(FM_ISSUE=iid, FM_AGENT="ty-1")
         try:
-            cli.main(["--home", str(e.home), "done", "--summary", "s", "--misled", "brief: the test command is wrong"])
-            cli.main(["--home", str(e.home), "verdict", "--high", "0", "--medium", "0", "--file", "r", "--misled", "none"])
+            fm(e.home, "done", "--summary", "s", "--misled", "brief: the test command is wrong")
+            fm(e.home, "verdict", "--high", "0", "--medium", "0", "--file", "r", "--misled", "none")
         finally:
             os.environ.pop("FM_ISSUE")
             os.environ.pop("FM_AGENT")
         text = e.p.lessons_file.read_text()
         self.assertIn("TY-1 (ty-1): brief: the test command is wrong", text)
         self.assertEqual(text.count("\n- "), 1)
-        self.assertIn(str(e.p.lessons_file), loop.brief(e.p, e.issue(iid), "work"))
+        self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.issue(iid), "work"))
 
 
 if __name__ == "__main__":

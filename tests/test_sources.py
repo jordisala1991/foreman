@@ -1,7 +1,7 @@
 import json
-import os
 import stat
 import unittest
+from pathlib import Path
 
 from helpers import Env, git
 
@@ -34,7 +34,7 @@ class Signals(unittest.TestCase):
         iid = self.running()
         branch = self.e.issue(iid)["branch"]
         wt = self.e.issue(iid)["worktree"]
-        open(f"{wt}/new.txt", "w").write("x")
+        Path(f"{wt}/new.txt").write_text("x")
         git(self.e.repo.__class__(wt), "add", "-A")
         git(self.e.repo.__class__(wt), "commit", "-qm", "work")
         backlog.set_status(self.p, iid, "in review", "t", report={"summary": "s"})
@@ -68,6 +68,7 @@ class Signals(unittest.TestCase):
     def test_accept_is_fm_accept(self):
         iid, branch = self.queued()
         from fm import integrate
+
         integrate.check(self.p, iid)
         self.emit({"key": "a1", "task": iid, "action": "accept"})
         self.assertTrue(self.e.issue(iid)["accepted"])  # as `fm accept`: the decision; the loop merges
@@ -92,12 +93,12 @@ class Signals(unittest.TestCase):
         backlog.set_status(self.p, closed, "canceled")
         before = json.dumps(backlog.load(self.p), sort_keys=True)
         bad = [
-            {"key": "b1", "task": "TY-99", "action": "note", "text": "x"},          # unknown task
-            {"key": "b2", "task": closed, "action": "note", "text": "x"},           # closed task
-            {"key": "b3", "task": run, "action": "explode"},                         # unknown action
-            {"key": "b4", "task": run, "action": "accept"},                          # not in review
-            {"key": "b5", "task": run, "action": "reject", "text": "x"},             # not in review
-            {"key": "b6", "task": run, "action": "note"},                            # no text
+            {"key": "b1", "task": "TY-99", "action": "note", "text": "x"},  # unknown task
+            {"key": "b2", "task": closed, "action": "note", "text": "x"},  # closed task
+            {"key": "b3", "task": run, "action": "explode"},  # unknown action
+            {"key": "b4", "task": run, "action": "accept"},  # not in review
+            {"key": "b5", "task": run, "action": "reject", "text": "x"},  # not in review
+            {"key": "b6", "task": run, "action": "note"},  # no text
         ]
         self.emit(*bad)
         self.assertEqual(json.dumps(backlog.load(self.p), sort_keys=True), before)
@@ -111,6 +112,7 @@ if __name__ == "__main__":
 class Review1(Signals):
     def test_failed_accept_is_logged_and_retried_then_applied_once(self):  # F1, F4
         from fm import integrate
+
         iid, _ = self.queued()
         sig = {"key": "a1", "task": iid, "action": "accept"}
         self.emit(sig)  # no check yet: "moved since it was checked"

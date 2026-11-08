@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import unittest
@@ -10,7 +12,7 @@ from fm import backlog, guard
 
 class Bash(unittest.TestCase):
     def check(self, cmd: str, branch: str = "fm/ty-1", own: str = "/w/ty-1") -> str | None:
-        return guard.check_bash(cmd, own, [Path(own)], branch, Path("/h/fm.toml"), [])
+        return guard.check_bash(cmd, guard.Scope(own, [Path(own)], branch, Path("/h/fm.toml"), []))
 
     def test_publish_by_program_name(self):
         self.assertEqual(self.check("npm publish"), "publish")
@@ -51,7 +53,7 @@ class Bash(unittest.TestCase):
 
     def test_owner_rules(self):
         extra = [{"name": "deploy", "pattern": r"^\s*make deploy"}]
-        self.assertEqual(guard.check_bash("make deploy", "/w", [], "", Path("/h/fm.toml"), extra), "deploy")
+        self.assertEqual(guard.check_bash("make deploy", guard.Scope("/w", [], "", Path("/h/fm.toml"), extra)), "deploy")
 
 
 class Hook(unittest.TestCase):
@@ -89,7 +91,8 @@ class Hook(unittest.TestCase):
         os.environ["FM_HOME"] = str(self.e.home)
 
     def test_a_broken_input_lets_it_run(self):
-        self.assertEqual(guard.hook("not json"), "")
+        with contextlib.redirect_stderr(io.StringIO()):  # the hook reports the broken input on stderr
+            self.assertEqual(guard.hook("not json"), "")
 
 
 if __name__ == "__main__":

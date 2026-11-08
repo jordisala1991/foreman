@@ -6,8 +6,6 @@ Operations: `publish` (make the branch visible: open the change), `ready` (mark 
 `merge(change, strategy)` (the one merge in fm; a future queue is just another strategy), `state` (is it merged?
 closed?). Config: `[integrate] provider` (only `local` for now) and `merge` (`squash` default | `merge`)."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..config import Project
@@ -55,7 +53,7 @@ def get(p: Project) -> Provider:
     from .local import Local
 
     if "forge" in p.cfg["integrate"]:
-        raise ConfigError("[integrate] forge was renamed to provider: use `provider = \"local\"`")
+        raise ConfigError('[integrate] forge was renamed to provider: use `provider = "local"`')
     name = p.get("integrate", "provider")
     providers = {"local": Local}
     if name not in providers:
