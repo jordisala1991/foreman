@@ -68,6 +68,33 @@ class Architecture(unittest.TestCase):
         self.check("integrate.py", "from . import loop")
 
 
+class SubprocessList(unittest.TestCase):
+    def test_per_file_ignores_match_design(self):
+        import re
+        import tomllib
+
+        ign = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["ruff"]["lint"]["per-file-ignores"]
+        self.assertEqual(
+            ign,
+            {
+                "fm/{loop,integrate,pulls,sessions,lock,sources}.py": ["TID251"],
+                "fm/providers/{github,local,registry}.py": ["TID251"],
+                "tests/*.py": ["TID251"],
+            },
+        )
+        design = (ROOT / "DESIGN.md").read_text()
+        for name in ("loop", "integrate", "pulls", "sessions", "lock", "sources", "providers/github"):
+            self.assertTrue(re.search(rf"`{re.escape(name)}`", design), name)
+
+    def test_the_port_cannot_import_subprocess(self):
+        if not UV:
+            self.skipTest("uv not installed")
+        d = scratch()
+        self.addCleanup(shutil.rmtree, d)
+        plant(d, "providers/__init__.py", "import subprocess")
+        self.assertNotEqual(run(d, "ruff", "check", "--ignore-noqa", "--no-cache", "fm").returncode, 0)
+
+
 @unittest.skipUnless(shutil.which("git"), "git not installed")
 class Suppressions(unittest.TestCase):
     def repo(self) -> Path:
@@ -85,7 +112,14 @@ class Suppressions(unittest.TestCase):
     def test_equal_passes_and_one_more_fails(self):
         d = self.repo()
         self.assertEqual(self.bin(d).returncode, 0)
-        for mark in ("# no" + "qa: E501", "# type: ig" + "nore", "# pyright: ig" + "nore"):
+        for mark in (
+            "# no" + "qa: E501",
+            "# type: ig" + "nore",
+            "# pyright: ig" + "nore",
+            "# pylint: dis" + "able=too-many-lines",
+            "# pyright: ba" + "sic",
+            "# fmt: sk" + "ip",
+        ):
             (d / "fm" / "a.py").write_text(f"x = 1  {mark}\n")
             self.assertEqual(self.bin(d).returncode, 1, mark)
 

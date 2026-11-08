@@ -236,7 +236,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | loop | `loop` | the process that ticks: does the I/O, calls the core |
 | steps | `sources`, `talk`, `health`, `metrics` | one step of a tick, or a view over several pieces |
 | services | `agents`, `integrate`, `pulls`, `sessions`, `lock` | the outside world: git, gh, claude, processes |
-| registry | `providers/registry` | the one place that picks an adapter |
+| registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
 | core | `risk`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
@@ -248,7 +248,9 @@ task.
 
 Rules (enforced by `make check`):
 - The core imports nothing above it, and **no `subprocess`**: ruff bans it everywhere except the loop, the services,
-  `sources`, the adapters and the tests (`per-file-ignores` in `pyproject.toml`).
+  `sources`, the adapters (`providers/github`, `local`, `registry`) and the tests: the list is `per-file-ignores` in
+  `pyproject.toml`, and a test fails if it differs from this one. It bans `import subprocess`, not `os.system`/`os.popen`.
+  The ratchet also counts `pylint: disable`, `pyright: basic|off` and `fmt: off|skip`.
 - An adapter imports neither the loop nor another adapter (tach).
 - Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services
   gather the facts (git, gh, claude) and apply the result. New decisions go there, not into `integrate` or `loop`.

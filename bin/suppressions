@@ -7,7 +7,7 @@ import argparse
 import subprocess
 import sys
 
-WORD = "#[[:space:]]*(" + "no" + "qa|type:[[:space:]]*ig" + "nore|pyright:[[:space:]]*ig" + "nore)"  # built in pieces so this file does not count itself
+WORD = "#[[:space:]]*(" + "no" + "qa|type:[[:space:]]*ig" + "nore|pyright:[[:space:]]*(ig" + "nore|basic|off)|pylint:[[:space:]]*dis" + "able|fmt:[[:space:]]*(off|skip))"  # built in pieces so this file does not count itself
 PATHS = ["fm", "tests", "bin", ":(exclude)bin/suppressions"]
 
 

@@ -27,7 +27,7 @@ select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PLR0912", "PLR0913", "PLR0915
 # The modules that may run processes: loop, services, sources, provider adapters, tests. Adding one here is the owner's call.
 [tool.ruff.lint.per-file-ignores]
 "fm/{loop,integrate,pulls,sessions,lock,sources}.py" = ["TID251"]
-"fm/providers/*.py" = ["TID251"]
+"fm/providers/{github,local,registry}.py" = ["TID251"]
 "tests/*.py" = ["TID251"]
 
 [tool.ruff.lint.mccabe]
