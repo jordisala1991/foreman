@@ -14,6 +14,9 @@ SAYS = {
     "high": "needs the owner's decision before it merges",
 }
 FOLD_LIMIT = 20000
+MAX_LISTED = 30
+WHAT_LIMIT = 300
+MAX_REASONS = 20
 _LINE = re.compile(r"^\s*[-*]?\s*(F\d+)\s*\|\s*([HML])\s*\|\s*([^|]*?)\s*\|\s*(.+?)\s*$")
 
 
@@ -35,18 +38,26 @@ def findings(review_text: str) -> list[Finding]:
     return found
 
 
+def _count(review: Mapping[str, Any], key: str) -> int | None:
+    n = review.get(key)
+    return n if isinstance(n, int) else None
+
+
 def _review_block(review: Mapping[str, Any] | None, found: list[Finding]) -> list[str]:
     if not review:
         return [NO_REVIEW]
-    high, medium, low = int(review.get("high", 0)), int(review.get("medium", 0)), int(review.get("low", 0))
-    total = high + medium + low
+    counts = [_count(review, k) for k in ("high", "medium", "low")]
+    head = f"**Review round {review.get('round', '?')}: "
+    if any(n is None for n in counts):  # a record without its counts is never read as clean
+        return [head + "open counts unknown**", "- see the full review below"]
+    total = sum(n for n in counts if n is not None)
     if total == 0:
         return [CLEAN]
-    lines = [f"**Review round {review.get('round', '?')}: {total} open**"]
-    ordered = sorted(found, key=lambda f: "HML".index(f.severity))
-    lines += [f"- {f.severity} · {f.place} · {f.what}" for f in ordered]
-    if len(found) < total:
-        lines.append(f"- {total - len(found)} more open: see the full review below")
+    ordered = sorted(found, key=lambda f: "HML".index(f.severity))[:MAX_LISTED]
+    lines = [head + f"{total} open**"]
+    lines += [f"- {f.severity} · {f.place[:WHAT_LIMIT]} · {f.what[:WHAT_LIMIT]}" for f in ordered]
+    if len(ordered) < total:
+        lines.append(f"- {total - len(ordered)} more open: see the full review below")
     return lines
 
 
@@ -54,7 +65,7 @@ def render(risk: str, reasons: list[str], checks: str, review: Mapping[str, Any]
     """`checks` is the one line on tests and CI; the findings are read from `review_text`."""
     parts = [f"**Merge risk: {risk}** · {SAYS.get(risk, '')}".rstrip(" ·")]
     if reasons:
-        parts.append("\n".join(f"- {r}" for r in reasons))
+        parts.append("\n".join(f"- {r[:WHAT_LIMIT]}" for r in reasons[:MAX_REASONS]))
     parts.append(checks)
     parts.append("\n".join(_review_block(review, findings(review_text))))
     text = review_text.strip()

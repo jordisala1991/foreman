@@ -93,7 +93,7 @@ def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
     return describe.render(text, describe.footer(head, describe.review_line(i.get("review")), at))
 
 
-def verdict_for(i: dict[str, Any], c: dict[str, Any]) -> str:
+def verdict_for(p: Project, i: dict[str, Any], c: dict[str, Any]) -> str:
     """The verdict comment's text for this check: the review file's findings are read here, never its path shown."""
     review: dict[str, Any] | None = i.get("review")
     text = ""
@@ -102,6 +102,8 @@ def verdict_for(i: dict[str, Any], c: dict[str, Any]) -> str:
             text = Path(review["file"]).read_text()
         except OSError:
             text = ""
+        for private, shown in ((review["file"], "<review file>"), (str(p.home), "<home>")):
+            text = text.replace(private, shown)
     return verdict.render(c["risk"], c.get("reasons", []), f"Tests: {c['tests']} · CI: {c.get('ci') or 'none'}", review, text)
 
 
@@ -137,5 +139,5 @@ def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     if pr.get("described") != c["head"]:
         pr = _describe(p, provider, i, c["head"], pr)
     if pr.get("commented") != c["head"]:
-        provider.comment(change, verdict_for(i, c), "verdict")
+        provider.comment(change, verdict_for(p, i, c), "verdict")
         backlog.update(p, i["id"], pr={**pr, "commented": c["head"], "at": util.now()})

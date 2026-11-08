@@ -318,7 +318,8 @@ class Pulls(unittest.TestCase):
         g = self.make(test="true")
         iid = g.work()
         loop.tick(g.e.p)
-        self.review_tip(g, iid, "F1 | M | a.py:3 | p\nScenario: long text")
+        file = str(g.e.home / f"reviews/{iid}.md")
+        self.review_tip(g, iid, f"F1 | M | a.py:3 | p\nScenario: long text, see {g.e.home}/fm.toml:9 and {file}")
         loop.tick(g.e.p)
         body = g.state["prs"]["1"]["comments"][0]["body"]
         self.assertIn("<details>", body)

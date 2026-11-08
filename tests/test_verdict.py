@@ -48,3 +48,13 @@ class Verdict(unittest.TestCase):
 
     def test_no_review_is_said(self):
         self.assertIn(verdict.NO_REVIEW, verdict.render("low", [], "t", None, ""))
+
+    def test_many_long_findings_stay_under_the_limit(self):
+        text = "\n".join(f"F{n} | M | a.py:{n} | {'y' * 300}" for n in range(400))
+        out = verdict.render("high", ["r" * 500] * 100, "t", {"round": 1, "high": 0, "medium": 400, "low": 0}, text)
+        self.assertLess(len(out), 60000)
+        self.assertIn("more open", out)
+
+    def test_a_record_without_counts_is_never_clean(self):
+        for review in ({"round": 1}, {"round": 1, "high": None, "medium": 0, "low": 0}):
+            self.assertNotIn(verdict.CLEAN, verdict.render("low", [], "t", review, ""))
