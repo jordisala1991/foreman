@@ -1,4 +1,4 @@
-"""The panel: a stdlib HTTP server on 127.0.0.1 for the owner. It serves the page built in panel/dist (React, from
+"""The panel: a stdlib HTTP server for the owner (127.0.0.1, or the network with `--host 0.0.0.0`). It serves the page built in panel/dist (React, from
 panel/src) and a JSON API over every registered project (`p=NAME` picks one; the first by default).
 
 Adapted from foreman's lib/foreman/panel.py: the key (`?key=` or the `fm_key` cookie the page sets), the ETag on every
@@ -347,16 +347,22 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"error": str(e)}, 400)
 
 
-def make_server(port: int = 7788, token: str | None = None) -> tuple[ThreadingHTTPServer, str]:
-    """The server (not started) and its key; port 0 picks a free one (tests)."""
+def make_server(port: int = 7788, token: str | None = None, host: str = "127.0.0.1") -> tuple[ThreadingHTTPServer, str]:
+    """The server (not started) and its key; port 0 picks a free one (tests). `host` 0.0.0.0 serves the other
+    devices of the network too (the key is still required, as in today's panel)."""
     Handler.token = token or load_token()
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler), Handler.token
+    return ThreadingHTTPServer((host, port), Handler), Handler.token
 
 
-def serve(port: int = 7788) -> None:
-    srv, tok = make_server(port)
+def serve(port: int = 7788, host: str = "127.0.0.1") -> None:
+    srv, tok = make_server(port, host=host)
     names = ", ".join(p.name for p in projects()) or "none (fm init registers one)"
-    print(f"fm panel on http://127.0.0.1:{srv.server_address[1]}/?key={quote(tok)}\nprojects: {names}", flush=True)
+    shown = host
+    if host in ("0.0.0.0", ""):
+        import socket
+
+        shown = socket.gethostname()
+    print(f"fm panel on http://{shown}:{srv.server_address[1]}/?key={quote(tok)}\nprojects: {names}", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

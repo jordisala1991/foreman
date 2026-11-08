@@ -258,7 +258,7 @@ def cmd_lock(a: argparse.Namespace) -> None:
 def cmd_panel(a: argparse.Namespace) -> None:
     from . import panel
 
-    panel.serve(a.port)
+    panel.serve(a.port, a.host)
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
@@ -355,6 +355,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("command", nargs=argparse.REMAINDER)
     c("guard", cmd_guard, "(hook) the agents' PreToolUse guard")
     s = c("panel", cmd_panel, "serve the panel")
+    s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from other devices (the key is required)")
     s.add_argument("--port", type=int, default=7788)
     c("launchd", cmd_launchd, "print the launchd job that keeps the loop alive")
     return ap
