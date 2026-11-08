@@ -160,6 +160,28 @@ class Pulls(unittest.TestCase):
         self.assertIn("--draft", g.calls("pr", "create")[0])
         self.assertEqual(g.e.issue(iid)["pr"]["number"], 1)
 
+    def test_a_pushed_task_has_its_draft_before_fm_done_and_is_not_sent_back(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        self.assertTrue(g.state["prs"]["1"]["draft"])  # before fm done
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        self.assertNotIn("Push your branch", json.dumps(g.e.issue(iid)))
+        self.assertFalse(g.state["prs"]["1"]["draft"])
+
+    def test_the_brief_tells_the_agent_to_push_after_each_commit_only_with_github(self):
+        from fm import agents
+
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        i = g.e.issue(iid)
+        text = agents.brief(g.e.p, i, "work")
+        self.assertIn(f"git push -u origin {i['branch']}", text)
+        self.assertIn("after each commit", text)
+        g.e.p.cfg["integrate"]["provider"] = "local"
+        self.assertNotIn("git push", agents.brief(g.e.p, i, "work"))
+
     def test_pr_done_opens_nothing_until_fm_done_and_then_a_ready_pr(self):
         g = self.make('pr = "done"', test="true")
         iid = g.work()
