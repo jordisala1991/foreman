@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import backlog, providers, sessions, util
+from . import backlog, providers, pulls, sessions, util
 from .config import Project
 
 RISKS = ("low", "medium", "high")
@@ -99,6 +99,7 @@ class Facts:
     deleted: list[str]
     conflict: bool
     commits: int
+    ci: str = ""
 
 
 def _high_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
@@ -106,6 +107,7 @@ def _high_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]
     reasons = [
         (f.commits == 0 or not f.files, "the branch has no changes"),
         (f.tests == "fail", "tests fail"),
+        (f.ci == "fail", "CI fails"),
         (f.conflict, "conflicts with main"),
         (bool(sensitive), "touches sensitive paths: " + ", ".join(sensitive[:5])),
         (not f.review.strip().lower().startswith("clean"), "review not clean: " + (f.review.strip()[:120] or "no review reported")),
@@ -134,21 +136,27 @@ def score(p: Project, f: Facts) -> tuple[str, list[str]]:
     return risk, high + medium or ["small, tests green, review clean"]
 
 
-def check(p: Project, iid: str) -> dict[str, Any]:
-    """Checks an issue's branch and stores the result in its `check`."""
+def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
+    """Checks an issue's branch and stores the result in its `check`. `ci`: the PR's CI as just read, if the caller has it."""
     d = backlog.load(p)
     i = backlog.get(d, iid)
     branch = i.get("branch", "")
     main = p.get("project", "main")
     commits = int(git(p.repo, "rev-list", "--count", f"{main}..{branch}", check=False).stdout.strip() or 0)
-    tests = tests_at(p, git(p.repo, "rev-parse", branch).stdout.strip(), iid.lower())
+    head = git(p.repo, "rev-parse", branch).stdout.strip()
+    tests = tests_at(p, head, iid.lower())
+    if ci is None:
+        ci = providers.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
+    if tests == "none" and ci in ("pass", "fail"):  # no test command: the PR's CI stands in for it
+        tests = ci
     files = diff_stat(p, branch)
     deleted = deleted_files(p, branch)
     v: backlog.Review | None = i.get("review")
     review = "" if not v else "clean" if v["high"] + v["medium"] == 0 else f"open after round {v['round']}: H {v['high']}, M {v['medium']}"
-    risk, reasons = score(p, Facts(tests, review, files, deleted, conflicts(p, branch), commits))
+    risk, reasons = score(p, Facts(tests, review, files, deleted, conflicts(p, branch), commits, ci))
     c = {
         "tests": tests,
+        "ci": ci,
         "files": len(files),
         "lines": sum(f["added"] + f["deleted"] for f in files),
         "paths": [f["path"] for f in files][:30],
@@ -165,8 +173,11 @@ def check(p: Project, iid: str) -> dict[str, Any]:
     return c
 
 
-def merges_alone(p: Project, risk: str) -> bool:
-    return risk in AUTONOMY.get(p.get("integrate", "autonomy"), ())
+def merges_alone(p: Project, c: dict[str, Any]) -> bool:
+    """Autonomy lets this risk in alone; with a PR, only on green CI."""
+    if providers.get(p).name == "github" and c.get("ci") != "pass":
+        return False
+    return c["risk"] in AUTONOMY.get(p.get("integrate", "autonomy"), ())
 
 
 def accept(p: Project, iid: str, by: str = "owner") -> str:
@@ -185,6 +196,16 @@ def accept(p: Project, iid: str, by: str = "owner") -> str:
     return head
 
 
+def adopt_merge(p: Project, i: dict[str, Any]) -> str:
+    """After a crash between the merge and storing its ref: the merge commit already in main, or ''."""
+    if not i.get("merging"):
+        return ""
+    found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {i['id']}: ", f"{i['merging']}..{p.get('project', 'main')}", check=False).stdout.split()
+    if found:
+        backlog.update(p, i["id"], merge=found[0])
+    return found[0] if found else ""
+
+
 def merge_accepted(p: Project, iid: str) -> str:
     """The one place that merges: asks the provider to merge an accepted issue (once), then closes the issue, removing
     its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
@@ -197,24 +218,24 @@ def merge_accepted(p: Project, iid: str) -> str:
     if head != acc["head"]:
         backlog.update(p, iid, accepted=None)
         raise IntegrateError(f"{i['branch']} moved after it was accepted: accept again after the next check")
-    change = {"id": iid, "title": i["title"], "branch": i["branch"], "head": head, "merge": i.get("merge", "")}
-    if not change["merge"] and i.get("merging"):  # a crash after the merge, before its ref was stored: adopt it
-        found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {iid}: ", f"{i['merging']}..{p.get('project', 'main')}", check=False).stdout.split()
-        if found:
-            change["merge"] = found[0]
-            backlog.update(p, iid, merge=found[0])
+    change = pulls.change_of(i, head)
+    if not change["merge"]:
+        change["merge"] = adopt_merge(p, i)
     if not change["merge"]:
         backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).stdout.strip())
         try:
             ref = provider.merge(change, providers.merge_strategy(p))
         except Exception as e:  # a platform's own errors are an integration error
-            if isinstance(e, providers.ConfigError):
+            if isinstance(e, providers.ConfigError | providers.Transient):
                 raise
             raise IntegrateError(str(e)) from None
         backlog.update(p, iid, merge=ref)
         backlog.event(p, iid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
         change["merge"] = ref
-    if not provider.state(change)["merged"]:
+    seen = provider.state(change)
+    if seen["closed"] and not seen["merged"]:
+        raise IntegrateError("its pull request was closed without merging: reopen it, or reject the task")
+    if not seen["merged"]:
         return "merging"
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
@@ -226,9 +247,9 @@ def merge_accepted(p: Project, iid: str) -> str:
         p,
         iid,
         "done",
-        f"integrated, accepted by {by}, as {change['merge'][:9]}",
+        f"integrated, accepted by {by}, as {(seen.get('commit') or change['merge'])[:9]}",
         result=report.get("summary", ""),
-        commit=change["merge"],
+        commit=seen.get("commit") or change["merge"],
         acceptance={**acceptance, "verdict": f"accepted by {by}"},
     )
     return "done"

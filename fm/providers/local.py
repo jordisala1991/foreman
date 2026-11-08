@@ -12,6 +12,7 @@ class ProviderError(Exception):
 
 class Local(Provider):
     name = "local"
+    merges = ("squash", "merge")
 
     def git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         r = subprocess.run(["git", "-C", str(self.p.repo), *args], capture_output=True, text=True, check=False)

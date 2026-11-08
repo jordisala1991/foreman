@@ -108,7 +108,7 @@ def cmd_cancel(a: argparse.Namespace) -> None:
 
 def cmd_unblock(a: argparse.Namespace) -> None:
     p = home(a)
-    i = backlog.update(p, a.id, blocked="")
+    i = backlog.update(p, a.id, blocked="", pr_error="", retry_error="")
     if i["status"] in backlog.RUNNING and a.relaunch:
         backlog.set_status(p, a.id, "backlog" if i["status"] == "refining" else "ready", "relaunch")
 

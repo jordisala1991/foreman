@@ -115,7 +115,7 @@ class Provider(unittest.TestCase):
     def test_unknown_merge_or_provider_is_a_clear_config_error(self):
         from fm import providers
 
-        for key, val in (("merge", "rebase"), ("provider", "github")):
+        for key, val in (("merge", "rebase"), ("provider", "gitlab"), ("pr", "never")):
             e = Env(test="true")
             e.p.cfg["integrate"][key] = val
             with self.assertRaisesRegex(providers.ConfigError, f"{key} = '{val}'"):
@@ -181,8 +181,8 @@ class Provider(unittest.TestCase):
         from fm import providers
 
         e = Env()
-        self.assertEqual((e.p.get("integrate", "provider"), e.p.get("integrate", "merge")), ("local", "squash"))
-        self.assertEqual(providers.get(e.p).name, "local")
+        self.assertEqual((e.p.get("integrate", "provider"), e.p.get("integrate", "merge")), ("auto", "squash"))
+        self.assertEqual(providers.get(e.p).name, "local")  # no GitHub remote: local
         import inspect
 
         from fm.providers import local

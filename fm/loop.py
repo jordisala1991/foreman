@@ -4,9 +4,10 @@
 2. sources: plug-in signals become triage issues (sources.py; none shipped yet)
 3. answers: the owner's answers go back to the agent that asked (its own session, resumed)
 4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
-5. queue: a delivered branch is checked (tests, diff, risk); the autonomy level may merge it
-6. health: broken states become triage issues, deduplicated (health.py)
-7. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
+5. pulls: with a GitHub remote, a task whose branch is pushed gets a draft PR (pulls.py)
+6. queue: a delivered branch is checked (tests, diff, risk); the autonomy level may merge it
+7. health: broken states become triage issues, deduplicated (health.py)
+8. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
    one. The loop never plans, never reviews, never talks to the owner.
 """
 
@@ -19,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, health, integrate, sessions, sources, util
+from . import backlog, health, integrate, providers, pulls, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -43,24 +44,38 @@ def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
     """One issue's step: a failure blocks that issue with the reason, the others go on."""
     try:
         fn()
+        if backlog.get(backlog.load(p), iid).get("retry_error"):
+            backlog.update(p, iid, retry_error="")
+    except providers.Transient as e:  # the platform hiccuped: stay in the queue, try again next tick, say it once
+        if backlog.get(backlog.load(p), iid).get("retry_error") != str(e):
+            backlog.update(p, iid, retry_error=str(e))
+            backlog.event(p, iid, f"could not {what} it, will retry: {e}"[:300])
     except Exception as e:
         backlog.update(p, iid, blocked=f"the loop could not {what} it: {e}"[:300])
         backlog.event(p, iid, f"blocked: could not {what}: {e}"[:300])
 
 
+def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> bool:
+    """True while this tip has no independent verdict yet: launches the reviewer, or blocks if it ended without one."""
+    v: dict[str, Any] = i.get("review") or {}
+    r: dict[str, Any] = i.get("reviewer") or {}
+    if v.get("tip") == head:
+        return False
+    if r.get("tip") == head:
+        if r.get("session") and not sessions.busy(rows, r["session"]) and idle_s(r) > NUDGE_IDLE_S:
+            backlog.update(p, i["id"], blocked="its reviewer ended without a verdict (`fm verdict`)")
+            backlog.event(p, i["id"], "blocked: reviewer ended without a verdict")
+    elif running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists():
+        launch_reviewer(p, i, head)
+    return True
+
+
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
     head = integrate.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).stdout.strip()
     main_head = integrate.git(p.repo, "rev-parse", main, check=False).stdout.strip()
-    v: dict[str, Any] = i.get("review") or {}
-    r: dict[str, Any] = i.get("reviewer") or {}
-    if v.get("tip") != head:  # no verdict on this tip yet: an independent review first
-        if r.get("tip") == head:
-            if r.get("session") and not sessions.busy(rows, r["session"]) and idle_s(r) > NUDGE_IDLE_S:
-                backlog.update(p, i["id"], blocked="its reviewer ended without a verdict (`fm verdict`)")
-                backlog.event(p, i["id"], "blocked: reviewer ended without a verdict")
-        elif running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists():
-            launch_reviewer(p, i, head)
+    if review_pending(p, i, head, rows):  # no verdict on this tip yet: an independent review first
         return
+    v: dict[str, Any] = i.get("review") or {}
     if v["high"] + v["medium"] and v["round"] < MAX_ROUNDS:
         send_back(
             p,
@@ -71,9 +86,16 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             "proof, nothing else; add «Review, round N» to your report and run `fm done` again.",
         )
         return
+    step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
+    if step == "back":
+        send_back(p, i["id"], "review", why)
+        return
+    if step == "wait":
+        return
     c: dict[str, Any] = i.get("check") or {}
-    if c.get("head") != head or c.get("main") != main_head:
-        c = integrate.check(p, i["id"])
+    stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
+    if c.get("head") != head or c.get("main") != main_head or stale:
+        c = integrate.check(p, i["id"], why if i.get("pr") else None)
     if c.get("conflict"):
         send_back(
             p,
@@ -83,7 +105,8 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             "your branch, resolve keeping both changes, run the tests, and run `fm done` again.",
         )
         return
-    if integrate.merges_alone(p, c["risk"]):
+    pulls.deliver(p, i, c)
+    if integrate.merges_alone(p, c):
         try:
             integrate.accept(p, i["id"], by=f"autonomy level {p.get('integrate', 'autonomy')}")
             integrate.merge_accepted(p, i["id"])
@@ -118,6 +141,7 @@ def tick(p: Project) -> None:
         ("sources", lambda: sources.run(p)),
         ("answers", lambda: deliver_answers(p, rows)),
         ("agents", lambda: watch_agents(p, rows)),
+        ("pulls", lambda: pulls.open_drafts(p)),
         ("queue", lambda: run_queue(p, rows)),
         ("health", lambda: health.run(p, rows)),
         ("launch", lambda: launch_free(p)),
