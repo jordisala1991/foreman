@@ -133,7 +133,8 @@ worktree: splits it, uses subagents, writes the failing test first for bugs and 
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
 (`<home>/reports/ID.md`: the task's description, each criterion line with its evidence; fm sets it as the PR body
 inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
-section in `<details>`, and the panel shows it) and ends with
+section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
+`.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
 conversation: fix or refute each H and M with proof, add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 

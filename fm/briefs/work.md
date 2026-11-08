@@ -26,18 +26,7 @@ Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$
 - Leave no live processes behind.
 
 # The end
-1. Write your report at `$report`. It is the task's description: fm puts it as the pull request body and in the panel, and the reviewer checks the same text the owner reads. Keep it under ~250 words before the last section, with these parts (if the repo has `.github/pull_request_template.md`, its sections win; keep «Review rounds»):
-   - Title line: imperative, with the task id.
-   - In one sentence: what is different now.
-   - Why: the problem or the data behind it.
-   - What changes: 3-6 bullets by behaviour, not by file.
-   - Look here first: 1-3 `file:line` places that need the owner's judgement, including what went off the plan («Off the plan»).
-   - Proof: each line of the done criterion with evidence that fits its kind: behaviour → a test by name; UI → before and after screenshots of each touched screen or state, saved in `reports/ID/` next to the report and named in the line; CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the command that checks it and its result.
-   - Risk, or «none known».
-   - Not done: what was left out on purpose.
-   - Try it: 1-3 commands for the owner.
-   - Last, `## Review rounds`: the per-finding log, one `### Round N` per round (empty until a review sends it back).
-   No footer: fm writes it (commit, review state, time). How to run the app and take screenshots is the project's business (its CLAUDE.md).
+1. Fill the report at `$report`: it already holds a template, with a hint under each heading. Replace every hint with your text, keeping the headings. It is the task's description (fm puts it as the PR body and in the panel; the reviewer checks the same text). Under ~250 words before «Review rounds». No footer: fm writes it. How to run the app and take screenshots is the project's business (its CLAUDE.md).
 2. Run `fm done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task, the repo or the lessons was wrong, stale or unclear and cost you time; or none"` and end your turn.
 
 The loop then has your branch reviewed by an independent reviewer. If the review finds high or medium problems, it comes back to you here with the review's path: read it whole; for each H and M finding fix it (a commit, with the test the review asks for) or refute it with proof (a test that passes, or the file:line that disproves it); nothing else, no new scope. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or refuted, and how), and run `fm done` again. The owner may also send it back with a note: same thing.

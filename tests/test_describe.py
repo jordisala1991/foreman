@@ -2,10 +2,10 @@
 
 import unittest
 
-from helpers import git
+from helpers import Env, git
 from test_github import GH
 
-from fm import backlog, describe, loop, pulls
+from fm import agents, backlog, describe, loop, pulls
 
 
 class Text(unittest.TestCase):
@@ -133,3 +133,36 @@ class OnGitHub(unittest.TestCase):
         i = self.g.e.issue(iid)
         self.assertIn("HTTP 502", i["pr_error"])
         self.assertFalse(i["pr"].get("described"))
+
+
+class Template(unittest.TestCase):
+    def launched(self, e: Env) -> tuple[str, str]:
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        return iid, agents.report_file(e.p, iid).read_text()
+
+    def test_a_launched_work_agent_finds_the_template_at_its_report(self):
+        e = Env(test="true")
+        _, text = self.launched(e)
+        self.assertIn("## Proof", text)
+        self.assertTrue(text.rstrip().splitlines()[-2].startswith("## Review rounds"))
+
+    def test_a_repo_pr_template_wins_and_review_rounds_is_added(self):
+        e = Env(test="true")
+        d = e.repo / ".github"
+        d.mkdir()
+        (d / "pull_request_template.md").write_text("## Their summary\n\n## Their checklist\n")
+        git(e.repo, "add", ".")
+        git(e.repo, "commit", "-qm", "pr template")
+        _, text = self.launched(e)
+        self.assertIn("## Their checklist", text)
+        self.assertNotIn("## Proof", text)
+        self.assertTrue(text.rstrip().endswith("## Review rounds"))
+
+    def test_an_existing_report_is_not_overwritten_on_relaunch(self):
+        e = Env(test="true")
+        iid, _ = self.launched(e)
+        f = agents.report_file(e.p, iid)
+        f.write_text("my work")
+        agents.seed_report(e.p, iid, e.repo)
+        self.assertEqual(f.read_text(), "my work")

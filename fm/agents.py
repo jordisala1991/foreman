@@ -27,6 +27,20 @@ def report_file(p: Project, iid: str) -> Path:
     return p.home / "reports" / f"{iid}.md"
 
 
+def seed_report(p: Project, iid: str, worktree: Path) -> None:
+    """Gives a work agent its report as a template to fill: the repo's PR template (plus a Review rounds section) or
+    fm's own. An existing report is never overwritten (a relaunch keeps the agent's work)."""
+    f = report_file(p, iid)
+    if f.exists():
+        return
+    theirs = worktree / ".github" / "pull_request_template.md"
+    text = (BRIEFS / "report.md").read_text(encoding="utf-8")
+    if theirs.is_file():
+        text = theirs.read_text(encoding="utf-8").rstrip() + "\n\n## Review rounds\n"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text, encoding="utf-8")
+
+
 def plan_file(p: Project, iid: str) -> Path:
     return p.home / "plans" / f"{iid}.md"
 
@@ -90,6 +104,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         i = {**i, "worktree": str(wt), "branch": branch}
         keys = {"worktree": str(wt), "branch": branch}
         cwd = wt
+        seed_report(p, i["id"], wt)
     else:
         cwd = p.repo
         plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
