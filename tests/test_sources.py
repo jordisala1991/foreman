@@ -125,6 +125,14 @@ class Review1(Signals):
         self.emit(sig)  # once
         self.assertEqual(len(self.errors()), n)
 
+    def test_a_retried_signal_leaves_one_error_line_per_key(self):  # F7
+        iid, _ = self.queued()
+        sig = {"key": "a1", "task": iid, "action": "accept"}
+        for _ in range(3):
+            self.emit(sig)  # still no check: fails every tick
+        self.assertEqual(len(self.errors()), 1)
+        self.assertEqual(self.e.issue(iid)["status"], "in review")
+
     def test_unexpected_failure_is_logged_and_does_not_stop_the_next_signal(self):  # F2
         from unittest import mock
 

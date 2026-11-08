@@ -61,7 +61,10 @@ def run(p: Project) -> list[str]:
                 except (backlog.BacklogError, ValueError) as e:  # permanent: it will not become valid by waiting
                     fail(p, exe.name, str(e), s)
                 except Exception as e:  # noqa: BLE001 - transient (a busy checkout, a hung stop): tried again next tick
-                    fail(p, exe.name, f"{e!r} (will be tried again)", s)
+                    logged = p.state / "retrying" / exe.name  # one line per key, not one per tick
+                    if key not in {x.get("key") for x in util.read_jsonl(logged)}:
+                        util.append_jsonl(logged, {"key": key, "at": util.now()})
+                        fail(p, exe.name, f"{e!r} (will be tried again)", s)
                     continue
                 util.append_jsonl(applied, {"key": key, "at": util.now()})
             elif s.get("key") and s.get("title"):
