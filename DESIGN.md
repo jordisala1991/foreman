@@ -227,7 +227,7 @@ with no `[integrate] test` the PR's CI **replaces the local test**. Then the dra
 carries the risk, its reasons and the review's verdict. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
-origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of
+origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before, also when the merge itself is refused for a conflict after acceptance: the acceptance is dropped and the new tip is checked and accepted again. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Architecture
