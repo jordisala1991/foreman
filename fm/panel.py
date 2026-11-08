@@ -20,7 +20,6 @@ import gzip
 import hashlib
 import json
 import os
-import re
 import secrets
 from collections.abc import Callable
 from http.cookies import SimpleCookie
@@ -29,7 +28,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import backlog, evidence
+from . import backlog, evidence, pulls
 from .panel_actions import Refused, act
 from .panel_views import Obj, forget, issue, project, projects, state, summary, system
 
@@ -136,8 +135,8 @@ class Handler(BaseHTTPRequestHandler):
         except KeyError:
             return self.json({"error": "not found"}, 404)
         iid, name = q.get("id", [""])[0], q.get("name", [""])[0]
-        f = p.home / "reports" / iid / name
-        if not (re.fullmatch(r"[A-Za-z0-9_-]+", iid) and evidence.bare(name) and f.is_file()):
+        f = pulls.evidence_file(p, iid, name)
+        if f is None or f.stat().st_size > evidence.MAX_BYTES:
             return self.json({"error": "not found"}, 404)
         self.send(200, f.read_bytes(), evidence.kind(name), headers={"Cache-Control": "private, max-age=60"})
 

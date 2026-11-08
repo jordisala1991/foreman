@@ -151,7 +151,7 @@ class GitHub(Provider):
     def evidence(self, change: dict[str, Any], files: dict[str, Path]) -> dict[str, str]:
         """Puts the images in `ID/` of the orphan branch `fm-evidence` (added to what is there, one commit, a plain push
         that origin refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
-        files = {n: f for n, f in files.items() if evidence.kind(n) and f.stat().st_size <= evidence.MAX_BYTES}
+        files = {n: f for n, f in files.items() if evidence.bare(n) and not f.is_symlink() and f.stat().st_size <= evidence.MAX_BYTES}
         if not files:
             return {}
         iid = change["id"]

@@ -3,6 +3,7 @@ running task a draft PR once its first commit is pushed (`[integrate] pr = draft
 branch is pushed and has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -102,8 +103,14 @@ def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
 
 def evidence_files(p: Project, iid: str, text: str) -> dict[str, Path]:
     """The images `text` names that exist in `reports/ID/` (a missing one is left as written)."""
-    folder = p.home / "reports" / iid
-    return {n: folder / n for n in evidence.names(text) if (folder / n).is_file()}
+    found = {n: evidence_file(p, iid, n) for n in evidence.names(text)}
+    return {n: f for n, f in found.items() if f}
+
+
+def evidence_file(p: Project, iid: str, name: str) -> Path | None:
+    """`reports/ID/name` when it is a regular file inside that folder (a symlink, which could point anywhere, is not)."""
+    f = p.home / "reports" / iid / name
+    return f if evidence.bare(name) and re.fullmatch(r"[A-Za-z0-9_-]+", iid) and f.is_file() and not f.is_symlink() else None
 
 
 def _failed(p: Project, i: dict[str, Any], what: str, e: Exception) -> None:

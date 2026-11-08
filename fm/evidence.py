@@ -8,6 +8,7 @@ BRANCH = "fm-evidence"
 KINDS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 MAX_BYTES = 2_000_000
 
+NAME = re.compile(r"[A-Za-z0-9._-]+")
 IMAGE = re.compile(r"(!\[[^\]]*\]\()([^()\s]+)(\))")
 
 
@@ -17,7 +18,8 @@ def kind(name: str) -> str:
 
 
 def bare(name: str) -> bool:
-    return bool(name) and not ({"/", "\\", ":"} & set(name)) and not name.startswith(".") and bool(kind(name))
+    """A plain file name (letters, digits, `.`, `_`, `-`; no dot first) with an image extension."""
+    return bool(NAME.fullmatch(name)) and not name.startswith(".") and bool(kind(name))
 
 
 def names(md: str) -> list[str]:

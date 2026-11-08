@@ -95,6 +95,23 @@ class OnGitHub(unittest.TestCase):
         self.assertEqual(self.remote("show", f"fm-evidence:{iid}/x.png"), PNG + b"2")
         self.assertEqual(self.remote("rev-list", "--count", "fm-evidence").strip(), b"2")
 
+    def test_symlinked_image_is_not_published(self):
+        g = self.g
+        secret = g.e.tmp / "secret.png"
+        secret.write_bytes(b"secret")
+        iid = g.work()
+        folder = g.e.home / "reports" / iid
+        folder.mkdir(parents=True)
+        (folder / "k.png").symlink_to(secret)
+        self.assertEqual(pulls.evidence_files(g.e.p, iid, "![x](k.png)"), {})
+        self.assertEqual(registry.get(g.e.p).evidence({"id": iid}, {"k.png": folder / "k.png"}), {})
+        self.assertEqual(self.remote("branch", "--list", "fm-evidence"), b"")
+
+    def test_non_ascii_name_is_not_published_twice(self):
+        for name in ("é.png", "a b.png", "$x.png"):
+            self.assertFalse(evidence.bare(name), name)
+        self.assertEqual(evidence.names("![a](é.png) ![b](ok-1_2.png)"), ["ok-1_2.png"])
+
     def test_second_task_keeps_first(self):
         g = self.g
         first = self.deliver()
@@ -186,6 +203,8 @@ class Panel(unittest.TestCase):
         for name in ("../../fm.toml", "a/b.png", "../secret.png", "..", "x.txt", "nope.png", "/etc/passwd"):
             self.assertEqual(self.get(self.q(name))[0], 404, name)
         self.assertEqual(self.get("/evidence?p=demo&id=..&name=x.png")[0], 404)
+        (self.folder / "k.png").symlink_to(self.t.p.home / "reports" / "secret.png")
+        self.assertEqual(self.get(self.q("k.png"))[0], 404)
 
     def test_panel_description_links_existing_images(self):
         t = self.t
