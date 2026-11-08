@@ -297,6 +297,84 @@ class Pulls(unittest.TestCase):
         self.assertIn("no pushing today", g.e.issue(iid)["blocked"])
         self.assertEqual(g.e.issue(iid)["status"], "in review")
 
+    def flaky_push(self, g: GH, failures: int):
+        """Patches the push so its first `failures` calls fail with a connection error; returns the list of push calls."""
+        from unittest import mock
+
+        from fm import pulls
+
+        real, calls = pulls.proc.run, []
+
+        def run(args, **kw):
+            if "push" in args:
+                calls.append(args)
+                if len(calls) <= failures:
+                    return pulls.proc.Result(128, "", "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com")
+            return real(args, **kw)
+
+        patcher = mock.patch.object(pulls.proc, "run", run)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return calls
+
+    def test_a_push_that_fails_once_with_a_connection_error_is_retried_and_never_blocks(self):
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        self.flaky_push(g, 1)
+        loop.tick(g.e.p)
+        self.assertFalse(g.e.issue(iid).get("blocked"))
+        self.assertEqual(self.origin_tip(g, iid), "")
+        backlog.update(g.e.p, iid, push_failed_at="")  # the backoff has run out
+        loop.tick(g.e.p)
+        self.assertFalse(g.e.issue(iid).get("blocked"))
+        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+
+    def test_a_delivered_branch_whose_push_fails_transiently_stays_in_review_and_is_pushed_later(self):
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        g.deliver(iid)
+        self.flaky_push(g, 1)
+        loop.tick(g.e.p)
+        self.assertFalse(g.e.issue(iid).get("blocked"))
+        self.assertEqual(g.e.issue(iid)["status"], "in review")
+        backlog.update(g.e.p, iid, push_failed_at="")
+        loop.tick(g.e.p)
+        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+        self.assertFalse(g.e.issue(iid).get("blocked"))
+
+    def test_after_a_failed_push_the_next_tick_does_not_push_that_task_again(self):
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        calls = self.flaky_push(g, 99)
+        loop.tick(g.e.p)
+        self.assertEqual(len(calls), 1)
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(g.e.issue(iid)["push_failed_at"])
+
+    def test_the_push_timeout_is_20_seconds(self):
+        from unittest import mock
+
+        from fm import pulls
+
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        with mock.patch.object(pulls.proc, "run", wraps=pulls.proc.run) as run:
+            loop.tick(g.e.p)
+        (push,) = [c for c in run.call_args_list if "push" in c.args[0]]
+        self.assertEqual(push.kwargs["timeout"], 20)
+        self.assertTrue(iid)
+
+    def test_a_remote_rejection_of_a_running_task_s_push_blocks_it_with_git_s_error(self):
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        hook = g.bare / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\necho 'no pushing today' >&2\nexit 1\n")
+        hook.chmod(0o755)
+        loop.tick(g.e.p)
+        self.assertIn("no pushing today", g.e.issue(iid)["blocked"])
+
     def test_a_branch_that_diverged_from_origin_is_not_force_pushed(self):
         g = self.make(test="true")
         iid = g.work()

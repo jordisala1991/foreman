@@ -3,6 +3,7 @@
 `prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -35,19 +36,45 @@ def _commits(p: Project, branch: str) -> int:
     return int(r.out.strip() or 0)
 
 
+PUSH_TIMEOUT_S = 20
+PUSH_BACKOFF_TICKS = 3
+# What a remote says when it refuses the branch itself: retrying never helps. Anything else (network, timeout, an
+# unreachable remote) is transient.
+REJECTED = re.compile(r"rejected|non-fast-forward|permission denied|protected branch|declined|denied|forbidden|not allowed", re.I)
+
+
 def push(p: Project, change: dict[str, Any]) -> None:
     """Pushes the task's branch to origin from the main repo (worktree branches live there). Never forced, never
-    the main branch: a rejected push (the branch diverged) is an error, not something to overwrite."""
+    the main branch. A rejection by the remote (diverged branch, permission, protected branch, a hook) is Permanent
+    with git's error; a network failure or a timeout is Transient: the caller retries later."""
     branch = change["branch"]
     if branch == p.get("project", "main"):
         raise providers.Permanent(f"refusing to push {branch}: it is the main branch")
     ref = f"refs/heads/{branch}"
     try:
-        r = proc.run(["git", "-C", str(p.repo), "push", "origin", f"{ref}:{ref}"], timeout=60)
+        r = proc.run(["git", "-C", str(p.repo), "push", "origin", f"{ref}:{ref}"], timeout=PUSH_TIMEOUT_S)
     except proc.ProcError as e:
-        raise (providers.Transient if e.timed_out else providers.Permanent)(str(e)) from None
+        raise providers.Transient(str(e)) from None
     if r.code != 0:
-        raise providers.Permanent(f"git push {branch}: {(r.err or r.out).strip()[:300]}")
+        text = (r.err or r.out).strip()[:300]
+        raise (providers.Permanent if REJECTED.search(text) else providers.Transient)(f"git push {branch}: {text}")
+
+
+def backing_off(p: Project, i: dict[str, Any]) -> bool:
+    """A task whose push just failed is left alone for a few ticks, so a hung remote cannot stall every tick."""
+    age = util.age_s(i.get("push_failed_at"))
+    return age is not None and age < PUSH_BACKOFF_TICKS * int(p.get("health", "loop_seconds"))
+
+
+def push_task(p: Project, i: dict[str, Any], change: dict[str, Any]) -> None:
+    """`push`, remembering a failure on the task (the backoff) and forgetting it on success."""
+    try:
+        push(p, change)
+    except Exception:
+        backlog.update(p, i["id"], push_failed_at=util.now())
+        raise
+    if i.get("push_failed_at"):
+        backlog.update(p, i["id"], push_failed_at="")
 
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
@@ -58,39 +85,53 @@ def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: b
     backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref['number']}: {ref['url']}")
 
 
+def _running(p: Project, provider: Provider, i: dict[str, Any]) -> None:
+    head = _head(p, i["branch"])
+    if not head or not _commits(p, i["branch"]):
+        return
+    change = change_of(i, head)
+    if not provider.pushed(change):
+        push_task(p, i, change)
+    if providers.pr_mode(p) == "draft" and not i.get("pr"):
+        _open(p, provider, i, head, True)
+
+
+def _failed(p: Project, i: dict[str, Any], e: Exception) -> None:
+    if isinstance(e, providers.Permanent) and "git push" in str(e):  # the remote refused the branch: nothing fixes itself
+        backlog.update(p, i["id"], blocked=f"the loop could not push it: {e}"[:300])
+        backlog.event(p, i["id"], f"blocked: could not push: {e}"[:300])
+    elif i.get("pr_error") != str(e):
+        backlog.update(p, i["id"], pr_error=str(e))
+        backlog.event(p, i["id"], f"could not push or open its PR, will retry: {e}"[:300])
+
+
 def open_drafts(p: Project) -> None:
     """Loop step: a task in progress with commits of its own has its branch pushed, and (`pr = draft`) a draft PR once
-    it is. One task's failure never stops the others, and none blocks the task (its agent is working fine): the error
-    is noted once and the push and the PR are retried next tick."""
+    it is. One task's failure never stops the others. A push the remote rejects blocks the task with git's error; any
+    other failure (network, timeout, the PR) is noted once and retried: a failed push is not retried for a few ticks."""
     provider = registry.get(p)
     if provider.name != "github":
         return
     for i in backlog.issues(backlog.load(p)):
-        if i["status"] != "in progress" or not i.get("branch") or i.get("blocked"):
+        if i["status"] != "in progress" or not i.get("branch") or i.get("blocked") or backing_off(p, i):
             continue
-        head = _head(p, i["branch"])
         try:
-            if not head or not _commits(p, i["branch"]):
-                continue
-            change = change_of(i, head)
-            if not provider.pushed(change):
-                push(p, change)
-            if providers.pr_mode(p) == "draft" and not i.get("pr"):
-                _open(p, provider, i, head, True)
+            _running(p, provider, i)
         except Exception as e:
-            if i.get("pr_error") != str(e):
-                backlog.update(p, i["id"], pr_error=str(e))
-                backlog.event(p, i["id"], f"could not push or open its PR, will retry: {e}"[:300])
+            _failed(p, i, e)
 
 
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
-    running. An unpushed branch is pushed here; a failed push raises (the loop blocks the task with git's error)."""
+    running. An unpushed branch is pushed here; a push the remote rejects raises Permanent (the loop blocks the task
+    with git's error), a network failure Transient (it stays queued and is retried)."""
     provider = registry.get(p)
     if provider.name != "github":
         return "ok", ""
     if not provider.pushed(change_of(i, head)):
-        push(p, change_of(i, head))
+        if backing_off(p, i):
+            return "wait", "its last push failed, trying again shortly"
+        push_task(p, i, change_of(i, head))
     if not i.get("pr"):
         _open(p, provider, i, head, False)
     ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))
