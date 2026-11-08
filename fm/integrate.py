@@ -178,7 +178,14 @@ def merge_accepted(p: Project, iid: str) -> str:
         backlog.update(p, iid, accepted=None)
         raise IntegrateError(f"{i['branch']} moved after it was accepted: accept again after the next check")
     change = {"id": iid, "title": i["title"], "branch": i["branch"], "head": head, "merge": i.get("merge", "")}
+    if not change["merge"] and i.get("merging"):  # a crash after the merge, before its ref was stored: adopt it
+        found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {iid}: ", f"{i['merging']}..{p.get('project', 'main')}",
+                    check=False).stdout.split()
+        if found:
+            change["merge"] = found[0]
+            backlog.update(p, iid, merge=found[0])
     if not change["merge"]:
+        backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).stdout.strip())
         try:
             ref = provider.merge(change, providers.merge_strategy(p))
         except Exception as e:  # noqa: BLE001 - a platform's own errors are an integration error

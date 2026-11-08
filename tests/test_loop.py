@@ -124,6 +124,58 @@ class Provider(unittest.TestCase):
             with self.assertRaises(providers.ConfigError):
                 integrate.accept(e.p, iid)
 
+    def test_the_old_forge_key_is_a_clear_config_error(self):
+        from fm import providers
+        e = Env()
+        e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace(
+            "[integrate]", '[integrate]\nforge = "github"'))
+        with self.assertRaisesRegex(providers.ConfigError, "forge was renamed to provider"):
+            providers.get(type(e.p).load(e.home))
+
+    def test_send_back_forgets_the_merge_of_the_old_tip(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        backlog.update(e.p, iid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
+        loop.send_back(e.p, iid, "rejection", "again")
+        i = e.issue(iid)
+        self.assertFalse({"accepted", "merge", "merging"} & set(i))
+
+    def test_a_crash_after_the_merge_adopts_it_instead_of_merging_twice(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        base = git(e.repo, "rev-parse", "main").strip()
+        git(e.repo, "merge", "--squash", "fm/ty-1")
+        git(e.repo, "commit", "-qm", f"Integrate {iid}: x")  # the merge happened; its ref was never stored
+        backlog.update(e.p, iid, merging=base)
+        merged = git(e.repo, "rev-parse", "main").strip()
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "done")
+        self.assertEqual(git(e.repo, "rev-parse", "main").strip(), merged)
+
+    def test_a_failing_merge_blocks_the_issue_with_the_reason(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        (e.repo / "app.py").write_text("dirty\n")  # the main checkout has uncommitted changes
+        loop.tick(e.p)
+        i = e.issue(iid)
+        self.assertEqual(i["status"], "in review")
+        self.assertIn("uncommitted changes", i["blocked"])
+        self.assertNotIn("merge", i)
+
+    def test_a_bad_provider_blocks_at_the_merge_step(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        e.p.cfg["integrate"]["merge"] = "rebase"
+        loop.run_queue(e.p, {})
+        self.assertIn("merge = 'rebase'", e.issue(iid)["blocked"])
+
     def test_defaults_and_nothing_is_published(self):
         from fm import providers
         e = Env()

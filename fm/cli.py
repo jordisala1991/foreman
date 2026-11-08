@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, providers, guard, health, integrate, lock, loop, metrics, sessions, util
+from . import backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, util
 from .config import Project, register
 
 

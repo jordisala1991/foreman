@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import backlog, cli, costs, providers, health, integrate, lock, metrics, sessions, util
+from . import backlog, cli, costs, health, integrate, lock, metrics, providers, sessions, util
 from .config import Project, registered
 
 DIST = Path(__file__).resolve().parent.parent / "panel" / "dist"
