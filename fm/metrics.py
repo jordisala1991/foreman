@@ -29,6 +29,8 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
         mine = [e for e in events if e.get("issue") == i["id"]]
         to_review = next((e["time"] for e in mine if e["text"].startswith("→ in review")), None)
         closed = next((e["time"] for e in mine if e["text"].startswith("→ done")), None)
+        check: backlog.Check = i.get("check") or {}
+        report: backlog.Report = i.get("report") or {}
         c = costs.of_sessions([s for s in i.get("sessions", []) if s])
         out.append(
             {
@@ -48,8 +50,8 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
                 ),
                 "guard_stops": sum(1 for s in stops if s.get("issue") == i["id"]),
                 "lock_wait_min": round(sum(u.get("waited_s", 0) for u in lock_uses if u.get("issue") == i["id"]) / 60, 1),
-                "risk": (util.sub(i, "check")).get("risk"),
-                "confused": (util.sub(i, "report")).get("confused", ""),
+                "risk": check.get("risk"),
+                "confused": report.get("confused", ""),
             }
         )
     return out

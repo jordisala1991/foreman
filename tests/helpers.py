@@ -76,7 +76,7 @@ class Env:
             loop_seconds = 1
         ''')
         )
-        util.write_json(self.home / "backlog.json", backlog.EMPTY)
+        util.write_json(self.home / "backlog.json", backlog.empty())
         self.p = Project.load(self.home)
         os.environ["FM_CLAUDE_PROJECTS"] = str(self.tmp / "transcripts")
 

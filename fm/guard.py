@@ -15,6 +15,7 @@ import re
 import shlex
 import sys
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -95,46 +96,84 @@ def _mine(path: str, cwd: str, own: list[Path]) -> bool:
     return any(p == r or r in p.parents for r in roots)
 
 
-def check_bash(cmd: str, cwd: str, own: list[Path], branch: str, config: Path, extra: list[dict[str, str]], mains: set[str] = MAIN) -> str | None:  # noqa: C901, PLR0912, PLR0913
+@dataclass
+class Scope:
+    """Where a command runs and what it may touch: its folder, the agent's own folders and branch, fm.toml, the owner's rules."""
+
+    cwd: str
+    own: list[Path]
+    branch: str
+    config: Path
+    extra: list[dict[str, str]]
+    mains: set[str] = field(default_factory=lambda: set(MAIN))
+
+
+def _git_args(args: list[str]) -> list[str]:
+    while args[:1] and args[0] in ("-C", "-c"):
+        args = args[2:]
+    return args
+
+
+def _publishes(prog: str, sub: str, args: list[str]) -> bool:
+    if (prog, sub) not in PUBLISH:
+        return False
+    return prog != "gh" or bool(args[1:2] and args[1] in ("create", "upload", "merge", "edit", "delete"))
+
+
+def _push(args: list[str], sc: Scope) -> str | None:
+    rest = args[args.index("push") + 1 :]
+    refs = [a for a in rest if not a.startswith("-")]
+    if {"--delete", "-d"} & set(rest) or any(r.startswith(":") for r in refs[1:]):
+        return "delete"
+    if {"-f", "--force", "--force-with-lease", "--mirror", "--all"} & set(rest):
+        return "push-main"
+    dests = [r.split(":")[-1].removeprefix("refs/heads/") for r in refs[1:]] or [sc.branch]
+    if any((d if d != "HEAD" else sc.branch) in sc.mains | {""} for d in dests):
+        return "push-main"
+    return None
+
+
+def _git(sub: str, args: list[str], sc: Scope) -> str | None:
+    if sub == "push":
+        return _push(args, sc)
+    if sub == "branch" and any(a in ("-d", "-D", "--delete") for a in args):
+        return "delete" if any(a != sc.branch for a in args[1:] if not a.startswith("-")) else None
+    if sub == "worktree" and "remove" in args:
+        return "delete"
+    return None
+
+
+def _removes(prog: str, args: list[str], sc: Scope) -> bool:
+    if not (prog in ("rm", "rmdir", "unlink", "trash") or (prog == "find" and "-delete" in args)):
+        return False
+    targets = [a for a in args if not a.startswith("-")] if prog != "find" else args[:1]
+    return any(not _mine(t, sc.cwd, sc.own) for t in targets)
+
+
+def _segment(w: list[str], sc: Scope) -> str | None:
+    prog, args = w[0], w[1:]
+    if prog == "git":
+        args = _git_args(args)
+    sub = next((a for a in args if not a.startswith("-")), "")
+    if _publishes(prog, sub, args):
+        return "publish"
+    found = _git(sub, args, sc) if prog == "git" else None
+    if found:
+        return found
+    if _removes(prog, args, sc):
+        return "delete"
+    if writes(w, sc.cwd, sc.config.resolve()):
+        return "config"
+    seg = " ".join(w)
+    return next((rule.get("name", "owner rule") for rule in sc.extra if re.search(rule.get("pattern", "$^"), seg)), None)
+
+
+def check_bash(cmd: str, sc: Scope) -> str | None:
     """The name of the first action of the list that `cmd` runs, or None."""
     for w in segments(cmd):
-        if not w:
-            continue
-        seg = " ".join(w)
-        prog, args = w[0], w[1:]
-        while prog == "git" and args[:1] and args[0] in ("-C", "-c"):
-            args = args[2:]
-        sub = next((a for a in args if not a.startswith("-")), "")
-        if (prog, sub) in PUBLISH and (prog != "gh" or (args[1:2] and args[1] in ("create", "upload", "merge", "edit", "delete"))):
-            return "publish"
-        if prog == "git" and sub == "push":
-            rest = args[args.index("push") + 1 :]
-            refs = [a for a in rest if not a.startswith("-")]
-            if {"--delete", "-d"} & set(rest) or any(r.startswith(":") for r in refs[1:]):
-                return "delete"
-            if {"-f", "--force", "--force-with-lease", "--mirror", "--all"} & set(rest):
-                return "push-main"
-            dests = [r.split(":")[-1].removeprefix("refs/heads/") for r in refs[1:]] or [branch]
-            if any((d if d != "HEAD" else branch) in mains | {""} for d in dests):
-                return "push-main"
-        if (
-            prog == "git"
-            and sub == "branch"
-            and any(a in ("-d", "-D", "--delete") for a in args)
-            and any(a != branch for a in args[1:] if not a.startswith("-"))
-        ):
-            return "delete"
-        if prog == "git" and sub == "worktree" and "remove" in args:
-            return "delete"
-        if prog in ("rm", "rmdir", "unlink", "trash") or (prog == "find" and "-delete" in args):
-            targets = [a for a in args if not a.startswith("-")] if prog != "find" else args[:1]
-            if any(not _mine(t, cwd, own) for t in targets):
-                return "delete"
-        if writes(w, cwd, config.resolve()):
-            return "config"
-        for rule in extra:
-            if re.search(rule.get("pattern", "$^"), seg):
-                return rule.get("name", "owner rule")
+        found = _segment(w, sc) if w else None
+        if found:
+            return found
     return None
 
 
@@ -147,7 +186,8 @@ def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, issue: dict[str,
             return "config"
         return None
     if tool == "Bash":
-        return check_bash(str(inp.get("command", "")), cwd, own, branch, p.config_file, p.get("guard", "ask"), MAIN | {p.get("project", "main")})
+        scope = Scope(cwd, own, branch, p.config_file, p.get("guard", "ask"), MAIN | {p.get("project", "main")})
+        return check_bash(str(inp.get("command", "")), scope)
     return None
 
 
@@ -178,7 +218,8 @@ def hook(stdin: str) -> str:
             issue = backlog.get(backlog.load(p), iid)
         except backlog.BacklogError:
             issue = None
-        action = check(p, d.get("tool_name", ""), util.sub(d, "tool_input"), d.get("cwd") or os.getcwd(), issue)
+        tool_input: dict[str, Any] = d.get("tool_input") or {}
+        action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), issue)
         if not action or granted(p, iid, action):
             return ""
         util.append_jsonl(
@@ -191,6 +232,6 @@ def hook(stdin: str) -> str:
             "if he allows it, you will be told, and it passes once."
         )
         return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": msg}})
-    except Exception as e:  # noqa: BLE001 - a broken guard must not stop the work
+    except Exception as e:  # a broken guard must not stop the work
         print(f"fm guard error (allowed): {e}", file=sys.stderr)
         return ""

@@ -5,7 +5,7 @@ import unittest
 
 from helpers import Env, git
 
-from fm import backlog, health, loop, util
+from fm import agents, backlog, health, loop, util
 
 
 class Health(unittest.TestCase):
@@ -106,7 +106,7 @@ class Lessons(unittest.TestCase):
         text = e.p.lessons_file.read_text()
         self.assertIn("TY-1 (ty-1): brief: the test command is wrong", text)
         self.assertEqual(text.count("\n- "), 1)
-        self.assertIn(str(e.p.lessons_file), loop.brief(e.p, e.issue(iid), "work"))
+        self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.issue(iid), "work"))
 
 
 if __name__ == "__main__":

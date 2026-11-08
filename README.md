@@ -26,6 +26,6 @@ bin/check              # everything CI runs: ruff, pyright (strict), file size, 
 python3 -m unittest discover -s tests   # just the tests
 ```
 
-Limits (pyproject.toml): files 300 lines (tests 600), functions complexity 10; files over today are listed as exceptions in `[tool.fm-size.exceptions]` and may shrink, never grow.
+Limits (pyproject.toml): files 300 lines (tests 600), functions complexity 10. No exceptions: a failing rule is a design signal to refactor, and `bin/check` rejects a `noqa` on a size or complexity rule.
 
 `DESIGN.md` has the architecture: the states of a task, the loop, the agents' briefs, the guard list, locks, health.

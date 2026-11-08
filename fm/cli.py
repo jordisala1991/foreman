@@ -11,24 +11,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from . import backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, util
+from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_note, cmd_ready, cmd_verdict
+from .cli_common import home
+from .cli_parser import parser
 from .config import Project, register
-
-
-def home(args: argparse.Namespace) -> Project:
-    h = args.home or os.environ.get("FM_HOME")
-    if not h:
-        here = Path.cwd()
-        h = next((str(d) for d in (here, *here.parents) if (d / "fm.toml").exists()), None)
-    if not h:
-        sys.exit("fm: no project: pass --home, set FM_HOME, or run inside a folder with fm.toml")
-    return Project.load(h)
-
-
-def mine(args: argparse.Namespace) -> str:
-    iid = getattr(args, "issue", None) or os.environ.get("FM_ISSUE")
-    if not iid:
-        sys.exit("fm: which issue? (--issue, or FM_ISSUE in an agent's session)")
-    return iid
 
 
 def cmd_init(a: argparse.Namespace) -> None:
@@ -43,7 +29,7 @@ def cmd_init(a: argparse.Namespace) -> None:
         )
     p = Project.load(h)
     if not p.backlog_file.exists():
-        util.write_json(p.backlog_file, backlog.EMPTY)
+        util.write_json(p.backlog_file, backlog.empty())
     register(h)
     print(f"project {p.name} at {h} (registered)")
 
@@ -61,7 +47,8 @@ def cmd_list(a: argparse.Namespace) -> None:
     for i in backlog.issues(d):
         if i["status"] in backlog.CLOSED and not a.all:
             continue
-        ag = (util.sub(i, "agent")).get("name", "")
+        agent: backlog.Agent = i.get("agent") or {}
+        ag = agent.get("name", "")
         print(f"{i['id']:8} {i['status']:12} {ag:14} {i['title']}" + (f"  [blocked: {i['blocked']}]" if i.get("blocked") else ""))
     for q in backlog.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
@@ -70,67 +57,6 @@ def cmd_list(a: argparse.Namespace) -> None:
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
     print(json.dumps(backlog.get(backlog.load(p), a.id), indent=2, ensure_ascii=False))
-
-
-# --- the agent's side ---------------------------------------------------------------------------------------------
-
-
-def cmd_ask(a: argparse.Namespace) -> None:
-    p = home(a)
-    kind = "permission" if a.action else "question"
-    qid = backlog.ask(p, mine(a), os.environ.get("FM_AGENT", "?"), a.text, kind, a.action or "")
-    print(f"{qid} is with the owner. End your turn now: his answer will come back to this conversation.")
-
-
-def cmd_note(a: argparse.Namespace) -> None:
-    p = home(a)
-    backlog.event(p, mine(a), f"note: {a.text}")
-
-
-def cmd_done(a: argparse.Namespace) -> None:
-    p = home(a)
-    iid = mine(a)
-    report = {"summary": a.summary, "file": a.report or "", "confused": a.misled or "", "at": util.now()}
-    backlog.set_status(p, iid, "in review", a.summary, report=report, blocked="")
-    backlog.lesson(p, iid, os.environ.get("FM_AGENT", "agent"), a.misled)
-    print(f"{iid} is in the integration queue: an independent reviewer reads it, then the owner. End your turn.")
-
-
-def cmd_verdict(a: argparse.Namespace) -> None:
-    p = home(a)
-    iid = mine(a)
-    with backlog.edit(p) as d:
-        i = backlog.get(d, iid)
-        r = util.sub(i, "reviewer")
-        v = {"round": r.get("round", 1), "tip": r.get("tip", ""), "high": a.high, "medium": a.medium, "low": a.low, "file": a.file, "at": util.now()}
-        i["review"] = v
-        i["reviews"] = [*i.get("reviews", []), v]
-        i["report"] = {**(util.sub(i, "report")), "review": "clean" if a.high + a.medium == 0 else f"open: H {a.high}, M {a.medium}"}
-    backlog.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
-    backlog.event(p, iid, f"review round {v['round']}: H {a.high}, M {a.medium}, L {a.low} ({a.file})")
-    print("Verdict recorded. End your turn.")
-
-
-def cmd_ready(a: argparse.Namespace) -> None:
-    p = home(a)
-    iid = mine(a)
-    with backlog.edit(p) as d:
-        i = backlog.get(d, iid)
-        i["acceptance"] = {**(util.sub(i, "acceptance")), "claim": a.claim, "criterion": a.criterion}
-        if a.detail:
-            i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
-        i["status"], i["blocked"] = "ready", ""
-        i["defined_by"] = (util.sub(i, "agent")).get("name")
-    backlog.event(p, iid, f"→ ready: {a.criterion}")
-    backlog.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)
-    print(f"{iid} is ready; the loop will launch its responsible agent. End your turn.")
-
-
-def cmd_block(a: argparse.Namespace) -> None:
-    p = home(a)
-    backlog.update(p, mine(a), blocked=a.text)
-    backlog.event(p, mine(a), f"blocked by its agent: {a.text}")
-    print("Blocked: the owner sees it in the panel. End your turn.")
 
 
 # --- the owner's side ---------------------------------------------------------------------------------------------
@@ -173,7 +99,8 @@ def cmd_reject(a: argparse.Namespace) -> None:
 def cmd_go(a: argparse.Namespace) -> None:
     p = home(a)
     i = backlog.get(backlog.load(p), a.id)
-    status = "ready" if (util.sub(i, "acceptance")).get("criterion") else "backlog"
+    acceptance: backlog.Acceptance = i.get("acceptance") or {}
+    status = "ready" if acceptance.get("criterion") else "backlog"
     backlog.set_status(p, a.id, status, "let in by the owner", blocked="")
 
 
@@ -258,105 +185,40 @@ def cmd_launchd(a: argparse.Namespace) -> None:
     print(loop.launchd_plist(str(Path(__file__).resolve().parent.parent / "bin/fm")))
 
 
-def parser() -> argparse.ArgumentParser:  # noqa: PLR0915
-    ap = argparse.ArgumentParser(prog="fm", description=__doc__)
-    ap.add_argument("--home", help="the project's home (else FM_HOME, else the folder with fm.toml)")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-
-    def c(name: str, fn: Callable[[argparse.Namespace], int | None], help_: str) -> argparse.ArgumentParser:
-        s = sub.add_parser(name, help=help_)
-        s.set_defaults(fn=fn)
-        return s
-
-    s = c("init", cmd_init, "make a project home and register it")
-    s.add_argument("--repo", required=True)
-    s.add_argument("--prefix", default="FM")
-    s = c("add", cmd_add, "file an issue (to define, unless --ready)")
-    s.add_argument("title")
-    s.add_argument("--detail")
-    s.add_argument("--claim")
-    s.add_argument("--criterion")
-    s.add_argument("--ready", action="store_true")
-    s.add_argument("--triage", action="store_true")
-    s.add_argument("--priority", default="none", choices=backlog.PRIORITIES)
-    s = c("list", cmd_list, "the backlog and the open questions")
-    s.add_argument("--all", action="store_true")
-    s = c("show", cmd_show, "one issue, as stored")
-    s.add_argument("id")
-    s = c("ask", cmd_ask, "(agent) ask the owner; then end your turn")
-    s.add_argument("text")
-    s.add_argument("--action", help="the guard action you ask permission for")
-    s.add_argument("--issue")
-    s = c("note", cmd_note, "(agent) a progress note")
-    s.add_argument("text")
-    s.add_argument("--issue")
-    s = c("done", cmd_done, "(agent) the task is ready to integrate")
-    s.add_argument("--summary", required=True)
-    s.add_argument("--report", help="your report file")
-    s.add_argument("--misled", default="", help="what was wrong or unclear in what you were given, or none")
-    s.add_argument("--issue")
-    s = c("verdict", cmd_verdict, "(reviewer) the open findings of your review")
-    s.add_argument("--high", type=int, required=True)
-    s.add_argument("--medium", type=int, required=True)
-    s.add_argument("--low", type=int, default=0)
-    s.add_argument("--file", required=True)
-    s.add_argument("--misled", default="")
-    s.add_argument("--issue")
-    s = c("ready", cmd_ready, "(defining agent) the task is defined")
-    s.add_argument("--claim", required=True)
-    s.add_argument("--criterion", required=True)
-    s.add_argument("--detail")
-    s.add_argument("--misled", default="")
-    s.add_argument("--issue")
-    s = c("block", cmd_block, "(agent) it cannot go on without the owner")
-    s.add_argument("text")
-    s.add_argument("--issue")
-    s = c("answer", cmd_answer, "answer an agent's question")
-    s.add_argument("qid")
-    s.add_argument("text")
-    for name, allowed in (("allow", True), ("deny", False)):
-        s = c(name, lambda a, al=allowed: cmd_allow(a, al), f"{name} a guarded action once")
-        s.add_argument("qid")
-        s.add_argument("text", nargs="?")
-    s = c("accept", cmd_accept, "integrate a queued issue")
-    s.add_argument("id")
-    s = c("reject", cmd_reject, "send a queued issue back to its agent")
-    s.add_argument("id")
-    s.add_argument("note")
-    s = c("go", cmd_go, "let a triage issue in")
-    s.add_argument("id")
-    s = c("cancel", cmd_cancel, "cancel an issue (stops its agent)")
-    s.add_argument("id")
-    s.add_argument("why", nargs="?")
-    s = c("unblock", cmd_unblock, "clear an issue's block")
-    s.add_argument("id")
-    s.add_argument("--relaunch", action="store_true", help="and launch a new agent for it")
-    s = c("pause", cmd_pause, "stop launching new agents (--off to resume)")
-    s.add_argument("--off", action="store_true")
-    s = c("loop", cmd_loop, "run the loop (launchd keeps it alive)")
-    s.add_argument("--once", action="store_true")
-    s = c("health", cmd_health, "the health checks, from outside the loop")
-    s.add_argument("--file", action="store_true", help="file the new findings as triage issues")
-    s = c("metrics", cmd_metrics, "cost, time, rework, questions, what misled agents")
-    s.add_argument("--json", action="store_true")
-    s = c("check", cmd_check, "check a queued branch now")
-    s.add_argument("id")
-    s = c("lock", cmd_lock, 'use a shared resource: fm lock NAME run "what" command…, or fm lock NAME status')
-    s.add_argument("name")
-    s.add_argument("action", choices=("run", "status"))
-    s.add_argument("what", nargs="?", default="")
-    s.add_argument("command", nargs=argparse.REMAINDER)
-    c("guard", cmd_guard, "(hook) the agents' PreToolUse guard")
-    s = c("panel", cmd_panel, "serve the panel")
-    s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from other devices (the key is required)")
-    s.add_argument("--port", type=int, default=7788)
-    c("launchd", cmd_launchd, "print the launchd job that keeps the loop alive")
-    return ap
+HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
+    "init": cmd_init,
+    "add": cmd_add,
+    "list": cmd_list,
+    "show": cmd_show,
+    "ask": cmd_ask,
+    "note": cmd_note,
+    "done": cmd_done,
+    "verdict": cmd_verdict,
+    "ready": cmd_ready,
+    "block": cmd_block,
+    "answer": cmd_answer,
+    "allow": lambda a: cmd_allow(a, True),
+    "deny": lambda a: cmd_allow(a, False),
+    "accept": cmd_accept,
+    "reject": cmd_reject,
+    "go": cmd_go,
+    "cancel": cmd_cancel,
+    "unblock": cmd_unblock,
+    "pause": cmd_pause,
+    "loop": cmd_loop,
+    "health": cmd_health,
+    "metrics": cmd_metrics,
+    "check": cmd_check,
+    "lock": cmd_lock,
+    "guard": cmd_guard,
+    "panel": cmd_panel,
+    "launchd": cmd_launchd,
+}
 
 
 def main(argv: list[str] | None = None) -> None:
-    a = parser().parse_args(argv)
+    a = parser(__doc__).parse_args(argv)
     try:
-        a.fn(a)
+        HANDLERS[a.cmd](a)
     except backlog.BacklogError as e:
         sys.exit(f"fm: {e}")

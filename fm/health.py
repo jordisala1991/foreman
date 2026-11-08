@@ -36,8 +36,9 @@ def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
     out: list[Finding] = []
     stuck_s = 60 * int(p.get("health", "stuck_minutes"))
     for i in backlog.issues(backlog.load(p)):
-        a = util.sub(i, "agent")
-        if i["status"] in backlog.RUNNING and util.sub(rows, a.get("session") or "").get("state") == "working":
+        a: backlog.Agent = i.get("agent") or {}
+        row: dict[str, Any] = rows.get(a.get("session") or "") or {}
+        if i["status"] in backlog.RUNNING and row.get("state") == "working":
             files = costs.files_of(a.get("session") or "")
             quiet = min((time.time() - f.stat().st_mtime for f in files), default=0)
             if quiet > stuck_s:
@@ -115,7 +116,7 @@ def findings(p: Project, rows: dict[str, Any], outside: bool = False) -> list[Fi
     for check in (lambda: agents(p, rows), lambda: orphan_worktrees(p), lambda: main_tests(p, run=not outside), lambda: loop_errors(p)):
         try:
             out += check()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             out.append({"key": f"health:{e!r}"[:80], "title": "A health check fails", "detail": repr(e)})
     return out
 

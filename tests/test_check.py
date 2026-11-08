@@ -1,4 +1,4 @@
-"""bin/check_size and bin/check: a file over its limit fails; exceptions may shrink, never grow."""
+"""bin/check_size: a file over its limit fails, and a size/complexity rule cannot be silenced with noqa. No exceptions."""
 
 import subprocess
 import sys
@@ -10,15 +10,13 @@ REPO = Path(__file__).resolve().parent.parent
 SIZE = REPO / "bin" / "check_size"
 
 
-def tree(files: dict[str, int], exceptions: str = "", functions: str = "") -> Path:
+def tree(files: dict[str, str | int]) -> Path:
     root = Path(tempfile.mkdtemp())
-    (root / "pyproject.toml").write_text(
-        f"[tool.fm-size]\nlimit = 10\ntests_limit = 20\n[tool.fm-size.exceptions]\n{exceptions}\n[tool.fm-size.functions]\n{functions}"
-    )
-    for rel, n in files.items():
+    (root / "pyproject.toml").write_text("[tool.fm-size]\nlimit = 10\ntests_limit = 20\n")
+    for rel, body in files.items():
         f = root / rel
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("x = 1\n" * n)
+        f.write_text("x = 1\n" * body if isinstance(body, int) else body)
     for d in ("fm", "panel/src", "tests"):
         (root / d).mkdir(parents=True, exist_ok=True)
     return root
@@ -36,57 +34,24 @@ class SizeCheck(unittest.TestCase):
         for rel in ("fm/a.py", "panel/src/b.ts", "panel/src/c.css"):
             r = run(tree({rel: 11}))
             self.assertEqual(r.returncode, 1, rel)
-            self.assertIn(f"{rel}: 11 lines, over its limit of 10", r.stderr)
+            self.assertIn(f"{rel}: 11 lines, over the limit of 10", r.stderr)
 
     def test_tests_have_their_own_larger_limit(self):
         self.assertEqual(run(tree({"tests/t.py": 20})).returncode, 0)
         self.assertEqual(run(tree({"tests/t.py": 21})).returncode, 1)
 
-    def test_an_exception_holds_its_size_but_not_more(self):
-        self.assertEqual(run(tree({"fm/a.py": 15}, '"fm/a.py" = 15\n')).returncode, 0)
-        r = run(tree({"fm/a.py": 16}, '"fm/a.py" = 15\n'))
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("over its limit of 15", r.stderr)
+    def test_silencing_a_size_or_complexity_rule_fails(self):
+        for code in ("C901", "PLR0912", "PLR0913", "PLR0915", "E501, C901"):
+            r = run(tree({"fm/m.py": f"def f(a):  # noqa: {code}\n    return a\n"}))
+            self.assertEqual(r.returncode, 1, code)
+            self.assertIn("fm/m.py:1: a size/complexity rule is silenced", r.stderr)
 
-    def test_a_stale_exception_fails(self):
-        self.assertIn("remove it", run(tree({"fm/a.py": 9}, '"fm/a.py" = 15\n')).stderr)
-        self.assertIn("does not exist", run(tree({}, '"fm/gone.py" = 15\n')).stderr)
+    def test_other_noqa_are_not_this_checks_business(self):
+        self.assertEqual(run(tree({"fm/m.py": "import os  # noqa: F401\n"})).returncode, 0)
 
     def test_the_repo_passes(self):
         r = subprocess.run([sys.executable, str(SIZE)], capture_output=True, text=True, check=False)
         self.assertEqual(r.returncode, 0, r.stderr)
-
-
-FN = "def f(a, b):  # noqa: C901\n    if a:\n        return 1\n    return b\n"  # 3 statements, 1 decision, 2 arguments
-
-
-def with_fn(body: str, recorded: str) -> subprocess.CompletedProcess[str]:
-    root = tree({}, functions=recorded)
-    (root / "fm" / "m.py").write_text(body)
-    return run(root)
-
-
-class FunctionRatchet(unittest.TestCase):
-    def test_a_function_at_its_recorded_size_passes(self):
-        self.assertEqual(with_fn(FN, '"fm/m.py:f" = [3, 1, 2]\n').returncode, 0)
-
-    def test_more_branches_statements_or_arguments_fail(self):
-        grown = {
-            "branches": FN.replace("    return b", "    if b:\n        return 2\n    return b"),
-            "statements": FN.replace("    return b", "    b = 1\n    return b"),
-            "arguments": FN.replace("(a, b)", "(a, b, c)"),
-        }
-        for what, body in grown.items():
-            r = with_fn(body, '"fm/m.py:f" = [3, 1, 2]\n')
-            self.assertEqual(r.returncode, 1, what)
-            self.assertIn("grew over", r.stderr, what)
-
-    def test_a_noqa_function_without_an_entry_fails(self):
-        self.assertIn("no entry", with_fn(FN, "").stderr)
-
-    def test_shrinking_or_a_stale_entry_asks_to_lower_it(self):
-        self.assertIn("shrank", with_fn(FN, '"fm/m.py:f" = [9, 9, 9]\n').stderr)
-        self.assertIn("no longer has", with_fn("def f():\n    return 1\n", '"fm/m.py:f" = [1, 0, 0]\n').stderr)
 
 
 if __name__ == "__main__":

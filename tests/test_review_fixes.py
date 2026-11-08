@@ -6,12 +6,12 @@ from pathlib import Path
 
 from helpers import Env, git
 
-from fm import backlog, cli, guard, health, loop
+from fm import agents, backlog, cli, guard, health, loop
 
 
 class GuardFalsePositives(unittest.TestCase):
     def check(self, cmd: str, cwd: str = "/h") -> str | None:
-        return guard.check_bash(cmd, cwd, [Path("/w")], "fm/ty-1", Path("/h/fm.toml"), [])
+        return guard.check_bash(cmd, guard.Scope(cwd, [Path("/w")], "fm/ty-1", Path("/h/fm.toml"), []))
 
     def test_reading_the_config_with_redirects_is_not_a_write(self):
         self.assertIsNone(self.check("cat fm.toml 2>/dev/null"))
@@ -118,7 +118,7 @@ class LaunchRace(unittest.TestCase):
 
         loop.sessions.start = start_and_cancel
         try:
-            loop.launch(e.p, e.issue(iid))
+            agents.launch(e.p, e.issue(iid))
         finally:
             loop.sessions.start = real
         self.assertEqual(e.issue(iid)["status"], "canceled")

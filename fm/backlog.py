@@ -24,7 +24,7 @@ import contextlib
 import re
 from collections.abc import Generator
 from datetime import date
-from typing import Any, cast
+from typing import Any, TypedDict, Unpack
 
 from . import util
 from .config import Project
@@ -33,8 +33,6 @@ STATUSES = ("triage", "backlog", "refining", "ready", "in progress", "in review"
 CLOSED = ("done", "canceled", "duplicate")
 RUNNING = ("refining", "in progress")
 PRIORITIES = ("urgent", "high", "medium", "low", "none")
-EMPTY: dict[str, Any] = {"schema_version": 5, "updated": "", "projects": [], "issues": [], "archive": [], "decisions": [], "decisions_resolved": []}
-
 Issue = dict[str, Any]
 Data = dict[str, Any]
 
@@ -43,16 +41,59 @@ class BacklogError(Exception):
     pass
 
 
-def _copy(v: Any) -> Any:
-    return list(cast(list[Any], v)) if isinstance(v, list) else v
+class Agent(TypedDict, total=False):
+    """An issue's `agent`: the session working on it."""
+
+    name: str
+    short: str
+    session: str
+    model: str
+    cwd: str
+
+
+class Acceptance(TypedDict, total=False):
+    claim: str
+    criterion: str
+    verdict: str
+
+
+class Report(TypedDict, total=False):
+    summary: str
+    review: str
+    confused: str
+
+
+class Reviewer(TypedDict, total=False):
+    """An issue's `reviewer`: the review running."""
+
+    round: int
+    tip: str
+
+
+class Review(TypedDict):
+    """An issue's `review`: a reviewer's verdict."""
+
+    round: int
+    tip: str
+    high: int
+    medium: int
+
+
+class Check(TypedDict, total=False):
+    head: str
+    risk: str
+
+
+def empty() -> Data:
+    return {"schema_version": 5, "updated": "", "projects": [], "issues": [], "archive": [], "decisions": [], "decisions_resolved": []}
 
 
 def load(p: Project) -> Data:
-    d: Data = util.read_json(p.backlog_file, None) or {k: _copy(v) for k, v in EMPTY.items()}
+    d: Data = util.read_json(p.backlog_file, None) or empty()
     if d.get("schema_version") != 5:
         raise BacklogError(f"{p.backlog_file}: schema {d.get('schema_version')!r}, expected 5")
-    for k, v in EMPTY.items():
-        d.setdefault(k, _copy(v))
+    for k, v in empty().items():
+        d.setdefault(k, v)
     return d
 
 
@@ -88,17 +129,24 @@ def event(p: Project, iid: str | None, text: str) -> None:
     util.append_jsonl(p.state / "events.jsonl", {"time": util.now(), "issue": iid, "text": text})
 
 
-def add(  # noqa: PLR0913
-    p: Project,
-    title: str,
-    *,
-    detail: str = "",
-    status: str = "backlog",
-    criterion: str = "",
-    claim: str = "",
-    source: str | None = None,
-    priority: str = "none",
-) -> str:
+class NewIssue(TypedDict, total=False):
+    """The optional fields of a new issue."""
+
+    detail: str
+    criterion: str
+    claim: str
+    source: str | None
+    priority: str
+
+
+class Question(TypedDict, total=False):
+    kind: str
+    action: str
+
+
+def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue]) -> str:
+    detail, criterion, claim = f.get("detail", ""), f.get("criterion", ""), f.get("claim", "")
+    source, priority = f.get("source"), f.get("priority", "none")
     if status not in ("triage", "backlog", "ready"):
         raise BacklogError("a new issue starts in triage, backlog or ready")
     if status == "ready" and not criterion:
@@ -169,7 +217,8 @@ def open_questions(d: Data, iid: str | None = None) -> list[dict[str, Any]]:
     return [q for q in d["decisions"] if q.get("issue") and (iid is None or q["issue"] == iid)]
 
 
-def ask(p: Project, iid: str, agent: str, text: str, kind: str = "question", action: str = "") -> str:  # noqa: PLR0913
+def ask(p: Project, iid: str, agent: str, text: str, **f: Unpack[Question]) -> str:
+    kind, action = f.get("kind", "question"), f.get("action", "")
     with edit(p) as d:
         i = get(d, iid)
         n = sum(1 for q in d["decisions"] + d["decisions_resolved"] if q.get("issue") == iid) + 1
@@ -208,13 +257,14 @@ def note(p: Project, iid: str, text: str, source: str) -> None:
     """A note from outside fm for the issue's agent: delivered like an owner's answer (loop.deliver_answers)."""
     with edit(p) as d:
         i = get(d, iid)
+        agent: Agent = i.get("agent") or {}
         n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == iid and q.get("kind") == "note")
         d["decisions_resolved"].append(
             {
                 "id": f"{iid} N{n + 1}",
                 "issue": iid,
                 "kind": "note",
-                "agent": util.sub(i, "agent").get("name"),
+                "agent": agent.get("name"),
                 "text": "signal",
                 "answer": text,
                 "source": source,

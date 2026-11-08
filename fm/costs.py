@@ -55,9 +55,9 @@ def usage(files: list[Path]) -> dict[str, Any]:
                 raw = json.loads(ln)
             except ValueError:
                 continue
-            r: dict[str, Any] = util.sub({"r": raw}, "r")
-            m = util.sub(r, "message")
-            u = util.sub(m, "usage")
+            r = util.json_object(raw) or {}
+            m = util.json_object(r.get("message")) or {}
+            u = util.json_object(m.get("usage")) or {}
             if r.get("type") != "assistant" or not u:
                 continue
             mid = m.get("id") or ""
@@ -65,7 +65,7 @@ def usage(files: list[Path]) -> dict[str, Any]:
                 continue
             seen.add(mid)
             cw = u.get("cache_creation_input_tokens") or 0
-            cw1h = util.sub(u, "cache_creation").get("ephemeral_1h_input_tokens") or 0
+            cw1h = (util.json_object(u.get("cache_creation")) or {}).get("ephemeral_1h_input_tokens") or 0
             inp, cr, out = u.get("input_tokens") or 0, u.get("cache_read_input_tokens") or 0, u.get("output_tokens") or 0
             p = PRICES.get(family(m.get("model", "")) or "")
             cost = (inp * p[0] + (cw - cw1h) * p[1] + cw1h * p[2] + cr * p[3] + out * p[4]) / 1e6 if p else 0.0

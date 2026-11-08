@@ -79,12 +79,12 @@ class Lock(unittest.TestCase):
         self.assertEqual(r.stdout.strip(), "free")
 
     def test_the_brief_names_the_resources(self):
-        from fm import backlog, loop
+        from fm import agents, backlog
         from fm.config import Project
 
         p = Project.load(self.e.home)
         iid = backlog.add(p, "x", status="ready", criterion="y")
-        text = loop.brief(p, backlog.get(backlog.load(p), iid), "work")
+        text = agents.brief(p, backlog.get(backlog.load(p), iid), "work")
         self.assertIn("`gpu`, `sim` (2 slots)", text)
         self.assertIn("fm lock NAME run", text)
 

@@ -88,13 +88,11 @@ def append_jsonl(path: Path, obj: Any) -> None:
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
-def sub(d: dict[str, Any], key: str) -> dict[str, Any]:
-    """d[key] as a dict; {} when it is missing, null or not a dict."""
-    v = d.get(key)
-    return cast(dict[str, Any], v) if isinstance(v, dict) else {}
+def json_object(v: object) -> dict[str, Any] | None:
+    """The JSON value as an object, or None when it is anything else: the one place untyped JSON gets its type."""
+    return cast(dict[str, Any], v) if isinstance(v, dict) else None
 
 
-def items(d: dict[str, Any], key: str) -> list[Any]:
-    """d[key] as a list; [] when it is missing, null or not a list."""
-    v = d.get(key)
+def json_list(v: object) -> list[Any]:
+    """The JSON value as a list; [] when it is anything else."""
     return cast(list[Any], v) if isinstance(v, list) else []

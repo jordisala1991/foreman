@@ -17,61 +17,79 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from . import backlog, integrate, util
 from .config import Project
+from .talk import send_back
 
 
-def run(p: Project) -> list[str]:  # noqa: C901, PLR0912
+def run(p: Project) -> list[str]:
     folder = p.home / "sources"
     filed: list[str] = []
     if not folder.is_dir():
         return filed
     for exe in sorted(folder.iterdir()):
-        if not exe.is_file() or not os.access(exe, os.X_OK):
-            continue
-        cursor_file = p.state / "cursors" / exe.name
-        cursor = cursor_file.read_text().strip() if cursor_file.exists() else ""
-        try:
-            r = subprocess.run([str(exe)], env={**os.environ, "FM_CURSOR": cursor}, capture_output=True, text=True, timeout=60, check=False)
-        except (OSError, subprocess.SubprocessError) as e:
-            util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": repr(e)})
-            continue
-        for ln in r.stdout.splitlines():
-            try:
-                raw = json.loads(ln)
-            except ValueError:
-                continue
-            s = util.sub({"s": raw}, "s")
-            if not isinstance(raw, dict):
-                fail(p, exe.name, "a signal must be a JSON object", ln)
-                continue
-            if "cursor" in s:
-                util.write_text_atomic(cursor_file, str(s["cursor"]))
-            elif s.get("task") and not s.get("key"):
-                fail(p, exe.name, "a signal with a task needs a key", s)
-            elif s.get("task"):
-                key = str(s["key"])
-                applied = p.state / "applied" / exe.name
-                if key in {x.get("key") for x in util.read_jsonl(applied)}:
-                    continue
-                try:
-                    apply(p, f"{exe.name}:{key}", s)
-                except (backlog.BacklogError, ValueError) as e:  # permanent: it will not become valid by waiting
-                    fail(p, exe.name, str(e), s)
-                except Exception as e:  # noqa: BLE001 - transient (a busy checkout, a hung stop): tried again next tick
-                    logged = p.state / "retrying" / exe.name  # one line per key, not one per tick
-                    if key not in {x.get("key") for x in util.read_jsonl(logged)}:
-                        util.append_jsonl(logged, {"key": key, "at": util.now()})
-                        fail(p, exe.name, f"{e!r} (will be tried again)", s)
-                    continue
-                util.append_jsonl(applied, {"key": key, "at": util.now()})
-            elif s.get("key") and s.get("title"):
-                iid = backlog.add(p, s["title"], detail=s.get("detail", ""), status="triage", source=f"{exe.name}:{s['key']}")
-                if iid:
-                    filed.append(iid)
+        if exe.is_file() and os.access(exe, os.X_OK):
+            filed += _poll(p, exe)
     return filed
+
+
+def _poll(p: Project, exe: Path) -> list[str]:
+    """Runs one source once: its signals are handled in order; the ids of the triage issues it filed."""
+    cursor_file = p.state / "cursors" / exe.name
+    cursor = cursor_file.read_text().strip() if cursor_file.exists() else ""
+    try:
+        r = subprocess.run([str(exe)], env={**os.environ, "FM_CURSOR": cursor}, capture_output=True, text=True, timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": repr(e)})
+        return []
+    ids = (_signal(p, exe.name, ln, cursor_file) for ln in r.stdout.splitlines())
+    return [iid for iid in ids if iid]
+
+
+def _signal(p: Project, name: str, ln: str, cursor_file: Path) -> str | None:
+    """One line of a source's output; the id of the issue it filed, if it filed one."""
+    try:
+        s = util.json_object(json.loads(ln))
+    except ValueError:
+        return None
+    if s is None:
+        fail(p, name, "a signal must be a JSON object", ln)
+        return None
+    return _handle(p, name, s, cursor_file)
+
+
+def _handle(p: Project, name: str, s: dict[str, Any], cursor_file: Path) -> str | None:
+    if "cursor" in s:
+        util.write_text_atomic(cursor_file, str(s["cursor"]))
+    elif s.get("task") and not s.get("key"):
+        fail(p, name, "a signal with a task needs a key", s)
+    elif s.get("task"):
+        _on_task(p, name, s)
+    elif s.get("key") and s.get("title"):
+        return backlog.add(p, s["title"], detail=s.get("detail", ""), status="triage", source=f"{name}:{s['key']}") or None
+    return None
+
+
+def _on_task(p: Project, name: str, s: dict[str, Any]) -> None:
+    """A signal that targets an open task: applied once per key."""
+    key = str(s["key"])
+    applied = p.state / "applied" / name
+    if key in {x.get("key") for x in util.read_jsonl(applied)}:
+        return
+    try:
+        apply(p, f"{name}:{key}", s)
+    except (backlog.BacklogError, ValueError) as e:  # permanent: it will not become valid by waiting
+        fail(p, name, str(e), s)
+    except Exception as e:  # transient (a busy checkout, a hung stop): tried again next tick
+        logged = p.state / "retrying" / name  # one line per key, not one per tick
+        if key not in {x.get("key") for x in util.read_jsonl(logged)}:
+            util.append_jsonl(logged, {"key": key, "at": util.now()})
+            fail(p, name, f"{e!r} (will be tried again)", s)
+        return
+    util.append_jsonl(applied, {"key": key, "at": util.now()})
 
 
 def fail(p: Project, name: str, error: str, signal: object) -> None:
@@ -83,8 +101,6 @@ ACTIONS = ("note", "reject", "accept", "done", "cancel")
 
 def apply(p: Project, source: str, s: dict[str, Any]) -> None:
     """One signal on a task, through the owner's command path. Raises when it is not valid: nothing changed."""
-    from . import loop  # late: loop imports this module
-
     iid, action, text = str(s["task"]), s.get("action"), str(s.get("text") or "")
     i = backlog.get(backlog.load(p), iid)
     status = i["status"]
@@ -102,7 +118,7 @@ def apply(p: Project, source: str, s: dict[str, Any]) -> None:
         if status != "in review":
             raise ValueError(f"{iid} is {status}, not in the integration queue")
         if action == "reject":
-            loop.send_back(p, iid, "rejection", text)
+            send_back(p, iid, "rejection", text)
         else:
             integrate.accept(p, iid, by=source)
     elif action == "done":

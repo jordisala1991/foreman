@@ -297,9 +297,9 @@ class Queue(unittest.TestCase):
         e = Env(test="true", autonomy="medium")
         f = [{"path": "a.py", "added": 1, "deleted": 0}]
         kw = dict(tests="pass", files=f, deleted=[], conflict=False, commits=1)
-        self.assertEqual(integrate.score(e.p, review="open after round 2: H 0, M 1", **kw)[0], "high")
-        self.assertEqual(integrate.score(e.p, review="", **kw)[0], "high")
-        self.assertEqual(integrate.score(e.p, review="clean", **kw)[0], "low")
+        self.assertEqual(integrate.score(e.p, integrate.Facts(review="open after round 2: H 0, M 1", **kw))[0], "high")
+        self.assertEqual(integrate.score(e.p, integrate.Facts(review="", **kw))[0], "high")
+        self.assertEqual(integrate.score(e.p, integrate.Facts(review="clean", **kw))[0], "low")
 
     def test_sensitive_path_is_high(self):
         e = Env(test="true")

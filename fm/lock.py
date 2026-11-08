@@ -25,7 +25,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from . import util
 
@@ -147,10 +147,9 @@ class Resource:
 def declared(cfg: dict[str, Any]) -> dict[str, Resource]:
     """The project's resources, from `[resources.NAME]` in fm.toml."""
     out: dict[str, Resource] = {}
-    raw: dict[str, Any] = util.sub(cfg, "resources")
-    for name, item in raw.items():
-        r: dict[str, Any] = cast(dict[str, Any], item if isinstance(item, dict) else {})
-        out[name] = Resource(name, [str(s) for s in cast(list[Any], r.get("slots", []))] or None, r.get("max_minutes", 20))
+    for name, item in (util.json_object(cfg.get("resources")) or {}).items():
+        r = util.json_object(item) or {}
+        out[name] = Resource(name, [str(s) for s in util.json_list(r.get("slots"))] or None, r.get("max_minutes", 20))
     return out
 
 

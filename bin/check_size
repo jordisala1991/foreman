@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Size checks, both ratchets (exceptions may shrink, never grow): no file in fm/ or panel/src over its limit, and no function
-that ruff lets pass with a `# noqa: C901/PLR09..` over the size recorded for it in `[tool.fm-size.functions]`
-(`"path:name" = [statements, decisions, arguments]`). A noqa'd function missing from that table fails too.
-
-Limits live in pyproject.toml, [tool.fm-size]: `limit` (default for the code), `tests_limit`, and `[tool.fm-size.exceptions]`,
-path = lines allowed. An exception whose file is now under the plain limit is stale and fails too: delete it.
+"""Size rules, with no exceptions: no file in fm/ or panel/src over `limit` lines (tests: `tests_limit`), both in pyproject.toml
+[tool.fm-size], and no `noqa` in fm/ that silences a size or complexity rule (C901, PLR09xx): ruff checks the functions, and this
+keeps anyone from turning that check off one function at a time. A rule that fires is a design signal: refactor.
 """
 
-import ast
 import re
 import sys
 import tomllib
 from pathlib import Path
 
 CODE = (".py", ".ts", ".tsx", ".css")
+SILENCED = re.compile(r"noqa:.*\b(C901|PLR09\d\d)\b")
 
 
 def lines(path: Path) -> int:
@@ -22,68 +19,25 @@ def lines(path: Path) -> int:
 
 def check(root: Path) -> list[str]:
     cfg = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["fm-size"]
-    exceptions: dict[str, int] = cfg.get("exceptions", {})
     rules = [("fm", cfg["limit"]), ("panel/src", cfg["limit"]), ("tests", cfg["tests_limit"])]
     problems: list[str] = []
-    seen: set[str] = set()
     for folder, limit in rules:
         for f in sorted((root / folder).rglob("*")):
             if not f.is_file() or f.suffix not in CODE or "__pycache__" in f.parts:
                 continue
             rel, n = f.relative_to(root).as_posix(), lines(f)
-            allowed = exceptions.get(rel, limit)
-            seen.add(rel)
-            if n > allowed:
-                problems.append(f"{rel}: {n} lines, over its limit of {allowed}")
-            elif rel in exceptions and n <= limit:
-                problems.append(f"{rel}: {n} lines is under {limit} now; remove it from the exceptions")
-    problems += [f"{rel}: exception for a file that does not exist" for rel in exceptions if rel not in seen]
-    return problems
-
-
-DECISIONS = (ast.If, ast.For, ast.While, ast.ExceptHandler, ast.IfExp, ast.comprehension, ast.match_case, ast.Assert)
-
-
-def measure(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[int]:
-    """[statements, decision points, arguments] of a function, nested functions included."""
-    nodes = list(ast.walk(fn))
-    stmts = sum(isinstance(n, ast.stmt) for n in nodes) - 1
-    decisions = sum(isinstance(n, DECISIONS) for n in nodes) + sum(len(n.values) - 1 for n in nodes if isinstance(n, ast.BoolOp))
-    a = fn.args
-    return [stmts, decisions, len(a.posonlyargs) + len(a.args) + len(a.kwonlyargs)]
-
-
-def functions(root: Path) -> dict[str, list[int]]:
-    """The measures of the functions whose def line carries a complexity noqa."""
-    found: dict[str, list[int]] = {}
-    for f in sorted((root / "fm").rglob("*.py")):
-        text = f.read_text(encoding="utf-8")
-        marked = {n for n, ln in enumerate(text.splitlines(), 1) if re.search(r"noqa:.*\b(C901|PLR09\d\d)\b", ln)}
-        for node in ast.walk(ast.parse(text)):
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.lineno in marked:
-                found[f"{f.relative_to(root).as_posix()}:{node.name}"] = measure(node)
-    return found
-
-
-def check_functions(root: Path) -> list[str]:
-    cfg = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["fm-size"]
-    recorded: dict[str, list[int]] = cfg.get("functions", {})
-    now = functions(root)
-    problems: list[str] = []
-    for key, got in now.items():
-        if key not in recorded:
-            problems.append(f"{key}: has a complexity noqa but no entry in [tool.fm-size.functions]; add it at {got}")
-        elif any(g > r for g, r in zip(got, recorded[key], strict=True)):
-            problems.append(f"{key}: {got} [statements, decisions, arguments] grew over its recorded {recorded[key]}")
-        elif got != recorded[key]:
-            problems.append(f"{key}: shrank to {got}; lower its entry from {recorded[key]}")
-    problems += [f"{key}: recorded but no longer has a complexity noqa; remove the entry" for key in recorded if key not in now]
+            if n > limit:
+                problems.append(f"{rel}: {n} lines, over the limit of {limit}")
+            if f.suffix == ".py" and folder == "fm":
+                for num, ln in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+                    if SILENCED.search(ln):
+                        problems.append(f"{rel}:{num}: a size/complexity rule is silenced with noqa; refactor instead")
     return problems
 
 
 def main() -> None:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
-    problems = check(root) + check_functions(root)
+    problems = check(root)
     for line in problems:
         print(line, file=sys.stderr)
     sys.exit(1 if problems else 0)

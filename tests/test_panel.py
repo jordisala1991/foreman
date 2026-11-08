@@ -27,7 +27,7 @@ class PanelTest(unittest.TestCase):
         home.mkdir()
         # `claude` is /usr/bin/false: no real sessions are listed or stopped
         (home / "fm.toml").write_text('[project]\nname = "demo"\nprefix = "DE"\nrepo = "repo"\n\n[agents]\nclaude = "/usr/bin/false"\n', encoding="utf-8")
-        util.write_json(home / "backlog.json", backlog.EMPTY)
+        util.write_json(home / "backlog.json", backlog.empty())
         register(home)
         self.p = Project.load(home)
         self.triage = backlog.add(self.p, "A health finding", status="triage", criterion="it is gone")
