@@ -35,14 +35,20 @@ def cmd_verdict(a: argparse.Namespace) -> None:
     iid = mine(a)
     with backlog.edit(p) as d:
         i = backlog.get(d, iid)
-        r: backlog.Reviewer = i.get("reviewer") or {}
-        v = {"round": r.get("round", 1), "tip": r.get("tip", ""), "high": a.high, "medium": a.medium, "low": a.low, "file": a.file, "at": util.now()}
-        i["review"] = v
+        latest: backlog.Reviewer = i.get("reviewer") or {}
+        newest = latest.get("tip", "")
+        launched = [x.get("tip", "") for x in (*i.get("reviewers", []), latest)]
+        tip = next((t for t in launched if t and t.startswith(a.tip)), "") if a.tip else newest
+        if a.tip and not tip:
+            sys.exit(f"fm: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
+        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "high": a.high, "medium": a.medium, "low": a.low, "file": a.file, "at": util.now()}
         i["reviews"] = [*i.get("reviews", []), v]
-        report: backlog.Report = i.get("report") or {}
-        i["report"] = {**report, "review": "clean" if a.high + a.medium == 0 else f"open: H {a.high}, M {a.medium}"}
+        if tip == newest:  # a verdict for an older launch is history: it decides nothing
+            i["review"] = v
+            report: backlog.Report = i.get("report") or {}
+            i["report"] = {**report, "review": "clean" if a.high + a.medium == 0 else f"open: H {a.high}, M {a.medium}"}
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
-    backlog.event(p, iid, f"review round {v['round']}: H {a.high}, M {a.medium}, L {a.low} ({a.file})")
+    backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: H {a.high}, M {a.medium}, L {a.low} ({a.file})")
     print("Verdict recorded. End your turn.")
 
 
