@@ -36,7 +36,6 @@ def _commits(p: Project, branch: str) -> int:
 
 
 PUSH_TIMEOUT_S = 20
-PUSH_BACKOFF_TICKS = 3
 PUSH_ATTEMPTS = 3  # consecutive failures of one task's push before it is blocked
 
 
@@ -59,26 +58,20 @@ def push(p: Project, change: dict[str, Any]) -> None:
         raise PushError(f"git push {branch}: {(r.err or r.out).strip()[:300]}")
 
 
-def backing_off(p: Project, i: dict[str, Any]) -> bool:
-    """A task whose push just failed is left alone for a few ticks, so a hung remote cannot stall every tick."""
-    age = util.age_s(i.get("push_failed_at"))
-    return age is not None and age < PUSH_BACKOFF_TICKS * int(p.get("health", "loop_seconds"))
-
-
 def push_task(p: Project, i: dict[str, Any], change: dict[str, Any]) -> None:
-    """`push`, counting consecutive failures on the task: each one starts the backoff and is retried (Transient);
-    the PUSH_ATTEMPTS-th raises PushError with git's last error, for the caller to block the task. A success resets."""
+    """`push`, counting consecutive failures on the task: each one is retried next tick (Transient); the
+    PUSH_ATTEMPTS-th raises PushError with git's last error, for the caller to block the task. A success resets."""
     try:
         push(p, change)
     except PushError as e:
         failures = int(i.get("push_failures") or 0) + 1
         if failures >= PUSH_ATTEMPTS:
-            backlog.update(p, i["id"], push_failures=0, push_failed_at="")
+            backlog.update(p, i["id"], push_failures=0)
             raise
-        backlog.update(p, i["id"], push_failures=failures, push_failed_at=util.now())
+        backlog.update(p, i["id"], push_failures=failures)
         raise providers.Transient(str(e)) from None
-    if i.get("push_failed_at") or i.get("push_failures"):
-        backlog.update(p, i["id"], push_failed_at="", push_failures=0)
+    if i.get("push_failures"):
+        backlog.update(p, i["id"], push_failures=0)
 
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
@@ -112,12 +105,12 @@ def _failed(p: Project, i: dict[str, Any], e: Exception) -> None:
 def open_drafts(p: Project) -> None:
     """Loop step: a task in progress with commits of its own has its branch pushed, and (`pr = draft`) a draft PR once
     it is. One task's failure never stops the others. A push that fails PUSH_ATTEMPTS times in a row blocks the task with git's last
-    error; any other failure is noted once and retried: a failed push is not retried for a few ticks."""
+    error; any other failure is noted once and retried next tick."""
     provider = registry.get(p)
     if provider.name != "github":
         return
     for i in backlog.issues(backlog.load(p)):
-        if i["status"] != "in progress" or not i.get("branch") or i.get("blocked") or backing_off(p, i):
+        if i["status"] != "in progress" or not i.get("branch") or i.get("blocked"):
             continue
         try:
             _running(p, provider, i)
@@ -127,14 +120,12 @@ def open_drafts(p: Project) -> None:
 
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
-    running. An unpushed branch is pushed here; a push that fails is Transient (it stays queued and is retried); the third in a row raises
-    PushError, and the loop blocks the task with git's error."""
+    running. An unpushed branch is pushed here; a push that fails is Transient (it stays queued and is retried); the
+    third in a row raises PushError, and the loop blocks the task with git's error."""
     provider = registry.get(p)
     if provider.name != "github":
         return "ok", ""
     if not provider.pushed(change_of(i, head)):
-        if backing_off(p, i):
-            return "wait", "its last push failed, trying again shortly"
         push_task(p, i, change_of(i, head))
     if not i.get("pr"):
         _open(p, provider, i, head, False)

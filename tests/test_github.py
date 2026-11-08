@@ -293,7 +293,7 @@ class Pulls(unittest.TestCase):
         hook = g.bare / "hooks" / "pre-receive"
         hook.write_text("#!/bin/sh\necho 'no pushing today' >&2\nexit 1\n")
         hook.chmod(0o755)
-        self.tick_through_backoff(g, iid, 3)
+        self.ticks(g, 3)
         self.assertIn("no pushing today", g.e.issue(iid)["blocked"])
         self.assertEqual(g.e.issue(iid)["status"], "in review")
 
@@ -317,27 +317,26 @@ class Pulls(unittest.TestCase):
         self.addCleanup(patcher.stop)
         return calls
 
-    def tick_through_backoff(self, g: GH, iid: str, times: int) -> None:
+    def ticks(self, g: GH, times: int) -> None:
         for _ in range(times):
-            backlog.update(g.e.p, iid, push_failed_at="")  # the backoff has run out
             loop.tick(g.e.p)
 
     def test_three_failed_pushes_in_a_row_block_the_task_with_git_s_last_error(self):
         g = self.make(test="true")
         iid = g.work(push=False)
         self.flaky_push(g, 99, "fatal: Authentication failed for 'https://github.com/o/r.git/'")
-        self.tick_through_backoff(g, iid, 2)
+        self.ticks(g, 2)
         self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.tick_through_backoff(g, iid, 1)
+        self.ticks(g, 1)
         self.assertIn("fatal: Authentication failed", g.e.issue(iid)["blocked"])
 
     def test_a_push_that_fails_once_then_succeeds_resets_the_count(self):
         g = self.make(test="true")
         iid = g.work(push=False)
         self.flaky_push(g, 1)
-        self.tick_through_backoff(g, iid, 1)
+        self.ticks(g, 1)
         self.assertEqual(g.e.issue(iid)["push_failures"], 1)
-        self.tick_through_backoff(g, iid, 1)
+        self.ticks(g, 1)
         self.assertEqual(g.e.issue(iid)["push_failures"], 0)
         self.assertFalse(g.e.issue(iid).get("blocked"))
         self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
@@ -349,7 +348,6 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertFalse(g.e.issue(iid).get("blocked"))
         self.assertEqual(self.origin_tip(g, iid), "")
-        backlog.update(g.e.p, iid, push_failed_at="")  # the backoff has run out
         loop.tick(g.e.p)
         self.assertFalse(g.e.issue(iid).get("blocked"))
         self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
@@ -362,21 +360,9 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertFalse(g.e.issue(iid).get("blocked"))
         self.assertEqual(g.e.issue(iid)["status"], "in review")
-        backlog.update(g.e.p, iid, push_failed_at="")
         loop.tick(g.e.p)
         self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
         self.assertFalse(g.e.issue(iid).get("blocked"))
-
-    def test_after_a_failed_push_the_next_tick_does_not_push_that_task_again(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        calls = self.flaky_push(g, 99)
-        loop.tick(g.e.p)
-        self.assertEqual(len(calls), 1)
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
-        self.assertEqual(len(calls), 1)
-        self.assertTrue(g.e.issue(iid)["push_failed_at"])
 
     def test_the_push_timeout_is_20_seconds(self):
         from unittest import mock
@@ -397,7 +383,7 @@ class Pulls(unittest.TestCase):
         remote_tip = self.origin_tip(g, iid)
         git(g.e.repo.parent / g.e.issue(iid)["worktree"], "commit", "-q", "--amend", "-m", "rewritten")
         g.deliver(iid)
-        self.tick_through_backoff(g, iid, 3)
+        self.ticks(g, 3)
         self.assertEqual(self.origin_tip(g, iid), remote_tip)
         self.assertTrue(g.e.issue(iid)["blocked"])
 
