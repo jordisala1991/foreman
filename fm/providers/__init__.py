@@ -20,6 +20,10 @@ class ConfigError(Exception):
     pass
 
 
+class ProviderError(Exception):
+    """A provider call that failed: git said no, or what the platform answered is not the shape fm expects."""
+
+
 class Transient(Exception):
     """A platform call that failed in a way worth retrying (network, rate limit, timeout): the loop retries, never blocks."""
 

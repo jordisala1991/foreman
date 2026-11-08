@@ -7,7 +7,7 @@ forbid_circular_dependencies = true
 source_roots = ["."]
 root_module = "ignore"
 exclude = ["tests", "panel", "demo", ".venv", "**/__pycache__"]
-layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "core"]
+layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
 
 # ui: the owner's and the agents' entry points; they call the loop and everything below.
 [[modules]]
@@ -87,6 +87,11 @@ depends_on = ["fm.providers"]
 path = "fm.providers.local"
 layer = "adapters"
 depends_on = ["fm.providers"]
+
+# proc: the one module that runs programs; used by the loop, the services and the adapters, never by the core.
+[[modules]]
+path = "fm.proc"
+layer = "proc"
 
 # core: vocabulary and pure rules (risk, autonomy, guard), plus the plain files that do not vary (backlog.json, config).
 # No subprocess here (ruff, TID251 in pyproject.toml).

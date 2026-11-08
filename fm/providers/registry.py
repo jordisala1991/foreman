@@ -1,8 +1,8 @@
 """Picks the project's provider: the one place that knows the adapters (github, local) and how to tell which applies."""
 
 import re
-import subprocess
 
+from .. import proc
 from ..config import Project
 from . import ConfigError, Provider, merge_strategy, pr_mode
 from .github import GitHub
@@ -11,8 +11,8 @@ from .local import Local
 
 def detect(p: Project) -> str:
     """github when the repo's origin is on GitHub, else local."""
-    r = subprocess.run(["git", "-C", str(p.repo), "remote", "get-url", "origin"], capture_output=True, text=True, check=False)
-    return "github" if r.returncode == 0 and re.search(r"github\.com[:/]", r.stdout) else "local"
+    r = proc.run(["git", "-C", str(p.repo), "remote", "get-url", "origin"])
+    return "github" if r.code == 0 and re.search(r"github\.com[:/]", r.out) else "local"
 
 
 def get(p: Project) -> Provider:

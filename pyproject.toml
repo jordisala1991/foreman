@@ -22,12 +22,12 @@ select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PLR0912", "PLR0913", "PLR0915
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "__future__.annotations".msg = "not needed on Python 3.11+"
-"subprocess".msg = "only the outside layers run processes (git, gh, claude): see DESIGN.md, Architecture, and per-file-ignores below"
+"subprocess".msg = "run programs through fm/proc.py: see DESIGN.md, Architecture"
 
-# The modules that may run processes: loop, services, sources, provider adapters, tests. Adding one here is the owner's call.
+# Only fm/proc.py runs processes. lock.py is the one exception (process groups and signals, see DESIGN.md), and the tests.
+# Adding one here is the owner's call.
 [tool.ruff.lint.per-file-ignores]
-"fm/{loop,integrate,pulls,sessions,lock,sources}.py" = ["TID251"]
-"fm/providers/{github,local,registry}.py" = ["TID251"]
+"fm/{proc,lock}.py" = ["TID251"]
 "tests/*.py" = ["TID251"]
 
 [tool.ruff.lint.mccabe]

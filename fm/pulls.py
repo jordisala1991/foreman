@@ -3,10 +3,9 @@ running task a draft PR once its first commit is pushed (`[integrate] pr = draft
 branch is pushed and has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
-import subprocess
 from typing import Any
 
-from . import backlog, providers, util
+from . import backlog, proc, providers, util
 from .config import Project
 from .providers import Provider, registry
 
@@ -26,13 +25,12 @@ def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
 
 
 def _head(p: Project, branch: str) -> str:
-    r = subprocess.run(["git", "-C", str(p.repo), "rev-parse", "--verify", branch], capture_output=True, text=True, check=False)
-    return r.stdout.strip()
+    return proc.run(["git", "-C", str(p.repo), "rev-parse", "--verify", branch]).out.strip()
 
 
 def _commits(p: Project, branch: str) -> int:
-    r = subprocess.run(["git", "-C", str(p.repo), "rev-list", "--count", f"{p.get('project', 'main')}..{branch}"], capture_output=True, text=True, check=False)
-    return int(r.stdout.strip() or 0)
+    r = proc.run(["git", "-C", str(p.repo), "rev-list", "--count", f"{p.get('project', 'main')}..{branch}"])
+    return int(r.out.strip() or 0)
 
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:

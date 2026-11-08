@@ -10,7 +10,7 @@ import unittest
 from helpers import Env, fm, git
 
 from fm import backlog, integrate, loop, providers, util
-from fm.providers import registry
+from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -64,8 +64,11 @@ FAKE_GH = textwrap.dedent("""\
             sys.exit(1)
         print(json.dumps([{"bucket": s["ci"]}]))
         sys.exit(8 if s["ci"] == "pending" else 0)
+    elif a[:2] == ["pr", "view"] and s.get("bad_view"):
+        print(json.dumps({"state": "SIDEWAYS", "number": "one"}))
     elif a[:2] == ["pr", "view"]:
-        print(json.dumps({"state": pr["state"], "mergeCommit": {"oid": "c0ffee"} if pr["state"] == "MERGED" and not s.get("no_oid") else None}))
+        mc = {"oid": "c0ffee"} if pr["state"] == "MERGED" and not s.get("no_oid") else None
+        print(json.dumps({"number": int(a[2]), "url": "https://github.com/o/r/pull/" + a[2], "isDraft": pr["draft"], "state": pr["state"], "mergeCommit": mc}))
     save()
 """)
 
@@ -141,6 +144,46 @@ class Provider(unittest.TestCase):
             registry.get(e.p)
         e.p.cfg["integrate"]["provider"] = "github"
         self.assertEqual(registry.get(e.p).name, "github")
+
+
+class Border(unittest.TestCase):
+    """What gh says is turned into fm's own types at the border; a shape that does not fit is a clear ProviderError."""
+
+    GOOD = {"number": 7, "url": "https://github.com/o/r/pull/7", "isDraft": True, "state": "OPEN", "mergeCommit": None}
+
+    def test_a_pull_request_becomes_a_typed_value(self):
+        pr = github.pull_request(self.GOOD)
+        self.assertEqual((pr.number, pr.url, pr.draft, pr.state, pr.merge_commit), (7, "https://github.com/o/r/pull/7", True, "OPEN", ""))
+        merged = github.pull_request({**self.GOOD, "state": "MERGED", "mergeCommit": {"oid": "abc"}})
+        self.assertEqual((merged.state, merged.merge_commit), ("MERGED", "abc"))
+
+    def test_a_pull_request_of_the_wrong_shape_is_a_provider_error(self):
+        for bad in (
+            [],
+            "x",
+            {**self.GOOD, "state": "SIDEWAYS"},
+            {**self.GOOD, "number": "7"},
+            {**self.GOOD, "number": True},
+            {**self.GOOD, "isDraft": "yes"},
+            {**self.GOOD, "mergeCommit": "abc"},
+            {**self.GOOD, "mergeCommit": {"oid": 1}},
+            {k: v for k, v in self.GOOD.items() if k != "url"},
+        ):
+            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
+                github.pull_request(bad)
+
+    def test_checks_become_buckets_or_a_provider_error(self):
+        self.assertEqual(github.buckets([{"bucket": "pass"}, {"bucket": "pending"}]), {"pass", "pending"})
+        for bad in ({}, [{"bucket": "weird"}], [{"state": "x"}], ["pass"]):
+            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
+                github.buckets(bad)
+
+    def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self):
+        g = GH()
+        self.addCleanup(g.close)
+        g.set(prs={"1": {"draft": False, "state": "OPEN", "comments": []}}, bad_view=True)
+        with self.assertRaises(providers.ProviderError):
+            registry.get(g.e.p).state({"pr": 1})
 
 
 class Pulls(unittest.TestCase):

@@ -59,6 +59,12 @@ class Architecture(unittest.TestCase):
     def test_an_adapter_cannot_import_the_loop(self):
         self.check("providers/github.py", "from .. import loop")
 
+    def test_core_cannot_import_proc(self):
+        self.check("risk.py", "from . import proc")
+
+    def test_an_adapter_cannot_import_subprocess_it_goes_through_proc(self):
+        self.check("providers/github.py", "import subprocess", tool="ruff")
+
     def test_a_service_cannot_import_the_loop(self):
         self.check("integrate.py", "from . import loop")
 
