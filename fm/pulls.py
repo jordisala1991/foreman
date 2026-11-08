@@ -1,5 +1,5 @@
 """Pull requests for a GitHub project (the loop's side: the loop pushes the task branches, the agents never do).
-`open_drafts` pushes a running task's new commits and, once it has some, gives it a draft PR (`[integrate] pr = draft`);
+`running` and `sync` push a running task's new commits and, once it has some, gives it a draft PR (`[integrate] pr = draft`);
 `prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
@@ -35,98 +35,43 @@ def _commits(p: Project, branch: str) -> int:
     return int(r.out.strip() or 0)
 
 
-PUSH_TIMEOUT_S = 20
-PUSH_ATTEMPTS = 3  # consecutive failures of one task's push before it is blocked
-
-
-class PushError(Exception):
-    """A push that did not happen; the message is git's own."""
-
-
-def push(p: Project, change: dict[str, Any]) -> None:
-    """Pushes the task's branch to origin from the main repo (worktree branches live there). Never forced, never
-    the main branch. Any failure raises PushError with git's error: the errors are not told apart by their text."""
-    branch = change["branch"]
-    if branch == p.get("project", "main"):
-        raise PushError(f"refusing to push {branch}: it is the main branch")
-    ref = f"refs/heads/{branch}"
-    try:
-        r = proc.run(["git", "-C", str(p.repo), "push", "origin", f"{ref}:{ref}"], timeout=PUSH_TIMEOUT_S)
-    except proc.ProcError as e:
-        raise PushError(f"git push {branch}: {e}") from None
-    if r.code != 0:
-        raise PushError(f"git push {branch}: {(r.err or r.out).strip()[:300]}")
-
-
-def push_task(p: Project, i: dict[str, Any], change: dict[str, Any]) -> None:
-    """`push`, counting consecutive failures on the task: each one is retried next tick (Transient); the
-    PUSH_ATTEMPTS-th raises PushError with git's last error, for the caller to block the task. A success resets."""
-    try:
-        push(p, change)
-    except PushError as e:
-        failures = int(i.get("push_failures") or 0) + 1
-        if failures >= PUSH_ATTEMPTS:
-            backlog.update(p, i["id"], push_failures=0)
-            raise
-        backlog.update(p, i["id"], push_failures=failures)
-        raise providers.Transient(str(e)) from None
-    if i.get("push_failures"):
-        backlog.update(p, i["id"], push_failures=0)
-
-
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
     change = change_of(i, head)
     change["body"] = describe.wrap(change["claim"] or change["title"])
     ref = provider.publish(change, draft)
-    backlog.update(p, i["id"], pr=ref, pr_error="")
+    backlog.update(p, i["id"], pr=ref)
     backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref['number']}: {ref['url']}")
 
 
-def _running(p: Project, provider: Provider, i: dict[str, Any]) -> None:
+def running(p: Project) -> list[dict[str, Any]]:
+    """The tasks whose branch the loop keeps on the platform: in progress, with a branch, not blocked (GitHub only)."""
+    if registry.get(p).name != "github":
+        return []
+    return [i for i in backlog.issues(backlog.load(p)) if i["status"] == "in progress" and i.get("branch") and not i.get("blocked")]
+
+
+def sync(p: Project, i: dict[str, Any]) -> None:
+    """One running task: with commits of its own its branch is pushed, and (`pr = draft`) it gets its draft PR. Failures
+    are the caller's (`loop.guarded`)."""
+    provider = registry.get(p)
     head = _head(p, i["branch"])
     if not head or not _commits(p, i["branch"]):
         return
     change = change_of(i, head)
     if not provider.pushed(change):
-        push_task(p, i, change)
+        provider.push(change)
     if providers.pr_mode(p) == "draft" and not i.get("pr"):
         _open(p, provider, i, head, True)
 
 
-def _failed(p: Project, i: dict[str, Any], e: Exception) -> None:
-    if isinstance(e, PushError):  # it failed PUSH_ATTEMPTS times in a row
-        backlog.update(p, i["id"], blocked=f"the loop could not push it: {e}"[:300])
-        backlog.event(p, i["id"], f"blocked: could not push: {e}"[:300])
-    elif i.get("pr_error") != str(e):
-        backlog.update(p, i["id"], pr_error=str(e))
-        backlog.event(p, i["id"], f"could not push or open its PR, will retry: {e}"[:300])
-
-
-def open_drafts(p: Project) -> None:
-    """Loop step: a task in progress with commits of its own has its branch pushed, and (`pr = draft`) a draft PR once
-    it is. One task's failure never stops the others. A push that fails PUSH_ATTEMPTS times in a row blocks the task with git's last
-    error; any other failure is noted once and retried next tick."""
-    provider = registry.get(p)
-    if provider.name != "github":
-        return
-    for i in backlog.issues(backlog.load(p)):
-        if i["status"] != "in progress" or not i.get("branch") or i.get("blocked"):
-            continue
-        try:
-            _running(p, provider, i)
-        except Exception as e:
-            _failed(p, i, e)
-
-
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
-    running. An unpushed branch is pushed here; a push that fails is Transient (it stays queued and is retried); the
-    third in a row raises PushError, and the loop blocks the task with git's error."""
+    running. An unpushed branch is pushed here; failures are the caller's (`loop.guarded`)."""
     provider = registry.get(p)
     if provider.name != "github":
         return "ok", ""
     if not provider.pushed(change_of(i, head)):
-        push_task(p, i, change_of(i, head))
+        provider.push(change_of(i, head))
     if not i.get("pr"):
         _open(p, provider, i, head, False)
     ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))

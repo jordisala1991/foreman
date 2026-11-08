@@ -265,128 +265,6 @@ class Pulls(unittest.TestCase):
         self.assertIn("merge risk low", pr["comments"][0])
         self.assertIn("round 1: H 0, M 0", pr["comments"][0])
 
-    def more_commits(self, g: GH, iid: str) -> None:
-        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
-        with open(wt / "app.py", "a") as f:
-            f.write("# more\n")
-        git(wt, "commit", "-qam", "more")
-
-    def test_fm_done_on_an_unpushed_branch_is_pushed_and_goes_to_review(self):
-        g = self.make(test="true")
-        iid = g.work()
-        loop.tick(g.e.p)
-        self.more_commits(g, iid)
-        g.deliver(iid)
-        self.assertNotEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
-        loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
-        self.assertEqual(g.e.issue(iid)["status"], "in review")
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.assertFalse(g.state["prs"]["1"]["draft"])
-
-    def test_a_failing_push_blocks_the_task_with_git_s_error(self):
-        g = self.make(test="true")
-        iid = g.work()
-        loop.tick(g.e.p)
-        self.more_commits(g, iid)
-        g.deliver(iid)
-        hook = g.bare / "hooks" / "pre-receive"
-        hook.write_text("#!/bin/sh\necho 'no pushing today' >&2\nexit 1\n")
-        hook.chmod(0o755)
-        self.ticks(g, 3)
-        self.assertIn("no pushing today", g.e.issue(iid)["blocked"])
-        self.assertEqual(g.e.issue(iid)["status"], "in review")
-
-    def flaky_push(self, g: GH, failures: int, error: str = "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com"):
-        """Patches the push so its first `failures` calls fail with `error`; returns the list of push calls."""
-        from unittest import mock
-
-        from fm import pulls
-
-        real, calls = pulls.proc.run, []
-
-        def run(args, **kw):
-            if "push" in args:
-                calls.append(args)
-                if len(calls) <= failures:
-                    return pulls.proc.Result(128, "", error)
-            return real(args, **kw)
-
-        patcher = mock.patch.object(pulls.proc, "run", run)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        return calls
-
-    def ticks(self, g: GH, times: int) -> None:
-        for _ in range(times):
-            loop.tick(g.e.p)
-
-    def test_three_failed_pushes_in_a_row_block_the_task_with_git_s_last_error(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        self.flaky_push(g, 99, "fatal: Authentication failed for 'https://github.com/o/r.git/'")
-        self.ticks(g, 2)
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.ticks(g, 1)
-        self.assertIn("fatal: Authentication failed", g.e.issue(iid)["blocked"])
-
-    def test_a_push_that_fails_once_then_succeeds_resets_the_count(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        self.flaky_push(g, 1)
-        self.ticks(g, 1)
-        self.assertEqual(g.e.issue(iid)["push_failures"], 1)
-        self.ticks(g, 1)
-        self.assertEqual(g.e.issue(iid)["push_failures"], 0)
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
-
-    def test_a_push_that_fails_once_with_a_connection_error_is_retried_and_never_blocks(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        self.flaky_push(g, 1)
-        loop.tick(g.e.p)
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.assertEqual(self.origin_tip(g, iid), "")
-        loop.tick(g.e.p)
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
-
-    def test_a_delivered_branch_whose_push_fails_transiently_stays_in_review_and_is_pushed_later(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        g.deliver(iid)
-        self.flaky_push(g, 1)
-        loop.tick(g.e.p)
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.assertEqual(g.e.issue(iid)["status"], "in review")
-        loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-
-    def test_the_push_timeout_is_20_seconds(self):
-        from unittest import mock
-
-        from fm import pulls
-
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        with mock.patch.object(pulls.proc, "run", wraps=pulls.proc.run) as run:
-            loop.tick(g.e.p)
-        (push,) = [c for c in run.call_args_list if "push" in c.args[0]]
-        self.assertEqual(push.kwargs["timeout"], 20)
-        self.assertTrue(iid)
-
-    def test_a_branch_that_diverged_from_origin_is_not_force_pushed(self):
-        g = self.make(test="true")
-        iid = g.work()
-        remote_tip = self.origin_tip(g, iid)
-        git(g.e.repo.parent / g.e.issue(iid)["worktree"], "commit", "-q", "--amend", "-m", "rewritten")
-        g.deliver(iid)
-        self.ticks(g, 3)
-        self.assertEqual(self.origin_tip(g, iid), remote_tip)
-        self.assertTrue(g.e.issue(iid)["blocked"])
-
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
         iid = g.work()
@@ -502,8 +380,8 @@ class Pulls(unittest.TestCase):
         iid = g.work()
         loop.tick(g.e.p)
         loop.tick(g.e.p)
-        self.assertIn("timed out", g.e.issue(iid)["pr_error"])
-        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push or open its PR" in e["text"]]
+        self.assertIn("timed out", g.e.issue(iid)["retry_error"])
+        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
         self.assertEqual(len(events), 1)
 
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
@@ -525,7 +403,7 @@ class Pulls(unittest.TestCase):
             g = self.make(test="true")
             g.set(**flag)
             first, second = g.work(), g.work()  # each work() ticks: the first one fails there, once
-            events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push or open its PR" in e["text"]]
+            events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
             self.assertEqual(len(events), 1)
             self.assertIn(text, events[0])
             self.assertFalse(g.e.issue(first).get("blocked"))
@@ -533,7 +411,7 @@ class Pulls(unittest.TestCase):
             loop.tick(g.e.p)
             self.assertIn("pr", g.e.issue(second))  # the failure did not stop the next task
             self.assertIn("pr", g.e.issue(first))
-            self.assertEqual(g.e.issue(first)["pr_error"], "")
+            self.assertEqual(g.e.issue(first)["retry_error"], "")
 
     def test_only_known_permanent_errors_are_permanent_and_unblock_clears_the_errors(self):
         from fm.providers import github
@@ -569,13 +447,13 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual((g.e.issue(iid)["status"], g.e.issue(iid)["commit"]), ("done", "feed01"))
 
-    def test_the_provider_never_publishes(self):
+    def test_the_provider_never_tags_releases_or_forces(self):
         import inspect
 
         from fm.providers import github
 
         src = inspect.getsource(github)
-        for word in ('"push"', '"tag"', '"release"'):
+        for word in ('"tag"', '"release"', "--force", "--tags", "+refs"):
             self.assertNotIn(word, src)
 
 

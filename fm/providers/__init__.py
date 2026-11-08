@@ -5,7 +5,8 @@ no tag, no release): that is the owner's, and releases are a separate concept.
 Operations: `publish` (make the branch visible: open the change), `ready` (mark it ready for review), `comment`,
 `body` (its description now), `describe` (set its body and title),
 `merge(change, strategy)` (the one merge in fm; a future queue is just another strategy), `state` (is it merged?
-closed?), `ci` (the platform's checks), `pushed` (is the branch on the platform at its tip?).
+closed?), `ci` (the platform's checks), `pushed` (is the branch on the platform at its tip?), `push` (put it there:
+never forced, never main; a failure is `Transient`, with the platform's own error).
 Config: `[integrate] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
 `merge` (`squash` default | `merge` | `rebase`; local has no rebase) and `pr` (`draft` default | `done`)."""
 
@@ -44,6 +45,10 @@ class Provider:
     def pushed(self, change: dict[str, Any]) -> bool:
         """Is the branch on the platform at the tip of `change['head']`? (nothing to push locally)"""
         return True
+
+    def push(self, change: dict[str, Any]) -> None:
+        """Puts the branch on the platform (nothing to do locally). Never forced, never the main branch; any failure is
+        a `Transient` carrying the platform's own error."""
 
     def publish(self, change: dict[str, Any], draft: bool) -> dict[str, Any]:
         """Makes the branch visible as a change (a pull request on a platform); returns its reference."""
