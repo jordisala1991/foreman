@@ -1,7 +1,8 @@
-"""Pull requests for a GitHub project (the loop's side: the loop pushes the task branches, the agents never do).
+"""Pull requests (the loop's side: the loop pushes the task branches, the agents never do).
 `running` and `sync` push a running task's new commits and, once it has some, gives it a draft PR (`[integrate] pr = draft`);
 `prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
-With the local provider every function here does nothing."""
+Every function calls the provider's operations whatever the platform; the local provider answers each as a no-op, and
+a task with no PR (`publish` returned nothing) has nothing to deliver to."""
 
 from pathlib import Path
 from typing import Any
@@ -39,14 +40,14 @@ def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: b
     change = change_of(i, head)
     change["body"] = describe.wrap(change["claim"] or change["title"])
     ref = provider.publish(change, draft)
+    if not ref:  # a provider with no pull requests
+        return
     backlog.update(p, i["id"], pr=ref)
     backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref['number']}: {ref['url']}")
 
 
 def running(p: Project) -> list[dict[str, Any]]:
-    """The tasks whose branch the loop keeps on the platform: in progress, with a branch, not blocked (GitHub only)."""
-    if registry.get(p).name != "github":
-        return []
+    """The tasks whose branch the loop keeps on the platform: in progress, with a branch, not blocked."""
     return [i for i in backlog.issues(backlog.load(p)) if i["status"] == "in progress" and i.get("branch") and not i.get("blocked")]
 
 
@@ -68,8 +69,6 @@ def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
     running. An unpushed branch is pushed here; failures are the caller's (`loop.guarded`)."""
     provider = registry.get(p)
-    if provider.name != "github":
-        return "ok", ""
     if not provider.pushed(change_of(i, head)):
         provider.push(change_of(i, head))
     if not i.get("pr"):
@@ -120,10 +119,10 @@ def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: 
 def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     """Marks the PR ready for review and posts the risk and verdict (once per checked tip)."""
     provider = registry.get(p)
-    if provider.name != "github":
-        return
     i = backlog.get(backlog.load(p), i["id"])
     pr: dict[str, Any] = i.get("pr") or {}
+    if not pr:
+        return
     change = change_of(i, c["head"])
     if pr.get("draft"):
         provider.ready(change)
