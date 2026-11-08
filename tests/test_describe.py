@@ -144,20 +144,18 @@ class Template(unittest.TestCase):
     def test_a_launched_work_agent_finds_the_template_at_its_report(self):
         e = Env(test="true")
         iid, text = self.launched(e)
-        self.assertTrue(text.startswith(f"# {iid}: "))
-        self.assertIn("**Proof**", text)
-        self.assertTrue(text.rstrip().splitlines()[-2].startswith("## Review rounds"))
+        self.assertEqual(text, (agents.BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", iid))
 
     def test_a_repo_pr_template_wins_and_review_rounds_is_added(self):
         e = Env(test="true")
         d = e.repo / ".github"
         d.mkdir()
-        (d / "pull_request_template.md").write_text("## Their summary\n\n## Their checklist\n")
+        theirs = "## Their summary\n\n## Their checklist\n"
+        (d / "pull_request_template.md").write_text(theirs)
         git(e.repo, "add", ".")
         git(e.repo, "commit", "-qm", "pr template")
         _, text = self.launched(e)
-        self.assertIn("## Their checklist", text)
-        self.assertNotIn("**Proof**", text)
+        self.assertTrue(text.startswith(theirs))
         self.assertTrue(text.rstrip().endswith("## Review rounds"))
 
     def test_an_existing_report_is_not_overwritten_on_relaunch(self):
