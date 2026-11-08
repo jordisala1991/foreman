@@ -5,8 +5,9 @@ import time
 from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any
+from urllib.parse import quote
 
-from . import backlog, costs, health, lock, metrics, pulls, sessions, util
+from . import backlog, costs, evidence, health, lock, metrics, pulls, sessions, util
 from .config import Project, registered
 
 RECENT_DAYS = 7  # closed issues the tasks screen still shows
@@ -114,7 +115,9 @@ def issue(p: Project, iid: str) -> Obj:
     shown = with_session(p, i, session_rows(p))
     if i.get("report"):
         check: Obj = i.get("check") or {}
-        shown["description"] = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
+        text = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
+        urls = {n: f"/evidence?p={quote(p.name)}&id={quote(iid)}&name={quote(n)}" for n in pulls.evidence_files(p, iid, text)}
+        shown["description"] = evidence.relink(text, urls)
     return {
         "issue": shown,
         "events": [e for e in util.read_jsonl(p.state / "events.jsonl") if e.get("issue") == iid][::-1],

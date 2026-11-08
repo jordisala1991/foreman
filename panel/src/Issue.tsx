@@ -31,6 +31,21 @@ function Cancel({ p, id, done }: { p: string; id: string; done: () => void }) {
   );
 }
 
+const IMAGE = /!\[([^\]]*)\]\((\/evidence\?[^()\s]+)\)/g;
+
+/** The description as text, with the report's images (served by /evidence) drawn where they are named. */
+function Described({ text }: { text: string }) {
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (const m of text.matchAll(IMAGE)) {
+    out.push(text.slice(at, m.index));
+    out.push(<img key={m.index} src={m[2]} alt={m[1]} style={{ maxWidth: "100%", display: "block" }} />);
+    at = m.index + m[0].length;
+  }
+  out.push(text.slice(at));
+  return <>{out}</>;
+}
+
 export function Issue({ product, id }: { product: Product; id: string }) {
   const path = `/api/issue?p=${enc(product.name)}&id=${enc(id)}`;
   const a = useFeed<IssueAnswer>(path, 10_000);
@@ -103,7 +118,7 @@ export function Issue({ product, id }: { product: Product; id: string }) {
           ) : null}
           {i.description ? (
             <Section title={t("isu_description")}>
-              <div className="card pre">{i.description}</div>
+              <div className="card pre"><Described text={i.description} /></div>
             </Section>
           ) : null}
           {i.report && i.status !== "in review" ? (

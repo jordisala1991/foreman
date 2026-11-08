@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import backlog, util
+from . import backlog, evidence, util
 from .config import Project
 
 PUBLISH = {
@@ -40,6 +40,7 @@ WHY = {
     "publish": "publishing goes outside this machine",
     "push-main": "pushing to the main branch (or forcing a push) skips the owner's integration",
     "delete": "it deletes something that is not this task's (outside its worktree, or another branch)",
+    "push-evidence": "the evidence branch is written by the loop, not by agents",
     "config": "it changes the project's config (fm.toml)",
 }
 
@@ -126,6 +127,8 @@ def _push(args: list[str], sc: Scope) -> str | None:
     if {"-f", "--force", "--force-with-lease", "--mirror", "--all"} & set(rest):
         return "push-main"
     dests = [r.split(":")[-1].removeprefix("refs/heads/") for r in refs[1:]] or [sc.branch]
+    if evidence.BRANCH in dests:
+        return "push-evidence"
     if any((d if d != "HEAD" else sc.branch) in sc.mains | {""} for d in dests):
         return "push-main"
     return None

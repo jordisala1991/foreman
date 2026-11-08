@@ -1,12 +1,15 @@
 """The GitHub provider: every task is a pull request, driven with `gh`. Only the loop runs it (the guard stops `gh pr`
-for agents); the agent only pushes its own branch. Nothing here publishes: no tag, no release, no push."""
+for agents); the agent only pushes its own branch. Nothing here publishes: no tag, no release. The only push fm makes is
+the `fm-evidence` branch (images of the reports, never forced, built with git plumbing so the checkout and the task
+branch are untouched)."""
 
 import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
-from .. import proc, util
+from .. import evidence, proc, util
 from . import Permanent, Provider, ProviderError, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
@@ -92,10 +95,10 @@ def buckets(raw: object) -> set[Bucket]:
 class GitHub(Provider):
     name = "github"
 
-    def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
+    def run(self, prog: str, *args: str, check: bool = True, input: str | None = None) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT, input=input)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if check and r.code != 0:
@@ -136,6 +139,42 @@ class GitHub(Provider):
 
     def describe(self, change: dict[str, Any], body: str) -> None:
         self.run("gh", "pr", "edit", str(change["pr"]), "--title", self.title(change), "--body", body)
+
+    def entries(self, tree: str) -> dict[str, str]:
+        """`git ls-tree` lines of a tree, by entry name."""
+        lines = self.run("git", "ls-tree", tree).out.splitlines()
+        return {line.split("\t", 1)[1]: line for line in lines}
+
+    def mktree(self, rows: dict[str, str]) -> str:
+        return self.run("git", "mktree", input="".join(f"{r}\n" for r in rows.values())).out.strip()
+
+    def evidence(self, change: dict[str, Any], files: dict[str, Path]) -> dict[str, str]:
+        """Puts the images in `ID/` of the orphan branch `fm-evidence` (added to what is there, one commit, a plain push
+        that origin refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
+        files = {n: f for n, f in files.items() if evidence.kind(n) and f.stat().st_size <= evidence.MAX_BYTES}
+        if not files:
+            return {}
+        iid = change["id"]
+        ref = f"refs/heads/{evidence.BRANCH}"
+        parent = (self.run("git", "ls-remote", "origin", ref).out.split() or [""])[0]
+        top: dict[str, str] = {}
+        mine: dict[str, str] = {}
+        if parent:
+            self.run("git", "fetch", "-q", "origin", ref)
+            top = self.entries(parent)
+            mine = self.entries(f"{parent}:{iid}") if iid in top else {}
+        before = dict(mine)
+        for name, f in files.items():
+            blob = self.run("git", "hash-object", "-w", "--no-filters", str(f)).out.strip()
+            mine[name] = f"100644 blob {blob}\t{name}"
+        if mine != before:
+            top[iid] = f"040000 tree {self.mktree(mine)}\t{iid}"
+            who = ["-c", "user.name=fm", "-c", "user.email=fm@localhost"]
+            parents = ["-p", parent] if parent else []
+            commit = self.run("git", *who, "commit-tree", self.mktree(top), *parents, "-m", f"evidence {iid}").out.strip()
+            self.run("git", "push", "-q", "origin", f"{commit}:{ref}")
+        slug = self.run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").out.strip()
+        return {n: f"https://github.com/{slug}/blob/{evidence.BRANCH}/{iid}/{n}?raw=true" for n in files}
 
     def ready(self, change: dict[str, Any]) -> None:
         self.run("gh", "pr", "ready", str(change["pr"]))

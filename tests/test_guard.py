@@ -32,6 +32,7 @@ class Bash(unittest.TestCase):
         self.assertEqual(self.check("git push --force origin fm/ty-1"), "push-main")
         self.assertEqual(self.check("git -C /w/ty-1 push origin main"), "push-main")
         self.assertIsNone(self.check("git push origin fm/ty-1"))
+        self.assertEqual(self.check("git push origin HEAD:fm-evidence"), "push-evidence")
         self.assertIsNone(self.check("git push"))  # the current branch is the task's
         self.assertEqual(self.check("git push", branch="main"), "push-main")
         self.assertEqual(self.check("git push origin --delete other"), "delete")

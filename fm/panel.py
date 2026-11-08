@@ -10,6 +10,7 @@ GET   /                index.html (sets the cookie)      /app.js, /app.css   the
 GET   /api/projects    each project: loop heartbeat, paused, what waits, what runs
 GET   /api/state       one project: its issues (closed ones of the last week), open questions, latest events
 GET   /api/issue       one issue: as stored, its events, its questions, its cost, its agent's session state
+GET   /evidence       an image of a report: p=, id=, name= (a bare file name in reports/ID/)
 GET   /api/system      loop heartbeat, paused, health findings, metrics per issue and their total
 POST  /api/add  /api/answer  /api/allow  /api/deny  /api/accept  /api/reject  /api/go  /api/cancel  /api/unblock
       /api/pause       (id=..., the text in the body; /api/add takes JSON {title, detail, claim, criterion})
@@ -19,6 +20,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import secrets
 from collections.abc import Callable
 from http.cookies import SimpleCookie
@@ -27,7 +29,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import backlog
+from . import backlog, evidence
 from .panel_actions import Refused, act
 from .panel_views import Obj, forget, issue, project, projects, state, summary, system
 
@@ -127,6 +129,18 @@ class Handler(BaseHTTPRequestHandler):
         except (KeyError, backlog.BacklogError) as e:
             self.json({"error": str(e).strip("'\"")}, 404)
 
+    def evidence(self, q: dict[str, list[str]]) -> None:
+        """An image of a task's report, only a plain file name inside `reports/ID/`."""
+        try:
+            p = project(q)
+        except KeyError:
+            return self.json({"error": "not found"}, 404)
+        iid, name = q.get("id", [""])[0], q.get("name", [""])[0]
+        f = p.home / "reports" / iid / name
+        if not (re.fullmatch(r"[A-Za-z0-9_-]+", iid) and evidence.bare(name) and f.is_file()):
+            return self.json({"error": "not found"}, 404)
+        self.send(200, f.read_bytes(), evidence.kind(name), headers={"Cache-Control": "private, max-age=60"})
+
     def do_GET(self) -> None:
         u = urlparse(self.path)
         q = parse_qs(u.query)
@@ -134,6 +148,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(403, "wrong key: open the URL `fm panel` printed", "text/plain; charset=utf-8")
         if u.path == "/":
             return self.index()
+        if u.path == "/evidence":
+            return self.evidence(q)
         if u.path in STATIC:
             return self.static(u.path)
         self.api(u.path, q)

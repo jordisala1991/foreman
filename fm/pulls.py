@@ -6,7 +6,7 @@ With the local provider every function here does nothing."""
 from pathlib import Path
 from typing import Any
 
-from . import backlog, describe, proc, providers, util
+from . import backlog, describe, evidence, proc, providers, util
 from .config import Project
 from .providers import Provider, registry
 
@@ -100,16 +100,38 @@ def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
     return f"**fm: merge risk {c['risk']}**\n\n{reasons}\n\nTests: {c['tests']} · CI: {c.get('ci') or 'none'}\nIndependent review, {review}\n"
 
 
+def evidence_files(p: Project, iid: str, text: str) -> dict[str, Path]:
+    """The images `text` names that exist in `reports/ID/` (a missing one is left as written)."""
+    folder = p.home / "reports" / iid
+    return {n: folder / n for n in evidence.names(text) if (folder / n).is_file()}
+
+
+def _failed(p: Project, i: dict[str, Any], what: str, e: Exception) -> None:
+    if i.get("pr_error") != str(e):
+        backlog.update(p, i["id"], pr_error=str(e))
+        backlog.event(p, i["id"], f"could not {what}, will retry: {e}"[:300])
+
+
 def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: dict[str, Any]) -> dict[str, Any]:
     """Sets the PR description for this tip. A failure never holds back the verdict comment or the merge: it is noted
-    once on the task (`pr_error`) and retried next tick."""
+    once on the task (`pr_error`) and retried next tick. If only the images could not be published the body is still
+    written, with them unlinked, and it is retried."""
+    change = change_of(i, head)
+    text = description(p, i, head, util.now())
+    urls: dict[str, str] = {}
+    retry = False
     try:
-        change = change_of(i, head)
-        provider.describe(change, describe.merge_body(provider.body(change), description(p, i, head, util.now())))
+        files = evidence_files(p, i["id"], text)
+        urls = provider.evidence(change, files) if files else {}
     except Exception as e:
-        if i.get("pr_error") != str(e):
-            backlog.update(p, i["id"], pr_error=str(e))
-            backlog.event(p, i["id"], f"could not set the PR description, will retry: {e}"[:300])
+        retry = True
+        _failed(p, i, "publish the evidence images", e)
+    try:
+        provider.describe(change, describe.merge_body(provider.body(change), evidence.relink(text, urls)))
+    except Exception as e:
+        _failed(p, i, "set the PR description", e)
+        return pr
+    if retry:
         return pr
     pr = {**pr, "described": head}
     backlog.update(p, i["id"], pr=pr, pr_error="")

@@ -42,6 +42,9 @@ FAKE_GH = textwrap.dedent("""\
     if a[:2] == ["pr", "create"] and flag("--head") == s.get("flaky"):
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
+    if a[:2] == ["repo", "view"]:
+        print("o/r")
+        sys.exit(0)
     if a[:1] == ["api"]:
         print(s.get("api_sha") or "null")
         sys.exit(0)
@@ -437,8 +440,12 @@ class Pulls(unittest.TestCase):
         from fm.providers import github
 
         src = inspect.getsource(github)
-        for word in ('"push"', '"tag"', '"release"'):
+        for word in ('"tag"', '"release"'):
             self.assertNotIn(word, src)
+        pushes = [line for line in src.splitlines() if '"push"' in line and not line.lstrip().startswith(('"""', "the "))]
+        self.assertEqual(len(pushes), 1)  # the one push fm makes: the evidence branch, never forced
+        self.assertIn("{ref}", pushes[0])
+        self.assertNotIn("force", src.lower().replace("never forced", ""))
 
 
 if __name__ == "__main__":
