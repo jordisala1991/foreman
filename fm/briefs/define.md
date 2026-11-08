@@ -25,7 +25,9 @@ Read the code the task touches (really read it), then write `$plan` for an imple
 - **Out of scope:** what must not be touched, even if it looks wrong.
 - **Risks:** what could break elsewhere, and which test above catches it (or that none does).
 - **Declared risk:** sensitive paths or architecture; new dependency or data-format change; open decision; size; or none.
-Before `fm ready`, reread it as the implementer: every criterion line has its test; every name is defined once and spelled the same everywhere; no line says «handle», «as needed», «appropriate» or «TBD». Fix it, do not list it.
+Keep it short: about as long as the change you expect, never more than twice it (a small task fits in 40 lines); say each thing once, do not restate the task, and in Start list only what the change touches. Whatever you dictate (names, signatures, text, test data) must already pass the project's checks (line length, types) and give each test fixture every field the code under test reads.
+
+Before `fm ready`, reread it as the implementer: every criterion line and every edge case has its test; every name is defined once and spelled the same everywhere; no line says «handle», «as needed», «appropriate» or «TBD». Fix it, do not list it.
 A plan that costs a bit more and makes the implementation cheap beats one that needs many rounds. What the owner discussed is context for the plan, not the plan. Only a trivial task may skip it (`--no-plan`).
 
 # The end
