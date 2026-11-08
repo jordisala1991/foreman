@@ -1,7 +1,9 @@
 import json
 import os
+import tempfile
 import time
 import unittest
+from pathlib import Path
 
 from helpers import Env, git
 
@@ -87,6 +89,15 @@ class Metrics(unittest.TestCase):
         (d / "s1.jsonl").write_text(json.dumps(rec) + "\n" + json.dumps(rec) + "\n")
         self.assertEqual(costs.of_sessions(["s1"])["usd"], 2.0)
         self.assertEqual(metrics.per_issue(e.p)[0]["usd"], 2.0)
+
+    def test_usage_skips_lines_that_are_not_objects(self):
+        from fm import costs
+
+        good = {"type": "assistant", "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 1000, "output_tokens": 0}}}
+        f = Path(tempfile.mkdtemp()) / "s.jsonl"
+        f.write_text("\n".join(["[1, 2]", '"x"', "null", "not json", json.dumps(good)]) + "\n")
+        u = costs.usage([f])
+        self.assertEqual((u["calls"], u["tokens"]), (1, 1000))
 
 
 class Lessons(unittest.TestCase):
