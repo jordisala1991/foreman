@@ -182,6 +182,13 @@ class Pulls(unittest.TestCase):
         g.e.p.cfg["integrate"]["provider"] = "local"
         self.assertNotIn("git push", agents.brief(g.e.p, i, "work"))
 
+    def test_the_brief_does_not_promise_a_draft_pr_when_pr_is_done(self):
+        from fm import agents
+
+        g = self.make('pr = "done"', test="true")
+        iid = g.work(push=False)
+        self.assertNotIn("draft PR", agents.brief(g.e.p, g.e.issue(iid), "work"))
+
     def test_pr_done_opens_nothing_until_fm_done_and_then_a_ready_pr(self):
         g = self.make('pr = "done"', test="true")
         iid = g.work()
