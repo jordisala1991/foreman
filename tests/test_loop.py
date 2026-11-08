@@ -249,7 +249,7 @@ class Stopped(unittest.TestCase):
 
 
 class Queue(unittest.TestCase):
-    def deliver(self, e: Env, lines: int = 1, high: int = 0, medium: int = 0) -> str:
+    def deliver(self, e: Env, lines: int = 1, high: int = 0, medium: int = 0, low: int = 0) -> str:
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         wt = e.issue(iid)["worktree"]
@@ -257,7 +257,7 @@ class Queue(unittest.TestCase):
             f.write("".join(f"# {n}\n" for n in range(lines)))
         git(e.repo.parent / wt, "commit", "-qam", "change")
         backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
-        e.review(iid, high, medium)
+        e.review(iid, high, medium, low)
         return iid
 
     def test_manual_waits_for_the_owner_who_accepts(self):
@@ -363,6 +363,98 @@ class Queue(unittest.TestCase):
         e.set_state(iid.lower(), "done")
         loop.tick(e.p)
         self.assertIn("name it better", e.calls()[-1]["argv"][-1])
+
+    def fix_and_resubmit(self, e: Env, iid: str) -> None:
+        e.set_state(iid.lower(), "done")
+        loop.tick(e.p)
+        wt = e.issue(iid)["worktree"]
+        with open(os.path.join(wt, "app.py"), "a") as f:
+            f.write("# fixed\n")
+        git(e.repo.parent / wt, "commit", "-qam", "fix")
+        backlog.set_status(e.p, iid, "in review")
+
+    def test_review_with_h_m_open_sends_back_with_low_included(self):
+        e = Env(test="true")
+        iid = self.deliver(e, high=1, low=2)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "in progress")
+        e.set_state(iid.lower(), "done")
+        loop.tick(e.p)
+        self.assertIn(f"reviews/{iid}.md", e.calls()[-1]["argv"][-1])
+
+    def test_l_only_review_gives_one_pass_then_the_queue(self):
+        e = Env(test="true")
+        iid = self.deliver(e, low=2)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "in progress")
+        self.fix_and_resubmit(e, iid)
+        e.review(iid, low=2)
+        n = len(e.calls())
+        loop.tick(e.p)
+        i = e.issue(iid)
+        self.assertEqual(i["status"], "in review")
+        self.assertIn("check", i)
+        self.assertEqual(len(e.calls()), n)
+
+    def test_clean_review_sends_nothing(self):
+        e = Env(test="true")
+        iid = self.deliver(e)
+        loop.tick(e.p)
+        i = e.issue(iid)
+        self.assertEqual(i["status"], "in review")
+        self.assertIn("check", i)
+        d = backlog.load(e.p)
+        self.assertFalse([x for x in d["decisions_resolved"] if x.get("kind") == "review"])
+
+    def test_low_findings_leave_the_risk_low(self):
+        e = Env(test="true")
+        iid = self.deliver(e, low=2)
+        loop.tick(e.p)
+        self.fix_and_resubmit(e, iid)
+        e.review(iid, low=2)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["check"]["risk"], "low")
+
+    def test_l_only_pass_answered_without_a_commit_goes_to_the_queue(self):
+        e = Env(test="true")
+        iid = self.deliver(e, low=1)
+        loop.tick(e.p)
+        e.set_state(iid.lower(), "done")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review")
+        n = len(e.calls())
+        loop.tick(e.p)
+        i = e.issue(iid)
+        self.assertEqual(i["status"], "in review")
+        self.assertIn("check", i)
+        self.assertEqual(len(e.calls()), n)
+
+    def test_refuted_without_commit_is_not_sent_back_twice(self):
+        e = Env(test="true")
+        iid = self.deliver(e, high=1)
+        loop.tick(e.p)
+        e.set_state(iid.lower(), "done")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review")
+        loop.tick(e.p)
+        i = e.issue(iid)
+        self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "high"))
+
+    def test_review_step_table(self):
+        rows = [
+            (1, 0, 0, 1, False, "back"),
+            (0, 1, 3, 1, False, "back"),
+            (0, 0, 2, 1, False, "back"),
+            (0, 0, 0, 1, False, "queue"),
+            (0, 0, 2, 2, False, "queue"),
+            (1, 0, 2, 2, False, "queue"),
+            (0, 0, 2, 1, True, "queue"),
+            (1, 0, 0, 1, True, "queue"),
+        ]
+        for h, m, low, rnd, sent, want in rows:
+            v = {"high": h, "medium": m, "low": low, "round": rnd, "sent_back": sent}
+            self.assertEqual(risk.review_step(v, 2), want, v)
+        self.assertEqual(risk.review_step({"high": 0, "medium": 0, "round": 1}, 2), "queue")
 
 
 if __name__ == "__main__":

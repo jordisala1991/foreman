@@ -27,4 +27,4 @@
 <1-3 commands the owner can run>
 
 ## Review rounds
-<one `### Round N` per round, one line per finding: id, fixed or refuted, how>
+<one `### Round N` per round, one line per finding: id, fixed or refuted, how; an L: fixed, or not, because …>
