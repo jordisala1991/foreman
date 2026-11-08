@@ -15,6 +15,17 @@ Read the project's lessons, `$lessons`.
 - Small and checkable beats complete. If it is really several tasks, each integrable on its own, file the others with `fm add "title" --claim "goal" --criterion "done when" --ready` (or without --ready if they need defining too) and keep this one for the first part.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
 
+# The plan
+Read the code that the task touches (really read it), then write the plan at `$plan`, with these sections:
+- Files touched
+- Steps
+- Decisions: each with the alternatives dropped and why
+- Out of scope
+- Risks
+- Declared risk: which of: sensitive paths or architecture; new dependency or data-format change; open decision; size; or `none`
+
+A plan that costs a bit more and makes the implementation cheap beats one that needs many rounds. What the owner discussed is context for the plan, not the plan. Only a trivial task may skip it (`--no-plan`).
+
 # The end
-`fm ready --claim "the goal in one line" --criterion "done when …" --detail "what the responsible agent needs: the files, the decisions taken (and the owner's answers), what is out of scope" --misled "what was wrong or unclear in what you were given, or none"`
-then end your turn. If it should not be done at all, `fm block "why"` and end your turn.
+`fm ready --claim "the goal in one line" --criterion "done when …" --detail "what the responsible agent needs: the decisions taken (and the owner's answers), what is out of scope" --plan $plan --misled "what was wrong or unclear in what you were given, or none"`
+(or `--no-plan "why it is trivial"` instead of `--plan`), then end your turn. If it should not be done at all, `fm block "why"` and end your turn.

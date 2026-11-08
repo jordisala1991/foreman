@@ -9,6 +9,8 @@ $detail
 # Before you start
 Read the project's lessons, `$lessons`: what misled earlier agents in this project.
 
+$plan_section
+
 # Where
 Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured. Do not touch the main checkout (`$repo`) and do not merge into `$main`: integration is not yours.
 
