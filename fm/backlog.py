@@ -174,6 +174,17 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
     return q
 
 
+def note(p: Project, iid: str, text: str, source: str) -> None:
+    """A note from outside fm for the issue's agent: delivered like an owner's answer (loop.deliver_answers)."""
+    with edit(p) as d:
+        i = get(d, iid)
+        n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == iid and q.get("kind") == "note")
+        d["decisions_resolved"].append({"id": f"{iid} N{n + 1}", "issue": iid, "kind": "note", "agent": (i.get(
+            "agent") or {}).get("name"), "text": "signal", "answer": text, "source": source,
+            "resolved": util.now()[:10], "delivered": False, "options": [], "title": i["title"]})
+    event(p, iid, f"note from {source}: {text}")
+
+
 def undelivered(d: Data) -> list[dict[str, Any]]:
     return [q for q in d["decisions_resolved"] if q.get("delivered") is False]
 

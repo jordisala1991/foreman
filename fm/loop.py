@@ -189,6 +189,8 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
         elif q.get("kind") == "rejection":
             msg = (f"The owner sent task {i['id']} back from the integration queue: «{q['answer']}». Fix it, review "
                    "again if you change much, and run `fm done` again.")
+        elif q.get("kind") == "note":
+            msg = f"A note from outside fm for task {i['id']} ({q.get('source')}): «{q['answer']}»."
         elif q.get("kind") == "permission":
             msg = (f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». "
                    + ("It is allowed once: run it again." if q.get("allowed") else "It is not allowed."))

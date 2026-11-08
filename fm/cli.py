@@ -177,16 +177,7 @@ def cmd_go(a: argparse.Namespace) -> None:
 
 
 def cmd_cancel(a: argparse.Namespace) -> None:
-    p = home(a)
-    i = backlog.get(backlog.load(p), a.id)
-    if (i.get("agent") or {}).get("short") and i["status"] in backlog.RUNNING:
-        sessions.stop(p, i["agent"]["short"])
-    for q in backlog.open_questions(backlog.load(p), a.id):
-        backlog.answer(p, q["id"], "(the task was canceled)")
-        backlog.mark_delivered(p, q["id"])
-    if i.get("worktree"):  # the branch stays: the work is not lost
-        integrate.git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
-    backlog.set_status(p, a.id, "canceled", a.why or "by the owner")
+    integrate.close(home(a), a.id, "canceled", a.why or "by the owner")
 
 
 def cmd_unblock(a: argparse.Namespace) -> None:

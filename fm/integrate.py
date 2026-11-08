@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import backlog, providers, util
+from . import backlog, providers, sessions, util
 from .config import Project
 
 RISKS = ("low", "medium", "high")
@@ -205,3 +205,17 @@ def merge_accepted(p: Project, iid: str) -> str:
                        result=(i.get("report") or {}).get("summary", ""), commit=change["merge"],
                        acceptance={**(i.get("acceptance") or {}), "verdict": f"accepted by {by}"})
     return "done"
+
+
+def close(p: Project, iid: str, status: str, why: str) -> None:
+    """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
+    removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
+    i = backlog.get(backlog.load(p), iid)
+    if (i.get("agent") or {}).get("short") and i["status"] in backlog.RUNNING:
+        sessions.stop(p, i["agent"]["short"])
+    for q in backlog.open_questions(backlog.load(p), iid):
+        backlog.answer(p, q["id"], f"(the task was {status})")
+        backlog.mark_delivered(p, q["id"])
+    if i.get("worktree"):
+        git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
+    backlog.set_status(p, iid, status, why)
