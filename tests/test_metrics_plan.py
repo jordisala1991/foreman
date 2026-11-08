@@ -8,7 +8,7 @@ from fm import agents, backlog, loop, metrics
 USD = {"A": 1.0, "B": 2.0, "B1": 2.0, "B2": 3.0, "C": 0.5, "L": 4.0}
 
 
-def stub(sids):
+def stub(sids, seen=None):
     return {"usd": sum(USD[s] for s in sids), "tokens": 0, "minutes": 0}
 
 
@@ -66,10 +66,12 @@ class Cost(unittest.TestCase):
             (d / f"{s}.jsonl").write_text(json.dumps(rec) + "\n")
         calls = []
         real = metrics.costs.of_sessions
-        with mock.patch("fm.costs.of_sessions", lambda s: calls.append(s) or real(s)):
+        with mock.patch("fm.costs.of_sessions", lambda s, seen=None: calls.append(s) or real(s, seen)):
             r = metrics.per_issue(e.p)[0]
         self.assertEqual(sorted(calls), [["s1"], ["s2"]])
-        self.assertLessEqual(r["plan_usd"] + r["work_usd"], r["usd"])
+        self.assertEqual(r["usd"], 2.0)  # m1 once, as the old single pass counted it
+        self.assertEqual(r["usd"], metrics.costs.of_sessions(["s1", "s2"])["usd"])
+        self.assertEqual((r["plan_usd"], r["work_usd"]), (2.0, 0))  # counted in its first session
 
 
 class Recording(unittest.TestCase):
