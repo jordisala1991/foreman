@@ -64,7 +64,7 @@ class Report(TypedDict, total=False):
 
 
 class Reviewer(TypedDict, total=False):
-    """An issue's `reviewer`: the review running."""
+    """An issue's `reviewer`: the newest review launched (`reviewers` keeps every launch, same shape)."""
 
     round: int
     tip: str
