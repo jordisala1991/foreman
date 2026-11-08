@@ -1,0 +1,26 @@
+{
+  "name": "fm-panel",
+  "private": true,
+  "version": "0.0.0",
+  "description": "foreman-next's panel: built into dist/, which fm/panel.py serves. Adapted from foreman's panel/next-src.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.6"
+  }
+}

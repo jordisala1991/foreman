@@ -1,0 +1,176 @@
+"""Integration: a queue. When a responsible agent says `fm done`, the loop checks its branch (tests in the worktree,
+diff size, sensitive paths, conflicts with main) and scores the merge risk: low, medium or high, with the reasons.
+The project's autonomy level decides which risks merge without the owner: `manual` (none: the default), `low`, or
+`medium`. High never merges alone. Everything else waits for the owner's accept in the panel (`fm accept`), or goes
+back to its agent with his note (`fm reject`).
+
+The merge is local, into the main checkout of the repo (`git merge --no-ff`); pushing is the owner's (guard list)."""
+
+from __future__ import annotations
+
+import fnmatch
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from . import backlog, util
+from .config import Project
+
+RISKS = ("low", "medium", "high")
+AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
+DEPENDENCY_FILES = ("requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "go.mod", "Cargo.toml")
+
+
+class IntegrateError(Exception):
+    pass
+
+
+def git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
+    if check and r.returncode != 0:
+        raise IntegrateError(f"git {' '.join(args)}: {(r.stderr or r.stdout).strip()[:300]}")
+    return r
+
+
+def run_tests(p: Project, cwd: Path) -> str:
+    """pass | fail | none (no test command); the tail of a failure goes to the events."""
+    cmd = p.get("integrate", "test")
+    if not cmd:
+        return "none"
+    try:
+        r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=900, check=False)
+    except subprocess.TimeoutExpired:
+        return "fail"
+    return "pass" if r.returncode == 0 else "fail"
+
+
+def tests_at(p: Project, commit: str, name: str) -> str:
+    """The test command on exactly `commit` (a fresh detached worktree in state/), never on uncommitted files."""
+    if not p.get("integrate", "test"):
+        return "none"
+    tmp = p.state / "trees" / name
+    git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
+    if git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=False).returncode != 0:
+        return "fail"
+    try:
+        return run_tests(p, tmp)
+    finally:
+        git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
+
+
+def diff_stat(p: Project, branch: str) -> list[dict[str, Any]]:
+    main = p.get("project", "main")
+    out = git(p.repo, "diff", "--numstat", "-M", f"{main}...{branch}").stdout
+    rows = []
+    for ln in out.splitlines():
+        a, d, path = ln.split("\t", 2)
+        rows.append({"path": path, "added": int(a) if a.isdigit() else 0, "deleted": int(d) if d.isdigit() else 0})
+    return rows
+
+
+def deleted_files(p: Project, branch: str) -> list[str]:
+    main = p.get("project", "main")
+    return git(p.repo, "diff", "--name-only", "--diff-filter=D", f"{main}...{branch}").stdout.split()
+
+
+def conflicts(p: Project, branch: str) -> bool:
+    r = git(p.repo, "merge-tree", "--write-tree", p.get("project", "main"), branch, check=False)
+    return r.returncode != 0
+
+
+def is_sensitive(path: str, patterns: list[str]) -> bool:
+    for pat in patterns:
+        if pat.endswith("/"):
+            if path.startswith(pat) or f"/{pat}" in f"/{path}":
+                return True
+        elif fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(Path(path).name, pat):
+            return True
+    return False
+
+
+def score(p: Project, *, tests: str, review: str, files: list[dict[str, Any]], deleted: list[str],
+          conflict: bool, commits: int) -> tuple[str, list[str]]:
+    """(risk, reasons): high beats medium beats low; each reason says what raised it."""
+    high, medium = [], []
+    lines = sum(f["added"] + f["deleted"] for f in files)
+    paths = [f["path"] for f in files]
+    sensitive = [x for x in paths if is_sensitive(x, p.get("integrate", "sensitive"))]
+    if commits == 0 or not files:
+        high.append("the branch has no changes")
+    if tests == "fail":
+        high.append("tests fail")
+    if conflict:
+        high.append("conflicts with main")
+    if sensitive:
+        high.append("touches sensitive paths: " + ", ".join(sensitive[:5]))
+    if not review.strip().lower().startswith("clean"):
+        high.append("review not clean: " + (review.strip()[:120] or "no review reported"))
+    if lines > p.get("integrate", "medium_lines"):
+        high.append(f"{lines} lines changed")
+    elif lines > p.get("integrate", "small_lines"):
+        medium.append(f"{lines} lines changed")
+    if tests == "none":
+        medium.append("no test command to run")
+    if deleted:
+        medium.append("deletes files: " + ", ".join(deleted[:5]))
+    if any(fnmatch.fnmatch(Path(x).name, pat) for x in paths for pat in DEPENDENCY_FILES):
+        medium.append("changes dependencies")
+    if len(paths) > 8:
+        medium.append(f"{len(paths)} files")
+    risk = "high" if high else "medium" if medium else "low"
+    return risk, high + medium or ["small, tests green, review clean"]
+
+
+def check(p: Project, iid: str) -> dict[str, Any]:
+    """Checks an issue's branch and stores the result in its `check`."""
+    d = backlog.load(p)
+    i = backlog.get(d, iid)
+    branch = i.get("branch", "")
+    main = p.get("project", "main")
+    commits = int(git(p.repo, "rev-list", "--count", f"{main}..{branch}", check=False).stdout.strip() or 0)
+    tests = tests_at(p, git(p.repo, "rev-parse", branch).stdout.strip(), iid.lower())
+    files = diff_stat(p, branch)
+    deleted = deleted_files(p, branch)
+    v = i.get("review") or {}
+    review = "" if not v else "clean" if v["high"] + v["medium"] == 0 else f"open after round {v['round']}: H {v['high']}, M {v['medium']}"
+    risk, reasons = score(p, tests=tests, review=review, files=files,
+                          deleted=deleted, conflict=conflicts(p, branch), commits=commits)
+    c = {"tests": tests, "files": len(files), "lines": sum(f["added"] + f["deleted"] for f in files),
+         "paths": [f["path"] for f in files][:30], "commits": commits, "risk": risk, "reasons": reasons,
+         "head": git(p.repo, "rev-parse", branch).stdout.strip(), "main": git(p.repo, "rev-parse", main).stdout.strip(),
+         "conflict": conflicts(p, branch), "at": util.now()}
+    backlog.update(p, iid, check=c)
+    backlog.event(p, iid, f"checked: tests {tests}, {c['files']} files, {c['lines']} lines, risk {risk}")
+    return c
+
+
+def merges_alone(p: Project, risk: str) -> bool:
+    return risk in AUTONOMY.get(p.get("integrate", "autonomy"), ())
+
+
+def accept(p: Project, iid: str, by: str = "owner") -> str:
+    """Merges the issue's branch into main, removes its worktree and branch, closes the issue. The merge commit."""
+    d = backlog.load(p)
+    i = backlog.get(d, iid)
+    if i["status"] != "in review":
+        raise IntegrateError(f"{iid} is {i['status']}, not in the integration queue")
+    main, branch = p.get("project", "main"), i["branch"]
+    head = git(p.repo, "rev-parse", branch).stdout.strip()
+    if (i.get("check") or {}).get("head") != head:
+        raise IntegrateError(f"{branch} moved since it was checked: wait for the next check")
+    if git(p.repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != main:
+        raise IntegrateError(f"the main checkout {p.repo} is not on {main}")
+    if git(p.repo, "status", "--porcelain", "--untracked-files=no").stdout.strip():
+        raise IntegrateError(f"the main checkout {p.repo} has uncommitted changes")
+    r = git(p.repo, "merge", "--no-ff", "-m", f"Integrate {iid}: {i['title']}", branch, check=False)
+    if r.returncode != 0:
+        git(p.repo, "merge", "--abort", check=False)
+        raise IntegrateError(f"merge failed: {(r.stderr or r.stdout).strip()[:300]}")
+    commit = git(p.repo, "rev-parse", "HEAD").stdout.strip()
+    if i.get("worktree"):
+        git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
+    git(p.repo, "branch", "-D", branch, check=False)
+    backlog.set_status(p, iid, "done", f"integrated by {by} as {commit[:9]}",
+                       result=(i.get("report") or {}).get("summary", ""), commit=commit,
+                       acceptance={**(i.get("acceptance") or {}), "verdict": f"accepted by {by}"})
+    return commit

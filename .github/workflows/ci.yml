@@ -1,66 +1,16 @@
-# foreman's CI: one pass of the selftest on the oldest supported Python (3.9), with the code quality checks and the
-# hooks module's check required (CONTRIBUTING.md, "Running the tests"). The tests need no network: they build fake
-# projects in $TMPDIR. Only the setup below downloads (the quality tools, Claude Code), at pinned versions.
 name: CI
-
 on:
   push:
-    branches: [main]
+    branches: [foreman-next]
   pull_request:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
+    branches: [foreman-next]
 jobs:
-  selftest:
+  tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      # Claude Code runs only `claude plugin validate` and `claude plugin test` (lib/foreman/mods.py): no session,
-      # no login, no updates.
-      DISABLE_AUTOUPDATER: "1"
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
     steps:
       - uses: actions/checkout@v4
-
-      - id: python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      # The new panel's built files (panel/next/) must be what its source (panel/next-src/) builds: build them again
-      # at the lockfile's versions and fail on any difference. The selftest checks the same without node, against
-      # the sha256 that panel/next/BUILD records.
-      - name: Build the new panel and compare
-        run: |
-          npm ci --prefix panel/next-src --no-audit --no-fund
-          npm run build --prefix panel/next-src
-          git diff --exit-code -- panel/next
-          test -z "$(git status --porcelain -- panel/next)"
-
-      # ruff, pyright and coverage at the versions of pyproject.toml [dependency-groups] dev (pip 25.1+ reads it).
-      # Without uv, quality.py takes the tool on the PATH at the pinned version. The first `pyright --version`
-      # fetches pyright's own package, so that happens here and not inside the selftest.
-      - name: Install the quality tools
-        run: |
-          python -m pip install --upgrade "pip>=25.1"
-          python -m pip install --group dev
-          ruff --version
-          pyright --version
-
-      # The minimum foreman supports is lib/foreman/versions.py CLAUDE_CODE_MIN; this is the version it is tested with.
-      - name: Install Claude Code
-        run: |
-          npm install --global @anthropic-ai/claude-code@2.1.316
-          claude --version
-
-      - name: Selftest (Python 3.9, quality and mods required)
-        run: bin/foreman selftest --python "${{ steps.python.outputs.python-path }}" --quality=require --mods=require
+          python-version: "3.12"
+      - run: git config --global user.email ci@example.com && git config --global user.name ci
+      - run: python3 -m unittest discover -s tests

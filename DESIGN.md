@@ -1,0 +1,195 @@
+# foreman-next: design
+
+One responsible agent per task, a loop without a model, a short guard, and a system that watches itself.
+Nothing exists to keep a coordinator alive, because there is no coordinator.
+
+## Pieces
+
+```
+            owner ──── panel (React, today's /next/ panel adapted) ── fm/panel.py (JSON API, local, key)
+              │  └─── claude attach / agent view / Claude app: talks to any agent directly
+              │
+   backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, loop heartbeat)
+              │
+   fm loop (plain process, launchd KeepAlive) ── every N s, per registered project:
+      sources → answers → agents → queue → health → launch
+              │
+   claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
+      defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block / fm add
+      responsible agent (cwd: its worktree, branch)  → subagents, fm ask, fm done / fm block
+      reviewer (launched by the loop, read only)     → review file, fm verdict
+```
+
+| File | Lines | What |
+|---|---|---|
+| `fm/backlog.py` | ~190 | the backlog file (today's schema 5, new statuses and keys), questions tied to an issue and agent |
+| `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
+| `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
+| `fm/integrate.py` | ~190 | check a delivered branch, risk score, autonomy level, accept (merge) |
+| `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
+| `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
+| `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
+| `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
+| `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
+| `fm/briefs/*.md` | ~80 | the defining agent's, the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
+| `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
+
+Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, built to `panel/dist`.
+
+## A project
+
+A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `worktrees/`, optional `sources/`.
+`fm.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
+(`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Every setting is per
+project: `[agents] slots` (how many at once), models, extra session settings; `[integrate] autonomy`, `test`,
+`sensitive`; `[guard] ask`; `[health]` timings.
+
+## The states of a task
+
+```
+ triage ──go──▶ backlog ──loop──▶ refining ──fm ready──▶ ready ──loop──▶ in progress ──fm done──▶ in review
+ (health,        (to define)      (defining agent)                       (responsible agent)      (queue: check,
+  sources)                                                                      ▲                    risk score)
+                                                                                └──── fm reject ─────┤
+                                                                                                     ▼
+                                                                                  done ◀── fm accept / autonomy
+ any open state ── fm cancel ──▶ canceled          `blocked` (a reason) on any state: the loop leaves it alone
+```
+
+- `triage`: filed by a health check or a source. Never launched until the owner says «go».
+- `backlog`: to define. `refining`: its defining agent works. It ends with `fm ready --claim --criterion`.
+- `ready`: has a goal and a done criterion. `in progress`: its responsible agent works, in its own worktree and branch.
+- `in review`: the integration queue. The loop checks the branch; the owner accepts it or sends it back with a note.
+- `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
+  nudge). The owner clears it (`fm unblock [--relaunch]`).
+- A question (`fm ask`) does not change the state: it is a decision tied to the issue and its agent. The agent ends
+  its turn; the owner answers in the panel (or talks to the agent directly); the loop resumes *that* session with the
+  answer.
+
+## The loop
+
+A plain process, no model (`fm loop`; `fm launchd` prints a job with `KeepAlive`); one per registry (a lock file).
+Each tick, per project, each step isolated (an exception goes to `state/errors.jsonl`, which a health check turns
+into a finding), and inside a step each issue isolated (a failure blocks that issue with the reason; the others go
+on). The heartbeat is written before every step, so a long test run does not look like a dead loop.
+
+1. **heartbeat**: `state/loop.json`.
+2. **sources**: every executable in `<home>/sources/` prints JSON lines; each signal becomes a triage issue,
+   deduplicated by source and key; cursors in `state/cursors/`. None shipped (the owner's call for now).
+3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
+   (`claude --bg --resume SID … MESSAGE`), when that session is not busy; dropped if the task closed meanwhile;
+   after 3 failed tries the task is blocked with the answer in the reason. A session id not listed yet at launch is
+   filled in from its short id on a later tick.
+4. **agents**: an agent whose session ended its turn without `fm done`/`ready`/`ask`/`block`, and whose transcript
+   has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
+5. **queue**: a branch in review whose head or main's head changed is checked: tests on exactly its committed head
+   (a fresh detached worktree, never uncommitted files), diff, deleted files,
+   dependencies, sensitive paths, conflicts with main, the agent's review verdict → risk `low|medium|high` with
+   reasons. A branch that conflicts with main goes back to its agent with a note to merge main. If the project's
+   autonomy level allows the risk, it merges (`git merge --no-ff` into the main checkout),
+   removes the worktree and branch and closes the issue.
+6. **health**: the checks below.
+7. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
+   agent) or `backlog` issue (its defining agent), by priority then id. If the issue changed while its session
+   started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
+
+`fm cancel` stops the agent, closes its open questions and removes its worktree (the branch stays).
+
+## The agents
+
+Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-define`), started with
+`claude --bg -n NAME --model M --permission-mode bypassPermissions --settings S PROMPT` in its cwd:
+
+- `S` sets `FM_HOME`, `FM_ISSUE`, `FM_AGENT` and `PATH` (so `fm` works), `worktree.bgIsolation: none`, the guard as
+  a PreToolUse hook, and the project's extra settings (the demo turns off today's foreman plugin for its agents).
+- The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
+  the agent that owns the task.
+
+**Defining agent** (`fm/briefs/define.md`): reads the repo (read only), settles what the task means, asks the owner
+only what only he can decide (`fm ask`, then ends its turn), may split into more issues (`fm add`), and ends with
+`fm ready --claim --criterion --detail`.
+
+Every brief starts by pointing the agent at the project's `LESSONS.md`: what misled earlier agents, in their words
+(each `--misled` text that is not «none» is appended; the owner prunes it).
+
+**Defining agent** also: a criterion checkable by an agent alone (a table input → expected when there are cases),
+scope claims cite their search, questions stand alone (context, options, recommendation and why).
+
+**Responsible agent** (`fm/briefs/work.md`, from foreman's dev agent and agent procedure): owns the whole task in its
+worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
+main before delivering if it moved, asks the owner only what only he can answer, writes a report
+(`<home>/reports/ID.md`: each criterion line with its evidence) and ends with
+`fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
+conversation: fix or refute each H and M with proof, add «Review, round N» to the report, `fm done` again.
+
+**Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
+its own session in the branch's worktree, once per delivered tip; it counts against the slots. Stance «not ready until
+shown»; reads the criterion, then the diff, then the agent's report last; a table criterion line → met / not met /
+not shown with evidence; findings F1… with H/M/L, confirmed or plausible, file:line, a scenario and the test that
+would prove it. It writes `<home>/reviews/ID-rN.md` (header `Branch/Tip/Round/Open`) and runs
+`fm verdict --high --medium --low --file`. Open H or M in round 1 → back to the responsible agent; round 2 checks
+the fixes only; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
+verdict blocks the task.
+
+What was dropped because it only served a coordinator: memory renewal, session marking, interface mods and band,
+catch-up summaries, the pass as a message, plans written by someone else, sub-issues assigned from outside, the
+orchestrator's skills. The responsible agent keeps: its brief, `fm`, its own subagents; the review is independent.
+
+## Shared resources
+
+`fm/lock.py`, the lean version of foreman's lock. A resource is declared in fm.toml (`[resources.NAME]`, optional
+`slots = [...]` and `max_minutes`, default 20). `fm lock NAME run "what" command…` waits its turn, runs the command
+holding the resource (with `FM_SLOT`), stops it at the time limit and always releases it; `fm lock NAME status`.
+
+- Fair queue: first come, first served; a holder or waiter whose process died is cleaned up whenever anyone looks.
+- Slots: one holder per slot, one queue.
+- The state is common to the machine (`~/.local/state/fm/locks/NAME/`), so projects that declare the same name share
+  it; every use is logged (`uses.jsonl`: who, task, what, waited, held, exit code, timeout) for the metrics
+  (`lock_wait_min` per task) and the panel (System: who holds each resource and who waits).
+- The responsible agent's brief lists the project's resources and the rule. No hook enforces it.
+
+Left out from today's: the «busy» detector, short jobs jumping the queue, the turn file, the «who am I» chain, the
+enforcing hook, machine tables merged with the project's.
+
+## The guard
+
+A reminder, not a cage (`fm/guard.py`). It runs only in agent sessions (the hook comes in `--settings`), looks at
+the program each shell segment runs (never at words inside strings or messages), and denies a handful of actions
+with a reason that says: do not look for another way; `fm ask --action NAME "what and why"`, end your turn. The
+owner allows it once from the panel (`fm allow QID`); the loop tells the agent; it passes once.
+
+| Action | Recognised by |
+|---|---|
+| `publish` | `npm/pnpm/yarn/cargo/uv/poetry publish`, `twine upload`, `docker push`, `gh release/pr/repo create|merge|edit|delete|upload` |
+| `push-main` | `git push` to the main branch (named, `HEAD` while on it, or bare while on it), or with `--force`/`--mirror`/`--all` |
+| `delete` | `rm`/`rmdir`/`unlink`/`find -delete` of a path outside its worktree and temp dirs; `git branch -d/-D` of another branch; `git worktree remove`; `git push --delete` |
+| `config` | Edit/Write of the project's `fm.toml`; a shell command that writes it (`>`, `tee`, `sed -i`, `mv`, `cp`, `rm`) |
+| owner's own | `[guard] ask = [{name, pattern}]` in fm.toml: a regex on a shell segment |
+
+Everything else runs. A way around the list is not a hole to close: the review and the owner's accept before
+integrating are the safety net. Each stop is logged (`state/guard.jsonl`) and counted in the metrics.
+
+## Integration: risk and autonomy
+
+Every delivered branch gets a risk score:
+
+- **high**: no changes, tests fail, conflicts with main, sensitive paths (`[integrate] sensitive`), the independent
+  review leaves H or M open after round 2,
+  more than `medium_lines` lines.
+- **medium**: more than `small_lines` lines, no test command, deleted files, dependency files, more than 8 files.
+- **low**: the rest (small, tests green, review clean).
+
+The project's `[integrate] autonomy` decides what merges without the owner: `manual` (nothing; the default),
+`low`, `medium`. `high` always waits. The owner accepts in the panel (`fm accept`), or sends it back with a note
+(`fm reject`, counted as rework).
+
+## Watching itself
+
+Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices), time to the queue and to
+done, rework (sent back), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
+misled its agents (their `--confused` words).
+
+Health checks (`fm/health.py`), each finding a triage issue, deduplicated by key while open or while it persists:
+loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its
+transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
+tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`), loop step errors.

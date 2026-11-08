@@ -1,8 +1,13 @@
 __pycache__/
 *.pyc
-.backlog.lock
-.ruff_cache/
-.mypy_cache/
-.coverage*
-/ops/
-/tests/live/
+/demo/run/
+node_modules/
+*.lock
+!package-lock.json
+# the experiment's own papers and evidence stay local, never committed
+/BRIEF.md
+/IDEA-*.md
+/STUDY-*.md
+/SUMMARY.md
+/docs/
+/demo/evidence/

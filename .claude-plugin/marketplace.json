@@ -1,8 +1,0 @@
-{
-  "name": "foreman",
-  "owner": {"name": "Jordi Sala Morales"},
-  "description": "Marketplace of the foreman plugin, served from its own repository.",
-  "plugins": [
-    {"name": "foreman", "source": "./", "description": "Orchestrator method: backlog, locks, worktrees, PR integration and hooks; inert outside registered active projects."}
-  ]
-}
