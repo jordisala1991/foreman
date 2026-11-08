@@ -57,7 +57,7 @@ def orphan_worktrees(p: Project) -> list[Finding]:
     root = p.path("worktrees").resolve()
     live = {str(Path(i["worktree"]).resolve()) for i in backlog.issues(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
     out: list[Finding] = []
-    listing = integrate.git(p.repo, "worktree", "list", "--porcelain", check=False).stdout
+    listing = integrate.git(p.repo, "worktree", "list", "--porcelain", check=False).out
     for ln in listing.splitlines():
         if ln.startswith("worktree "):
             wt = Path(ln.split(" ", 1)[1]).resolve()
@@ -76,7 +76,7 @@ def main_tests(p: Project, run: bool = True) -> list[Finding]:
     """With `run` False (the panel, `fm health`) it only reads the last result; the loop runs the tests."""
     if not p.get("integrate", "test"):
         return []
-    head = integrate.git(p.repo, "rev-parse", p.get("project", "main"), check=False).stdout.strip()
+    head = integrate.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
     ci = util.read_json(p.state / "ci.json", {})
     due = ci.get("head") != head or (util.age_s(ci.get("at")) or 1e9) > 60 * int(p.get("health", "ci_every_minutes"))
     if due and run:

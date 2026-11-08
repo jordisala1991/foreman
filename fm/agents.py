@@ -17,7 +17,7 @@ def agent_name(p: Project, iid: str, kind: str) -> str:
 
 ROUND2 = (
     "7. **Round 2 checks the fixes**, it does not reopen the branch: read the previous review (`$previous`), "
-    "`git diff $previous_tip..$branch` and the «Review, round 1» section of the report. Each earlier finding is "
+    "`git diff $previous_tip..$branch` and the «Review rounds» section of the report. Each earlier finding is "
     "fixed (the commit or test that shows it), refuted (proof you accept) or still open. New findings only in "
     "what the fixes changed."
 )
@@ -36,6 +36,20 @@ def push_rule(p: Project, i: dict[str, Any]) -> str:
         f" Push your branch after each commit (`git push -u origin {branch}`): the draft PR opens from what is pushed,"
         " and `fm done` is not sent back for a missing push."
     )
+
+
+def seed_report(p: Project, iid: str, worktree: Path) -> None:
+    """Gives a work agent its report as a template to fill: the repo's PR template (plus a Review rounds section) or
+    fm's own. An existing report is never overwritten (a relaunch keeps the agent's work)."""
+    f = report_file(p, iid)
+    if f.exists():
+        return
+    theirs = worktree / ".github" / "pull_request_template.md"
+    text = (BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", iid)
+    if theirs.is_file():
+        text = theirs.read_text(encoding="utf-8").rstrip() + "\n\n## Review rounds\n"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text, encoding="utf-8")
 
 
 def plan_file(p: Project, iid: str) -> Path:
@@ -86,7 +100,7 @@ def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
     wt = p.path("worktrees") / i["id"].lower()
     if not wt.exists():
         wt.parent.mkdir(parents=True, exist_ok=True)
-        exists = integrate.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).returncode == 0
+        exists = integrate.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).code == 0
         args = ["worktree", "add", str(wt), branch] if exists else ["worktree", "add", "-b", branch, str(wt), p.get("project", "main")]
         integrate.git(p.repo, *args)
     return wt, branch
@@ -96,35 +110,44 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     kind = "define" if i["status"] == "backlog" else "work"
     name = agent_name(p, i["id"], kind)
     model = p.get("agents", "define_model" if kind == "define" else "model")
+    effort = p.get("agents", "define_effort" if kind == "define" else "effort")
     keys: dict[str, Any] = {}
     if kind == "work":
         wt, branch = worktree(p, i)
         i = {**i, "worktree": str(wt), "branch": branch}
         keys = {"worktree": str(wt), "branch": branch}
         cwd = wt
+        seed_report(p, i["id"], wt)
     else:
         cwd = p.repo
         plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
     backlog.update(p, i["id"], **keys)  # the guard reads the worktree from the backlog
     try:
-        short, sid = sessions.start(p, sessions.Agent(i["id"], name, model), brief(p, i, kind), cwd)
+        short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, kind), cwd)
     except sessions.SessionError as e:
         backlog.update(p, i["id"], blocked=f"could not launch its agent: {e}")
         backlog.event(p, i["id"], f"launch failed: {e}")
         return
-    agent = {"name": name, "short": short, "session": sid, "kind": kind, "model": model, "started": util.now(), "cwd": str(cwd)}
+    agent = {"name": name, "short": short, "session": sid, "kind": kind, "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         still = it["status"] == i["status"] and not it.get("blocked")
         if still:
             it["status"] = "refining" if kind == "define" else "in progress"
             it["agent"] = agent
-            it["sessions"] = [*it.get("sessions", []), *([sid] if sid else [])]
+            if sid:
+                record_session(it, sid, kind)
     if not still:  # the owner cancelled or changed it while the session started
         sessions.stop(p, short)
         backlog.event(p, i["id"], f"launch of {name} undone: the issue changed meanwhile")
         return
     backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, session {short})")
+
+
+def record_session(it: dict[str, Any], sid: str, kind: str) -> None:
+    """Stores a session id in the issue's `sessions` and its kind (define|work|review) in `session_kinds`."""
+    it["sessions"] = [*it.get("sessions", []), sid]
+    it["session_kinds"] = {**it.get("session_kinds", {}), sid: kind}
 
 
 def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
@@ -138,7 +161,7 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        it["sessions"] = [*it.get("sessions", []), sid]
+                        record_session(it, sid, "review" if role == "reviewer" else a.get("kind", ""))
 
 
 def idle_s(a: dict[str, Any]) -> float:
@@ -166,6 +189,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
     prev = reviews[-1] if reviews else {}
     name = f"{i['id'].lower()}-review"
     model = p.get("agents", "review_model")
+    effort = p.get("agents", "review_effort")
     review_file = p.home / "reviews" / f"{i['id']}-r{rnd}.md"
     review_file.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
@@ -178,7 +202,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
         "previous_tip": prev.get("tip", ""),
     }
     cwd = Path(i["worktree"])
-    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model), brief(p, i, "reviewer", extra), cwd)
+    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, "reviewer", extra), cwd)
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         it["reviewer"] = {
@@ -186,13 +210,15 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
             "short": short,
             "session": sid,
             "model": model,
+            "effort": effort,
             "started": util.now(),
             "round": rnd,
             "tip": tip,
             "cwd": str(cwd),
             "file": str(review_file),
         }
-        it["sessions"] = [*it.get("sessions", []), *([sid] if sid else [])]
+        if sid:
+            record_session(it, sid, "review")
     backlog.event(p, i["id"], f"launched {name} (review round {rnd} of {tip[:9]}, {model}, session {short})")
 
 
@@ -202,7 +228,7 @@ def send(p: Project, i: dict[str, Any], message: str) -> bool:
     if not a.get("session"):
         return False
     try:
-        who = sessions.Agent(i["id"], a["name"], a.get("model") or p.get("agents", "model"))
+        who = sessions.Agent(i["id"], a["name"], a.get("model") or p.get("agents", "model"), a.get("effort") or p.get("agents", "effort"))
         sessions.resume(p, who, a["session"], message, Path(a.get("cwd") or p.repo))
     except sessions.SessionError as e:
         backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")

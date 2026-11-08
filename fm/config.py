@@ -13,7 +13,18 @@ from . import util
 DEFAULTS: dict[str, dict[str, Any]] = {
     "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees", "branch_prefix": "fm/"},
     # slots: how many agents of this project run at once (defining and responsible agents alike)
-    "agents": {"slots": 2, "model": "sonnet", "define_model": "sonnet", "review_model": "sonnet", "settings": {}, "claude": "claude"},
+    # every agent kind gets an explicit model and effort (claude --effort), never the machine's Claude settings
+    "agents": {
+        "slots": 2,
+        "model": "sonnet",
+        "define_model": "sonnet",
+        "define_effort": "high",
+        "effort": "medium",
+        "review_model": "sonnet",
+        "review_effort": "high",
+        "settings": {},
+        "claude": "claude",
+    },
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "integrate": {
         "autonomy": "manual",

@@ -14,11 +14,10 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
 
 import json
 import os
-import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import backlog, integrate, util
+from . import backlog, integrate, proc, util
 from .config import Project
 from .talk import send_back
 
@@ -39,11 +38,11 @@ def _poll(p: Project, exe: Path) -> list[str]:
     cursor_file = p.state / "cursors" / exe.name
     cursor = cursor_file.read_text().strip() if cursor_file.exists() else ""
     try:
-        r = subprocess.run([str(exe)], env={**os.environ, "FM_CURSOR": cursor}, capture_output=True, text=True, timeout=60, check=False)
-    except (OSError, subprocess.SubprocessError) as e:
-        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": repr(e)})
+        r = proc.run([str(exe)], env={**os.environ, "FM_CURSOR": cursor})
+    except proc.ProcError as e:
+        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": str(e)})
         return []
-    ids = (_signal(p, exe.name, ln, cursor_file) for ln in r.stdout.splitlines())
+    ids = (_signal(p, exe.name, ln, cursor_file) for ln in r.out.splitlines())
     return [iid for iid in ids if iid]
 
 

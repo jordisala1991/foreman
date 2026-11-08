@@ -19,7 +19,7 @@ Read the project's lessons, `$lessons`.
 Read the code the task touches (really read it), then write `$plan` for an implementer who has seen neither this conversation nor this code. A plan is the decisions it cannot make alone, each precise enough that it can write only one reasonable thing; no function bodies unless the algorithm is the decision (a plan longer than the code has written the code). Sections:
 - **Start:** what exists today that the task builds on, with file:line, read today.
 - **Changes:** per file, what changes, with the exact names, signatures, data shapes and user-visible text.
-- **Tests:** for each line or row of the done criterion, the test that shows it: file, name, input, expected value. Expected values come from the criterion, the owner or a worked example, never from running the code. A test checks behaviour (input → result), never fixed text or the shape of a file.
+- **Tests and evidence:** for each line or row of the done criterion, what proves it (a UI plan says which before and after screenshots; a CLI change, which command and output). For behaviour, the test that shows it: file, name, input, expected value. Expected values come from the criterion, the owner or a worked example, never from running the code. A test checks behaviour (input → result), never fixed text or the shape of a file.
 - **Edge cases:** up to five inputs the criterion does not name but real use will meet (missing, empty, failed or timed out read as «none»; run twice; bad input), each with its expected behaviour and its test.
 - **Decisions:** each with the alternative dropped and why; the owner's answers as he gave them.
 - **Out of scope:** what must not be touched, even if it looks wrong.

@@ -13,14 +13,13 @@
 
 import os
 import re
-import subprocess
 import time
 import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, health, integrate, providers, pulls, sessions, sources, util
+from . import backlog, health, integrate, proc, providers, pulls, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -71,8 +70,8 @@ def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any
 
 
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
-    head = integrate.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).stdout.strip()
-    main_head = integrate.git(p.repo, "rev-parse", main, check=False).stdout.strip()
+    head = integrate.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
+    main_head = integrate.git(p.repo, "rev-parse", main, check=False).out.strip()
     if review_pending(p, i, head, rows):  # no verdict on this tip yet: an independent review first
         return
     v: dict[str, Any] = i.get("review") or {}
@@ -83,7 +82,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             "review",
             f"The independent review of your branch (round {v['round']}) leaves "
             f"H {v['high']}, M {v['medium']} open: read {v['file']}. Fix or refute each H and M finding with "
-            "proof, nothing else; add «Review, round N» to your report and run `fm done` again.",
+            "proof, nothing else; add one `### Round N` to the «Review rounds» section of your report and run `fm done` again.",
         )
         return
     step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
@@ -175,7 +174,7 @@ def forever(homes: list[str] | None = None, once: bool = False) -> None:
 
 def launchd_plist(fm_bin: str, label: str = "dev.fm.loop") -> str:
     """The launchd job that keeps the loop alive (KeepAlive restarts it if it dies)."""
-    py = subprocess.run(["/usr/bin/which", "python3"], capture_output=True, text=True).stdout.strip() or "python3"
+    py = proc.run(["/usr/bin/which", "python3"]).out.strip() or "python3"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>

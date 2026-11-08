@@ -26,7 +26,9 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
-| `fm/providers/` | ~100 | one module per platform behind a small interface; `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
+| `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
+| `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
+| `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
@@ -129,9 +131,12 @@ scope claims cite their search, questions stand alone (context, options, recomme
 **Responsible agent** (`fm/briefs/work.md`, from foreman's dev agent and agent procedure): owns the whole task in its
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
-(`<home>/reports/ID.md`: each criterion line with its evidence) and ends with
+(`<home>/reports/ID.md`: the task's description, each criterion line with its evidence; fm sets it as the PR body
+inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
+section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
+`.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
-conversation: fix or refute each H and M with proof, add «Review, round N» to the report, `fm done` again.
+conversation: fix or refute each H and M with proof, add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 
 **Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
 its own session in the branch's worktree, once per delivered tip; it counts against the slots. Stance «not ready until
@@ -197,7 +202,7 @@ The project's `[integrate] autonomy` decides what merges without the owner: `man
 ### Provider, accepted → merged
 
 Integration goes through a *provider* module (`fm/providers/`), one per platform; the rest of fm does not know which.
-Interface: `publish` (open the change), `ready`, `comment` (no-ops locally), `merge(change, strategy)` (the only merge
+Interface: `publish` (open the change), `ready`, `comment`, `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
 in fm: a future queue is just another strategy) and `state` (merged? closed?). Steps:
 
 1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the issue (it stays `in review`).
@@ -223,9 +228,53 @@ green CI** (no CI, pending or failing waits for the owner). After the merge the 
 origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
+## Architecture
+
+Hexagonal-lite: a small core, ports only where something external varies, everything else outside. Not Clean Architecture
+nor full DDD; what is shared is a vocabulary: *task* (an issue in the backlog), *round* (one review pass), *risk* (low,
+medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act).
+
+Layers, outside in (`tach.toml`; a module imports its own layer and the ones below, never above):
+
+| Layer | Modules | Role |
+|---|---|---|
+| ui | `cli*`, `panel*` | the owner's and the agents' entry points; call the loop and below |
+| loop | `loop` | the process that ticks: does the I/O, calls the core |
+| steps | `sources`, `talk`, `health`, `metrics` | one step of a tick, or a view over several pieces |
+| services | `agents`, `integrate`, `pulls`, `sessions`, `lock` | the outside world: git, gh, claude, processes |
+| registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
+| adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
+| ports | `providers/__init__` (the `Provider` interface) | |
+| core | `risk`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+
+Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
+launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
+the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
+task.
+
+Rules (enforced by `make check`):
+- The core imports nothing above it. **One module runs programs**: `fm/proc.py` (`run`, `run_json`, `spawn`; it knows
+  nothing of git, gh or claude; a missing program or a timeout is a `ProcError`). Everything else calls it; ruff bans
+  `import subprocess` elsewhere (not `os.system`/`os.popen`). `proc` sits just above the core in the layers: the loop,
+  the services and the adapters use it, the core does not. The only other exceptions in `per-file-ignores`
+  (`pyproject.toml`) are the tests and `fm/lock.py`, which needs a process group and signals to stop a whole job at its
+  time limit (`start_new_session`, `killpg`), which `spawn` deliberately does not offer.
+- Data from outside is typed at the border: `providers/github.py` turns `gh`'s JSON into its own types
+  (`PullRequest`, the check buckets) with a small converter per shape, and a shape that does not fit is a
+  `ProviderError`; only those types go inward, never `gh`'s dicts.
+  The ratchet also counts `pylint: disable`, `pyright: basic|off` and `fmt: off|skip`.
+- An adapter imports neither the loop nor another adapter (tach).
+- Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services
+  gather the facts (git, gh, claude) and apply the result. New decisions go there, not into `integrate` or `loop`.
+- Files stay under 300 lines (`make size`, no exceptions): a module that grows is split along these layers.
+- Suppressions do not work: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments = false`, and `make suppressions` fails on `pyright: ignore` and `pylint: disable`.
+- Loosening a rule (`tach.toml`, the ruff ignores, `pyproject.toml`, the `suppressions` target) is the owner's call.
+
+The panel's TypeScript is out of this (a dependency check there can come later).
+
 ## Watching itself
 
-Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices), time to the queue and to
+Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices; plan_usd of define sessions and work_usd of work sessions, from `session_kinds`; review rounds), time to the queue and to
 done, rework (sent back), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
 misled its agents (their `--confused` words).
 

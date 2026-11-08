@@ -10,6 +10,7 @@ import unittest
 from helpers import Env, fm, git
 
 from fm import backlog, integrate, loop, providers, util
+from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -25,6 +26,9 @@ FAKE_GH = textwrap.dedent("""\
         json.dump(s, open(f, "w"))
     if s.get("hang") and a[:2] == ["pr", "create"]:
         time.sleep(5)
+    if s.get("fail_always") == a[:2]:
+        print("HTTP 502", file=sys.stderr)
+        sys.exit(1)
     if s.get("fail_once") == a[:2]:
         s["fail_once"] = None
         save()
@@ -43,13 +47,19 @@ FAKE_GH = textwrap.dedent("""\
         sys.exit(0)
     if a[:2] == ["pr", "create"]:
         n = str(len(s["prs"]) + 1)
-        s["prs"][n] = {"draft": "--draft" in a, "state": "OPEN", "comments": [], "head": flag("--head"), "title": flag("--title")}
+        s["prs"][n] = {"draft": "--draft" in a, "state": "OPEN", "comments": [], "head": flag("--head"), "title": flag("--title"), "body": flag("--body")}
         save()
         print("https://github.com/o/r/pull/" + n)
         sys.exit(0)
     pr = s["prs"][a[2]]
     if a[:2] == ["pr", "ready"]:
         pr["draft"] = False
+    elif a[:2] == ["pr", "edit"]:
+        pr["title"] = flag("--title")
+        pr["body"] = flag("--body")
+        pr["edits"] = pr.get("edits", 0) + 1
+    elif a[:2] == ["pr", "view"] and "body" in a:
+        print(json.dumps({"body": pr["body"]}))
     elif a[:2] == ["pr", "comment"]:
         pr["comments"].append(flag("--body"))
     elif a[:2] == ["pr", "merge"]:
@@ -63,8 +73,11 @@ FAKE_GH = textwrap.dedent("""\
             sys.exit(1)
         print(json.dumps([{"bucket": s["ci"]}]))
         sys.exit(8 if s["ci"] == "pending" else 0)
+    elif a[:2] == ["pr", "view"] and s.get("bad_view"):
+        print(json.dumps({"state": "SIDEWAYS", "number": "one"}))
     elif a[:2] == ["pr", "view"]:
-        print(json.dumps({"state": pr["state"], "mergeCommit": {"oid": "c0ffee"} if pr["state"] == "MERGED" and not s.get("no_oid") else None}))
+        mc = {"oid": "c0ffee"} if pr["state"] == "MERGED" and not s.get("no_oid") else None
+        print(json.dumps({"number": int(a[2]), "url": "https://github.com/o/r/pull/" + a[2], "isDraft": pr["draft"], "state": pr["state"], "mergeCommit": mc}))
     save()
 """)
 
@@ -124,22 +137,62 @@ class GH:
 class Provider(unittest.TestCase):
     def test_provider_is_detected_from_origin_and_can_be_overridden(self):
         e = Env()
-        self.assertEqual(providers.get(e.p).name, "local")
+        self.assertEqual(registry.get(e.p).name, "local")
         git(e.repo, "remote", "add", "origin", "git@github.com:o/r.git")
-        self.assertEqual(providers.get(e.p).name, "github")
+        self.assertEqual(registry.get(e.p).name, "github")
         git(e.repo, "remote", "set-url", "origin", "https://gitlab.com/o/r.git")
-        self.assertEqual(providers.get(e.p).name, "local")
+        self.assertEqual(registry.get(e.p).name, "local")
         git(e.repo, "remote", "set-url", "origin", "https://github.com/o/r.git")
         e.p.cfg["integrate"]["provider"] = "local"
-        self.assertEqual(providers.get(e.p).name, "local")
+        self.assertEqual(registry.get(e.p).name, "local")
 
     def test_local_has_no_rebase_github_has(self):
         e = Env()
         e.p.cfg["integrate"]["merge"] = "rebase"
         with self.assertRaises(providers.ConfigError):
-            providers.get(e.p)
+            registry.get(e.p)
         e.p.cfg["integrate"]["provider"] = "github"
-        self.assertEqual(providers.get(e.p).name, "github")
+        self.assertEqual(registry.get(e.p).name, "github")
+
+
+class Border(unittest.TestCase):
+    """What gh says is turned into fm's own types at the border; a shape that does not fit is a clear ProviderError."""
+
+    GOOD = {"number": 7, "url": "https://github.com/o/r/pull/7", "isDraft": True, "state": "OPEN", "mergeCommit": None}
+
+    def test_a_pull_request_becomes_a_typed_value(self):
+        pr = github.pull_request(self.GOOD)
+        self.assertEqual((pr.number, pr.url, pr.draft, pr.state, pr.merge_commit), (7, "https://github.com/o/r/pull/7", True, "OPEN", ""))
+        merged = github.pull_request({**self.GOOD, "state": "MERGED", "mergeCommit": {"oid": "abc"}})
+        self.assertEqual((merged.state, merged.merge_commit), ("MERGED", "abc"))
+
+    def test_a_pull_request_of_the_wrong_shape_is_a_provider_error(self):
+        for bad in (
+            [],
+            "x",
+            {**self.GOOD, "state": "SIDEWAYS"},
+            {**self.GOOD, "number": "7"},
+            {**self.GOOD, "number": True},
+            {**self.GOOD, "isDraft": "yes"},
+            {**self.GOOD, "mergeCommit": "abc"},
+            {**self.GOOD, "mergeCommit": {"oid": 1}},
+            {k: v for k, v in self.GOOD.items() if k != "url"},
+        ):
+            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
+                github.pull_request(bad)
+
+    def test_checks_become_buckets_or_a_provider_error(self):
+        self.assertEqual(github.buckets([{"bucket": "pass"}, {"bucket": "pending"}]), {"pass", "pending"})
+        for bad in ({}, [{"bucket": "weird"}], [{"state": "x"}], ["pass"]):
+            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
+                github.buckets(bad)
+
+    def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self):
+        g = GH()
+        self.addCleanup(g.close)
+        g.set(prs={"1": {"draft": False, "state": "OPEN", "comments": []}}, bad_view=True)
+        with self.assertRaises(providers.ProviderError):
+            registry.get(g.e.p).state({"pr": 1})
 
 
 class Pulls(unittest.TestCase):
