@@ -25,7 +25,8 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/backlog.py` | ~190 | the backlog file (today's schema 5, new statuses and keys), questions tied to an issue and agent |
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
-| `fm/integrate.py` | ~190 | check a delivered branch, risk score, autonomy level, accept (merge) |
+| `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
+| `fm/forges/` | ~100 | one module per platform behind a small interface; `local` (git merge into the main checkout) |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
@@ -41,7 +42,7 @@ Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, b
 A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `worktrees/`, optional `sources/`.
 `fm.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
 (`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Every setting is per
-project: `[agents] slots` (how many at once), models, extra session settings; `[integrate] autonomy`, `test`,
+project: `[agents] slots` (how many at once), models, extra session settings; `[integrate] autonomy`, `forge`, `merge`, `test`,
 `sensitive`; `[guard] ask`; `[health]` timings.
 
 ## The states of a task
@@ -52,7 +53,8 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
   sources)                                                                      ▲                    risk score)
                                                                                 └──── fm reject ─────┤
                                                                                                      ▼
-                                                                                  done ◀── fm accept / autonomy
+                                                                                  done ◀── fm accept / autonomy,
+                                                                                  then the merge step
  any open state ── fm cancel ──▶ canceled          `blocked` (a reason) on any state: the loop leaves it alone
 ```
 
@@ -182,6 +184,21 @@ Every delivered branch gets a risk score:
 The project's `[integrate] autonomy` decides what merges without the owner: `manual` (nothing; the default),
 `low`, `medium`. `high` always waits. The owner accepts in the panel (`fm accept`), or sends it back with a note
 (`fm reject`, counted as rework).
+
+### Forge, accepted → merged
+
+Integration goes through a *forge* module (`fm/forges/`), one per platform; the rest of fm does not know which.
+Interface: `publish` (open the change), `ready`, `comment` (no-ops locally), `merge(change, strategy)` (the only merge
+in fm: a future queue is just another strategy) and `state` (merged? closed?). Steps:
+
+1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the issue (it stays `in review`).
+2. **merge**: the loop's queue step asks the forge to merge once, and stores the merge reference.
+3. **merged**: the issue closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
+   not when the command ran.
+
+Config: `[integrate] forge = "local"` (the only value for now) and `merge = "squash"` (default) or `"merge"`
+(`--no-ff`). An unknown value is a clear config error (at accept, and in the merge step). A merge never publishes: no
+push, no tag, no release.
 
 ## Watching itself
 

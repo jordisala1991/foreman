@@ -240,6 +240,7 @@ def send_back(p: Project, iid: str, kind: str, note: str) -> None:
                                                                                                     "conflict", "review"))
         i["status"] = "in progress"
         i.pop("check", None)
+        i.pop("accepted", None)
         if kind == "rejection":
             i["rework"] = i.get("rework", 0) + 1
         elif kind == "conflict":
@@ -256,6 +257,9 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
     main = p.get("project", "main")
     for i in backlog.issues(backlog.load(p)):
         if i["status"] != "in review" or i.get("blocked"):
+            continue
+        if i.get("accepted"):
+            guarded(p, i["id"], "merge", lambda i=i: integrate.merge_accepted(p, i["id"]))
             continue
         guarded(p, i["id"], "check", lambda i=i: queue_one(p, i, main, rows))
 
@@ -296,6 +300,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     if integrate.merges_alone(p, c["risk"]):
         try:
             integrate.accept(p, i["id"], by=f"autonomy level {p.get('integrate', 'autonomy')}")
+            integrate.merge_accepted(p, i["id"])
         except integrate.IntegrateError as e:
             backlog.event(p, i["id"], f"automatic integration failed: {e}")
 

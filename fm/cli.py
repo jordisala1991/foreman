@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, guard, health, integrate, lock, loop, metrics, sessions, util
+from . import backlog, forges, guard, health, integrate, lock, loop, metrics, sessions, util
 from .config import Project, register
 
 
@@ -37,7 +37,7 @@ def cmd_init(a: argparse.Namespace) -> None:
         (h / "fm.toml").write_text(
             f'[project]\nname = "{h.name}"\nprefix = "{a.prefix}"\nrepo = "{a.repo}"\nmain = "main"\n\n'
             '[agents]\nslots = 2\nmodel = "sonnet"\ndefine_model = "sonnet"\n\n'
-            '[integrate]\nautonomy = "manual"  # manual | low | medium\ntest = ""\n', encoding="utf-8")
+            '[integrate]\nautonomy = "manual"  # manual | low | medium\nforge = "local"\nmerge = "squash"  # squash | merge\ntest = ""\n', encoding="utf-8")
     p = Project.load(h)
     if not p.backlog_file.exists():
         util.write_json(p.backlog_file, backlog.EMPTY)
@@ -156,8 +156,9 @@ def cmd_allow(a: argparse.Namespace, allowed: bool = True) -> None:
 def cmd_accept(a: argparse.Namespace) -> None:
     p = home(a)
     try:
-        print(integrate.accept(p, a.id))
-    except integrate.IntegrateError as e:
+        integrate.accept(p, a.id)
+        print(f"{a.id} accepted: the loop merges it next")
+    except (integrate.IntegrateError, forges.ConfigError) as e:
         sys.exit(f"fm: {e}")
 
 

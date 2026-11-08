@@ -68,6 +68,79 @@ class Answers(unittest.TestCase):
         self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
 
 
+class Forge(unittest.TestCase):
+    def delivered(self, e):
+        return Queue().deliver(e)
+
+    def test_accept_only_marks_and_the_issue_closes_when_the_merge_is_seen_in_main(self):
+        from fm.forges import local
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        before = git(e.repo, "rev-parse", "main").strip()
+        integrate.accept(e.p, iid)
+        i = e.issue(iid)
+        self.assertEqual((i["status"], i["accepted"]["by"]), ("in review", "owner"))
+        self.assertEqual(git(e.repo, "rev-parse", "main").strip(), before)
+        wt = i["worktree"]
+        # the forge merges but main does not show it yet: the issue stays open, worktree and branch stay
+        orig = local.Local.state
+        local.Local.state = lambda self, change: {"merged": False, "closed": False}
+        try:
+            loop.tick(e.p)
+        finally:
+            local.Local.state = orig
+        self.assertEqual(e.issue(iid)["status"], "in review")
+        self.assertTrue(e.issue(iid)["merge"])
+        self.assertIn("fm/ty-1", git(e.repo, "branch"))
+        self.assertTrue(os.path.isdir(e.repo.parent / wt))
+        loop.tick(e.p)  # seen done in main: closes and cleans, without merging twice
+        self.assertEqual(e.issue(iid)["status"], "done")
+        self.assertNotIn("fm/ty-1", git(e.repo, "branch"))
+        self.assertFalse(os.path.isdir(e.repo.parent / wt))
+        self.assertEqual(git(e.repo, "rev-list", "--count", f"{before}..main").strip(), "1")
+
+    def test_squash_by_default_merge_is_no_ff(self):
+        for strategy, parents in (("", 1), ("merge", 2)):
+            e = Env(test="true", autonomy="low")
+            if strategy:
+                e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace(
+                    '[integrate]', f'[integrate]\nmerge = "{strategy}"'))
+                e.p = type(e.p).load(e.home)
+            iid = self.delivered(e)
+            loop.tick(e.p)
+            self.assertEqual(e.issue(iid)["status"], "done")
+            self.assertEqual(len(git(e.repo, "log", "-1", "--format=%P", "main").split()), parents)
+
+    def test_unknown_merge_or_forge_is_a_clear_config_error(self):
+        from fm import forges
+        for key, val in (("merge", "rebase"), ("forge", "github")):
+            e = Env(test="true")
+            e.p.cfg["integrate"][key] = val
+            with self.assertRaisesRegex(forges.ConfigError, f"{key} = '{val}'"):
+                forges.get(e.p)
+            iid = self.delivered(e)
+            loop.tick(e.p)
+            with self.assertRaises(forges.ConfigError):
+                integrate.accept(e.p, iid)
+
+    def test_defaults_and_nothing_is_published(self):
+        from fm import forges
+        e = Env()
+        self.assertEqual((e.p.get("integrate", "forge"), e.p.get("integrate", "merge")), ("local", "squash"))
+        self.assertEqual(forges.get(e.p).name, "local")
+        import inspect
+        from fm.forges import local
+        src = inspect.getsource(local)
+        for word in ('"push"', '"tag"', "release"):
+            self.assertNotIn(word, src)
+        e = Env(test="true", autonomy="low")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        self.assertEqual(git(e.repo, "tag").strip(), "")
+        self.assertEqual(git(e.repo, "remote").strip(), "")
+
+
 class Stopped(unittest.TestCase):
     def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self):
         e = Env()
@@ -103,6 +176,8 @@ class Queue(unittest.TestCase):
         i = e.issue(iid)
         self.assertEqual((i["status"], i["check"]["risk"], i["check"]["tests"]), ("in review", "low", "pass"))
         integrate.accept(e.p, iid)
+        self.assertEqual(e.issue(iid)["status"], "in review")  # accepting merges nothing
+        loop.tick(e.p)
         self.assertEqual(e.issue(iid)["status"], "done")
         self.assertIn("Integrate TY-1", git(e.repo, "log", "--oneline", "-1"))
         self.assertNotIn("fm/ty-1", git(e.repo, "branch"))
