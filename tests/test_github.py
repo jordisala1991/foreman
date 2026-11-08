@@ -293,12 +293,12 @@ class Pulls(unittest.TestCase):
         hook = g.bare / "hooks" / "pre-receive"
         hook.write_text("#!/bin/sh\necho 'no pushing today' >&2\nexit 1\n")
         hook.chmod(0o755)
-        loop.tick(g.e.p)
+        self.tick_through_backoff(g, iid, 3)
         self.assertIn("no pushing today", g.e.issue(iid)["blocked"])
         self.assertEqual(g.e.issue(iid)["status"], "in review")
 
-    def flaky_push(self, g: GH, failures: int):
-        """Patches the push so its first `failures` calls fail with a connection error; returns the list of push calls."""
+    def flaky_push(self, g: GH, failures: int, error: str = "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com"):
+        """Patches the push so its first `failures` calls fail with `error`; returns the list of push calls."""
         from unittest import mock
 
         from fm import pulls
@@ -309,13 +309,38 @@ class Pulls(unittest.TestCase):
             if "push" in args:
                 calls.append(args)
                 if len(calls) <= failures:
-                    return pulls.proc.Result(128, "", "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com")
+                    return pulls.proc.Result(128, "", error)
             return real(args, **kw)
 
         patcher = mock.patch.object(pulls.proc, "run", run)
         patcher.start()
         self.addCleanup(patcher.stop)
         return calls
+
+    def tick_through_backoff(self, g: GH, iid: str, times: int) -> None:
+        for _ in range(times):
+            backlog.update(g.e.p, iid, push_failed_at="")  # the backoff has run out
+            loop.tick(g.e.p)
+
+    def test_three_failed_pushes_in_a_row_block_the_task_with_git_s_last_error(self):
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        self.flaky_push(g, 99, "fatal: Authentication failed for 'https://github.com/o/r.git/'")
+        self.tick_through_backoff(g, iid, 2)
+        self.assertFalse(g.e.issue(iid).get("blocked"))
+        self.tick_through_backoff(g, iid, 1)
+        self.assertIn("fatal: Authentication failed", g.e.issue(iid)["blocked"])
+
+    def test_a_push_that_fails_once_then_succeeds_resets_the_count(self):
+        g = self.make(test="true")
+        iid = g.work(push=False)
+        self.flaky_push(g, 1)
+        self.tick_through_backoff(g, iid, 1)
+        self.assertEqual(g.e.issue(iid)["push_failures"], 1)
+        self.tick_through_backoff(g, iid, 1)
+        self.assertEqual(g.e.issue(iid)["push_failures"], 0)
+        self.assertFalse(g.e.issue(iid).get("blocked"))
+        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
 
     def test_a_push_that_fails_once_with_a_connection_error_is_retried_and_never_blocks(self):
         g = self.make(test="true")
@@ -366,22 +391,13 @@ class Pulls(unittest.TestCase):
         self.assertEqual(push.kwargs["timeout"], 20)
         self.assertTrue(iid)
 
-    def test_a_remote_rejection_of_a_running_task_s_push_blocks_it_with_git_s_error(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        hook = g.bare / "hooks" / "pre-receive"
-        hook.write_text("#!/bin/sh\necho 'no pushing today' >&2\nexit 1\n")
-        hook.chmod(0o755)
-        loop.tick(g.e.p)
-        self.assertIn("no pushing today", g.e.issue(iid)["blocked"])
-
     def test_a_branch_that_diverged_from_origin_is_not_force_pushed(self):
         g = self.make(test="true")
         iid = g.work()
         remote_tip = self.origin_tip(g, iid)
         git(g.e.repo.parent / g.e.issue(iid)["worktree"], "commit", "-q", "--amend", "-m", "rewritten")
         g.deliver(iid)
-        loop.tick(g.e.p)
+        self.tick_through_backoff(g, iid, 3)
         self.assertEqual(self.origin_tip(g, iid), remote_tip)
         self.assertTrue(g.e.issue(iid)["blocked"])
 

@@ -3,7 +3,6 @@
 `prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -38,26 +37,26 @@ def _commits(p: Project, branch: str) -> int:
 
 PUSH_TIMEOUT_S = 20
 PUSH_BACKOFF_TICKS = 3
-# What a remote says when it refuses the branch itself: retrying never helps. Anything else (network, timeout, an
-# unreachable remote) is transient.
-REJECTED = re.compile(r"rejected|non-fast-forward|permission denied|protected branch|declined|denied|forbidden|not allowed", re.I)
+PUSH_ATTEMPTS = 3  # consecutive failures of one task's push before it is blocked
+
+
+class PushError(Exception):
+    """A push that did not happen; the message is git's own."""
 
 
 def push(p: Project, change: dict[str, Any]) -> None:
     """Pushes the task's branch to origin from the main repo (worktree branches live there). Never forced, never
-    the main branch. A rejection by the remote (diverged branch, permission, protected branch, a hook) is Permanent
-    with git's error; a network failure or a timeout is Transient: the caller retries later."""
+    the main branch. Any failure raises PushError with git's error: the errors are not told apart by their text."""
     branch = change["branch"]
     if branch == p.get("project", "main"):
-        raise providers.Permanent(f"refusing to push {branch}: it is the main branch")
+        raise PushError(f"refusing to push {branch}: it is the main branch")
     ref = f"refs/heads/{branch}"
     try:
         r = proc.run(["git", "-C", str(p.repo), "push", "origin", f"{ref}:{ref}"], timeout=PUSH_TIMEOUT_S)
     except proc.ProcError as e:
-        raise providers.Transient(str(e)) from None
+        raise PushError(f"git push {branch}: {e}") from None
     if r.code != 0:
-        text = (r.err or r.out).strip()[:300]
-        raise (providers.Permanent if REJECTED.search(text) else providers.Transient)(f"git push {branch}: {text}")
+        raise PushError(f"git push {branch}: {(r.err or r.out).strip()[:300]}")
 
 
 def backing_off(p: Project, i: dict[str, Any]) -> bool:
@@ -67,14 +66,19 @@ def backing_off(p: Project, i: dict[str, Any]) -> bool:
 
 
 def push_task(p: Project, i: dict[str, Any], change: dict[str, Any]) -> None:
-    """`push`, remembering a failure on the task (the backoff) and forgetting it on success."""
+    """`push`, counting consecutive failures on the task: each one starts the backoff and is retried (Transient);
+    the PUSH_ATTEMPTS-th raises PushError with git's last error, for the caller to block the task. A success resets."""
     try:
         push(p, change)
-    except Exception:
-        backlog.update(p, i["id"], push_failed_at=util.now())
-        raise
-    if i.get("push_failed_at"):
-        backlog.update(p, i["id"], push_failed_at="")
+    except PushError as e:
+        failures = int(i.get("push_failures") or 0) + 1
+        if failures >= PUSH_ATTEMPTS:
+            backlog.update(p, i["id"], push_failures=0, push_failed_at="")
+            raise
+        backlog.update(p, i["id"], push_failures=failures, push_failed_at=util.now())
+        raise providers.Transient(str(e)) from None
+    if i.get("push_failed_at") or i.get("push_failures"):
+        backlog.update(p, i["id"], push_failed_at="", push_failures=0)
 
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
@@ -97,7 +101,7 @@ def _running(p: Project, provider: Provider, i: dict[str, Any]) -> None:
 
 
 def _failed(p: Project, i: dict[str, Any], e: Exception) -> None:
-    if isinstance(e, providers.Permanent) and "git push" in str(e):  # the remote refused the branch: nothing fixes itself
+    if isinstance(e, PushError):  # it failed PUSH_ATTEMPTS times in a row
         backlog.update(p, i["id"], blocked=f"the loop could not push it: {e}"[:300])
         backlog.event(p, i["id"], f"blocked: could not push: {e}"[:300])
     elif i.get("pr_error") != str(e):
@@ -107,8 +111,8 @@ def _failed(p: Project, i: dict[str, Any], e: Exception) -> None:
 
 def open_drafts(p: Project) -> None:
     """Loop step: a task in progress with commits of its own has its branch pushed, and (`pr = draft`) a draft PR once
-    it is. One task's failure never stops the others. A push the remote rejects blocks the task with git's error; any
-    other failure (network, timeout, the PR) is noted once and retried: a failed push is not retried for a few ticks."""
+    it is. One task's failure never stops the others. A push that fails PUSH_ATTEMPTS times in a row blocks the task with git's last
+    error; any other failure is noted once and retried: a failed push is not retried for a few ticks."""
     provider = registry.get(p)
     if provider.name != "github":
         return
@@ -123,8 +127,8 @@ def open_drafts(p: Project) -> None:
 
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
-    running. An unpushed branch is pushed here; a push the remote rejects raises Permanent (the loop blocks the task
-    with git's error), a network failure Transient (it stays queued and is retried)."""
+    running. An unpushed branch is pushed here; a push that fails is Transient (it stays queued and is retried); the third in a row raises
+    PushError, and the loop blocks the task with git's error."""
     provider = registry.get(p)
     if provider.name != "github":
         return "ok", ""
