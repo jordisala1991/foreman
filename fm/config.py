@@ -17,8 +17,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "integrate": {
         "autonomy": "manual",
-        "provider": "local",  # where merges happen: only `local` for now (fm/providers/)
-        "merge": "squash",  # squash | merge (--no-ff)
+        "provider": "auto",  # auto (github if origin is on GitHub, else local) | local | github (fm/providers/)
+        "merge": "squash",  # squash | merge (--no-ff) | rebase (github only)
+        "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `fm done`
         "test": "",
         "sensitive": ["fm.toml", ".github/", "*.lock", "*secret*", "*.env"],
         "small_lines": 80,

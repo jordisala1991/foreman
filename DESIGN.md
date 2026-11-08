@@ -26,7 +26,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
-| `fm/providers/` | ~100 | one module per platform behind a small interface; `local` (git merge into the main checkout) |
+| `fm/providers/` | ~100 | one module per platform behind a small interface; `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
@@ -203,9 +203,23 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). S
 3. **merged**: the issue closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
 
-Config: `[integrate] provider = "local"` (the only value for now) and `merge = "squash"` (default) or `"merge"`
-(`--no-ff`). An unknown value is a clear config error (at accept, and in the merge step). A merge never publishes: no
-push, no tag, no release.
+Config: `[integrate] provider = "auto"` (default: `github` if the repo's `origin` is on github.com, else `local`; or force
+`local` | `github`) and `merge = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An
+unknown value is a clear config error (at accept, and in the merge step). A merge never publishes: no tag, no release.
+
+### GitHub provider: every task is a pull request
+
+The agent commits and pushes its own task branch (the guard allows it); the **loop**, never the agent, opens, readies,
+comments on and merges PRs through `gh` (the guard keeps stopping `gh pr` for agents). `[integrate] pr = "draft"`
+(default): a task in progress gets a **draft PR** as soon as its first commit is pushed; `pr = "done"`: no PR until
+`fm done`. In the queue, after the independent review: the branch must be pushed at its tip (otherwise it goes back to
+its agent), the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
+with no `[integrate] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and a comment
+carries the risk, its reasons and the review's verdict. Accepted → `gh pr merge` with the configured type; the task
+closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
+green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
+origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of
+scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Watching itself
 
