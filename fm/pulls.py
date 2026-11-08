@@ -100,6 +100,22 @@ def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
     return f"**fm: merge risk {c['risk']}**\n\n{reasons}\n\nTests: {c['tests']} · CI: {c.get('ci') or 'none'}\nIndependent review, {review}\n"
 
 
+def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: dict[str, Any]) -> dict[str, Any]:
+    """Sets the PR description for this tip. A failure never holds back the verdict comment or the merge: it is noted
+    once on the task (`pr_error`) and retried next tick."""
+    try:
+        change = change_of(i, head)
+        provider.describe(change, describe.merge_body(provider.body(change), description(p, i, head, util.now())))
+    except Exception as e:
+        if i.get("pr_error") != str(e):
+            backlog.update(p, i["id"], pr_error=str(e))
+            backlog.event(p, i["id"], f"could not set the PR description, will retry: {e}"[:300])
+        return pr
+    pr = {**pr, "described": head}
+    backlog.update(p, i["id"], pr=pr, pr_error="")
+    return pr
+
+
 def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     """Marks the PR ready for review and posts the risk and verdict (once per checked tip)."""
     provider = registry.get(p)
@@ -114,11 +130,7 @@ def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
         backlog.update(p, i["id"], pr=pr)
         backlog.event(p, i["id"], f"PR #{pr['number']} ready for review")
     if pr.get("described") != c["head"]:
-        change = change_of(i, c["head"])
-        block = description(p, i, c["head"], util.now())
-        provider.describe(change, describe.merge_body(provider.body(change), block))
-        pr = {**pr, "described": c["head"]}
-        backlog.update(p, i["id"], pr=pr)
+        pr = _describe(p, provider, i, c["head"], pr)
     if pr.get("commented") != c["head"]:
         provider.comment(change, verdict_text(i, c))
         backlog.update(p, i["id"], pr={**pr, "commented": c["head"], "at": util.now()})

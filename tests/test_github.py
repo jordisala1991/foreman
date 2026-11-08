@@ -26,6 +26,9 @@ FAKE_GH = textwrap.dedent("""\
         json.dump(s, open(f, "w"))
     if s.get("hang") and a[:2] == ["pr", "create"]:
         time.sleep(5)
+    if s.get("fail_always") == a[:2]:
+        print("HTTP 502", file=sys.stderr)
+        sys.exit(1)
     if s.get("fail_once") == a[:2]:
         s["fail_once"] = None
         save()
