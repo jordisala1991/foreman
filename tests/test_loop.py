@@ -364,10 +364,6 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         self.assertIn("name it better", e.calls()[-1]["argv"][-1])
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def fix_and_resubmit(self, e: Env, iid: str) -> None:
         e.set_state(iid.lower(), "done")
         loop.tick(e.p)
@@ -459,3 +455,7 @@ if __name__ == "__main__":
             v = {"high": h, "medium": m, "low": low, "round": rnd, "sent_back": sent}
             self.assertEqual(risk.review_step(v, 2), want, v)
         self.assertEqual(risk.review_step({"high": 0, "medium": 0, "round": 1}, 2), "queue")
+
+
+if __name__ == "__main__":
+    unittest.main()
