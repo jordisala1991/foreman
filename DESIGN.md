@@ -136,14 +136,14 @@ inside `<!-- fm:description -->` markers, adds a footer with the commit and revi
 section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
-conversation: fix or refute each H and M with proof, add a `### Round N` to the report's «Review rounds» section, `fm done` again.
+conversation: every finding goes back: fix or refute each H and M with proof, fix each L or say «not, because …», add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 
 **Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
 its own session in the branch's worktree, once per delivered tip; it counts against the slots. Stance «not ready until
 shown»; reads the criterion, then the diff, then the agent's report last; a table criterion line → met / not met /
 not shown with evidence; findings F1… with H/M/L, confirmed or plausible, file:line, a scenario and the test that
 would prove it. It writes `<home>/reviews/ID-rN.md` (header `Branch/Tip/Round/Open`) and runs
-`fm verdict --high --medium --low --file`. Open H or M in round 1 → back to the responsible agent; round 2 checks
+`fm verdict --high --medium --low --file`. Open H or M in round 1 → back to the responsible agent with every finding, L included; an L-only verdict in round 1 gets one pass, never a second round only for L, and an L never blocks by itself (`risk.review_step`); round 2 checks
 the fixes only; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
 verdict blocks the task.
 

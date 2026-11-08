@@ -105,14 +105,14 @@ class Env:
                 r["state"] = state
         f.write_text(json.dumps(rows))
 
-    def review(self, iid: str, high: int = 0, medium: int = 0) -> None:
+    def review(self, iid: str, high: int = 0, medium: int = 0, low: int = 0) -> None:
         """One tick launches the reviewer; then its verdict, as `fm verdict` gives it."""
         from fm import loop
 
         loop.tick(self.p)
         os.environ["FM_ISSUE"] = iid
         try:
-            fm(self.home, "verdict", "--high", str(high), "--medium", str(medium), "--file", str(self.home / f"reviews/{iid}.md"))
+            fm(self.home, "verdict", "--high", str(high), "--medium", str(medium), "--low", str(low), "--file", str(self.home / f"reviews/{iid}.md"))
         finally:
             os.environ.pop("FM_ISSUE")
 

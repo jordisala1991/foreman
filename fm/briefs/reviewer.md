@@ -26,7 +26,7 @@ Write it to `$review_file`. Its first lines, plain:
 Branch: $branch
 Tip: $tip
 Round: $round
-Open: H n, M n
+Open: H n, M n, L n
 ```
 then the criterion table, the findings (H, then M, then L), and a line `Misled: …` (what in this brief or the task was wrong or unclear, or none).
 

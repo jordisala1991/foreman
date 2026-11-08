@@ -24,7 +24,7 @@ import contextlib
 import re
 from collections.abc import Generator
 from datetime import date
-from typing import Any, TypedDict, Unpack
+from typing import Any, NotRequired, TypedDict, Unpack
 
 from . import util
 from .config import Project
@@ -77,6 +77,8 @@ class Review(TypedDict):
     tip: str
     high: int
     medium: int
+    low: int
+    sent_back: NotRequired[bool]
 
 
 class Check(TypedDict, total=False):
