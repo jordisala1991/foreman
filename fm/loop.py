@@ -4,7 +4,7 @@
 2. sources: plug-in signals become triage issues (sources.py; none shipped yet)
 3. answers: the owner's answers go back to the agent that asked (its own session, resumed)
 4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
-5. pulls: with a GitHub remote, a running task's branch is pushed and it gets a draft PR (pulls.py)
+5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
 6. queue: a delivered branch is checked (tests, diff, risk); the autonomy level may merge it
 7. health: broken states become triage issues, deduplicated (health.py)
 8. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
@@ -34,9 +34,9 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
         if i["status"] != "in review" or i.get("blocked"):
             continue
         if i.get("accepted"):
-            guarded(p, i["id"], "merge", lambda i=i: integrate.merge_accepted(p, i["id"]))
+            guarded(p, i["id"], "merge it", lambda i=i: integrate.merge_accepted(p, i["id"]))
             continue
-        guarded(p, i["id"], "check", lambda i=i: queue_one(p, i, main, rows))
+        guarded(p, i["id"], "check it", lambda i=i: queue_one(p, i, main, rows))
 
 
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
@@ -54,14 +54,14 @@ def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
         i = backlog.get(backlog.load(p), iid)
         count = int(i.get("retry_count") or 0) + 1
         if count >= TRANSIENT_ATTEMPTS:
-            backlog.update(p, iid, blocked=f"the loop could not {what} it: {e}"[:300], retry_error="", retry_count=0)
+            backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300], retry_error="", retry_count=0)
             backlog.event(p, iid, f"blocked: could not {what} {TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])
             return
         backlog.update(p, iid, retry_count=count, retry_error=str(e))
         if i.get("retry_error") != str(e):  # the platform hiccuped: stay as is, try again next tick, say it once
-            backlog.event(p, iid, f"could not {what} it, will retry: {e}"[:300])
+            backlog.event(p, iid, f"could not {what}, will retry: {e}"[:300])
     except Exception as e:
-        backlog.update(p, iid, blocked=f"the loop could not {what} it: {e}"[:300])
+        backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300])
         backlog.event(p, iid, f"blocked: could not {what}: {e}"[:300])
 
 
@@ -138,7 +138,7 @@ def launch_free(p: Project) -> None:
     free = int(p.get("agents", "slots")) - running(d)
     todo = sorted((i for i in backlog.issues(d) if i["status"] in ("backlog", "ready") and not i.get("blocked")), key=sort_key)
     for i in todo[: max(0, free)]:
-        guarded(p, i["id"], "launch", lambda i=i: launch(p, i))
+        guarded(p, i["id"], "launch it", lambda i=i: launch(p, i))
 
 
 def beat(p: Project, step: str) -> None:
@@ -156,7 +156,7 @@ def tick(p: Project) -> None:
         ("pulls", lambda: run_pulls(p)),
         ("queue", lambda: run_queue(p, rows)),
         ("health", lambda: health.run(p, rows)),
-        ("launch", lambda: launch_free(p)),
+        ("launch it", lambda: launch_free(p)),
     ]
     for name, step in steps:
         beat(p, name)

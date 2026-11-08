@@ -5,7 +5,9 @@ no tag, no release): that is the owner's, and releases are a separate concept.
 Operations: `publish` (make the branch visible: open the change), `ready` (mark it ready for review), `comment`,
 `body` (its description now), `describe` (set its body and title),
 `merge(change, strategy)` (the one merge in fm; a future queue is just another strategy), `state` (is it merged?
-closed?), `ci` (the platform's checks), `pushed` (is the branch on the platform at its tip?), `push` (put it there:
+closed?), `ci` (the platform's checks),
+`has_ci` (attribute: is there CI that must be green? github yes, local no; autonomy merges only on a pass when so),
+`pushed` (is the branch on the platform at its tip?), `push` (put it there:
 never forced, never main; a failure is `Transient`, with the platform's own error).
 Config: `[integrate] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
 `merge` (`squash` default | `merge` | `rebase`; local has no rebase) and `pr` (`draft` default | `done`)."""
@@ -38,7 +40,7 @@ class Permanent(Exception):
 class Provider:
     name = ""
     merges = MERGES
-    merges_on_platform = False  # True: the merge happens on the platform, and only after its checks are green
+    has_ci = False  # True: there is CI whose result must be green before autonomy merges
 
     def __init__(self, p: Project) -> None:
         self.p = p

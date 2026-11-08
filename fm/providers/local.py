@@ -9,7 +9,7 @@ from . import Provider, ProviderError
 class Local(Provider):
     name = "local"
     merges = ("squash", "merge")
-    merges_on_platform = False  # merged here, in the repo: there are no platform checks
+    has_ci = False  # no CI: merged here, in the repo
 
     def git(self, *args: str, check: bool = True) -> proc.Result:
         try:

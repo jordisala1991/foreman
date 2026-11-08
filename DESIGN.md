@@ -196,7 +196,7 @@ Every delivered branch gets a risk score:
 - **low**: the rest (small, tests green, review clean).
 
 The project's `[integrate] autonomy` decides what merges without the owner: `manual` (nothing; the default),
-`low`, `medium`. `high` always waits. The owner accepts in the panel (`fm accept`), or sends it back with a note
+`low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or sends it back with a note
 (`fm reject`, counted as rework).
 
 ### Provider, accepted → merged

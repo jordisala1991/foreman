@@ -91,7 +91,7 @@ def buckets(raw: object) -> set[Bucket]:
 
 
 class GitHub(Provider):
-    merges_on_platform = True
+    has_ci = True
     name = "github"
 
     def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
