@@ -108,12 +108,19 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         if still:
             it["status"] = "refining" if kind == "define" else "in progress"
             it["agent"] = agent
-            it["sessions"] = [*it.get("sessions", []), *([sid] if sid else [])]
+            if sid:
+                record_session(it, sid, kind)
     if not still:  # the owner cancelled or changed it while the session started
         sessions.stop(p, short)
         backlog.event(p, i["id"], f"launch of {name} undone: the issue changed meanwhile")
         return
     backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, session {short})")
+
+
+def record_session(it: dict[str, Any], sid: str, kind: str) -> None:
+    """Stores a session id in the issue's `sessions` and its kind (define|work|review) in `session_kinds`."""
+    it["sessions"] = [*it.get("sessions", []), sid]
+    it["session_kinds"] = {**it.get("session_kinds", {}), sid: kind}
 
 
 def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
@@ -127,7 +134,7 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        it["sessions"] = [*it.get("sessions", []), sid]
+                        record_session(it, sid, "review" if role == "reviewer" else a.get("kind", ""))
 
 
 def idle_s(a: dict[str, Any]) -> float:
@@ -183,7 +190,8 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
             "cwd": str(cwd),
             "file": str(review_file),
         }
-        it["sessions"] = [*it.get("sessions", []), *([sid] if sid else [])]
+        if sid:
+            record_session(it, sid, "review")
     backlog.event(p, i["id"], f"launched {name} (review round {rnd} of {tip[:9]}, {model}, session {short})")
 
 
