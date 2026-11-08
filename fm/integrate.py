@@ -115,8 +115,8 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
 
 
 def merges_alone(p: Project, c: dict[str, Any]) -> bool:
-    """Autonomy lets this risk in alone; with a PR, only on green CI."""
-    if registry.get(p).name == "github" and c.get("ci") != "pass":
+    """Autonomy lets this risk in alone; when the provider merges on its platform, only on green CI."""
+    if registry.get(p).merges_on_platform and c.get("ci") != "pass":
         return False
     return allows(p.get("integrate", "autonomy"), c["risk"])
 

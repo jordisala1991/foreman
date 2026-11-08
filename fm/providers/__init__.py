@@ -38,6 +38,7 @@ class Permanent(Exception):
 class Provider:
     name = ""
     merges = MERGES
+    merges_on_platform = False  # True: the merge happens on the platform, and only after its checks are green
 
     def __init__(self, p: Project) -> None:
         self.p = p
