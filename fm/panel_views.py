@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any
 
-from . import backlog, costs, health, lock, metrics, sessions, util
+from . import backlog, costs, health, lock, metrics, pulls, sessions, util
 from .config import Project, registered
 
 RECENT_DAYS = 7  # closed issues the tasks screen still shows
@@ -111,8 +111,12 @@ def issue(p: Project, iid: str) -> Obj:
     i = backlog.get(d, iid)
     sids = [s for s in i.get("sessions", []) if s]
     c = memo(("cost", tuple(sids)), 30, lambda: costs.of_sessions(sids))
+    shown = with_session(p, i, session_rows(p))
+    if i.get("report"):
+        check: Obj = i.get("check") or {}
+        shown["description"] = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
     return {
-        "issue": with_session(p, i, session_rows(p)),
+        "issue": shown,
         "events": [e for e in util.read_jsonl(p.state / "events.jsonl") if e.get("issue") == iid][::-1],
         "questions": [q for q in d["decisions"] + d["decisions_resolved"] if q.get("issue") == iid],
         "cost": {"usd": c["usd"], "tokens": c["tokens"], "minutes": c["minutes"]},
