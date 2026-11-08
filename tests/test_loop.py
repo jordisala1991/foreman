@@ -31,15 +31,15 @@ class Launch(unittest.TestCase):
         self.assertIn("fm/ty-2", git(self.e.repo, "branch"))
         self.assertTrue(self.e.issue(b)["agent"]["session"])
 
-    def test_define_agent_runs_opus_high_and_work_agent_sets_no_effort(self):
+    def test_define_agent_runs_opus_medium_and_work_agent_sets_no_effort(self):
         d = backlog.add(self.p, "vague idea")
         w = backlog.add(self.p, "clear one", status="ready", criterion="x")
         loop.tick(self.p)
         by = {c["argv"][-1].split("]")[0]: c["argv"] for c in self.e.calls()}
         define, work = by[f"[fm define {d}"], by[f"[fm work {w}"]
-        self.assertEqual(define[define.index("--model") :][:4], ["--model", "opus", "--effort", "high"])
+        self.assertEqual(define[define.index("--model") :][:4], ["--model", "opus", "--effort", "medium"])
         self.assertNotIn("--effort", work)
-        self.assertEqual(self.e.issue(d)["agent"]["effort"], "high")
+        self.assertEqual(self.e.issue(d)["agent"]["effort"], "medium")
 
     def test_the_effort_of_work_agents_is_configurable(self):
         self.p.cfg["agents"]["effort"] = "low"

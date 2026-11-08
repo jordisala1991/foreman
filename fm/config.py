@@ -18,7 +18,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "slots": 2,
         "model": "sonnet",
         "define_model": "opus",
-        "define_effort": "high",
+        "define_effort": "medium",
         "effort": "",
         "review_model": "sonnet",
         "settings": {},
