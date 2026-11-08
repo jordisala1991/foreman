@@ -10,9 +10,11 @@ REPO = Path(__file__).resolve().parent.parent
 SIZE = REPO / "bin" / "check_size"
 
 
-def tree(files: dict[str, int], exceptions: str = "") -> Path:
+def tree(files: dict[str, int], exceptions: str = "", functions: str = "") -> Path:
     root = Path(tempfile.mkdtemp())
-    (root / "pyproject.toml").write_text(f"[tool.fm-size]\nlimit = 10\ntests_limit = 20\n[tool.fm-size.exceptions]\n{exceptions}")
+    (root / "pyproject.toml").write_text(
+        f"[tool.fm-size]\nlimit = 10\ntests_limit = 20\n[tool.fm-size.exceptions]\n{exceptions}\n[tool.fm-size.functions]\n{functions}"
+    )
     for rel, n in files.items():
         f = root / rel
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -53,6 +55,38 @@ class SizeCheck(unittest.TestCase):
     def test_the_repo_passes(self):
         r = subprocess.run([sys.executable, str(SIZE)], capture_output=True, text=True, check=False)
         self.assertEqual(r.returncode, 0, r.stderr)
+
+
+FN = "def f(a, b):  # noqa: C901\n    if a:\n        return 1\n    return b\n"  # 3 statements, 1 decision, 2 arguments
+
+
+def with_fn(body: str, recorded: str) -> subprocess.CompletedProcess[str]:
+    root = tree({}, functions=recorded)
+    (root / "fm" / "m.py").write_text(body)
+    return run(root)
+
+
+class FunctionRatchet(unittest.TestCase):
+    def test_a_function_at_its_recorded_size_passes(self):
+        self.assertEqual(with_fn(FN, '"fm/m.py:f" = [3, 1, 2]\n').returncode, 0)
+
+    def test_more_branches_statements_or_arguments_fail(self):
+        grown = {
+            "branches": FN.replace("    return b", "    if b:\n        return 2\n    return b"),
+            "statements": FN.replace("    return b", "    b = 1\n    return b"),
+            "arguments": FN.replace("(a, b)", "(a, b, c)"),
+        }
+        for what, body in grown.items():
+            r = with_fn(body, '"fm/m.py:f" = [3, 1, 2]\n')
+            self.assertEqual(r.returncode, 1, what)
+            self.assertIn("grew over", r.stderr, what)
+
+    def test_a_noqa_function_without_an_entry_fails(self):
+        self.assertIn("no entry", with_fn(FN, "").stderr)
+
+    def test_shrinking_or_a_stale_entry_asks_to_lower_it(self):
+        self.assertIn("shrank", with_fn(FN, '"fm/m.py:f" = [9, 9, 9]\n').stderr)
+        self.assertIn("no longer has", with_fn("def f():\n    return 1\n", '"fm/m.py:f" = [1, 0, 0]\n').stderr)
 
 
 if __name__ == "__main__":

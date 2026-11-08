@@ -16,7 +16,7 @@ One responsible agent per task, a loop without a model, a short guard, and a sys
 - **Shared resources**: `fm lock NAME run "what" command…`.
 - **Health and metrics**: broken states become triage tasks; cost, time, rework and what misled agents per task.
 
-Python 3.11+ standard library only; the panel is React + Vite, built into `panel/dist`.
+Python 3.12+ standard library only; the panel is React + Vite, built into `panel/dist`.
 
 ```sh
 bin/fm --home ~/my-project-home init --repo ~/src/my-repo --prefix MY

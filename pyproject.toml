@@ -30,3 +30,18 @@ tests_limit = 600
 "fm/loop.py" = 430
 "fm/panel.py" = 387
 "panel/src/app.css" = 356
+
+# Functions that break a ruff complexity limit today (`# noqa` on the def): [statements, decisions, arguments]; bin/check_size
+# fails when one grows, or shrinks without this being lowered.
+[tool.fm-size.functions]
+"fm/backlog.py:add" = [16, 10, 8]
+"fm/backlog.py:ask" = [10, 2, 6]
+"fm/cli.py:parser" = [91, 1, 0]
+"fm/guard.py:check_bash" = [35, 41, 7]
+"fm/integrate.py:score" = [30, 21, 7]
+"fm/panel.py:act" = [42, 23, 3]
+"fm/panel.py:do_GET" = [26, 11, 1]
+"fm/sessions.py:command" = [4, 1, 6]
+"fm/sessions.py:start" = [4, 2, 6]
+"fm/sessions.py:resume" = [1, 0, 7]
+"fm/sources.py:run" = [44, 22, 1]

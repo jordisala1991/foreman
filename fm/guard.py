@@ -122,7 +122,7 @@ def check_bash(cmd: str, cwd: str, own: list[Path], branch: str, config: Path, e
             and sub == "branch"
             and any(a in ("-d", "-D", "--delete") for a in args)
             and any(a != branch for a in args[1:] if not a.startswith("-"))
-        ):  # noqa: E501
+        ):
             return "delete"
         if prog == "git" and sub == "worktree" and "remove" in args:
             return "delete"
