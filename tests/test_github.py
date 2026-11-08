@@ -7,7 +7,7 @@ import subprocess
 import textwrap
 import unittest
 
-from helpers import Env, git
+from helpers import Env, fm, git
 
 from fm import backlog, integrate, loop, providers, util
 
@@ -31,6 +31,8 @@ FAKE_GH = textwrap.dedent("""\
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
     if a[:2] == ["pr", "create"] and flag("--head") == s.get("reject"):
+        s["reject"] = None  # GitHub says this once, right after a push, then it works
+        save()
         print("GraphQL: Head sha can't be blank, Base sha can't be blank", file=sys.stderr)
         sys.exit(1)
     if a[:2] == ["pr", "create"] and flag("--head") == s.get("flaky"):
@@ -326,24 +328,39 @@ class Pulls(unittest.TestCase):
             self.assertFalse(i.get("blocked"), failing)
             self.assertEqual(i["status"], "done", failing)
 
-    def test_one_tasks_failure_does_not_stop_the_next_task_getting_its_pr(self):
-        for flag, blocked in (({"reject": "fm/ty-1"}, True), ({"flaky": "fm/ty-1"}, False)):
+    def test_one_tasks_failure_never_blocks_it_nor_stops_the_next_task_getting_its_pr(self):
+        # "Head sha can't be blank" (once, then fine) and a 502 are both retried; neither blocks the task
+        for flag, text in (({"reject": "fm/ty-1"}, "Head sha"), ({"flaky": "fm/ty-1"}, "HTTP 502")):
             g = self.make(test="true")
             g.set(**flag)
-            first, second = g.work(), g.work()
+            first, second = g.work(), g.work()  # each work() ticks: the first one fails there, once
+            events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not open its PR" in e["text"]]
+            self.assertEqual(len(events), 1)
+            self.assertIn(text, events[0])
+            self.assertFalse(g.e.issue(first).get("blocked"))
+            g.set(flaky="")
             loop.tick(g.e.p)
-            self.assertEqual(g.e.issue(second)["pr"]["number"], 1)
-            one = g.e.issue(first)
-            if blocked:  # permanent: the platform rejects it: blocked with the reason, never retried
-                self.assertIn("Head sha", one["blocked"])
-                loop.tick(g.e.p)
-                self.assertEqual(len(g.calls("pr", "create")), 2)
-            else:  # transient (502): retried next tick, never blocked
-                self.assertFalse(one.get("blocked"))
-                self.assertIn("HTTP 502", one["pr_error"])
-                g.set(flaky="")
-                loop.tick(g.e.p)
-                self.assertEqual(g.e.issue(first)["pr"]["number"], 2)
+            self.assertIn("pr", g.e.issue(second))  # the failure did not stop the next task
+            self.assertIn("pr", g.e.issue(first))
+            self.assertEqual(g.e.issue(first)["pr_error"], "")
+
+    def test_only_known_permanent_errors_are_permanent_and_unblock_clears_the_errors(self):
+        from fm.providers import github
+
+        cases = (
+            ("Head sha can't be blank", github.TransientError),
+            ("something new", github.TransientError),
+            ("pull request is closed", github.PermanentError),
+            ("merge conflict", github.PermanentError),
+        )
+        for text, kind in cases:
+            self.assertIsInstance(github.failure("gh", text), kind, text)
+        g = self.make(test="true")
+        iid = g.work()
+        backlog.update(g.e.p, iid, blocked="x", pr_error="a", retry_error="b")
+        fm(g.e.home, "unblock", iid)
+        i = g.e.issue(iid)
+        self.assertEqual((i["blocked"], i["pr_error"], i["retry_error"]), ("", "", ""))
 
     def test_a_merged_pr_without_a_merge_commit_is_read_from_the_api_or_fails_clearly(self):
         g, iid = self.merged(None)

@@ -11,7 +11,7 @@ from . import Permanent, Provider, Transient
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 
 
-TRANSIENT = re.compile(r"timed? ?out|connection|could not resolve|network|HTTP 5\d\d|\b50[0-4]\b|rate limit|temporar|unavailable|\bEOF\b|TLS", re.I)
+PERMANENT = re.compile(r"\bclosed\b|conflict|not mergeable|cannot be merged|merge commit cannot", re.I)  # what will not fix itself
 
 
 class TransientError(Transient):
@@ -23,10 +23,10 @@ class PermanentError(Permanent):
 
 
 def failure(what: str, text: str) -> Exception:
-    """What went wrong with a gh/git call: a network or server hiccup is retried; anything else (gh rejecting the PR,
-    a missing branch or PR) is permanent."""
+    """What went wrong with a gh/git call: transient by default (retried, noted once); permanent only what is known
+    not to fix itself: a closed PR, a conflict."""
     text = text.strip()[:300]
-    return (TransientError if TRANSIENT.search(text) else PermanentError)(f"{what}: {text}")
+    return (PermanentError if PERMANENT.search(text) else TransientError)(f"{what}: {text}")
 
 
 class GitHub(Provider):

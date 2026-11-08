@@ -43,8 +43,8 @@ def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: b
 
 def open_drafts(p: Project) -> None:
     """Loop step: a task in progress whose branch is pushed (with commits of its own) gets a draft PR. One task's
-    failure never stops the others: a transient one (network, timeout, 5xx) is noted once and retried next tick; a
-    permanent one (the platform rejects it) blocks that task with the reason."""
+    failure never stops the others, and none blocks the task (its agent is working fine): the error is noted once and
+    the PR is retried next tick."""
     provider = providers.get(p)
     if provider.name != "github" or providers.pr_mode(p) != "draft":
         return
@@ -55,13 +55,10 @@ def open_drafts(p: Project) -> None:
         try:
             if head and _commits(p, i["branch"]) and provider.pushed(change_of(i, head)):
                 _open(p, provider, i, head, True)
-        except providers.Transient as e:
+        except Exception as e:
             if i.get("pr_error") != str(e):
                 backlog.update(p, i["id"], pr_error=str(e))
                 backlog.event(p, i["id"], f"could not open its PR, will retry: {e}"[:300])
-        except Exception as e:
-            backlog.update(p, i["id"], blocked=f"the loop could not open its PR: {e}"[:300])
-            backlog.event(p, i["id"], f"blocked: could not open its PR: {e}"[:300])
 
 
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
