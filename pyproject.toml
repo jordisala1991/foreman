@@ -20,6 +20,10 @@ include = ["fm"]
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
 
-[tool.fm-size]
-limit = 300
-tests_limit = 600
+# File length is the one thing ruff has no rule for: pylint, with only that check on. Tests get a larger limit (bin/check).
+[tool.pylint.main]
+disable = ["all"]
+enable = ["too-many-lines"]
+
+[tool.pylint.format]
+max-module-lines = 300

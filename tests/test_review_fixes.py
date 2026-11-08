@@ -131,17 +131,16 @@ class LaunchRace(unittest.TestCase):
         e = Env()
         os.environ["FM_REGISTRY"] = str(e.tmp / "projects.json")
         try:
-            lock = open(str(e.tmp / "projects.json") + ".loop.lock", "a")  # noqa: SIM115 (held across the run)
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            r = subprocess.run(
-                [sys.executable, str(Path(__file__).parent.parent / "bin/fm"), "--home", str(e.home), "loop", "--once"],
-                capture_output=True,
-                text=True,
-                env=os.environ,
-            )
+            with open(str(e.tmp / "projects.json") + ".loop.lock", "a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                r = subprocess.run(
+                    [sys.executable, str(Path(__file__).parent.parent / "bin/fm"), "--home", str(e.home), "loop", "--once"],
+                    capture_output=True,
+                    text=True,
+                    env=os.environ,
+                )
             self.assertIn("another loop", r.stderr)
         finally:
-            lock.close()
             os.environ.pop("FM_REGISTRY")
 
 

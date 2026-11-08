@@ -6,16 +6,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import textwrap
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+from fm import backlog, util
+from fm.config import Project
 
-from fm import backlog, util  # noqa: E402
-from fm.config import Project  # noqa: E402
+ROOT = Path(__file__).resolve().parent.parent
 
 FAKE = textwrap.dedent("""\
     #!/usr/bin/env python3

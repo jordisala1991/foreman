@@ -1,15 +1,17 @@
 #!/bin/sh
-# One command for everything: lint, format, types, file size, panel types, tests. Stops at the first failure.
+# One command for everything: lint, format, types, file length, panel types, tests. Stops at the first failure.
 # Dev tools run through uvx, pinned so a new release cannot turn the check red by itself (ruff, pyright) and npx (tsc); nothing is added to fm's runtime.
 set -e
 cd "$(dirname "$0")/.."
 
 step() { printf '\n== %s\n' "$*"; }
 
-step "ruff check";        uvx ruff@0.17.4 check .
+step "ruff check";        uvx ruff@0.17.4 check --ignore-noqa .   # --ignore-noqa: a rule cannot be turned off with a comment
 step "ruff format --check"; uvx ruff@0.17.4 format --check .
 step "pyright (strict, fm/)"; uvx pyright@1.1.414
-step "file size";         python3 bin/check_size
+step "file length (pylint: fm 300 lines, tests 600)"
+uvx pylint@4.1.3 fm
+uvx pylint@4.1.3 --max-module-lines=600 tests
 step "tsc --noEmit (panel/src)"
 [ -d panel/node_modules ] || (cd panel && npm ci --silent --no-audit --no-fund)
 (cd panel && npx tsc --noEmit)
