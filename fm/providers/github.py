@@ -1,5 +1,5 @@
 """The GitHub provider: every task is a pull request, driven with `gh`. Only the loop runs it (the guard stops `gh pr`
-for agents); the agent only pushes its own branch. Nothing here publishes: no tag, no release, no push."""
+for agents); the loop also pushes the task branches. Nothing here publishes: no tag, no release, no push to main."""
 
 import json
 import re
@@ -10,6 +10,7 @@ from .. import proc, util
 from . import Permanent, Provider, ProviderError, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
+PUSH_TIMEOUT = 20  # seconds for a push
 
 
 # Only these exact phrases will not fix themselves; anything else (a network error that says "closed") is transient.
@@ -90,6 +91,7 @@ def buckets(raw: object) -> set[Bucket]:
 
 
 class GitHub(Provider):
+    has_ci = True
     name = "github"
 
     def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
@@ -112,6 +114,20 @@ class GitHub(Provider):
     def pushed(self, change: dict[str, Any]) -> bool:
         r = self.run("git", "ls-remote", "origin", f"refs/heads/{change['branch']}", check=False)
         return r.code == 0 and r.out.split()[:1] == [change["head"]]
+
+    def push(self, change: dict[str, Any]) -> None:
+        """`git push origin refs/heads/<branch>:refs/heads/<branch>` from the main repo (worktree branches live there):
+        never forced, never the main branch. Any failure is Transient with git's error; the text is not classified."""
+        branch = change["branch"]
+        if branch == self.p.get("project", "main"):
+            raise ProviderError(f"refusing to push {branch}: it is the main branch")
+        ref = f"refs/heads/{branch}"
+        try:
+            r = proc.run(["git", "-C", str(self.p.repo), "push", "origin", f"{ref}:{ref}"], timeout=PUSH_TIMEOUT)
+        except proc.ProcError as e:
+            raise TransientError(f"git push {branch}: {e}") from None
+        if r.code != 0:
+            raise TransientError(f"git push {branch}: {(r.err or r.out).strip()[:300]}")
 
     def publish(self, change: dict[str, Any], draft: bool) -> dict[str, Any]:
         args = ["pr", "create", "--head", change["branch"], "--base", self.p.get("project", "main")]
