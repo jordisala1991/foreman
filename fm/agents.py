@@ -55,6 +55,19 @@ def plan_section(i: dict[str, Any]) -> str:
     return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and criterion."
 
 
+def owner_notes_section(p: Project, iid: str) -> str:
+    """The owner's corrections on this task (rejection notes), oldest first; empty when there are none."""
+    notes = [q for q in backlog.load(p)["decisions_resolved"] if q.get("issue") == iid and q.get("kind") == "rejection"]
+    if not notes:
+        return ""
+    lines = "\n".join(f"- {q.get('at') or q.get('resolved', '')}: {q.get('answer', '')}" for q in notes)
+    return (
+        f"\n# The owner's notes on this task\n{lines}\n"
+        "A note overrides the plan and the criterion where they differ; the latest note wins. A departure backed by a note "
+        "is not a finding, and the report's «Off the plan» should cite it.\n"
+    )
+
+
 def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None = None) -> str:
     a: dict[str, Any] = i.get("acceptance") or {}
     values = {
@@ -74,6 +87,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
         "round2": "",
+        "owner_notes": owner_notes_section(p, i["id"]) if kind == "reviewer" else "",
         "resources": lock.describe(p.cfg),
         **(extra or {}),
     }
