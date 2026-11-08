@@ -53,15 +53,17 @@ class Agent:
     iid: str
     name: str
     model: str
+    effort: str = ""
 
 
 def command(p: Project, agent: Agent, prompt: str, resume: str | None = None) -> list[str]:
     cmd = [p.get("agents", "claude"), "--bg", "-n", agent.name]
     if resume:
         cmd += ["--resume", resume]
+    cmd += ["--model", agent.model]
+    if agent.effort:
+        cmd += ["--effort", agent.effort]
     return cmd + [
-        "--model",
-        agent.model,
         "--permission-mode",
         "bypassPermissions",
         "--settings",
