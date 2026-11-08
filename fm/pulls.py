@@ -1,7 +1,8 @@
-"""Pull requests for a GitHub project (the loop's side; the agent only pushes its branch). `open_drafts` gives a
-running task a draft PR once its first commit is pushed (`[integrate] pr = draft`); `prepare` makes sure a delivered
-branch is pushed and has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
-With the local provider every function here does nothing."""
+"""Pull requests (the loop's side: the loop pushes the task branches, the agents never do).
+`running` and `sync` push a running task's new commits and, once it has some, gives it a draft PR (`[integrate] pr = draft`);
+`prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
+Every function calls the provider's operations whatever the platform; the local provider answers each as a no-op, and
+a task with no PR (`publish` returned nothing) has nothing to deliver to."""
 
 import re
 from pathlib import Path
@@ -40,38 +41,37 @@ def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: b
     change = change_of(i, head)
     change["body"] = describe.wrap(change["claim"] or change["title"])
     ref = provider.publish(change, draft)
-    backlog.update(p, i["id"], pr=ref, pr_error="")
+    if not ref:  # a provider with no pull requests
+        return
+    backlog.update(p, i["id"], pr=ref)
     backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref['number']}: {ref['url']}")
 
 
-def open_drafts(p: Project) -> None:
-    """Loop step: a task in progress whose branch is pushed (with commits of its own) gets a draft PR. One task's
-    failure never stops the others, and none blocks the task (its agent is working fine): the error is noted once and
-    the PR is retried next tick."""
+def running(p: Project) -> list[dict[str, Any]]:
+    """The tasks whose branch the loop keeps on the platform: in progress, with a branch, not blocked."""
+    return [i for i in backlog.issues(backlog.load(p)) if i["status"] == "in progress" and i.get("branch") and not i.get("blocked")]
+
+
+def sync(p: Project, i: dict[str, Any]) -> None:
+    """One running task: with commits of its own its branch is pushed, and (`pr = draft`) it gets its draft PR. Failures
+    are the caller's (`loop.guarded`)."""
     provider = registry.get(p)
-    if provider.name != "github" or providers.pr_mode(p) != "draft":
+    head = _head(p, i["branch"])
+    if not head or not _commits(p, i["branch"]):
         return
-    for i in backlog.issues(backlog.load(p)):
-        if i["status"] != "in progress" or i.get("pr") or not i.get("branch") or i.get("blocked"):
-            continue
-        head = _head(p, i["branch"])
-        try:
-            if head and _commits(p, i["branch"]) and provider.pushed(change_of(i, head)):
-                _open(p, provider, i, head, True)
-        except Exception as e:
-            if i.get("pr_error") != str(e):
-                backlog.update(p, i["id"], pr_error=str(e))
-                backlog.event(p, i["id"], f"could not open its PR, will retry: {e}"[:300])
+    change = change_of(i, head)
+    if not provider.pushed(change):
+        provider.push(change)
+    if providers.pr_mode(p) == "draft" and not i.get("pr"):
+        _open(p, provider, i, head, True)
 
 
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
-    running; ('back', note) the agent must push first."""
+    running. An unpushed branch is pushed here; failures are the caller's (`loop.guarded`)."""
     provider = registry.get(p)
-    if provider.name != "github":
-        return "ok", ""
     if not provider.pushed(change_of(i, head)):
-        return "back", f"Push your branch ({i['branch']}) to origin at its tip, then run `fm done` again: the PR is opened and merged from what is pushed."
+        provider.push(change_of(i, head))
     if not i.get("pr"):
         _open(p, provider, i, head, False)
     ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))
@@ -148,10 +148,10 @@ def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: 
 def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     """Marks the PR ready for review and posts the risk and verdict (once per checked tip)."""
     provider = registry.get(p)
-    if provider.name != "github":
-        return
     i = backlog.get(backlog.load(p), i["id"])
     pr: dict[str, Any] = i.get("pr") or {}
+    if not pr:
+        return
     change = change_of(i, c["head"])
     if pr.get("draft"):
         provider.ready(change)
