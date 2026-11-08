@@ -74,8 +74,13 @@ into a finding), and inside a step each issue isolated (a failure blocks that is
 on). The heartbeat is written before every step, so a long test run does not look like a dead loop.
 
 1. **heartbeat**: `state/loop.json`.
-2. **sources**: every executable in `<home>/sources/` prints JSON lines; each signal becomes a triage issue,
-   deduplicated by source and key; cursors in `state/cursors/`. None shipped (the owner's call for now).
+2. **sources**: every executable in `<home>/sources/` prints JSON lines, each with a `key` (dedup). Without `task`,
+   `{key, title, detail}` becomes a triage issue, deduplicated by source and key. With `task` (an issue id),
+   `{key, task, action, text}` acts on that open task through the owner's own commands: `note` (text reaches its
+   agent like an answer), `reject` (text; as `fm reject`), `accept` (as `fm accept`), `done` (closed as done, merged
+   outside fm), `cancel` (as `fm cancel`). Applied once per source and key (`state/applied/`). Unknown or closed
+   task, unknown action, or an action invalid for the task's state: nothing changes, logged in `state/errors.jsonl`.
+   Cursors in `state/cursors/`. None shipped (the owner's call for now).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
    (`claude --bg --resume SID … MESSAGE`), when that session is not busy; dropped if the task closed meanwhile;
    after 3 failed tries the task is blocked with the answer in the reason. A session id not listed yet at launch is
