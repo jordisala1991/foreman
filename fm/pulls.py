@@ -3,9 +3,10 @@ running task a draft PR once its first commit is pushed (`[integrate] pr = draft
 branch is pushed and has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
+from pathlib import Path
 from typing import Any
 
-from . import backlog, proc, providers, util
+from . import backlog, describe, proc, providers, util
 from .config import Project
 from .providers import Provider, registry
 
@@ -19,6 +20,7 @@ def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
         "branch": i["branch"],
         "head": head,
         "claim": acceptance.get("claim", ""),
+        "body": "",
         "pr": pr.get("number"),
         "merge": i.get("merge", ""),
     }
@@ -34,7 +36,9 @@ def _commits(p: Project, branch: str) -> int:
 
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
-    ref = provider.publish(change_of(i, head), draft)
+    change = change_of(i, head)
+    change["body"] = describe.wrap(change["claim"] or change["title"])
+    ref = provider.publish(change, draft)
     backlog.update(p, i["id"], pr=ref, pr_error="")
     backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref['number']}: {ref['url']}")
 
@@ -73,6 +77,22 @@ def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     return ("wait", "CI is still running") if ci == "pending" else ("ok", ci)
 
 
+def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
+    """The task's report as its description, with fm's footer; the claim (or title) when there is no usable report."""
+    report: dict[str, Any] = i.get("report") or {}
+    acceptance: backlog.Acceptance = i.get("acceptance") or {}
+    path: str = report.get("file") or ""
+    text = ""
+    if path:
+        try:
+            text = Path(path).read_text()
+        except OSError:
+            text = ""
+    if not text.strip():
+        text = acceptance.get("claim") or i["title"]
+    return describe.render(text, describe.footer(head, describe.review_line(i.get("review")), at))
+
+
 def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
     v: dict[str, Any] = i.get("review") or {}
     review = "no review" if not v else f"round {v['round']}: H {v['high']}, M {v['medium']}" + (f" ({v['file']})" if v.get("file") else "")
@@ -93,6 +113,12 @@ def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
         pr = {**pr, "draft": False}
         backlog.update(p, i["id"], pr=pr)
         backlog.event(p, i["id"], f"PR #{pr['number']} ready for review")
+    if pr.get("described") != c["head"]:
+        change = change_of(i, c["head"])
+        block = description(p, i, c["head"], util.now())
+        provider.describe(change, describe.merge_body(provider.body(change), block))
+        pr = {**pr, "described": c["head"]}
+        backlog.update(p, i["id"], pr=pr)
     if pr.get("commented") != c["head"]:
         provider.comment(change, verdict_text(i, c))
         backlog.update(p, i["id"], pr={**pr, "commented": c["head"], "at": util.now()})

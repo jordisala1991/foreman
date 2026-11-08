@@ -126,6 +126,7 @@
   "isu_verdict": "Veredicto",
   "isu_no_goal": "Aún sin objetivo ni criterio: los escribe su agente de definición.",
   "isu_detail": "Detalle",
+  "isu_description": "Descripción",
   "isu_report": "El informe de su agente",
   "isu_check": "La comprobación de la cola",
   "isu_asked": "Preguntado y respondido",

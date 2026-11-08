@@ -91,6 +91,7 @@ export interface Issue {
   acceptance?: { claim?: string; criterion?: string; verdict?: string };
   agent?: Agent;
   agent_state?: string | null; // working | done | stopped | gone
+  description?: string;
   report?: { summary?: string; review?: string; confused?: string; at?: string };
   check?: Check;
   branch?: string;

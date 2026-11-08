@@ -101,6 +101,11 @@ export function Issue({ product, id }: { product: Product; id: string }) {
               <div className="card pre">{i.detail}</div>
             </Section>
           ) : null}
+          {i.description ? (
+            <Section title={t("isu_description")}>
+              <div className="card pre">{i.description}</div>
+            </Section>
+          ) : null}
           {i.report && i.status !== "in review" ? (
             <Section title={t("isu_report")}>
               <div className="card"><ReportView r={i.report} /></div>

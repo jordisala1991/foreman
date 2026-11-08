@@ -3,6 +3,7 @@ interface and does not know which platform is behind it. Only `merge` changes ma
 no tag, no release): that is the owner's, and releases are a separate concept.
 
 Operations: `publish` (make the branch visible: open the change), `ready` (mark it ready for review), `comment`,
+`body` (its description now), `describe` (set its body and title),
 `merge(change, strategy)` (the one merge in fm; a future queue is just another strategy), `state` (is it merged?
 closed?), `ci` (the platform's checks), `pushed` (is the branch on the platform at its tip?).
 Config: `[integrate] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
@@ -53,6 +54,13 @@ class Provider:
 
     def comment(self, change: dict[str, Any], text: str) -> None:
         """Leaves a note on the change."""
+
+    def body(self, change: dict[str, Any]) -> str:
+        """The change's description as the platform has it now (nothing locally)."""
+        return ""
+
+    def describe(self, change: dict[str, Any], body: str) -> None:
+        """Sets the change's body and its title."""
 
     def merge(self, change: dict[str, Any], strategy: str) -> str:
         """Merges the change into main with `strategy`; returns a reference to the merge. Never publishes."""
