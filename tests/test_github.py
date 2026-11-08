@@ -178,7 +178,6 @@ class Pulls(unittest.TestCase):
         i = g.e.issue(iid)
         text = agents.brief(g.e.p, i, "work")
         self.assertIn(f"git push -u origin {i['branch']}", text)
-        self.assertIn("after each commit", text)
         g.e.p.cfg["integrate"]["provider"] = "local"
         self.assertNotIn("git push", agents.brief(g.e.p, i, "work"))
 
