@@ -146,3 +146,33 @@ class LaunchRace(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewerSeesOwnerNotes(unittest.TestCase):
+    def brief(self, e: Env, iid: str) -> str:
+        return agents.brief(e.p, e.issue(iid), "reviewer")
+
+    def test_every_owner_note_of_the_task_reaches_the_reviewer_oldest_first_with_its_time(self):
+        e = Env()
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        other = backlog.add(e.p, "z", status="ready", criterion="y")
+        loop.tick(e.p)
+        loop.send_back(e.p, iid, "rejection", "FIRSTNOTE use B")
+        loop.send_back(e.p, iid, "review", "REVIEWFIX")
+        loop.send_back(e.p, iid, "conflict", "CONFLICTFIX")
+        loop.send_back(e.p, iid, "rejection", "SECONDNOTE actually C")
+        loop.send_back(e.p, other, "rejection", "OTHERTASK")
+        text = self.brief(e, iid)
+        self.assertLess(text.index("FIRSTNOTE"), text.index("SECONDNOTE"))
+        for gone in ("REVIEWFIX", "CONFLICTFIX", "OTHERTASK"):
+            self.assertNotIn(gone, text)
+        stamp = [q for q in backlog.load(e.p)["decisions_resolved"] if "FIRSTNOTE" in q["answer"]][0]["at"]
+        self.assertIn(stamp, text)
+
+    def test_no_owner_notes_no_section(self):
+        e = Env()
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        loop.send_back(e.p, iid, "review", "REVIEWFIX")
+        self.assertEqual(agents.owner_notes_section(e.p, iid), "")
+        self.assertNotIn("owner's notes", self.brief(e, iid))

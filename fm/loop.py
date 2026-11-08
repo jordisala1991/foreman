@@ -4,7 +4,7 @@
 2. sources: plug-in signals become triage issues (sources.py; none shipped yet)
 3. answers: the owner's answers go back to the agent that asked (its own session, resumed)
 4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
-5. pulls: with a GitHub remote, a task whose branch is pushed gets a draft PR (pulls.py)
+5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
 6. queue: a delivered branch is checked (tests, diff, risk); the autonomy level may merge it
 7. health: broken states become triage issues, deduplicated (health.py)
 8. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
@@ -35,24 +35,40 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
         if i["status"] != "in review" or i.get("blocked"):
             continue
         if i.get("accepted"):
-            guarded(p, i["id"], "merge", lambda i=i: integrate.merge_accepted(p, i["id"]))
+            guarded(p, i["id"], "merge it", lambda i=i: integrate.merge_accepted(p, i["id"]))
             continue
-        guarded(p, i["id"], "check", lambda i=i: queue_one(p, i, main, rows))
+        guarded(p, i["id"], "check it", lambda i=i: queue_one(p, i, main, rows))
+
+
+TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
 
 
 def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
-    """One issue's step: a failure blocks that issue with the reason, the others go on."""
+    """One issue's step: a Transient failure is retried next tick (noted once per error); the 3rd in a row blocks the
+    issue with the last error; a success resets the count. Any other failure blocks it at once. The others go on."""
     try:
         fn()
-        if backlog.get(backlog.load(p), iid).get("retry_error"):
-            backlog.update(p, iid, retry_error="")
-    except providers.Transient as e:  # the platform hiccuped: stay in the queue, try again next tick, say it once
-        if backlog.get(backlog.load(p), iid).get("retry_error") != str(e):
-            backlog.update(p, iid, retry_error=str(e))
-            backlog.event(p, iid, f"could not {what} it, will retry: {e}"[:300])
+        i = backlog.get(backlog.load(p), iid)
+        if i.get("retry_error") or i.get("retry_count"):
+            backlog.update(p, iid, retry_error="", retry_count=0)
+    except providers.Transient as e:
+        i = backlog.get(backlog.load(p), iid)
+        count = int(i.get("retry_count") or 0) + 1
+        if count >= TRANSIENT_ATTEMPTS:
+            backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300], retry_error="", retry_count=0)
+            backlog.event(p, iid, f"blocked: could not {what} {TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])
+            return
+        backlog.update(p, iid, retry_count=count, retry_error=str(e))
+        if i.get("retry_error") != str(e):  # the platform hiccuped: stay as is, try again next tick, say it once
+            backlog.event(p, iid, f"could not {what}, will retry: {e}"[:300])
     except Exception as e:
-        backlog.update(p, iid, blocked=f"the loop could not {what} it: {e}"[:300])
+        backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300])
         backlog.event(p, iid, f"blocked: could not {what}: {e}"[:300])
+
+
+def run_pulls(p: Project) -> None:
+    for i in pulls.running(p):
+        guarded(p, i["id"], "push it or open its PR", lambda i=i: pulls.sync(p, i))
 
 
 def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> bool:
@@ -87,9 +103,6 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
         )
         return
     step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
-    if step == "back":
-        send_back(p, i["id"], "review", why)
-        return
     if step == "wait":
         return
     c: dict[str, Any] = i.get("check") or {}
@@ -127,7 +140,7 @@ def launch_free(p: Project) -> None:
     todo = sorted((i for i in backlog.issues(d) if i["status"] in ("backlog", "ready") and not i.get("blocked")), key=sort_key)
     todo = [i for i in todo if not plan_gate.pending(p, i)]  # a plan above the autonomy level waits for the owner
     for i in todo[: max(0, free)]:
-        guarded(p, i["id"], "launch", lambda i=i: launch_gated(p, i))
+        guarded(p, i["id"], "launch it", lambda i=i: launch_gated(p, i))
 
 
 def launch_gated(p: Project, i: dict[str, Any]) -> None:
@@ -147,7 +160,7 @@ def tick(p: Project) -> None:
         ("sources", lambda: sources.run(p)),
         ("answers", lambda: deliver_answers(p, rows)),
         ("agents", lambda: watch_agents(p, rows)),
-        ("pulls", lambda: pulls.open_drafts(p)),
+        ("pulls", lambda: run_pulls(p)),
         ("queue", lambda: run_queue(p, rows)),
         ("health", lambda: health.run(p, rows)),
         ("launch", lambda: launch_free(p)),

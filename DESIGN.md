@@ -204,13 +204,13 @@ Every delivered branch gets a risk score:
 - **low**: the rest (small, tests green, review clean).
 
 The project's `[integrate] autonomy` decides what merges without the owner: `manual` (nothing; the default),
-`low`, `medium`. `high` always waits. The owner accepts in the panel (`fm accept`), or sends it back with a note
+`low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or sends it back with a note
 (`fm reject`, counted as rework).
 
 ### Provider, accepted → merged
 
 Integration goes through a *provider* module (`fm/providers/`), one per platform; the rest of fm does not know which.
-Interface: `publish` (open the change), `ready`, `comment`, `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
+Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `comment`, `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
 in fm: a future queue is just another strategy) and `state` (merged? closed?). Steps:
 
 1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the issue (it stays `in review`).
@@ -218,17 +218,19 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). S
 3. **merged**: the issue closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
 
+Retry policy, one place (`loop.guarded`, every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both.
+
 Config: `[integrate] provider = "auto"` (default: `github` if the repo's `origin` is on github.com, else `local`; or force
 `local` | `github`) and `merge = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An
 unknown value is a clear config error (at accept, and in the merge step). A merge never publishes: no tag, no release.
 
 ### GitHub provider: every task is a pull request
 
-The agent commits and pushes its own task branch (the guard allows it); the **loop**, never the agent, opens, readies,
+The agent only commits; the **loop** pushes the task branches (`provider.push`: `git push origin refs/heads/<b>:refs/heads/<b>`,
+never forced, never main, 20 s timeout; a failure is `Transient` with git's error) and, never the agent, opens, readies,
 comments on and merges PRs through `gh` (the guard keeps stopping `gh pr` for agents). `[integrate] pr = "draft"`
-(default): a task in progress gets a **draft PR** as soon as its first commit is pushed; `pr = "done"`: no PR until
-`fm done`. In the queue, after the independent review: the branch must be pushed at its tip (otherwise it goes back to
-its agent), the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
+(default): a task in progress has its commits pushed and gets a **draft PR** as soon as it has its first commit; `pr = "done"`: no PR until
+`fm done`. In the queue, after the independent review: the branch is pushed at its tip if it is not yet, the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
 with no `[integrate] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and a comment
 carries the risk, its reasons and the review's verdict. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
