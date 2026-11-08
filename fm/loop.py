@@ -156,7 +156,7 @@ def tick(p: Project) -> None:
         ("pulls", lambda: run_pulls(p)),
         ("queue", lambda: run_queue(p, rows)),
         ("health", lambda: health.run(p, rows)),
-        ("launch it", lambda: launch_free(p)),
+        ("launch", lambda: launch_free(p)),
     ]
     for name, step in steps:
         beat(p, name)
