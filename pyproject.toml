@@ -20,7 +20,7 @@ include = ["fm"]
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
 
-# File length is the one thing ruff has no rule for: pylint, with only that check on. Tests get a larger limit (bin/check).
+# File length is the one thing ruff has no rule for: pylint, with only that check on. Tests get a larger limit (`make size`).
 [tool.pylint.main]
 disable = ["all"]
 enable = ["too-many-lines"]
