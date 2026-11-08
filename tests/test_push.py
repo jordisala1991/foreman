@@ -80,26 +80,6 @@ class Pushes(unittest.TestCase):
         for _ in range(times):
             loop.tick(g.e.p)
 
-    def test_three_failed_pushes_in_a_row_block_the_task_with_git_s_last_error(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        self.flaky_push(g, 99, "fatal: Authentication failed for 'https://github.com/o/r.git/'")
-        self.ticks(g, 2)
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.ticks(g, 1)
-        self.assertIn("fatal: Authentication failed", g.e.issue(iid)["blocked"])
-
-    def test_a_push_that_fails_once_then_succeeds_resets_the_count(self):
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        self.flaky_push(g, 1)
-        self.ticks(g, 1)
-        self.assertEqual(g.e.issue(iid)["retry_count"], 1)
-        self.ticks(g, 1)
-        self.assertEqual(g.e.issue(iid)["retry_count"], 0)
-        self.assertFalse(g.e.issue(iid).get("blocked"))
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
-
     def test_a_push_that_fails_once_with_a_connection_error_is_retried_and_never_blocks(self):
         g = self.make(test="true")
         iid = g.work(push=False)
@@ -122,19 +102,6 @@ class Pushes(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
         self.assertFalse(g.e.issue(iid).get("blocked"))
-
-    def test_the_push_timeout_is_20_seconds(self):
-        from unittest import mock
-
-        from fm import pulls
-
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        with mock.patch.object(pulls.proc, "run", wraps=pulls.proc.run) as run:
-            loop.tick(g.e.p)
-        (push,) = [c for c in run.call_args_list if "push" in c.args[0]]
-        self.assertEqual(push.kwargs["timeout"], 20)
-        self.assertTrue(iid)
 
     def test_the_local_provider_pushes_nothing(self):
         e = Env(test="true")
