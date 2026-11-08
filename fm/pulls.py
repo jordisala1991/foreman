@@ -1,6 +1,6 @@
-"""Pull requests for a GitHub project (the loop's side; the agent only pushes its branch). `open_drafts` gives a
-running task a draft PR once its first commit is pushed (`[integrate] pr = draft`); `prepare` makes sure a delivered
-branch is pushed and has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
+"""Pull requests for a GitHub project (the loop's side: the loop pushes the task branches, the agents never do).
+`open_drafts` pushes a running task's new commits and, once it has some, gives it a draft PR (`[integrate] pr = draft`);
+`prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
 from pathlib import Path
@@ -35,6 +35,21 @@ def _commits(p: Project, branch: str) -> int:
     return int(r.out.strip() or 0)
 
 
+def push(p: Project, change: dict[str, Any]) -> None:
+    """Pushes the task's branch to origin from the main repo (worktree branches live there). Never forced, never
+    the main branch: a rejected push (the branch diverged) is an error, not something to overwrite."""
+    branch = change["branch"]
+    if branch == p.get("project", "main"):
+        raise providers.Permanent(f"refusing to push {branch}: it is the main branch")
+    ref = f"refs/heads/{branch}"
+    try:
+        r = proc.run(["git", "-C", str(p.repo), "push", "origin", f"{ref}:{ref}"], timeout=60)
+    except proc.ProcError as e:
+        raise (providers.Transient if e.timed_out else providers.Permanent)(str(e)) from None
+    if r.code != 0:
+        raise providers.Permanent(f"git push {branch}: {(r.err or r.out).strip()[:300]}")
+
+
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
     change = change_of(i, head)
     change["body"] = describe.wrap(change["claim"] or change["title"])
@@ -44,33 +59,38 @@ def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: b
 
 
 def open_drafts(p: Project) -> None:
-    """Loop step: a task in progress whose branch is pushed (with commits of its own) gets a draft PR. One task's
-    failure never stops the others, and none blocks the task (its agent is working fine): the error is noted once and
-    the PR is retried next tick."""
+    """Loop step: a task in progress with commits of its own has its branch pushed, and (`pr = draft`) a draft PR once
+    it is. One task's failure never stops the others, and none blocks the task (its agent is working fine): the error
+    is noted once and the push and the PR are retried next tick."""
     provider = registry.get(p)
-    if provider.name != "github" or providers.pr_mode(p) != "draft":
+    if provider.name != "github":
         return
     for i in backlog.issues(backlog.load(p)):
-        if i["status"] != "in progress" or i.get("pr") or not i.get("branch") or i.get("blocked"):
+        if i["status"] != "in progress" or not i.get("branch") or i.get("blocked"):
             continue
         head = _head(p, i["branch"])
         try:
-            if head and _commits(p, i["branch"]) and provider.pushed(change_of(i, head)):
+            if not head or not _commits(p, i["branch"]):
+                continue
+            change = change_of(i, head)
+            if not provider.pushed(change):
+                push(p, change)
+            if providers.pr_mode(p) == "draft" and not i.get("pr"):
                 _open(p, provider, i, head, True)
         except Exception as e:
             if i.get("pr_error") != str(e):
                 backlog.update(p, i["id"], pr_error=str(e))
-                backlog.event(p, i["id"], f"could not open its PR, will retry: {e}"[:300])
+                backlog.event(p, i["id"], f"could not push or open its PR, will retry: {e}"[:300])
 
 
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
-    running; ('back', note) the agent must push first."""
+    running. An unpushed branch is pushed here; a failed push raises (the loop blocks the task with git's error)."""
     provider = registry.get(p)
     if provider.name != "github":
         return "ok", ""
     if not provider.pushed(change_of(i, head)):
-        return "back", f"Push your branch ({i['branch']}) to origin at its tip, then run `fm done` again: the PR is opened and merged from what is pushed."
+        push(p, change_of(i, head))
     if not i.get("pr"):
         _open(p, provider, i, head, False)
     ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))

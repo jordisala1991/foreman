@@ -86,9 +86,6 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
         )
         return
     step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
-    if step == "back":
-        send_back(p, i["id"], "review", why)
-        return
     if step == "wait":
         return
     c: dict[str, Any] = i.get("check") or {}

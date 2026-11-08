@@ -201,45 +201,45 @@ class Pulls(unittest.TestCase):
         self.addCleanup(g.close)
         return g
 
-    def test_draft_pr_opens_with_the_first_pushed_commit_not_before(self):
+    def origin_tip(self, g: GH, iid: str) -> str:
+        ref = "refs/heads/" + g.e.issue(iid)["branch"]
+        r = subprocess.run(["git", "--git-dir", str(g.bare), "rev-parse", "--verify", "-q", ref], capture_output=True, text=True)
+        return r.stdout.strip()
+
+    def local_tip(self, g: GH, iid: str) -> str:
+        return subprocess.run(["git", "-C", str(g.e.repo), "rev-parse", g.e.issue(iid)["branch"]], capture_output=True, text=True).stdout.strip()
+
+    def test_the_loop_pushes_a_running_tasks_commits_and_opens_its_draft(self):
         g = self.make(test="true")
         iid = g.work(push=False)
-        loop.tick(g.e.p)
-        self.assertEqual(g.calls("pr", "create"), [])
-        git(g.e.repo.parent / g.e.issue(iid)["worktree"], "push", "-q", "origin", g.e.issue(iid)["branch"])
+        self.assertEqual(self.origin_tip(g, iid), "")
         loop.tick(g.e.p)
         loop.tick(g.e.p)
+        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+        with open(wt / "app.py", "a") as f:
+            f.write("# second\n")
+        git(wt, "commit", "-qam", "second")
+        loop.tick(g.e.p)
+        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
         self.assertEqual(len(g.calls("pr", "create")), 1)  # once
         self.assertIn("--draft", g.calls("pr", "create")[0])
         self.assertEqual(g.e.issue(iid)["pr"]["number"], 1)
 
-    def test_a_pushed_task_has_its_draft_before_fm_done_and_is_not_sent_back(self):
+    def test_nothing_is_pushed_before_the_task_has_commits_and_main_never(self):
         g = self.make(test="true")
-        iid = g.work()
+        iid = backlog.add(g.e.p, "x", status="ready", criterion="y")
         loop.tick(g.e.p)
-        self.assertTrue(g.state["prs"]["1"]["draft"])  # before fm done
-        g.deliver(iid)
         loop.tick(g.e.p)
-        self.assertNotIn("Push your branch", json.dumps(g.e.issue(iid)))
-        self.assertFalse(g.state["prs"]["1"]["draft"])
+        self.assertEqual(self.origin_tip(g, iid), "")
+        self.assertEqual(g.calls("pr", "create"), [])
 
-    def test_the_brief_tells_the_agent_to_push_after_each_commit_only_with_github(self):
-        from fm import agents
-
-        g = self.make(test="true")
-        iid = g.work(push=False)
-        i = g.e.issue(iid)
-        text = agents.brief(g.e.p, i, "work")
-        self.assertIn(f"git push -u origin {i['branch']}", text)
-        g.e.p.cfg["integrate"]["provider"] = "local"
-        self.assertNotIn("git push", agents.brief(g.e.p, i, "work"))
-
-    def test_the_brief_does_not_promise_a_draft_pr_when_pr_is_done(self):
-        from fm import agents
-
+    def test_pr_done_pushes_early_but_opens_the_pr_only_at_fm_done(self):
         g = self.make('pr = "done"', test="true")
         iid = g.work(push=False)
-        self.assertNotIn("draft PR", agents.brief(g.e.p, g.e.issue(iid), "work"))
+        loop.tick(g.e.p)
+        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+        self.assertEqual(g.calls("pr", "create"), [])
 
     def test_pr_done_opens_nothing_until_fm_done_and_then_a_ready_pr(self):
         g = self.make('pr = "done"', test="true")
@@ -265,17 +265,47 @@ class Pulls(unittest.TestCase):
         self.assertIn("merge risk low", pr["comments"][0])
         self.assertIn("round 1: H 0, M 0", pr["comments"][0])
 
-    def test_an_unpushed_tip_goes_back_to_the_agent(self):
-        g = self.make(test="true")
-        iid = g.work()
+    def more_commits(self, g: GH, iid: str) -> None:
         wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# more\n")
         git(wt, "commit", "-qam", "more")
+
+    def test_fm_done_on_an_unpushed_branch_is_pushed_and_goes_to_review(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        self.more_commits(g, iid)
+        g.deliver(iid)
+        self.assertNotEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+        loop.tick(g.e.p)
+        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+        self.assertEqual(g.e.issue(iid)["status"], "in review")
+        self.assertFalse(g.e.issue(iid).get("blocked"))
+        self.assertFalse(g.state["prs"]["1"]["draft"])
+
+    def test_a_failing_push_blocks_the_task_with_git_s_error(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        self.more_commits(g, iid)
+        g.deliver(iid)
+        hook = g.bare / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\necho 'no pushing today' >&2\nexit 1\n")
+        hook.chmod(0o755)
+        loop.tick(g.e.p)
+        self.assertIn("no pushing today", g.e.issue(iid)["blocked"])
+        self.assertEqual(g.e.issue(iid)["status"], "in review")
+
+    def test_a_branch_that_diverged_from_origin_is_not_force_pushed(self):
+        g = self.make(test="true")
+        iid = g.work()
+        remote_tip = self.origin_tip(g, iid)
+        git(g.e.repo.parent / g.e.issue(iid)["worktree"], "commit", "-q", "--amend", "-m", "rewritten")
         g.deliver(iid)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["status"], "in progress")
-        self.assertEqual(g.calls("pr", "ready"), [])
+        self.assertEqual(self.origin_tip(g, iid), remote_tip)
+        self.assertTrue(g.e.issue(iid)["blocked"])
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
@@ -393,7 +423,7 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         self.assertIn("timed out", g.e.issue(iid)["pr_error"])
-        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not open its PR" in e["text"]]
+        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push or open its PR" in e["text"]]
         self.assertEqual(len(events), 1)
 
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
@@ -415,7 +445,7 @@ class Pulls(unittest.TestCase):
             g = self.make(test="true")
             g.set(**flag)
             first, second = g.work(), g.work()  # each work() ticks: the first one fails there, once
-            events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not open its PR" in e["text"]]
+            events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push or open its PR" in e["text"]]
             self.assertEqual(len(events), 1)
             self.assertIn(text, events[0])
             self.assertFalse(g.e.issue(first).get("blocked"))

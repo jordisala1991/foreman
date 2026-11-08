@@ -12,7 +12,7 @@ Read the project's lessons, `$lessons`: what misled earlier agents in this proje
 $plan_section
 
 # Where
-Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured. Do not touch the main checkout (`$repo`) and do not merge into `$main`: integration is not yours.$push
+Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured. Do not touch the main checkout (`$repo`) and do not merge into `$main`: integration is not yours.
 
 # How
 - Understand the task, then split it into steps if it helps. Use subagents (Agent tool) for independent pieces or searches; brief them as peers and pin their scope to this worktree.

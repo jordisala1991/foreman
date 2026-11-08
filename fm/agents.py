@@ -5,9 +5,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import backlog, costs, integrate, lock, providers, sessions, util
+from . import backlog, costs, integrate, lock, sessions, util
 from .config import Project
-from .providers import registry
 
 BRIEFS = Path(__file__).parent / "briefs"
 
@@ -26,17 +25,6 @@ ROUND2 = (
 
 def report_file(p: Project, iid: str) -> Path:
     return p.home / "reports" / f"{iid}.md"
-
-
-def push_rule(p: Project, i: dict[str, Any]) -> str:
-    """With GitHub and `pr = draft` the branch must be on origin early, so its draft PR opens while the agent works."""
-    if registry.get(p).name != "github" or providers.pr_mode(p) != "draft":
-        return ""
-    branch = i.get("branch", "")
-    return (
-        f" Push your branch after each commit (`git push -u origin {branch}`): the draft PR opens from what is pushed,"
-        " and `fm done` is not sent back for a missing push."
-    )
 
 
 def seed_report(p: Project, iid: str, worktree: Path) -> None:
@@ -87,7 +75,6 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "plan_section": plan_section(i),
         "round2": "",
         "resources": lock.describe(p.cfg),
-        "push": push_rule(p, i),
         **(extra or {}),
     }
     if values.get("round2"):
