@@ -30,6 +30,15 @@ FAKE_GH = textwrap.dedent("""\
         save()
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
+    if a[:2] == ["pr", "create"] and flag("--head") == s.get("reject"):
+        print("GraphQL: Head sha can't be blank, Base sha can't be blank", file=sys.stderr)
+        sys.exit(1)
+    if a[:2] == ["pr", "create"] and flag("--head") == s.get("flaky"):
+        print("HTTP 502", file=sys.stderr)
+        sys.exit(1)
+    if a[:1] == ["api"]:
+        print(s.get("api_sha") or "null")
+        sys.exit(0)
     if a[:2] == ["pr", "create"]:
         n = str(len(s["prs"]) + 1)
         s["prs"][n] = {"draft": "--draft" in a, "state": "OPEN", "comments": [], "head": flag("--head"), "title": flag("--title")}
@@ -53,7 +62,7 @@ FAKE_GH = textwrap.dedent("""\
         print(json.dumps([{"bucket": s["ci"]}]))
         sys.exit(8 if s["ci"] == "pending" else 0)
     elif a[:2] == ["pr", "view"]:
-        print(json.dumps({"state": pr["state"], "mergeCommit": {"oid": "c0ffee"} if pr["state"] == "MERGED" else None}))
+        print(json.dumps({"state": pr["state"], "mergeCommit": {"oid": "c0ffee"} if pr["state"] == "MERGED" and not s.get("no_oid") else None}))
     save()
 """)
 
@@ -316,6 +325,36 @@ class Pulls(unittest.TestCase):
             i = g.e.issue(iid)
             self.assertFalse(i.get("blocked"), failing)
             self.assertEqual(i["status"], "done", failing)
+
+    def test_one_tasks_failure_does_not_stop_the_next_task_getting_its_pr(self):
+        for flag, blocked in (({"reject": "fm/ty-1"}, True), ({"flaky": "fm/ty-1"}, False)):
+            g = self.make(test="true")
+            g.set(**flag)
+            first, second = g.work(), g.work()
+            loop.tick(g.e.p)
+            self.assertEqual(g.e.issue(second)["pr"]["number"], 1)
+            one = g.e.issue(first)
+            if blocked:  # permanent: the platform rejects it: blocked with the reason, never retried
+                self.assertIn("Head sha", one["blocked"])
+                loop.tick(g.e.p)
+                self.assertEqual(len(g.calls("pr", "create")), 2)
+            else:  # transient (502): retried next tick, never blocked
+                self.assertFalse(one.get("blocked"))
+                self.assertIn("HTTP 502", one["pr_error"])
+                g.set(flaky="")
+                loop.tick(g.e.p)
+                self.assertEqual(g.e.issue(first)["pr"]["number"], 2)
+
+    def test_a_merged_pr_without_a_merge_commit_is_read_from_the_api_or_fails_clearly(self):
+        g, iid = self.merged(None)
+        g.set(no_oid=True)
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.issue(iid)["status"], "in review")  # no sha anywhere: retried, no invented reference
+        self.assertNotIn("merge", g.e.issue(iid))
+        self.assertIn("no merge commit", g.e.issue(iid)["retry_error"])
+        g.set(api_sha="feed01")
+        loop.tick(g.e.p)
+        self.assertEqual((g.e.issue(iid)["status"], g.e.issue(iid)["commit"]), ("done", "feed01"))
 
     def test_the_provider_never_publishes(self):
         import inspect

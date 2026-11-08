@@ -26,6 +26,11 @@ class Transient(Exception):
     """A platform call that failed in a way worth retrying (network, rate limit, timeout): the loop retries, never blocks."""
 
 
+class Permanent(Exception):
+    """A platform call that will fail the same way if repeated (the platform rejects it, the branch is not there): the
+    task is blocked with the reason instead of retried."""
+
+
 class Provider:
     name = ""
     merges = MERGES
@@ -56,7 +61,7 @@ class Provider:
         return ""
 
     def state(self, change: dict[str, Any]) -> dict[str, Any]:
-        """{'merged': bool, 'closed': bool}, as seen on the platform now."""
+        """{'merged': bool, 'closed': bool, 'commit'?: str}, as seen on the platform now."""
         raise NotImplementedError
 
 

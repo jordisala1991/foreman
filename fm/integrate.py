@@ -247,9 +247,9 @@ def merge_accepted(p: Project, iid: str) -> str:
         p,
         iid,
         "done",
-        f"integrated, accepted by {by}, as {change['merge'][:9]}",
+        f"integrated, accepted by {by}, as {(seen.get('commit') or change['merge'])[:9]}",
         result=report.get("summary", ""),
-        commit=change["merge"],
+        commit=seen.get("commit") or change["merge"],
         acceptance={**acceptance, "verdict": f"accepted by {by}"},
     )
     return "done"

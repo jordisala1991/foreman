@@ -2,16 +2,31 @@
 for agents); the agent only pushes its own branch. Nothing here publishes: no tag, no release, no push."""
 
 import json
+import re
 import subprocess
 from typing import Any
 
-from . import Provider, Transient
+from . import Permanent, Provider, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 
 
-class ProviderError(Transient):
+TRANSIENT = re.compile(r"timed? ?out|connection|could not resolve|network|HTTP 5\d\d|\b50[0-4]\b|rate limit|temporar|unavailable|\bEOF\b|TLS", re.I)
+
+
+class TransientError(Transient):
     pass
+
+
+class PermanentError(Permanent):
+    pass
+
+
+def failure(what: str, text: str) -> Exception:
+    """What went wrong with a gh/git call: a network or server hiccup is retried; anything else (gh rejecting the PR,
+    a missing branch or PR) is permanent."""
+    text = text.strip()[:300]
+    return (TransientError if TRANSIENT.search(text) else PermanentError)(f"{what}: {text}")
 
 
 class GitHub(Provider):
@@ -22,9 +37,9 @@ class GitHub(Provider):
         try:
             r = subprocess.run(argv, capture_output=True, text=True, check=False, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
         except subprocess.TimeoutExpired:
-            raise ProviderError(f"{prog} {' '.join(args[:3])}: timed out after {TIMEOUT}s") from None
+            raise TransientError(f"{prog} {' '.join(args[:3])}: timed out after {TIMEOUT}s") from None
         if check and r.returncode != 0:
-            raise ProviderError(f"{prog} {' '.join(args[:3])}: {(r.stderr or r.stdout).strip()[:300]}")
+            raise failure(f"{prog} {' '.join(args[:3])}", r.stderr or r.stdout)
         return r
 
     def view(self, change: dict[str, Any], fields: str) -> dict[str, Any]:
@@ -55,7 +70,7 @@ class GitHub(Provider):
         except (ValueError, KeyError, TypeError):
             if "no checks" in (r.stderr + r.stdout).lower():
                 return "none"
-            raise ProviderError(f"gh pr checks: {(r.stderr or r.stdout).strip()[:300]}") from None
+            raise failure("gh pr checks", r.stderr or r.stdout) from None
         if buckets & {"fail", "cancel"}:
             return "fail"
         if "pending" in buckets:
@@ -63,19 +78,32 @@ class GitHub(Provider):
         return "pass" if "pass" in buckets else "none"
 
     def merge(self, change: dict[str, Any], strategy: str) -> str:
+        """Merges the PR once (a retry after a crash finds it merged). Returns the merge commit; if GitHub has not
+        merged it yet, a marker that the merge was requested, so it is not requested twice."""
         v = self.view(change, "state,mergeCommit")
-        if v["state"] != "MERGED":  # a retry after a crash finds it merged already
+        if v["state"] != "MERGED":
             msg = ["--subject", f"Integrate {change['id']}: {change['title']}"] if strategy != "rebase" else []
             self.run("gh", "pr", "merge", str(change["pr"]), f"--{strategy}", *msg)
             v = self.view(change, "state,mergeCommit")
+        return self.merge_commit(change, v) if v["state"] == "MERGED" else f"pr-{change['pr']}-merge-requested"
+
+    def merge_commit(self, change: dict[str, Any], v: dict[str, Any]) -> str:
+        """The merge commit of a merged PR: from `gh pr view`, else the API. Still none: fail (retried) rather than
+        invent a reference."""
         commit: dict[str, Any] = v.get("mergeCommit") or {}
-        return str(commit.get("oid") or "merged")
+        sha = str(commit.get("oid") or "")
+        if not sha:
+            sha = self.run("gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}", "--jq", ".merge_commit_sha").stdout.strip()
+        if not sha or sha == "null":
+            raise TransientError(f"PR #{change['pr']} is merged but GitHub shows no merge commit yet")
+        return sha
 
     def state(self, change: dict[str, Any]) -> dict[str, Any]:
-        s = self.view(change, "state")["state"]
-        if s == "MERGED":
-            self.catch_up()
-        return {"merged": s == "MERGED", "closed": s != "OPEN"}
+        v = self.view(change, "state,mergeCommit")
+        if v["state"] != "MERGED":
+            return {"merged": False, "closed": v["state"] != "OPEN"}
+        self.catch_up()
+        return {"merged": True, "closed": True, "commit": self.merge_commit(change, v)}
 
     def catch_up(self) -> None:
         """Best effort: bring the main checkout up to the merged main so the next checks see it (fetch + fast-forward
