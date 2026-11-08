@@ -11,7 +11,8 @@ from . import Permanent, Provider, Transient
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 
 
-PERMANENT = re.compile(r"\bclosed\b|conflict|not mergeable|cannot be merged|merge commit cannot", re.I)  # what will not fix itself
+# Only these exact phrases will not fix themselves; anything else (a network error that says "closed") is transient.
+PERMANENT = re.compile(r"pull request is closed|is not mergeable|merge conflict|cannot be merged", re.I)
 
 
 class TransientError(Transient):

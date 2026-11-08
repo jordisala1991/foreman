@@ -352,6 +352,11 @@ class Pulls(unittest.TestCase):
             ("something new", github.TransientError),
             ("pull request is closed", github.PermanentError),
             ("merge conflict", github.PermanentError),
+            ("Pull request #3 is not mergeable", github.PermanentError),
+            ("the pull request cannot be merged", github.PermanentError),
+            ("read tcp: use of closed network connection", github.TransientError),
+            ("connection closed by remote host", github.TransientError),
+            ("error on branch fix-conflict-ui", github.TransientError),
         )
         for text, kind in cases:
             self.assertIsInstance(github.failure("gh", text), kind, text)
