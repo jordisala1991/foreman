@@ -8,18 +8,14 @@ Accepting only records the decision; the merge step (`merge_accepted`, through t
 and the issue closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
-import fnmatch
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from . import backlog, providers, pulls, sessions, util
 from .config import Project
-
-RISKS = ("low", "medium", "high")
-AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
-DEPENDENCY_FILES = ("requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "go.mod", "Cargo.toml")
+from .providers import registry
+from .risk import Facts, allows, score
 
 
 class IntegrateError(Exception):
@@ -79,63 +75,6 @@ def conflicts(p: Project, branch: str) -> bool:
     return r.returncode != 0
 
 
-def is_sensitive(path: str, patterns: list[str]) -> bool:
-    for pat in patterns:
-        if pat.endswith("/"):
-            if path.startswith(pat) or f"/{pat}" in f"/{path}":
-                return True
-        elif fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(Path(path).name, pat):
-            return True
-    return False
-
-
-@dataclass
-class Facts:
-    """What the checks found about a branch: the input of its risk score."""
-
-    tests: str
-    review: str
-    files: list[dict[str, Any]]
-    deleted: list[str]
-    conflict: bool
-    commits: int
-    ci: str = ""
-
-
-def _high_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
-    sensitive = [x for x in paths if is_sensitive(x, p.get("integrate", "sensitive"))]
-    reasons = [
-        (f.commits == 0 or not f.files, "the branch has no changes"),
-        (f.tests == "fail", "tests fail"),
-        (f.ci == "fail", "CI fails"),
-        (f.conflict, "conflicts with main"),
-        (bool(sensitive), "touches sensitive paths: " + ", ".join(sensitive[:5])),
-        (not f.review.strip().lower().startswith("clean"), "review not clean: " + (f.review.strip()[:120] or "no review reported")),
-        (lines > p.get("integrate", "medium_lines"), f"{lines} lines changed"),
-    ]
-    return [why for hit, why in reasons if hit]
-
-
-def _medium_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
-    reasons = [
-        (p.get("integrate", "small_lines") < lines <= p.get("integrate", "medium_lines"), f"{lines} lines changed"),
-        (f.tests == "none", "no test command to run"),
-        (bool(f.deleted), "deletes files: " + ", ".join(f.deleted[:5])),
-        (any(fnmatch.fnmatch(Path(x).name, pat) for x in paths for pat in DEPENDENCY_FILES), "changes dependencies"),
-        (len(paths) > 8, f"{len(paths)} files"),
-    ]
-    return [why for hit, why in reasons if hit]
-
-
-def score(p: Project, f: Facts) -> tuple[str, list[str]]:
-    """(risk, reasons): high beats medium beats low; each reason says what raised it."""
-    lines = sum(x["added"] + x["deleted"] for x in f.files)
-    paths = [x["path"] for x in f.files]
-    high, medium = _high_risks(p, f, lines, paths), _medium_risks(p, f, lines, paths)
-    risk = "high" if high else "medium" if medium else "low"
-    return risk, high + medium or ["small, tests green, review clean"]
-
-
 def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     """Checks an issue's branch and stores the result in its `check`. `ci`: the PR's CI as just read, if the caller has it."""
     d = backlog.load(p)
@@ -146,7 +85,7 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     head = git(p.repo, "rev-parse", branch).stdout.strip()
     tests = tests_at(p, head, iid.lower())
     if ci is None:
-        ci = providers.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
+        ci = registry.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
     if tests == "none" and ci in ("pass", "fail"):  # no test command: the PR's CI stands in for it
         tests = ci
     files = diff_stat(p, branch)
@@ -175,14 +114,14 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
 
 def merges_alone(p: Project, c: dict[str, Any]) -> bool:
     """Autonomy lets this risk in alone; with a PR, only on green CI."""
-    if providers.get(p).name == "github" and c.get("ci") != "pass":
+    if registry.get(p).name == "github" and c.get("ci") != "pass":
         return False
-    return c["risk"] in AUTONOMY.get(p.get("integrate", "autonomy"), ())
+    return allows(p.get("integrate", "autonomy"), c["risk"])
 
 
 def accept(p: Project, iid: str, by: str = "owner") -> str:
     """Records the decision to integrate; it merges nothing. The loop's merge step does the merge (`merge_accepted`)."""
-    providers.get(p)  # a bad [integrate] provider/merge fails here, clearly
+    registry.get(p)  # a bad [integrate] provider/merge fails here, clearly
     d = backlog.load(p)
     i = backlog.get(d, iid)
     if i["status"] != "in review":
@@ -209,7 +148,7 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
 def merge_accepted(p: Project, iid: str) -> str:
     """The one place that merges: asks the provider to merge an accepted issue (once), then closes the issue, removing
     its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     i = backlog.get(backlog.load(p), iid)
     acc = i.get("accepted")
     if i["status"] != "in review" or not acc:

@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Fails when this branch has more lint/type suppressions than the main branch: each `noqa`, `type: ignore` or `pyright: ignore`
+comment in fm/, tests/ and bin/. Fixing a root cause never adds one; loosening is the owner's call.
+Usage: bin/suppressions [--root DIR] [--base REF]  (base: foreman-next, else origin/foreman-next)"""
+
+import argparse
+import subprocess
+import sys
+
+WORD = "#[[:space:]]*(" + "no" + "qa|type:[[:space:]]*ig" + "nore|pyright:[[:space:]]*ig" + "nore)"  # built in pieces so this file does not count itself
+PATHS = ["fm", "tests", "bin", ":(exclude)bin/suppressions"]
+
+
+def git(root: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", "-C", root, *args], capture_output=True, text=True, check=False)
+
+
+def count(root: str, ref: str | None) -> list[str]:
+    cmd = ["grep", "-nE"] + ([] if ref else ["--untracked"]) + [WORD] + ([ref] if ref else []) + ["--", *PATHS]
+    r = git(root, *cmd)
+    if r.returncode > 1:
+        sys.exit(f"suppressions: git grep failed: {r.stderr.strip()}")
+    out = r.stdout.splitlines()
+    return [line.removeprefix(f"{ref}:") for line in out]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=".")
+    ap.add_argument("--base")
+    a = ap.parse_args()
+    refs = [a.base] if a.base else ["foreman-next", "origin/foreman-next"]
+    base = next((r for r in refs if git(a.root, "rev-parse", "--verify", "-q", r + "^{commit}").returncode == 0), None)
+    if base is None:
+        print(f"suppressions: no base branch found (tried {', '.join(refs)}): cannot compare", file=sys.stderr)
+        return 1
+    here, there = count(a.root, None), count(a.root, base)
+    if len(here) > len(there):
+        print(f"suppressions: {len(here)} here, {len(there)} on {base}. A suppression is not a fix; fix the cause, or ask the owner.", file=sys.stderr)
+        print("\n".join(here), file=sys.stderr)
+        return 1
+    print(f"suppressions: {len(here)} (base {base}: {len(there)}) ok")
+    return 0
+
+
+sys.exit(main())

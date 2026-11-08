@@ -10,6 +10,7 @@ import unittest
 from helpers import Env, fm, git
 
 from fm import backlog, integrate, loop, providers, util
+from fm.providers import registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -124,22 +125,22 @@ class GH:
 class Provider(unittest.TestCase):
     def test_provider_is_detected_from_origin_and_can_be_overridden(self):
         e = Env()
-        self.assertEqual(providers.get(e.p).name, "local")
+        self.assertEqual(registry.get(e.p).name, "local")
         git(e.repo, "remote", "add", "origin", "git@github.com:o/r.git")
-        self.assertEqual(providers.get(e.p).name, "github")
+        self.assertEqual(registry.get(e.p).name, "github")
         git(e.repo, "remote", "set-url", "origin", "https://gitlab.com/o/r.git")
-        self.assertEqual(providers.get(e.p).name, "local")
+        self.assertEqual(registry.get(e.p).name, "local")
         git(e.repo, "remote", "set-url", "origin", "https://github.com/o/r.git")
         e.p.cfg["integrate"]["provider"] = "local"
-        self.assertEqual(providers.get(e.p).name, "local")
+        self.assertEqual(registry.get(e.p).name, "local")
 
     def test_local_has_no_rebase_github_has(self):
         e = Env()
         e.p.cfg["integrate"]["merge"] = "rebase"
         with self.assertRaises(providers.ConfigError):
-            providers.get(e.p)
+            registry.get(e.p)
         e.p.cfg["integrate"]["provider"] = "github"
-        self.assertEqual(providers.get(e.p).name, "github")
+        self.assertEqual(registry.get(e.p).name, "github")
 
 
 class Pulls(unittest.TestCase):

@@ -8,7 +8,7 @@ from typing import Any
 
 from . import backlog, providers, util
 from .config import Project
-from .providers import Provider
+from .providers import Provider, registry
 
 
 def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
@@ -45,7 +45,7 @@ def open_drafts(p: Project) -> None:
     """Loop step: a task in progress whose branch is pushed (with commits of its own) gets a draft PR. One task's
     failure never stops the others, and none blocks the task (its agent is working fine): the error is noted once and
     the PR is retried next tick."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     if provider.name != "github" or providers.pr_mode(p) != "draft":
         return
     for i in backlog.issues(backlog.load(p)):
@@ -64,7 +64,7 @@ def open_drafts(p: Project) -> None:
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
     running; ('back', note) the agent must push first."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     if provider.name != "github":
         return "ok", ""
     if not provider.pushed(change_of(i, head)):
@@ -84,7 +84,7 @@ def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
 
 def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     """Marks the PR ready for review and posts the risk and verdict (once per checked tip)."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     if provider.name != "github":
         return
     i = backlog.get(backlog.load(p), i["id"])

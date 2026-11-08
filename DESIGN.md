@@ -26,7 +26,8 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
-| `fm/providers/` | ~100 | one module per platform behind a small interface; `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
+| `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
+| `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
@@ -220,6 +221,42 @@ closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Auton
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
 origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
+
+## Architecture
+
+Hexagonal-lite: a small core, ports only where something external varies, everything else outside. Not Clean Architecture
+nor full DDD; what is shared is a vocabulary: *task* (an issue in the backlog), *round* (one review pass), *risk* (low,
+medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act).
+
+Layers, outside in (`tach.toml`; a module imports its own layer and the ones below, never above):
+
+| Layer | Modules | Role |
+|---|---|---|
+| ui | `cli*`, `panel*` | the owner's and the agents' entry points; call the loop and below |
+| loop | `loop` | the process that ticks: does the I/O, calls the core |
+| steps | `sources`, `talk`, `health`, `metrics` | one step of a tick, or a view over several pieces |
+| services | `agents`, `integrate`, `pulls`, `sessions`, `lock` | the outside world: git, gh, claude, processes |
+| registry | `providers/registry` | the one place that picks an adapter |
+| adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
+| ports | `providers/__init__` (the `Provider` interface) | |
+| core | `risk`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+
+Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
+launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
+the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
+task.
+
+Rules (enforced by `make check`):
+- The core imports nothing above it, and **no `subprocess`**: ruff bans it everywhere except the loop, the services,
+  `sources`, the adapters and the tests (`per-file-ignores` in `pyproject.toml`).
+- An adapter imports neither the loop nor another adapter (tach).
+- Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services
+  gather the facts (git, gh, claude) and apply the result. New decisions go there, not into `integrate` or `loop`.
+- Files stay under 300 lines (`make size`, no exceptions): a module that grows is split along these layers.
+- `make check` also fails when the branch has more `noqa` / `type: ignore` than `foreman-next` (`bin/suppressions`).
+- Loosening a rule (`tach.toml`, the ruff ignores, `pyproject.toml`, `bin/suppressions`) is the owner's call.
+
+The panel's TypeScript is out of this (a dependency check there can come later).
 
 ## Watching itself
 

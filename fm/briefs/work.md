@@ -9,6 +9,9 @@ $detail
 # Before you start
 Read the project's lessons, `$lessons`: what misled earlier agents in this project.
 
+# Architecture
+Read the Architecture section of DESIGN.md (`$repo/DESIGN.md`) before you write code: the layers, the ports and the rules. Put code where it belongs (pure decisions in the core, I/O in the loop and services) and add no port without need. `make check` enforces it (tach, no subprocess in the core, no new noqa / type: ignore).
+
 # Where
 Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured. Do not touch the main checkout (`$repo`) and do not merge into `$main`: integration is not yours.
 

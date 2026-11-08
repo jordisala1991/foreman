@@ -1,16 +1,18 @@
-# One entry point for the code checks (CI runs `make check`). Dev tools (ruff, pyright, pylint) are the `dev` dependency group in
+# One entry point for the code checks (CI runs `make check`). Dev tools (ruff, pyright, pylint, tach) are the `dev` dependency group in
 # pyproject.toml, locked in uv.lock, and run through `uv run`. Nothing is added to fm's runtime.
 # To change a tool's version: edit pyproject.toml, then `uv lock`.
 # Fail if uv.lock is out of date with pyproject.toml; never rewrite it silently.
 export UV_LOCKED := 1
 
-.PHONY: check fix lint format types size test
+.PHONY: check fix lint format types arch suppressions size test
 
 # Everything, in this order, stopping at the first failure (even under `make -j`).
 check:
 	@$(MAKE) --no-print-directory lint
 	@$(MAKE) --no-print-directory format
 	@$(MAKE) --no-print-directory types
+	@$(MAKE) --no-print-directory arch
+	@$(MAKE) --no-print-directory suppressions
 	@$(MAKE) --no-print-directory size
 	@$(MAKE) --no-print-directory test
 	@echo "make check: all passed"
@@ -30,6 +32,15 @@ format:
 # Strict on fm/ (see [tool.pyright] in pyproject.toml).
 types:
 	uv run pyright
+
+# Architecture: layers and adapters (tach.toml, DESIGN.md "Architecture"). Process-running (subprocess) is banned outside the
+# allowed modules by ruff, in `make lint`.
+arch:
+	uv run tach check
+
+# No more noqa / type: ignore than the main branch (foreman-next).
+suppressions:
+	bin/suppressions
 
 # File length: ruff has no rule for it. fm/ 300 lines (limit in pyproject.toml), tests 600.
 size:

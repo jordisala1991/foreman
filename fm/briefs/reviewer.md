@@ -14,8 +14,9 @@ Done when: $criterion
    - **M**: a plausible failure in a real case, a doc or contract that contradicts the code, a change of behaviour without a test, a claim of the report with nothing behind it.
    - **L**: the rest. Style, names, «it would be cleaner» and anything outside the task are L or not written.
    - **New suppressions in the diff** (noqa, ignore, cast, exception-list entries) are an M finding, unless the owner approved them.
-5. **Look where reviews miss:** a slow or blocking call inside a loop tick, hook or handler; something missing, failed or timed out read as «none», «zero» or «clean»; a check that also blocks normal work.
-6. **Do not talk yourself down:** a finding leaves only by citing the line that refutes it.
+5. **Architecture:** read the Architecture section of DESIGN.md. Check where the new code lives (pure decisions in the core, I/O in the loop and services, no layer reaching above itself) and that no port was added without need (an external system or two real implementations). A wrongly placed piece of logic or an unneeded port is an M finding.
+6. **Look where reviews miss:** a slow or blocking call inside a loop tick, hook or handler; something missing, failed or timed out read as «none», «zero» or «clean»; a check that also blocks normal work.
+7. **Do not talk yourself down:** a finding leaves only by citing the line that refutes it.
 $round2
 
 # The review
