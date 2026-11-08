@@ -32,7 +32,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
 | `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
-| `fm/briefs/*.md` | ~80 | the defining agent's, the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
+| `fm/briefs/*.md` | ~80 | the defining agent's (it plans), the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
 | `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
 
 Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, built to `panel/dist`.
@@ -116,7 +116,9 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-de
 
 **Defining agent** (`fm/briefs/define.md`): reads the repo (read only), settles what the task means, asks the owner
 only what only he can decide (`fm ask`, then ends its turn), may split into more issues (`fm add`), and ends with
-`fm ready --claim --criterion --detail`.
+`fm ready --claim --criterion --detail --plan PATH` (or `--no-plan "why trivial"`). It also reads the code and writes a
+plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
+risk); the issue gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
 
 Every brief starts by pointing the agent at the project's `LESSONS.md`: what misled earlier agents, in their words
 (each `--misled` text that is not «none» is appended; the owner prunes it).

@@ -2,6 +2,8 @@
 
 import argparse
 import os
+import sys
+from pathlib import Path
 
 from . import backlog, util
 from .cli_common import home, mine
@@ -47,8 +49,20 @@ def cmd_verdict(a: argparse.Namespace) -> None:
 def cmd_ready(a: argparse.Namespace) -> None:
     p = home(a)
     iid = mine(a)
+    if not (a.plan or a.no_plan):
+        sys.exit('fm: say how the task is planned: --plan PATH (the written plan) or --no-plan "why it is trivial"')
+    if a.plan and a.no_plan:
+        sys.exit("fm: --plan and --no-plan exclude each other: either the task has a plan or it is trivial")
+    if a.plan:
+        f = Path(a.plan)
+        if not f.is_file() or not f.read_text(encoding="utf-8").strip():
+            sys.exit(f"fm: the plan file {a.plan} is missing or empty: write it, then run fm ready again")
     with backlog.edit(p) as d:
         i = backlog.get(d, iid)
+        if a.plan:
+            i["plan_file"] = str(Path(a.plan).resolve())
+        else:
+            i.pop("plan_file", None)  # a relaunched definer that now says «trivial» leaves no stale plan
         acceptance: backlog.Acceptance = i.get("acceptance") or {}
         agent: backlog.Agent = i.get("agent") or {}
         i["acceptance"] = {**acceptance, "claim": a.claim, "criterion": a.criterion}
@@ -56,7 +70,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
         i["status"], i["blocked"] = "ready", ""
         i["defined_by"] = agent.get("name")
-    backlog.event(p, iid, f"→ ready: {a.criterion}")
+    backlog.event(p, iid, f"→ ready: {a.criterion}" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)
     print(f"{iid} is ready; the loop will launch its responsible agent. End your turn.")
 

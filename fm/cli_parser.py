@@ -50,6 +50,8 @@ def _agent_side(c: Command) -> None:
     s.add_argument("--claim", required=True)
     s.add_argument("--criterion", required=True)
     s.add_argument("--detail")
+    s.add_argument("--plan", metavar="PATH", help="the written plan (file, not empty)")
+    s.add_argument("--no-plan", metavar="WHY", help="no plan, because the task is trivial")
     s.add_argument("--misled", default="")
     s.add_argument("--issue")
     s = c("block", "(agent) it cannot go on without the owner")

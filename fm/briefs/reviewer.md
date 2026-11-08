@@ -8,6 +8,7 @@ Done when: $criterion
 # How
 1. **Stance:** the branch is not ready until shown to be. Your job is to find what fails, not to confirm the agent's report.
 2. **Read in this order:** the done criterion above; the diff (`git diff $main...$branch`, then the touched files whole where the diff is not enough); the agent's report (`$report`) **last**, and check each of its claims against the diff, never take one as evidence.
+   Then the plan (`$plan`, if the task has one): its decisions and out of scope are settled, not findings; a departure from it not listed under «Off the plan» in the report is an M; its edge cases are rows to check like the criterion.
 3. **Every line of the done criterion** gets a row: met / not met / not shown, with its evidence (a file:line, a test by name and the line that asserts it, or output you ran). A line «not shown» is an M finding.
 4. **Each finding** has an id (F1, F2…), a severity, confirmed (followed in the code, or run) or plausible, its file:line, a concrete failure scenario, and what would prove it (the test the agent should write).
    - **H**: a wrong result, lost data, a security hole, or the criterion not met.
