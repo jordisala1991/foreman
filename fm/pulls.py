@@ -54,15 +54,16 @@ def open_drafts(p: Project) -> None:
         try:
             if head and _commits(p, i["branch"]) and provider.pushed(change_of(i, head)):
                 _open(p, provider, i, head, True)
-        except Exception as e:  # gh down, no auth, ...: say it once
+        except Exception as e:  # gh down, no auth, timeout...: say it once, and leave the rest to the next tick
             if i.get("pr_error") != str(e):
                 backlog.update(p, i["id"], pr_error=str(e))
                 backlog.event(p, i["id"], f"could not open its PR: {e}"[:300])
+            return
 
 
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
-    """For a delivered branch: ('ok', '') ready to be checked; ('wait', why) CI still running; ('back', note) the
-    agent must push first."""
+    """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
+    running; ('back', note) the agent must push first."""
     provider = providers.get(p)
     if provider.name != "github":
         return "ok", ""
@@ -70,9 +71,8 @@ def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
         return "back", f"Push your branch ({i['branch']}) to origin at its tip, then run `fm done` again: the PR is opened and merged from what is pushed."
     if not i.get("pr"):
         _open(p, provider, i, head, False)
-    if provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head)) == "pending":
-        return "wait", "CI is still running"
-    return "ok", ""
+    ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))
+    return ("wait", "CI is still running") if ci == "pending" else ("ok", ci)
 
 
 def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:

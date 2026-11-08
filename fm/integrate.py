@@ -136,8 +136,8 @@ def score(p: Project, f: Facts) -> tuple[str, list[str]]:
     return risk, high + medium or ["small, tests green, review clean"]
 
 
-def check(p: Project, iid: str) -> dict[str, Any]:
-    """Checks an issue's branch and stores the result in its `check`."""
+def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
+    """Checks an issue's branch and stores the result in its `check`. `ci`: the PR's CI as just read, if the caller has it."""
     d = backlog.load(p)
     i = backlog.get(d, iid)
     branch = i.get("branch", "")
@@ -145,7 +145,8 @@ def check(p: Project, iid: str) -> dict[str, Any]:
     commits = int(git(p.repo, "rev-list", "--count", f"{main}..{branch}", check=False).stdout.strip() or 0)
     head = git(p.repo, "rev-parse", branch).stdout.strip()
     tests = tests_at(p, head, iid.lower())
-    ci = providers.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
+    if ci is None:
+        ci = providers.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
     if tests == "none" and ci in ("pass", "fail"):  # no test command: the PR's CI stands in for it
         tests = ci
     files = diff_stat(p, branch)
@@ -225,7 +226,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         try:
             ref = provider.merge(change, providers.merge_strategy(p))
         except Exception as e:  # a platform's own errors are an integration error
-            if isinstance(e, providers.ConfigError):
+            if isinstance(e, providers.ConfigError | providers.Transient):
                 raise
             raise IntegrateError(str(e)) from None
         backlog.update(p, iid, merge=ref)

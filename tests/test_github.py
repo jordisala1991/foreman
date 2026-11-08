@@ -9,11 +9,11 @@ import unittest
 
 from helpers import Env, git
 
-from fm import backlog, integrate, loop, providers
+from fm import backlog, integrate, loop, providers, util
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys
+    import json, os, sys, time
     d = os.path.dirname(os.path.abspath(__file__))
     a = sys.argv[1:]
     f = os.path.join(d, "gh.json")
@@ -23,6 +23,13 @@ FAKE_GH = textwrap.dedent("""\
         return a[a.index(n) + 1] if n in a else None
     def save():
         json.dump(s, open(f, "w"))
+    if s.get("hang") and a[:2] == ["pr", "create"]:
+        time.sleep(5)
+    if s.get("fail_once") == a[:2]:
+        s["fail_once"] = None
+        save()
+        print("HTTP 502", file=sys.stderr)
+        sys.exit(1)
     if a[:2] == ["pr", "create"]:
         n = str(len(s["prs"]) + 1)
         s["prs"][n] = {"draft": "--draft" in a, "state": "OPEN", "comments": [], "head": flag("--head"), "title": flag("--title")}
@@ -258,6 +265,57 @@ class Pulls(unittest.TestCase):
             loop.tick(g.e.p)
             loop.tick(g.e.p)
             self.assertEqual(g.e.issue(iid)["status"], status, ci)
+
+    def test_ci_is_read_again_at_every_decision_not_cached_with_the_check(self):
+        g = self.make(test="true", autonomy="medium")
+        g.set(ci="none")
+        iid = g.work()
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        self.assertEqual((g.e.issue(iid)["status"], g.e.issue(iid)["check"]["ci"]), ("in review", "none"))
+        g.set(ci="pass")  # the CI registered later: no new push needed
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.issue(iid)["status"], "done")
+
+    def test_ci_turning_red_on_the_same_head_stops_autonomy(self):
+        g = self.make(test="true", autonomy="manual")
+        iid = g.work()
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")  # cached, head and main unchanged
+        g.set(ci="fail")  # a CI re-run failed on the same head
+        g.e.p.cfg["integrate"]["autonomy"] = "medium"
+        loop.tick(g.e.p)
+        self.assertEqual((g.e.issue(iid)["check"]["ci"], g.e.issue(iid)["status"]), ("fail", "in review"))
+        self.assertEqual(g.calls("pr", "merge"), [])
+
+    def test_a_hung_gh_times_out_without_freezing_the_tick(self):
+        from fm.providers import github
+
+        old = github.TIMEOUT
+        github.TIMEOUT = 1
+        self.addCleanup(setattr, github, "TIMEOUT", old)
+        g = self.make(test="true")
+        g.set(hang=True)
+        iid = g.work()
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        self.assertIn("timed out", g.e.issue(iid)["pr_error"])
+        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not open its PR" in e["text"]]
+        self.assertEqual(len(events), 1)
+
+    def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
+        for failing in (["pr", "checks"], ["pr", "merge"], ["pr", "view"]):
+            g = self.make(test="true", autonomy="medium")
+            iid = g.work()
+            g.deliver(iid)
+            g.set(fail_once=failing)
+            loop.tick(g.e.p)
+            loop.tick(g.e.p)
+            loop.tick(g.e.p)
+            i = g.e.issue(iid)
+            self.assertFalse(i.get("blocked"), failing)
+            self.assertEqual(i["status"], "done", failing)
 
     def test_the_provider_never_publishes(self):
         import inspect

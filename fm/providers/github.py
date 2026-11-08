@@ -5,10 +5,12 @@ import json
 import subprocess
 from typing import Any
 
-from . import Provider
+from . import Provider, Transient
+
+TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 
 
-class ProviderError(Exception):
+class ProviderError(Transient):
     pass
 
 
@@ -17,7 +19,10 @@ class GitHub(Provider):
 
     def run(self, prog: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
-        r = subprocess.run(argv, capture_output=True, text=True, check=False, cwd=self.p.repo if prog == "gh" else None)
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, check=False, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise ProviderError(f"{prog} {' '.join(args[:3])}: timed out after {TIMEOUT}s") from None
         if check and r.returncode != 0:
             raise ProviderError(f"{prog} {' '.join(args[:3])}: {(r.stderr or r.stdout).strip()[:300]}")
         return r

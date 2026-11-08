@@ -20,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, health, integrate, pulls, sessions, sources, util
+from . import backlog, health, integrate, providers, pulls, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -44,6 +44,12 @@ def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
     """One issue's step: a failure blocks that issue with the reason, the others go on."""
     try:
         fn()
+        if backlog.get(backlog.load(p), iid).get("retry_error"):
+            backlog.update(p, iid, retry_error="")
+    except providers.Transient as e:  # the platform hiccuped: stay in the queue, try again next tick, say it once
+        if backlog.get(backlog.load(p), iid).get("retry_error") != str(e):
+            backlog.update(p, iid, retry_error=str(e))
+            backlog.event(p, iid, f"could not {what} it, will retry: {e}"[:300])
     except Exception as e:
         backlog.update(p, iid, blocked=f"the loop could not {what} it: {e}"[:300])
         backlog.event(p, iid, f"blocked: could not {what}: {e}"[:300])
@@ -80,15 +86,16 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             "proof, nothing else; add «Review, round N» to your report and run `fm done` again.",
         )
         return
-    step, why = pulls.prepare(p, i, head)
+    step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
     if step == "back":
         send_back(p, i["id"], "review", why)
         return
     if step == "wait":
         return
     c: dict[str, Any] = i.get("check") or {}
-    if c.get("head") != head or c.get("main") != main_head:
-        c = integrate.check(p, i["id"])
+    stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
+    if c.get("head") != head or c.get("main") != main_head or stale:
+        c = integrate.check(p, i["id"], why if i.get("pr") else None)
     if c.get("conflict"):
         send_back(
             p,

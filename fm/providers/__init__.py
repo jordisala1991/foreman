@@ -22,6 +22,10 @@ class ConfigError(Exception):
     pass
 
 
+class Transient(Exception):
+    """A platform call that failed in a way worth retrying (network, rate limit, timeout): the loop retries, never blocks."""
+
+
 class Provider:
     name = ""
     merges = MERGES
