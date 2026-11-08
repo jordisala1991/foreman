@@ -4,7 +4,7 @@ You review branch `$branch` of task $id in project $project before it is integra
 $id · $title
 Goal: $claim
 Done when: $criterion
-
+$owner_notes
 # How
 1. **Stance:** the branch is not ready until shown to be. Your job is to find what fails, not to confirm the agent's report.
 2. **Read in this order:** the done criterion above; the diff (`git diff $main...$branch`, then the touched files whole where the diff is not enough); the agent's report (`$report`, the task's description: the owner reads this same text) **last**, and check each of its claims against the diff, never take one as evidence.
