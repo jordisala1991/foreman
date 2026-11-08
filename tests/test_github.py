@@ -297,6 +297,7 @@ class Pulls(unittest.TestCase):
         i = g.e.issue(iid)
         self.assertEqual(i["status"], "in progress")
         self.assertEqual(i["conflicts"], 1)
+        self.assertEqual(backlog.load(g.e.p)["decisions_resolved"][-1]["kind"], "conflict")
         self.assertFalse(i.get("blocked"))
         self.assertNotIn("accepted", i)
         self.assertEqual(len(g.calls("pr", "merge")), 1)

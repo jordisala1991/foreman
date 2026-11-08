@@ -223,6 +223,7 @@ class Provider(unittest.TestCase):
             i = e.issue(iid)
             self.assertEqual(i["status"], "in progress")
             self.assertEqual(i["conflicts"], 1)
+            self.assertEqual(backlog.load(e.p)["decisions_resolved"][-1]["kind"], "conflict")
             self.assertFalse(i.get("blocked"))
             self.assertNotIn("accepted", i)
             self.assertEqual(git(e.repo, "rev-parse", "main").strip(), main)
