@@ -74,6 +74,7 @@ class Provider(unittest.TestCase):
 
     def test_accept_only_marks_and_the_issue_closes_when_the_merge_is_seen_in_main(self):
         from fm.providers import local
+
         e = Env(test="true")
         iid = self.delivered(e)
         loop.tick(e.p)
@@ -104,8 +105,7 @@ class Provider(unittest.TestCase):
         for strategy, parents in (("", 1), ("merge", 2)):
             e = Env(test="true", autonomy="low")
             if strategy:
-                e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace(
-                    '[integrate]', f'[integrate]\nmerge = "{strategy}"'))
+                e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[integrate]", f'[integrate]\nmerge = "{strategy}"'))
                 e.p = type(e.p).load(e.home)
             iid = self.delivered(e)
             loop.tick(e.p)
@@ -114,6 +114,7 @@ class Provider(unittest.TestCase):
 
     def test_unknown_merge_or_provider_is_a_clear_config_error(self):
         from fm import providers
+
         for key, val in (("merge", "rebase"), ("provider", "github")):
             e = Env(test="true")
             e.p.cfg["integrate"][key] = val
@@ -126,9 +127,9 @@ class Provider(unittest.TestCase):
 
     def test_the_old_forge_key_is_a_clear_config_error(self):
         from fm import providers
+
         e = Env()
-        e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace(
-            "[integrate]", '[integrate]\nforge = "github"'))
+        e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[integrate]", '[integrate]\nforge = "github"'))
         with self.assertRaisesRegex(providers.ConfigError, "forge was renamed to provider"):
             providers.get(type(e.p).load(e.home))
 
@@ -178,16 +179,19 @@ class Provider(unittest.TestCase):
 
     def test_defaults_and_nothing_is_published(self):
         from fm import providers
+
         e = Env()
         self.assertEqual((e.p.get("integrate", "provider"), e.p.get("integrate", "merge")), ("local", "squash"))
         self.assertEqual(providers.get(e.p).name, "local")
         import inspect
+
         from fm.providers import local
+
         src = inspect.getsource(local)
         for word in ('"push"', '"tag"', "release"):
             self.assertNotIn(word, src)
         e = Env(test="true", autonomy="low")
-        iid = self.delivered(e)
+        self.delivered(e)
         loop.tick(e.p)
         self.assertEqual(git(e.repo, "tag").strip(), "")
         self.assertEqual(git(e.repo, "remote").strip(), "")

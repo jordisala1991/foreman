@@ -1,0 +1,32 @@
+[project]
+name = "fm"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.ruff]
+line-length = 160
+target-version = "py312"
+extend-exclude = ["panel"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PLR0912", "PLR0913", "PLR0915"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.pyright]
+include = ["fm"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+
+[tool.fm-size]
+limit = 300
+tests_limit = 600
+
+# Over the limit today: they may shrink, never grow. Splitting them is the architecture task.
+[tool.fm-size.exceptions]
+"fm/cli.py" = 362
+"fm/loop.py" = 430
+"fm/panel.py" = 387
+"panel/src/app.css" = 356

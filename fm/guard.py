@@ -22,8 +22,17 @@ from . import backlog, util
 from .config import Project
 
 PUBLISH = {
-    ("npm", "publish"), ("pnpm", "publish"), ("yarn", "publish"), ("cargo", "publish"), ("twine", "upload"),
-    ("gh", "release"), ("gh", "pr"), ("gh", "repo"), ("docker", "push"), ("uv", "publish"), ("poetry", "publish"),
+    ("npm", "publish"),
+    ("pnpm", "publish"),
+    ("yarn", "publish"),
+    ("cargo", "publish"),
+    ("twine", "upload"),
+    ("gh", "release"),
+    ("gh", "pr"),
+    ("gh", "repo"),
+    ("docker", "push"),
+    ("uv", "publish"),
+    ("poetry", "publish"),
 }
 MAIN = {"main", "master"}
 OPERATORS = {";", "&&", "||", "|", "&", ";;", "|&"}
@@ -55,6 +64,7 @@ def segments(cmd: str) -> list[list[str]]:
 def writes(w: list[str], cwd: str, target: Path) -> bool:
     """`w` writes or removes the file `target`: as a redirect target, through tee / sed -i / perl -i, as the
     destination of mv / cp, or as an argument of rm / mv / truncate."""
+
     def hits(arg: str) -> bool:
         return Path(cwd, os.path.expanduser(arg)).resolve() == target
 
@@ -85,8 +95,7 @@ def _mine(path: str, cwd: str, own: list[Path]) -> bool:
     return any(p == r or r in p.parents for r in roots)
 
 
-def check_bash(cmd: str, cwd: str, own: list[Path], branch: str, config: Path,
-               extra: list[dict[str, str]], mains: set[str] = MAIN) -> str | None:
+def check_bash(cmd: str, cwd: str, own: list[Path], branch: str, config: Path, extra: list[dict[str, str]], mains: set[str] = MAIN) -> str | None:  # noqa: C901, PLR0912, PLR0913
     """The name of the first action of the list that `cmd` runs, or None."""
     for w in segments(cmd):
         if not w:
@@ -96,11 +105,10 @@ def check_bash(cmd: str, cwd: str, own: list[Path], branch: str, config: Path,
         while prog == "git" and args[:1] and args[0] in ("-C", "-c"):
             args = args[2:]
         sub = next((a for a in args if not a.startswith("-")), "")
-        if (prog, sub) in PUBLISH:
-            if prog != "gh" or (args[1:2] and args[1] in ("create", "upload", "merge", "edit", "delete")):
-                return "publish"
+        if (prog, sub) in PUBLISH and (prog != "gh" or (args[1:2] and args[1] in ("create", "upload", "merge", "edit", "delete"))):
+            return "publish"
         if prog == "git" and sub == "push":
-            rest = args[args.index("push") + 1:]
+            rest = args[args.index("push") + 1 :]
             refs = [a for a in rest if not a.startswith("-")]
             if {"--delete", "-d"} & set(rest) or any(r.startswith(":") for r in refs[1:]):
                 return "delete"
@@ -109,9 +117,13 @@ def check_bash(cmd: str, cwd: str, own: list[Path], branch: str, config: Path,
             dests = [r.split(":")[-1].removeprefix("refs/heads/") for r in refs[1:]] or [branch]
             if any((d if d != "HEAD" else branch) in mains | {""} for d in dests):
                 return "push-main"
-        if prog == "git" and sub == "branch" and any(a in ("-d", "-D", "--delete") for a in args):
-            if any(a != branch for a in args[1:] if not a.startswith("-")):
-                return "delete"
+        if (
+            prog == "git"
+            and sub == "branch"
+            and any(a in ("-d", "-D", "--delete") for a in args)
+            and any(a != branch for a in args[1:] if not a.startswith("-"))
+        ):  # noqa: E501
+            return "delete"
         if prog == "git" and sub == "worktree" and "remove" in args:
             return "delete"
         if prog in ("rm", "rmdir", "unlink", "trash") or (prog == "find" and "-delete" in args):
@@ -135,8 +147,7 @@ def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, issue: dict[str,
             return "config"
         return None
     if tool == "Bash":
-        return check_bash(str(inp.get("command", "")), cwd, own, branch, p.config_file, p.get("guard", "ask"),
-                          MAIN | {p.get("project", "main")})
+        return check_bash(str(inp.get("command", "")), cwd, own, branch, p.config_file, p.get("guard", "ask"), MAIN | {p.get("project", "main")})
     return None
 
 
@@ -167,17 +178,19 @@ def hook(stdin: str) -> str:
             issue = backlog.get(backlog.load(p), iid)
         except backlog.BacklogError:
             issue = None
-        action = check(p, d.get("tool_name", ""), d.get("tool_input") or {}, d.get("cwd") or os.getcwd(), issue)
+        action = check(p, d.get("tool_name", ""), util.sub(d, "tool_input"), d.get("cwd") or os.getcwd(), issue)
         if not action or granted(p, iid, action):
             return ""
-        util.append_jsonl(p.state / "guard.jsonl", {"time": util.now(), "issue": iid, "action": action,
-                                                     "tool": d.get("tool_name"), "input": d.get("tool_input")})
+        util.append_jsonl(
+            p.state / "guard.jsonl", {"time": util.now(), "issue": iid, "action": action, "tool": d.get("tool_name"), "input": d.get("tool_input")}
+        )
         why = WHY.get(action, "the owner asked to be asked first")
-        msg = (f"The owner asked to be asked before this ({action}: {why}). Do not look for another way to do it. "
-               f"If it is needed, run `fm ask --action {action} \"what you want to run and why\"` and end your turn; "
-               "if he allows it, you will be told, and it passes once.")
-        return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                                  "permissionDecisionReason": msg}})
+        msg = (
+            f"The owner asked to be asked before this ({action}: {why}). Do not look for another way to do it. "
+            f'If it is needed, run `fm ask --action {action} "what you want to run and why"` and end your turn; '
+            "if he allows it, you will be told, and it passes once."
+        )
+        return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": msg}})
     except Exception as e:  # noqa: BLE001 - a broken guard must not stop the work
         print(f"fm guard error (allowed): {e}", file=sys.stderr)
         return ""

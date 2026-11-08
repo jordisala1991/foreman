@@ -8,10 +8,10 @@ import json
 import os
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def now() -> str:
@@ -27,7 +27,7 @@ def age_s(stamp: str | None) -> float | None:
 
 
 @contextlib.contextmanager
-def file_lock(path: Path) -> Iterator[None]:
+def file_lock(path: Path) -> Generator[None, None, None]:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(str(path) + ".lock", "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
@@ -62,7 +62,7 @@ def write_json(path: Path, obj: Any) -> None:
 
 
 @contextlib.contextmanager
-def locked_json(path: Path, default: Any) -> Iterator[Any]:
+def locked_json(path: Path, default: Any) -> Generator[Any, None, None]:
     """Read under the file's lock; whatever the caller leaves in the yielded object is written back."""
     with file_lock(path):
         data = read_json(path, default)
@@ -71,7 +71,7 @@ def locked_json(path: Path, default: Any) -> Iterator[Any]:
 
 
 def read_jsonl(path: Path) -> list[Any]:
-    out = []
+    out: list[Any] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -86,3 +86,15 @@ def append_jsonl(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path), open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+
+def sub(d: dict[str, Any], key: str) -> dict[str, Any]:
+    """d[key] as a dict; {} when it is missing, null or not a dict."""
+    v = d.get(key)
+    return cast(dict[str, Any], v) if isinstance(v, dict) else {}
+
+
+def items(d: dict[str, Any], key: str) -> list[Any]:
+    """d[key] as a list; [] when it is missing, null or not a list."""
+    v = d.get(key)
+    return cast(list[Any], v) if isinstance(v, list) else []

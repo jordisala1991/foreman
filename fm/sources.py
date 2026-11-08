@@ -17,12 +17,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from typing import Any
 
 from . import backlog, integrate, util
 from .config import Project
 
 
-def run(p: Project) -> list[str]:
+def run(p: Project) -> list[str]:  # noqa: C901, PLR0912
     folder = p.home / "sources"
     filed: list[str] = []
     if not folder.is_dir():
@@ -33,18 +34,17 @@ def run(p: Project) -> list[str]:
         cursor_file = p.state / "cursors" / exe.name
         cursor = cursor_file.read_text().strip() if cursor_file.exists() else ""
         try:
-            r = subprocess.run([str(exe)], env={**os.environ, "FM_CURSOR": cursor}, capture_output=True, text=True,
-                               timeout=60, check=False)
+            r = subprocess.run([str(exe)], env={**os.environ, "FM_CURSOR": cursor}, capture_output=True, text=True, timeout=60, check=False)
         except (OSError, subprocess.SubprocessError) as e:
-            util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}",
-                                                         "error": repr(e)})
+            util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": repr(e)})
             continue
         for ln in r.stdout.splitlines():
             try:
-                s = json.loads(ln)
+                raw = json.loads(ln)
             except ValueError:
                 continue
-            if not isinstance(s, dict):
+            s = util.sub({"s": raw}, "s")
+            if not isinstance(raw, dict):
                 fail(p, exe.name, "a signal must be a JSON object", ln)
                 continue
             if "cursor" in s:
@@ -68,22 +68,20 @@ def run(p: Project) -> list[str]:
                     continue
                 util.append_jsonl(applied, {"key": key, "at": util.now()})
             elif s.get("key") and s.get("title"):
-                iid = backlog.add(p, s["title"], detail=s.get("detail", ""), status="triage",
-                                  source=f"{exe.name}:{s['key']}")
+                iid = backlog.add(p, s["title"], detail=s.get("detail", ""), status="triage", source=f"{exe.name}:{s['key']}")
                 if iid:
                     filed.append(iid)
     return filed
 
 
 def fail(p: Project, name: str, error: str, signal: object) -> None:
-    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {name}", "error": error,
-                                                 "signal": signal})
+    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {name}", "error": error, "signal": signal})
 
 
 ACTIONS = ("note", "reject", "accept", "done", "cancel")
 
 
-def apply(p: Project, source: str, s: dict) -> None:
+def apply(p: Project, source: str, s: dict[str, Any]) -> None:
     """One signal on a task, through the owner's command path. Raises when it is not valid: nothing changed."""
     from . import loop  # late: loop imports this module
 

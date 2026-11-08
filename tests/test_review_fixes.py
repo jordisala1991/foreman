@@ -1,13 +1,12 @@
 """One test per defect found by the code review (2026-11-08)."""
 
-import json
 import os
 import unittest
 from pathlib import Path
 
 from helpers import Env, git
 
-from fm import backlog, cli, guard, health, integrate, loop
+from fm import backlog, cli, guard, health, loop
 
 
 class GuardFalsePositives(unittest.TestCase):
@@ -53,8 +52,7 @@ class Sessions(unittest.TestCase):
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         a = e.issue(iid)["agent"]
-        backlog.update(e.p, iid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"},
-                       sessions=[])
+        backlog.update(e.p, iid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"}, sessions=[])
         loop.tick(e.p)
         i = e.issue(iid)
         self.assertEqual((i["agent"]["session"], i.get("blocked")), (a["session"], ""))
@@ -133,10 +131,14 @@ class LaunchRace(unittest.TestCase):
         e = Env()
         os.environ["FM_REGISTRY"] = str(e.tmp / "projects.json")
         try:
-            lock = open(str(e.tmp / "projects.json") + ".loop.lock", "a")
+            lock = open(str(e.tmp / "projects.json") + ".loop.lock", "a")  # noqa: SIM115 (held across the run)
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            r = subprocess.run([sys.executable, str(Path(__file__).parent.parent / "bin/fm"), "--home", str(e.home),
-                                "loop", "--once"], capture_output=True, text=True, env=os.environ)
+            r = subprocess.run(
+                [sys.executable, str(Path(__file__).parent.parent / "bin/fm"), "--home", str(e.home), "loop", "--once"],
+                capture_output=True,
+                text=True,
+                env=os.environ,
+            )
             self.assertIn("another loop", r.stderr)
         finally:
             lock.close()

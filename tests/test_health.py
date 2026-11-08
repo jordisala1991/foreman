@@ -79,13 +79,14 @@ class Metrics(unittest.TestCase):
         backlog.update(e.p, iid, sessions=["s1"])
         d = e.tmp / "transcripts/proj"
         d.mkdir(parents=True)
-        rec = {"type": "assistant", "timestamp": "2026-11-07T10:00:00Z",
-               "message": {"id": "m1", "model": "claude-sonnet-5-5",
-                           "usage": {"input_tokens": 1_000_000, "output_tokens": 0}}}
+        rec = {
+            "type": "assistant",
+            "timestamp": "2026-11-07T10:00:00Z",
+            "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 1_000_000, "output_tokens": 0}},
+        }
         (d / "s1.jsonl").write_text(json.dumps(rec) + "\n" + json.dumps(rec) + "\n")
         self.assertEqual(costs.of_sessions(["s1"])["usd"], 2.0)
         self.assertEqual(metrics.per_issue(e.p)[0]["usd"], 2.0)
-
 
 
 class Lessons(unittest.TestCase):

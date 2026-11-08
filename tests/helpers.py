@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 from fm import backlog, util  # noqa: E402
 from fm.config import Project  # noqa: E402
 
-FAKE = textwrap.dedent('''\
+FAKE = textwrap.dedent("""\
     #!/usr/bin/env python3
     import json, sys, os, hashlib
     d = os.path.dirname(os.path.abspath(__file__))
@@ -36,7 +36,7 @@ FAKE = textwrap.dedent('''\
         rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "state": "working"})
         json.dump(rows, open(os.path.join(d, "agents.json"), "w"))
     print(f"backgrounded · {short} · {name}")
-''')
+""")
 
 
 def git(repo: Path, *args: str) -> str:
@@ -60,20 +60,22 @@ class Env:
         (self.bin / "claude").chmod(0o755)
         self.home = self.tmp / "home"
         self.home.mkdir()
-        (self.home / "fm.toml").write_text(textwrap.dedent(f'''\
+        (self.home / "fm.toml").write_text(
+            textwrap.dedent(f'''\
             [project]
             name = "toy"
             prefix = "TY"
             repo = "{self.repo}"
             [agents]
             slots = {slots}
-            claude = "{self.bin / 'claude'}"
+            claude = "{self.bin / "claude"}"
             [integrate]
             autonomy = "{autonomy}"
             test = "{test}"
             [health]
             loop_seconds = 1
-        '''))
+        ''')
+        )
         util.write_json(self.home / "backlog.json", backlog.EMPTY)
         self.p = Project.load(self.home)
         os.environ["FM_CLAUDE_PROJECTS"] = str(self.tmp / "transcripts")
@@ -96,8 +98,7 @@ class Env:
         loop.tick(self.p)
         os.environ["FM_ISSUE"] = iid
         try:
-            cli.main(["--home", str(self.home), "verdict", "--high", str(high), "--medium", str(medium),
-                      "--file", str(self.home / f"reviews/{iid}.md")])
+            cli.main(["--home", str(self.home), "verdict", "--high", str(high), "--medium", str(medium), "--file", str(self.home / f"reviews/{iid}.md")])
         finally:
             os.environ.pop("FM_ISSUE")
 

@@ -22,7 +22,10 @@ Python 3.11+ standard library only; the panel is React + Vite, built into `panel
 bin/fm --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
 bin/fm loop            # or: bin/fm launchd > ~/Library/LaunchAgents/dev.fm.loop.plist
 bin/fm panel --port 7788
-python3 -m unittest discover -s tests
+bin/check              # everything CI runs: ruff, pyright (strict), file size, tsc, unit tests
+python3 -m unittest discover -s tests   # just the tests
 ```
+
+Limits (pyproject.toml): files 300 lines (tests 600), functions complexity 10; files over today are listed as exceptions in `[tool.fm-size.exceptions]` and may shrink, never grow.
 
 `DESIGN.md` has the architecture: the states of a task, the loop, the agents' briefs, the guard list, locks, health.

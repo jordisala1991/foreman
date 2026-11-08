@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import contextlib
 import re
-from collections.abc import Iterator
+from collections.abc import Generator
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from . import util
 from .config import Project
@@ -33,8 +33,7 @@ STATUSES = ("triage", "backlog", "refining", "ready", "in progress", "in review"
 CLOSED = ("done", "canceled", "duplicate")
 RUNNING = ("refining", "in progress")
 PRIORITIES = ("urgent", "high", "medium", "low", "none")
-EMPTY = {"schema_version": 5, "updated": "", "projects": [], "issues": [], "archive": [], "decisions": [],
-         "decisions_resolved": []}
+EMPTY: dict[str, Any] = {"schema_version": 5, "updated": "", "projects": [], "issues": [], "archive": [], "decisions": [], "decisions_resolved": []}
 
 Issue = dict[str, Any]
 Data = dict[str, Any]
@@ -44,17 +43,21 @@ class BacklogError(Exception):
     pass
 
 
+def _copy(v: Any) -> Any:
+    return list(cast(list[Any], v)) if isinstance(v, list) else v
+
+
 def load(p: Project) -> Data:
-    d = util.read_json(p.backlog_file, None) or {k: (list(v) if isinstance(v, list) else v) for k, v in EMPTY.items()}
+    d: Data = util.read_json(p.backlog_file, None) or {k: _copy(v) for k, v in EMPTY.items()}
     if d.get("schema_version") != 5:
         raise BacklogError(f"{p.backlog_file}: schema {d.get('schema_version')!r}, expected 5")
     for k, v in EMPTY.items():
-        d.setdefault(k, list(v) if isinstance(v, list) else v)
+        d.setdefault(k, _copy(v))
     return d
 
 
 @contextlib.contextmanager
-def edit(p: Project) -> Iterator[Data]:
+def edit(p: Project) -> Generator[Data, None, None]:
     with util.file_lock(p.backlog_file):
         d = load(p)
         yield d
@@ -85,8 +88,17 @@ def event(p: Project, iid: str | None, text: str) -> None:
     util.append_jsonl(p.state / "events.jsonl", {"time": util.now(), "issue": iid, "text": text})
 
 
-def add(p: Project, title: str, *, detail: str = "", status: str = "backlog", criterion: str = "",
-        claim: str = "", source: str | None = None, priority: str = "none") -> str:
+def add(  # noqa: PLR0913
+    p: Project,
+    title: str,
+    *,
+    detail: str = "",
+    status: str = "backlog",
+    criterion: str = "",
+    claim: str = "",
+    source: str | None = None,
+    priority: str = "none",
+) -> str:
     if status not in ("triage", "backlog", "ready"):
         raise BacklogError("a new issue starts in triage, backlog or ready")
     if status == "ready" and not criterion:
@@ -95,8 +107,17 @@ def add(p: Project, title: str, *, detail: str = "", status: str = "backlog", cr
         if source and any(i.get("source") == source and i["status"] not in CLOSED for i in issues(d)):
             return ""
         iid = new_id(p, d)
-        issue: Issue = {"id": iid, "title": title, "status": status, "blocked": "", "plan": [], "subs": [],
-                        "detail": detail, "priority": priority, "created": util.now()}
+        issue: Issue = {
+            "id": iid,
+            "title": title,
+            "status": status,
+            "blocked": "",
+            "plan": [],
+            "subs": [],
+            "detail": detail,
+            "priority": priority,
+            "created": util.now(),
+        }
         if criterion or claim:
             issue["acceptance"] = {"claim": claim, "criterion": criterion}
         if source:
@@ -138,8 +159,9 @@ def lesson(p: Project, iid: str, who: str, text: str) -> None:
 
 def ensure_lessons(p: Project) -> Any:
     if not p.lessons_file.exists():
-        util.write_text_atomic(p.lessons_file, "# Lessons\n\nWhat misled earlier agents in this project, in their "
-                               "words. The owner prunes it; agents read it before starting.\n\n")
+        util.write_text_atomic(
+            p.lessons_file, "# Lessons\n\nWhat misled earlier agents in this project, in their words. The owner prunes it; agents read it before starting.\n\n"
+        )
     return p.lessons_file
 
 
@@ -147,13 +169,22 @@ def open_questions(d: Data, iid: str | None = None) -> list[dict[str, Any]]:
     return [q for q in d["decisions"] if q.get("issue") and (iid is None or q["issue"] == iid)]
 
 
-def ask(p: Project, iid: str, agent: str, text: str, kind: str = "question", action: str = "") -> str:
+def ask(p: Project, iid: str, agent: str, text: str, kind: str = "question", action: str = "") -> str:  # noqa: PLR0913
     with edit(p) as d:
         i = get(d, iid)
         n = sum(1 for q in d["decisions"] + d["decisions_resolved"] if q.get("issue") == iid) + 1
         qid = f"{iid} Q{n}"
-        q = {"id": qid, "issue": iid, "agent": agent, "title": i["title"], "text": text, "options": [],
-             "date": date.today().isoformat(), "asked": util.now(), "kind": kind}
+        q: dict[str, Any] = {
+            "id": qid,
+            "issue": iid,
+            "agent": agent,
+            "title": i["title"],
+            "text": text,
+            "options": [],
+            "date": date.today().isoformat(),
+            "asked": util.now(),
+            "kind": kind,
+        }
         if action:
             q["action"] = action
         d["decisions"].append(q)
@@ -167,8 +198,7 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
         if q is None:
             raise BacklogError(f"no open question {qid}")
         d["decisions"].remove(q)
-        q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}",
-                  "free": True, "delivered": False})
+        q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}", "free": True, "delivered": False})
         d["decisions_resolved"].append(q)
     event(p, q["issue"], f"owner answered {qid}: {text}")
     return q
@@ -179,9 +209,21 @@ def note(p: Project, iid: str, text: str, source: str) -> None:
     with edit(p) as d:
         i = get(d, iid)
         n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == iid and q.get("kind") == "note")
-        d["decisions_resolved"].append({"id": f"{iid} N{n + 1}", "issue": iid, "kind": "note", "agent": (i.get(
-            "agent") or {}).get("name"), "text": "signal", "answer": text, "source": source,
-            "resolved": util.now()[:10], "delivered": False, "options": [], "title": i["title"]})
+        d["decisions_resolved"].append(
+            {
+                "id": f"{iid} N{n + 1}",
+                "issue": iid,
+                "kind": "note",
+                "agent": util.sub(i, "agent").get("name"),
+                "text": "signal",
+                "answer": text,
+                "source": source,
+                "resolved": util.now()[:10],
+                "delivered": False,
+                "options": [],
+                "title": i["title"],
+            }
+        )
     event(p, iid, f"note from {source}: {text}")
 
 

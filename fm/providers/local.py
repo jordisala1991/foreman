@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from . import Provider, ConfigError  # noqa: F401
+from . import Provider
 
 
 class ProviderError(Exception):

@@ -1,0 +1,17 @@
+#!/bin/sh
+# One command for everything: lint, format, types, file size, panel types, tests. Stops at the first failure.
+# Dev tools run through uvx (ruff, pyright) and npx (tsc); nothing is added to fm's runtime.
+set -e
+cd "$(dirname "$0")/.."
+
+step() { printf '\n== %s\n' "$*"; }
+
+step "ruff check";        uvx ruff check .
+step "ruff format --check"; uvx ruff format --check .
+step "pyright (strict, fm/)"; uvx pyright
+step "file size";         python3 bin/check_size
+step "tsc --noEmit (panel/src)"
+[ -d panel/node_modules ] || (cd panel && npm ci --silent --no-audit --no-fund)
+(cd panel && npx tsc --noEmit)
+step "unit tests";        python3 -m unittest discover -s tests
+printf '\nbin/check: all passed\n'

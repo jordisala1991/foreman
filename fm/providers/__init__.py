@@ -55,7 +55,7 @@ def get(p: Project) -> Provider:
     from .local import Local
 
     if "forge" in p.cfg["integrate"]:
-        raise ConfigError("[integrate] forge was renamed to provider: use `provider = \"local\"`")
+        raise ConfigError('[integrate] forge was renamed to provider: use `provider = "local"`')
     name = p.get("integrate", "provider")
     providers = {"local": Local}
     if name not in providers:

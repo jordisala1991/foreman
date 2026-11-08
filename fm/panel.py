@@ -51,6 +51,7 @@ class Refused(Exception):
 
 # ---------- the key ----------
 
+
 def token_file() -> Path:
     return Path.home() / ".config/fm/panel.token"
 
@@ -94,8 +95,9 @@ def session_rows(p: Project) -> dict[str, Any]:
 
 # ---------- the projects ----------
 
+
 def projects() -> list[Project]:
-    out = []
+    out: list[Project] = []
     for home in registered():
         try:
             out.append(Project.load(home))
@@ -126,22 +128,26 @@ def paused(p: Project) -> str | None:
 
 def needs(d: Obj) -> int:
     """What waits for the owner: open questions, the queue, triage, blocked issues."""
-    waiting = [i for i in backlog.issues(d) if i["status"] in ("in review", "triage")
-               or (i.get("blocked") and i["status"] not in backlog.CLOSED)]
+    waiting = [i for i in backlog.issues(d) if i["status"] in ("in review", "triage") or (i.get("blocked") and i["status"] not in backlog.CLOSED)]
     return len(d["decisions"]) + len(waiting)
 
 
 def summary(p: Project) -> Obj:
     try:
         d = backlog.load(p)
-        return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "needs": needs(d),
-                "running": sum(1 for i in backlog.issues(d) if i["status"] in backlog.RUNNING)}
+        return {
+            "name": p.name,
+            "paused": paused(p),
+            "loop": loop_beat(p),
+            "needs": needs(d),
+            "running": sum(1 for i in backlog.issues(d) if i["status"] in backlog.RUNNING),
+        }
     except Exception as e:  # noqa: BLE001
         return {"name": p.name, "broken": str(e)}
 
 
 def with_session(p: Project, i: Obj, rows: dict[str, Any]) -> Obj:
-    a = i.get("agent") or {}
+    a = util.sub(i, "agent")
     return {**i, "agent_state": sessions.state(rows, a.get("session")) if a else None}
 
 
@@ -149,11 +155,9 @@ def state(p: Project) -> Obj:
     d = backlog.load(p)
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     rows = session_rows(p)
-    shown = [with_session(p, i, rows) for i in backlog.issues(d)
-             if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
+    shown = [with_session(p, i, rows) for i in backlog.issues(d) if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
-    return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "issues": shown, "questions": d["decisions"],
-            "events": events}
+    return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "issues": shown, "questions": d["decisions"], "events": events}
 
 
 def issue(p: Project, iid: str) -> Obj:
@@ -173,8 +177,15 @@ def system(p: Project) -> Obj:
     found = memo(("health", str(p.home)), 60, lambda: health.findings(p, session_rows(p), outside=True))
     rows = memo(("metrics", str(p.home)), 30, lambda: metrics.per_issue(p))
     locks = [r.status() for r in lock.declared(p.cfg).values()]
-    return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "findings": found, "metrics": rows,
-            "total": round(sum(r["usd"] for r in rows), 2), "locks": locks}
+    return {
+        "name": p.name,
+        "paused": paused(p),
+        "loop": loop_beat(p),
+        "findings": found,
+        "metrics": rows,
+        "total": round(sum(r["usd"] for r in rows), 2),
+        "locks": locks,
+    }
 
 
 # ---------- the owner's actions ----------
@@ -197,7 +208,7 @@ def open_permission(p: Project, qid: str) -> None:
         raise Refused(f"{qid} is not an open permission request")
 
 
-def act(path: str, q: dict[str, list[str]], body: str) -> Obj:
+def act(path: str, q: dict[str, list[str]], body: str) -> Obj:  # noqa: C901, PLR0912
     p = project(q)
     iid = q.get("id", [""])[0]
     text = body.strip()
@@ -206,9 +217,14 @@ def act(path: str, q: dict[str, list[str]], body: str) -> Obj:
         if not str(f.get("title", "")).strip():
             raise Refused("a task needs a title")
         crit = str(f.get("criterion", "")).strip()
-        new = backlog.add(p, f["title"].strip(), detail=str(f.get("detail", "")).strip(),
-                          status="ready" if crit else "backlog", criterion=crit,
-                          claim=str(f.get("claim", "")).strip())
+        new = backlog.add(
+            p,
+            f["title"].strip(),
+            detail=str(f.get("detail", "")).strip(),
+            status="ready" if crit else "backlog",
+            criterion=crit,
+            claim=str(f.get("claim", "")).strip(),
+        )
         return {"id": new}
     if not iid and path != "/api/pause":
         raise KeyError("id is missing")
@@ -248,6 +264,7 @@ def act(path: str, q: dict[str, list[str]], body: str) -> Obj:
 
 # ---------- HTTP ----------
 
+
 class Handler(BaseHTTPRequestHandler):
     token = ""
 
@@ -263,8 +280,9 @@ class Handler(BaseHTTPRequestHandler):
     def ok(self, q: dict[str, list[str]]) -> bool:
         return secrets.compare_digest(self.given_key(q), self.token)
 
-    def send(self, code: int, body: str | bytes, ctype: str = "application/json; charset=utf-8",
-             etag: bool = False, headers: dict[str, str] | None = None) -> None:
+    def send(
+        self, code: int, body: str | bytes, ctype: str = "application/json; charset=utf-8", etag: bool = False, headers: dict[str, str] | None = None
+    ) -> None:
         b = body.encode() if isinstance(body, str) else body
         tag = '"' + hashlib.sha1(b).hexdigest()[:16] + '"' if etag and code == 200 else None
         if tag and self.headers.get("If-None-Match") == tag:
@@ -292,7 +310,7 @@ class Handler(BaseHTTPRequestHandler):
     def json(self, obj: Any, code: int = 200) -> None:
         self.send(code, json.dumps(obj, ensure_ascii=False), etag=True)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:  # noqa: N802, C901
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if not self.ok(q):
@@ -300,11 +318,9 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/":
             f = DIST / "index.html"
             if not f.exists():
-                return self.send(500, "panel/dist is not built: cd panel && npm install && npm run build",
-                                 "text/plain; charset=utf-8")
+                return self.send(500, "panel/dist is not built: cd panel && npm install && npm run build", "text/plain; charset=utf-8")
             cookie = f"{COOKIE}={self.token}; Path=/; HttpOnly; SameSite=Strict"
-            return self.send(200, f.read_bytes(), "text/html; charset=utf-8", etag=True,
-                             headers={"Set-Cookie": cookie})
+            return self.send(200, f.read_bytes(), "text/html; charset=utf-8", etag=True, headers={"Set-Cookie": cookie})
         if u.path in STATIC:
             name, ctype = STATIC[u.path]
             if not (DIST / name).exists():

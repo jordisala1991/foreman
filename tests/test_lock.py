@@ -1,7 +1,6 @@
 import os
 import subprocess
 import sys
-import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -26,8 +25,9 @@ class Lock(unittest.TestCase):
 
     def fm_lock(self, name: str, who: str, *cmd: str) -> subprocess.Popen:
         env = {**os.environ, "FM_AGENT": who, "FM_ISSUE": who.upper()}
-        return subprocess.Popen([sys.executable, FM, "--home", str(self.e.home), "lock", name, "run", f"job {who}",
-                                 *cmd], env=env, stderr=subprocess.PIPE, text=True)
+        return subprocess.Popen(
+            [sys.executable, FM, "--home", str(self.e.home), "lock", name, "run", f"job {who}", *cmd], env=env, stderr=subprocess.PIPE, text=True
+        )
 
     def test_one_at_a_time_in_arrival_order(self):
         body = f"echo start $FM_AGENT >> {self.log}; sleep 0.4; echo end $FM_AGENT >> {self.log}"
@@ -37,8 +37,7 @@ class Lock(unittest.TestCase):
             time.sleep(0.15)
         for pr in procs:
             self.assertEqual(pr.wait(timeout=20), 0)
-        self.assertEqual(self.log.read_text().split("\n")[:-1],
-                         ["start a", "end a", "start b", "end b", "start c", "end c"])
+        self.assertEqual(self.log.read_text().split("\n")[:-1], ["start a", "end a", "start b", "end b", "start c", "end c"])
         uses = lock.uses(["gpu"])
         self.assertEqual([u["who"] for u in uses], ["a", "b", "c"])
         self.assertGreater(uses[2]["waited_s"], 0.3)
@@ -70,16 +69,13 @@ class Lock(unittest.TestCase):
         dead = subprocess.Popen(["true"])
         dead.wait()
         r = lock.declared(Project.load(self.e.home).cfg)["gpu"]
-        util.write_json(r.dir / "state.json", {"held": {"1": {"who": "ghost", "what": "x", "pid": dead.pid,
-                                                              "since": "", "t": 0}}, "queue": []})
+        util.write_json(r.dir / "state.json", {"held": {"1": {"who": "ghost", "what": "x", "pid": dead.pid, "since": "", "t": 0}}, "queue": []})
         self.assertEqual(self.fm_lock("gpu", "a", "true").wait(timeout=20), 0)
 
     def test_unknown_resource_and_status(self):
-        r = subprocess.run([sys.executable, FM, "--home", str(self.e.home), "lock", "nope", "status"],
-                           capture_output=True, text=True)
+        r = subprocess.run([sys.executable, FM, "--home", str(self.e.home), "lock", "nope", "status"], capture_output=True, text=True)
         self.assertIn("unknown resource", r.stderr)
-        r = subprocess.run([sys.executable, FM, "--home", str(self.e.home), "lock", "gpu", "status"],
-                           capture_output=True, text=True)
+        r = subprocess.run([sys.executable, FM, "--home", str(self.e.home), "lock", "gpu", "status"], capture_output=True, text=True)
         self.assertEqual(r.stdout.strip(), "free")
 
     def test_the_brief_names_the_resources(self):

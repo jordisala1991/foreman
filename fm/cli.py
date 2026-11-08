@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from . import backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, util
@@ -37,7 +38,9 @@ def cmd_init(a: argparse.Namespace) -> None:
         (h / "fm.toml").write_text(
             f'[project]\nname = "{h.name}"\nprefix = "{a.prefix}"\nrepo = "{a.repo}"\nmain = "main"\n\n'
             '[agents]\nslots = 2\nmodel = "sonnet"\ndefine_model = "sonnet"\n\n'
-            '[integrate]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nmerge = "squash"  # squash | merge\ntest = ""\n', encoding="utf-8")
+            '[integrate]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nmerge = "squash"  # squash | merge\ntest = ""\n',
+            encoding="utf-8",
+        )
     p = Project.load(h)
     if not p.backlog_file.exists():
         util.write_json(p.backlog_file, backlog.EMPTY)
@@ -48,8 +51,7 @@ def cmd_init(a: argparse.Namespace) -> None:
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
     status = "ready" if a.ready else "triage" if a.triage else "backlog"
-    iid = backlog.add(p, a.title, detail=a.detail or "", status=status, criterion=a.criterion or "",
-                      claim=a.claim or "", priority=a.priority)
+    iid = backlog.add(p, a.title, detail=a.detail or "", status=status, criterion=a.criterion or "", claim=a.claim or "", priority=a.priority)
     print(iid)
 
 
@@ -59,9 +61,8 @@ def cmd_list(a: argparse.Namespace) -> None:
     for i in backlog.issues(d):
         if i["status"] in backlog.CLOSED and not a.all:
             continue
-        ag = (i.get("agent") or {}).get("name", "")
-        print(f"{i['id']:8} {i['status']:12} {ag:14} {i['title']}" + (f"  [blocked: {i['blocked']}]" if i.get(
-            "blocked") else ""))
+        ag = (util.sub(i, "agent")).get("name", "")
+        print(f"{i['id']:8} {i['status']:12} {ag:14} {i['title']}" + (f"  [blocked: {i['blocked']}]" if i.get("blocked") else ""))
     for q in backlog.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
 
@@ -72,6 +73,7 @@ def cmd_show(a: argparse.Namespace) -> None:
 
 
 # --- the agent's side ---------------------------------------------------------------------------------------------
+
 
 def cmd_ask(a: argparse.Namespace) -> None:
     p = home(a)
@@ -99,13 +101,11 @@ def cmd_verdict(a: argparse.Namespace) -> None:
     iid = mine(a)
     with backlog.edit(p) as d:
         i = backlog.get(d, iid)
-        r = i.get("reviewer") or {}
-        v = {"round": r.get("round", 1), "tip": r.get("tip", ""), "high": a.high, "medium": a.medium,
-             "low": a.low, "file": a.file, "at": util.now()}
+        r = util.sub(i, "reviewer")
+        v = {"round": r.get("round", 1), "tip": r.get("tip", ""), "high": a.high, "medium": a.medium, "low": a.low, "file": a.file, "at": util.now()}
         i["review"] = v
         i["reviews"] = [*i.get("reviews", []), v]
-        i["report"] = {**(i.get("report") or {}),
-                       "review": "clean" if a.high + a.medium == 0 else f"open: H {a.high}, M {a.medium}"}
+        i["report"] = {**(util.sub(i, "report")), "review": "clean" if a.high + a.medium == 0 else f"open: H {a.high}, M {a.medium}"}
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
     backlog.event(p, iid, f"review round {v['round']}: H {a.high}, M {a.medium}, L {a.low} ({a.file})")
     print("Verdict recorded. End your turn.")
@@ -116,11 +116,11 @@ def cmd_ready(a: argparse.Namespace) -> None:
     iid = mine(a)
     with backlog.edit(p) as d:
         i = backlog.get(d, iid)
-        i["acceptance"] = {**(i.get("acceptance") or {}), "claim": a.claim, "criterion": a.criterion}
+        i["acceptance"] = {**(util.sub(i, "acceptance")), "claim": a.claim, "criterion": a.criterion}
         if a.detail:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
         i["status"], i["blocked"] = "ready", ""
-        i["defined_by"] = (i.get("agent") or {}).get("name")
+        i["defined_by"] = (util.sub(i, "agent")).get("name")
     backlog.event(p, iid, f"→ ready: {a.criterion}")
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)
     print(f"{iid} is ready; the loop will launch its responsible agent. End your turn.")
@@ -134,6 +134,7 @@ def cmd_block(a: argparse.Namespace) -> None:
 
 
 # --- the owner's side ---------------------------------------------------------------------------------------------
+
 
 def cmd_answer(a: argparse.Namespace) -> None:
     p = home(a)
@@ -172,7 +173,7 @@ def cmd_reject(a: argparse.Namespace) -> None:
 def cmd_go(a: argparse.Namespace) -> None:
     p = home(a)
     i = backlog.get(backlog.load(p), a.id)
-    status = "ready" if (i.get("acceptance") or {}).get("criterion") else "backlog"
+    status = "ready" if (util.sub(i, "acceptance")).get("criterion") else "backlog"
     backlog.set_status(p, a.id, status, "let in by the owner", blocked="")
 
 
@@ -257,12 +258,12 @@ def cmd_launchd(a: argparse.Namespace) -> None:
     print(loop.launchd_plist(str(Path(__file__).resolve().parent.parent / "bin/fm")))
 
 
-def parser() -> argparse.ArgumentParser:
+def parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     ap = argparse.ArgumentParser(prog="fm", description=__doc__)
     ap.add_argument("--home", help="the project's home (else FM_HOME, else the folder with fm.toml)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    def c(name: str, fn, help_: str):  # noqa: ANN001, ANN202
+    def c(name: str, fn: Callable[[argparse.Namespace], int | None], help_: str) -> argparse.ArgumentParser:
         s = sub.add_parser(name, help=help_)
         s.set_defaults(fn=fn)
         return s
@@ -340,7 +341,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
     s = c("check", cmd_check, "check a queued branch now")
     s.add_argument("id")
-    s = c("lock", cmd_lock, "use a shared resource: fm lock NAME run \"what\" command…, or fm lock NAME status")
+    s = c("lock", cmd_lock, 'use a shared resource: fm lock NAME run "what" command…, or fm lock NAME status')
     s.add_argument("name")
     s.add_argument("action", choices=("run", "status"))
     s.add_argument("what", nargs="?", default="")

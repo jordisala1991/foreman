@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import util
+
 # $ per million tokens: input, cache write (5 min), cache write (1 h), cache read, output. As in foreman's costs.py.
 PRICES = {
     "opus": (4.0, 5.0, 8.0, 0.20, 20.0),
@@ -25,7 +27,7 @@ def projects_dir() -> Path:
 def files_of(sid: str) -> list[Path]:
     if not sid or "/" in sid:
         return []
-    out = []
+    out: list[Path] = []
     for f in projects_dir().glob(f"*/{sid}.jsonl"):
         out.append(f)
         out += sorted((f.parent / sid / "subagents").glob("*.jsonl"))
@@ -50,19 +52,20 @@ def usage(files: list[Path]) -> dict[str, Any]:
             continue
         for ln in lines:
             try:
-                r = json.loads(ln)
+                raw = json.loads(ln)
             except ValueError:
                 continue
-            m = r.get("message") if isinstance(r, dict) else None
-            if r.get("type") != "assistant" or not isinstance(m, dict) or not isinstance(m.get("usage"), dict):
+            r: dict[str, Any] = util.sub({"r": raw}, "r")
+            m = util.sub(r, "message")
+            u = util.sub(m, "usage")
+            if r.get("type") != "assistant" or not u:
                 continue
             mid = m.get("id") or ""
             if mid in seen or m.get("model") == "<synthetic>":
                 continue
             seen.add(mid)
-            u = m["usage"]
             cw = u.get("cache_creation_input_tokens") or 0
-            cw1h = ((u.get("cache_creation") or {}).get("ephemeral_1h_input_tokens") or 0)
+            cw1h = util.sub(u, "cache_creation").get("ephemeral_1h_input_tokens") or 0
             inp, cr, out = u.get("input_tokens") or 0, u.get("cache_read_input_tokens") or 0, u.get("output_tokens") or 0
             p = PRICES.get(family(m.get("model", "")) or "")
             cost = (inp * p[0] + (cw - cw1h) * p[1] + cw1h * p[2] + cr * p[3] + out * p[4]) / 1e6 if p else 0.0
@@ -75,8 +78,13 @@ def usage(files: list[Path]) -> dict[str, Any]:
                 t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 first = t if first is None or t < first else first
                 last = t if last is None or t > last else last
-    return {"usd": round(usd, 4), "tokens": tokens, "calls": calls, "models": models,
-            "minutes": round((last - first).total_seconds() / 60, 1) if first and last else 0}
+    return {
+        "usd": round(usd, 4),
+        "tokens": tokens,
+        "calls": calls,
+        "models": models,
+        "minutes": round((last - first).total_seconds() / 60, 1) if first and last else 0,
+    }
 
 
 def of_sessions(sids: list[str]) -> dict[str, Any]:

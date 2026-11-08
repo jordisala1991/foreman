@@ -13,11 +13,9 @@ from typing import Any
 from . import util
 
 DEFAULTS: dict[str, dict[str, Any]] = {
-    "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees",
-                "branch_prefix": "fm/"},
+    "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees", "branch_prefix": "fm/"},
     # slots: how many agents of this project run at once (defining and responsible agents alike)
-    "agents": {"slots": 2, "model": "sonnet", "define_model": "sonnet", "review_model": "sonnet", "settings": {},
-               "claude": "claude"},
+    "agents": {"slots": 2, "model": "sonnet", "define_model": "sonnet", "review_model": "sonnet", "settings": {}, "claude": "claude"},
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "integrate": {
         "autonomy": "manual",
@@ -50,7 +48,7 @@ def register(home: Path) -> None:
 @dataclass
 class Project:
     home: Path
-    cfg: dict[str, dict[str, Any]] = field(default_factory=dict)
+    cfg: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
 
     @classmethod
     def load(cls, home: str | Path) -> Project:
@@ -59,7 +57,7 @@ class Project:
         f = home / "fm.toml"
         if f.exists():
             raw = tomllib.loads(f.read_text(encoding="utf-8"))
-        cfg = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
+        cfg: dict[str, dict[str, Any]] = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
         cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: fm/lock.py
         if not cfg["project"]["name"]:
             cfg["project"]["name"] = home.name
