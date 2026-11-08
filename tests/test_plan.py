@@ -4,7 +4,7 @@ from unittest import mock
 
 from helpers import Env, fm
 
-from fm import agents, backlog
+from fm import agents, backlog, panel_actions
 
 READY = ("ready", "--claim", "g", "--criterion", "c")
 
@@ -61,13 +61,50 @@ class Plan(unittest.TestCase):
         self.assertIn("no plan", without.lower())
         self.assertNotIn("/plans/", without)
 
-    def test_ready_with_add_flag_needs_no_plan(self):
-        iid = backlog.add(self.p, "x", status="ready", criterion="y")
-        self.assertEqual(self.e.issue(iid)["status"], "ready")
-        self.assertNotIn("plan_file", self.e.issue(iid))
+    def test_plan_and_no_plan_together_fail(self):
+        self.plan.parent.mkdir(parents=True)
+        self.plan.write_text("x")
+        with self.assertRaises(SystemExit) as r:
+            self.ready("--plan", str(self.plan), "--no-plan", "why")
+        self.assertNotEqual(r.exception.code, 0)
+        self.assertEqual(self.e.issue(self.iid)["status"], "refining")
+
+    def test_no_plan_after_a_plan_clears_plan_file(self):
+        self.plan.parent.mkdir(parents=True)
+        self.plan.write_text("x")
+        self.ready("--plan", str(self.plan))
+        backlog.update(self.p, self.iid, status="refining")
+        self.ready("--no-plan", "trivial after all")
+        self.assertNotIn("plan_file", self.e.issue(self.iid))
+
+    def assert_planless_ready(self, iid):
+        i = self.e.issue(iid)
+        self.assertEqual(i["status"], "ready")
+        self.assertNotIn("plan_file", i)
+        self.assertIn("no plan", agents.brief(self.p, i, "work").lower())
+
+    def test_fm_add_ready_needs_no_plan(self):
+        fm(self.e.home, "add", "t", "--claim", "g", "--criterion", "c", "--ready")
+        self.assert_planless_ready(max(x["id"] for x in backlog.load(self.p)["issues"] if x["title"] == "t"))
+
+    def test_panel_filed_ready_needs_no_plan(self):
+        new = panel_actions.add(self.p, '{"title": "p", "criterion": "c"}')["id"]
+        self.assert_planless_ready(new)
 
     def test_define_brief_names_plan_path_and_sections(self):
         text = agents.brief(self.p, self.e.issue(self.iid), "define")
         self.assertIn(str(self.plan), text)
-        for s in ("Files touched", "Steps", "Decisions", "Out of scope", "Risks", "Declared risk"):
+        for s in (
+            "alternatives dropped",
+            "sensitive paths",
+            "new dependency",
+            "open decision",
+            "size",
+            "Files touched",
+            "Steps",
+            "Decisions",
+            "Out of scope",
+            "Risks",
+            "Declared risk",
+        ):
             self.assertIn(s, text)

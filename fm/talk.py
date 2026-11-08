@@ -60,7 +60,7 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
             continue  # it may be waiting for the owner, who is talking to it
 
         if not a.get("nudged"):
-            how = "fm ready" if a.get("kind") == "define" else "fm done"
+            how = 'fm ready (--plan PATH, or --no-plan "why trivial")' if a.get("kind") == "define" else "fm done"
             if send(
                 p,
                 i,
