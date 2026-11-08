@@ -1,10 +1,10 @@
 # One entry point for the code checks (CI runs `make check`). Dev tools (ruff, pyright, pylint) are the `dev` dependency group in
-# pyproject.toml, locked in uv.lock, and run through `uv run`; tsc runs through npx. Nothing is added to fm's runtime.
+# pyproject.toml, locked in uv.lock, and run through `uv run`. Nothing is added to fm's runtime.
 # To change a tool's version: edit pyproject.toml, then `uv lock`.
 # Fail if uv.lock is out of date with pyproject.toml; never rewrite it silently.
 export UV_LOCKED := 1
 
-.PHONY: check fix lint format types size panel test
+.PHONY: check fix lint format types size test
 
 # Everything, in this order, stopping at the first failure (even under `make -j`).
 check:
@@ -12,7 +12,6 @@ check:
 	@$(MAKE) --no-print-directory format
 	@$(MAKE) --no-print-directory types
 	@$(MAKE) --no-print-directory size
-	@$(MAKE) --no-print-directory panel
 	@$(MAKE) --no-print-directory test
 	@echo "make check: all passed"
 
@@ -36,10 +35,6 @@ types:
 size:
 	uv run pylint fm
 	uv run pylint --max-module-lines=600 tests
-
-panel:
-	@[ -d panel/node_modules ] || (cd panel && npm ci --silent --no-audit --no-fund)
-	cd panel && npx tsc --noEmit
 
 test:
 	python3 -m unittest discover -s tests

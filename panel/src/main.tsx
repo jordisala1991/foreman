@@ -2,7 +2,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./app.css";
-import "./app-screens.css";
 import { refresh } from "./feed";
 import { t, type Projects } from "./lib";
 import { Shell } from "./Shell";
