@@ -44,6 +44,7 @@ def _agent_side(c: Command) -> None:
     s.add_argument("--medium", type=int, required=True)
     s.add_argument("--low", type=int, default=0)
     s.add_argument("--file", required=True)
+    s.add_argument("--tip", default="", help="the tip you reviewed (the brief gives it)")
     s.add_argument("--misled", default="")
     s.add_argument("--issue")
     s = c("ready", "(defining agent) the task is defined")

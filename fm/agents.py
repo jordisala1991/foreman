@@ -18,8 +18,9 @@ def agent_name(p: Project, iid: str, kind: str) -> str:
 ROUND2 = (
     "7. **Round 2 checks the fixes**, it does not reopen the branch: read the previous review (`$previous`), "
     "`git diff $previous_tip..$branch` and the «Review rounds» section of the report. Each earlier finding is "
-    "fixed (the commit or test that shows it), refuted (proof you accept) or still open. New findings only in "
-    "what the fixes changed."
+    "fixed (the commit or test that shows it), refuted (proof you accept) or still open; an L the report answers with «not, because …» is closed "
+    "unless the reason is false, an L with neither fix nor reason is still open. "
+    "New findings only in what the fixes changed."
 )
 
 
@@ -192,7 +193,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
     name = f"{i['id'].lower()}-review"
     model = p.get("agents", "review_model")
     effort = p.get("agents", "review_effort")
-    review_file = p.home / "reviews" / f"{i['id']}-r{rnd}.md"
+    review_file = p.home / "reviews" / f"{i['id']}-r{rnd}-{tip[:9]}.md"
     review_file.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
         "round": rnd,
@@ -207,7 +208,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
     short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, "reviewer", extra), cwd)
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
-        it["reviewer"] = {
+        it["reviewer"] = launch = {
             "name": name,
             "short": short,
             "session": sid,
@@ -219,6 +220,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
             "cwd": str(cwd),
             "file": str(review_file),
         }
+        it["reviewers"] = [*it.get("reviewers", []), launch]
         if sid:
             record_session(it, sid, "review")
     backlog.event(p, i["id"], f"launched {name} (review round {rnd} of {tip[:9]}, {model}, session {short})")

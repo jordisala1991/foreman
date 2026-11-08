@@ -26,8 +26,8 @@ Write it to `$review_file`. Its first lines, plain:
 Branch: $branch
 Tip: $tip
 Round: $round
-Open: H n, M n
+Open: H n, M n, L n
 ```
 then the criterion table, the findings (H, then M, then L), and a line `Misled: …` (what in this brief or the task was wrong or unclear, or none).
 
-Then run `fm verdict --high N --medium N --low N --file $review_file --misled "…or none"` with the open counts, and end your turn.
+Then run `fm verdict --tip $tip --high N --medium N --low N --file $review_file --misled "…or none"` with the open counts, and end your turn.

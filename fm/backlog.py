@@ -24,7 +24,7 @@ import contextlib
 import re
 from collections.abc import Generator
 from datetime import date
-from typing import Any, TypedDict, Unpack
+from typing import Any, NotRequired, TypedDict, Unpack
 
 from . import util
 from .config import Project
@@ -64,7 +64,7 @@ class Report(TypedDict, total=False):
 
 
 class Reviewer(TypedDict, total=False):
-    """An issue's `reviewer`: the review running."""
+    """An issue's `reviewer`: the newest review launched (`reviewers` keeps every launch, same shape)."""
 
     round: int
     tip: str
@@ -77,6 +77,8 @@ class Review(TypedDict):
     tip: str
     high: int
     medium: int
+    low: int
+    sent_back: NotRequired[bool]
 
 
 class Check(TypedDict, total=False):
