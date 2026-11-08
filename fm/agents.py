@@ -87,7 +87,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
         "round2": "",
-        "owner_notes": "",
+        "owner_notes": owner_notes_section(p, i["id"]) if kind == "reviewer" else "",
         "resources": lock.describe(p.cfg),
         **(extra or {}),
     }
@@ -200,7 +200,6 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
         "tip": tip,
         "review_file": str(review_file),
         "round2": ROUND2 if rnd > 1 else "",
-        "owner_notes": owner_notes_section(p, i["id"]),
         "previous": prev.get("file", ""),
         "previous_tip": prev.get("tip", ""),
     }

@@ -150,7 +150,7 @@ if __name__ == "__main__":
 
 class ReviewerSeesOwnerNotes(unittest.TestCase):
     def brief(self, e: Env, iid: str) -> str:
-        return agents.brief(e.p, e.issue(iid), "reviewer", {"owner_notes": agents.owner_notes_section(e.p, iid)})
+        return agents.brief(e.p, e.issue(iid), "reviewer")
 
     def test_every_owner_note_of_the_task_reaches_the_reviewer_oldest_first_with_its_time(self):
         e = Env()
