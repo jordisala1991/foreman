@@ -5,7 +5,7 @@ import time
 import unittest
 from pathlib import Path
 
-from helpers import Env, git
+from helpers import Env, fm, git
 
 from fm import agents, backlog, health, loop, util
 
@@ -102,15 +102,15 @@ class Metrics(unittest.TestCase):
 
 class Lessons(unittest.TestCase):
     def test_what_misled_an_agent_goes_to_the_lessons_and_none_does_not(self):
-        from fm import cli, loop
+        from fm import loop
 
         e = Env()
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         os.environ.update(FM_ISSUE=iid, FM_AGENT="ty-1")
         try:
-            cli.main(["--home", str(e.home), "done", "--summary", "s", "--misled", "brief: the test command is wrong"])
-            cli.main(["--home", str(e.home), "verdict", "--high", "0", "--medium", "0", "--file", "r", "--misled", "none"])
+            fm(e.home, "done", "--summary", "s", "--misled", "brief: the test command is wrong")
+            fm(e.home, "verdict", "--high", "0", "--medium", "0", "--file", "r", "--misled", "none")
         finally:
             os.environ.pop("FM_ISSUE")
             os.environ.pop("FM_AGENT")

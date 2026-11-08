@@ -4,9 +4,9 @@ import os
 import unittest
 from pathlib import Path
 
-from helpers import Env, git
+from helpers import Env, fm, git
 
-from fm import agents, backlog, cli, guard, health, loop
+from fm import agents, backlog, guard, health, loop
 
 
 class GuardFalsePositives(unittest.TestCase):
@@ -72,7 +72,7 @@ class Isolation(unittest.TestCase):
         loop.tick(e.p)  # both reviewers start (two slots)
         for iid in ids:
             os.environ["FM_ISSUE"] = iid
-            cli.main(["--home", str(e.home), "verdict", "--high", "0", "--medium", "0", "--file", "r.md"])
+            fm(e.home, "verdict", "--high", "0", "--medium", "0", "--file", "r.md")
         os.environ.pop("FM_ISSUE")
         backlog.update(e.p, ids[0], branch="no/such-branch")
         loop.tick(e.p)
@@ -86,7 +86,7 @@ class Closed(unittest.TestCase):
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         backlog.ask(e.p, iid, iid.lower(), "A or B?")
-        cli.main(["--home", str(e.home), "cancel", iid])
+        fm(e.home, "cancel", iid)
         d = backlog.load(e.p)
         self.assertEqual(backlog.open_questions(d), [])
         self.assertFalse(Path(e.issue(iid)["worktree"]).exists())
@@ -100,7 +100,7 @@ class Orphans(unittest.TestCase):
         e = Env()
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
-        cli.main(["--home", str(e.home), "pause"])
+        fm(e.home, "pause")
         backlog.set_status(e.p, iid, "ready", "relaunch")
         self.assertEqual(health.orphan_worktrees(e.p), [])
 

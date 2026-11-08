@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import unittest
@@ -89,7 +91,8 @@ class Hook(unittest.TestCase):
         os.environ["FM_HOME"] = str(self.e.home)
 
     def test_a_broken_input_lets_it_run(self):
-        self.assertEqual(guard.hook("not json"), "")
+        with contextlib.redirect_stderr(io.StringIO()):  # the hook reports the broken input on stderr
+            self.assertEqual(guard.hook("not json"), "")
 
 
 if __name__ == "__main__":

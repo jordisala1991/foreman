@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from helpers import Env, git
+from helpers import Env, fm, git
 
 from fm import backlog, integrate, loop
 
@@ -321,11 +321,9 @@ class Queue(unittest.TestCase):
         self.assertIn("conflicts", e.calls()[-1]["argv"][-1])
 
     def test_reject_sends_the_note_back_to_the_agent(self):
-        from fm import cli
-
         e = Env(test="true")
         iid = self.deliver(e)
-        cli.main(["--home", str(e.home), "reject", iid, "name it better"])
+        fm(e.home, "reject", iid, "name it better")
         self.assertEqual((e.issue(iid)["status"], e.issue(iid)["rework"]), ("in progress", 1))
         e.set_state(iid.lower(), "done")
         loop.tick(e.p)

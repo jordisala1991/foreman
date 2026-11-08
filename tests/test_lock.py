@@ -25,9 +25,11 @@ class Lock(unittest.TestCase):
 
     def fm_lock(self, name: str, who: str, *cmd: str) -> subprocess.Popen:
         env = {**os.environ, "FM_AGENT": who, "FM_ISSUE": who.upper()}
-        return subprocess.Popen(
+        proc = subprocess.Popen(
             [sys.executable, FM, "--home", str(self.e.home), "lock", name, "run", f"job {who}", *cmd], env=env, stderr=subprocess.PIPE, text=True
         )
+        self.addCleanup(proc.__exit__, None, None, None)  # waits for it and closes its pipes, whatever the test does
+        return proc
 
     def test_one_at_a_time_in_arrival_order(self):
         body = f"echo start $FM_AGENT >> {self.log}; sleep 0.4; echo end $FM_AGENT >> {self.log}"

@@ -36,5 +36,6 @@ size:
 	uv run pylint fm
 	uv run pylint --max-module-lines=600 tests
 
+# -W error::ResourceWarning: a file or pipe left open is reported loudly (traceback of where it was opened), not swallowed.
 test:
-	python3 -m unittest discover -s tests
+	python3 -W error::ResourceWarning -m unittest discover -s tests

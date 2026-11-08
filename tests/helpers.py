@@ -1,9 +1,12 @@
 """A temporary project: a git repo with one commit, a home with fm.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
+import contextlib
+import io
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import textwrap
 from pathlib import Path
@@ -37,6 +40,21 @@ FAKE = textwrap.dedent("""\
 
 def git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True).stdout
+
+
+def fm(home: Path, *args: str) -> str:
+    """Run an `fm` command in-process with its output captured and returned, so the test run stays quiet.
+    If the command fails, its output is printed with the error: a failure is never buried."""
+    from fm import cli
+
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            cli.main(["--home", str(home), *args])
+    except BaseException:
+        print(out.getvalue(), file=sys.stderr)
+        raise
+    return out.getvalue()
 
 
 class Env:
@@ -89,12 +107,12 @@ class Env:
 
     def review(self, iid: str, high: int = 0, medium: int = 0) -> None:
         """One tick launches the reviewer; then its verdict, as `fm verdict` gives it."""
-        from fm import cli, loop
+        from fm import loop
 
         loop.tick(self.p)
         os.environ["FM_ISSUE"] = iid
         try:
-            cli.main(["--home", str(self.home), "verdict", "--high", str(high), "--medium", str(medium), "--file", str(self.home / f"reviews/{iid}.md")])
+            fm(self.home, "verdict", "--high", str(high), "--medium", str(medium), "--file", str(self.home / f"reviews/{iid}.md"))
         finally:
             os.environ.pop("FM_ISSUE")
 
