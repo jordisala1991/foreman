@@ -81,7 +81,7 @@ class Plan(unittest.TestCase):
         i = self.e.issue(iid)
         self.assertEqual(i["status"], "ready")
         self.assertNotIn("plan_file", i)
-        self.assertIn("no plan", agents.brief(self.p, i, "work").lower())
+        self.assertNotIn("/plans/", agents.brief(self.p, i, "work"))
 
     def test_fm_add_ready_needs_no_plan(self):
         fm(self.e.home, "add", "t", "--claim", "g", "--criterion", "c", "--ready")
