@@ -8,28 +8,26 @@ Accepting only records the decision; the merge step (`merge_accepted`, through t
 and the issue closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
-import fnmatch
-import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import backlog, providers, pulls, sessions, util
+from . import backlog, proc, providers, pulls, sessions, util
 from .config import Project
-
-RISKS = ("low", "medium", "high")
-AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
-DEPENDENCY_FILES = ("requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "go.mod", "Cargo.toml")
+from .providers import registry
+from .risk import Facts, allows, score
 
 
 class IntegrateError(Exception):
     pass
 
 
-def git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
-    if check and r.returncode != 0:
-        raise IntegrateError(f"git {' '.join(args)}: {(r.stderr or r.stdout).strip()[:300]}")
+def git(repo: Path, *args: str, check: bool = True) -> proc.Result:
+    try:
+        r = proc.run(["git", "-C", str(repo), *args])
+    except proc.ProcError as e:
+        raise IntegrateError(str(e)) from e
+    if check and r.code != 0:
+        raise IntegrateError(f"git {' '.join(args)}: {(r.err or r.out).strip()[:300]}")
     return r
 
 
@@ -39,10 +37,10 @@ def run_tests(p: Project, cwd: Path) -> str:
     if not cmd:
         return "none"
     try:
-        r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=900, check=False)
-    except subprocess.TimeoutExpired:
+        r = proc.run(["sh", "-c", cmd], cwd=cwd, timeout=900)
+    except proc.ProcError:
         return "fail"
-    return "pass" if r.returncode == 0 else "fail"
+    return "pass" if r.code == 0 else "fail"
 
 
 def tests_at(p: Project, commit: str, name: str) -> str:
@@ -51,7 +49,7 @@ def tests_at(p: Project, commit: str, name: str) -> str:
         return "none"
     tmp = p.state / "trees" / name
     git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
-    if git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=False).returncode != 0:
+    if git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=False).code != 0:
         return "fail"
     try:
         return run_tests(p, tmp)
@@ -61,7 +59,7 @@ def tests_at(p: Project, commit: str, name: str) -> str:
 
 def diff_stat(p: Project, branch: str) -> list[dict[str, Any]]:
     main = p.get("project", "main")
-    out = git(p.repo, "diff", "--numstat", "-M", f"{main}...{branch}").stdout
+    out = git(p.repo, "diff", "--numstat", "-M", f"{main}...{branch}").out
     rows: list[dict[str, Any]] = []
     for ln in out.splitlines():
         a, d, path = ln.split("\t", 2)
@@ -71,69 +69,12 @@ def diff_stat(p: Project, branch: str) -> list[dict[str, Any]]:
 
 def deleted_files(p: Project, branch: str) -> list[str]:
     main = p.get("project", "main")
-    return git(p.repo, "diff", "--name-only", "--diff-filter=D", f"{main}...{branch}").stdout.split()
+    return git(p.repo, "diff", "--name-only", "--diff-filter=D", f"{main}...{branch}").out.split()
 
 
 def conflicts(p: Project, branch: str) -> bool:
     r = git(p.repo, "merge-tree", "--write-tree", p.get("project", "main"), branch, check=False)
-    return r.returncode != 0
-
-
-def is_sensitive(path: str, patterns: list[str]) -> bool:
-    for pat in patterns:
-        if pat.endswith("/"):
-            if path.startswith(pat) or f"/{pat}" in f"/{path}":
-                return True
-        elif fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(Path(path).name, pat):
-            return True
-    return False
-
-
-@dataclass
-class Facts:
-    """What the checks found about a branch: the input of its risk score."""
-
-    tests: str
-    review: str
-    files: list[dict[str, Any]]
-    deleted: list[str]
-    conflict: bool
-    commits: int
-    ci: str = ""
-
-
-def _high_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
-    sensitive = [x for x in paths if is_sensitive(x, p.get("integrate", "sensitive"))]
-    reasons = [
-        (f.commits == 0 or not f.files, "the branch has no changes"),
-        (f.tests == "fail", "tests fail"),
-        (f.ci == "fail", "CI fails"),
-        (f.conflict, "conflicts with main"),
-        (bool(sensitive), "touches sensitive paths: " + ", ".join(sensitive[:5])),
-        (not f.review.strip().lower().startswith("clean"), "review not clean: " + (f.review.strip()[:120] or "no review reported")),
-        (lines > p.get("integrate", "medium_lines"), f"{lines} lines changed"),
-    ]
-    return [why for hit, why in reasons if hit]
-
-
-def _medium_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
-    reasons = [
-        (p.get("integrate", "small_lines") < lines <= p.get("integrate", "medium_lines"), f"{lines} lines changed"),
-        (f.tests == "none", "no test command to run"),
-        (bool(f.deleted), "deletes files: " + ", ".join(f.deleted[:5])),
-        (any(fnmatch.fnmatch(Path(x).name, pat) for x in paths for pat in DEPENDENCY_FILES), "changes dependencies"),
-        (len(paths) > 8, f"{len(paths)} files"),
-    ]
-    return [why for hit, why in reasons if hit]
-
-
-def score(p: Project, f: Facts) -> tuple[str, list[str]]:
-    """(risk, reasons): high beats medium beats low; each reason says what raised it."""
-    lines = sum(x["added"] + x["deleted"] for x in f.files)
-    paths = [x["path"] for x in f.files]
-    high, medium = _high_risks(p, f, lines, paths), _medium_risks(p, f, lines, paths)
-    risk = "high" if high else "medium" if medium else "low"
-    return risk, high + medium or ["small, tests green, review clean"]
+    return r.code != 0
 
 
 def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
@@ -142,11 +83,11 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     i = backlog.get(d, iid)
     branch = i.get("branch", "")
     main = p.get("project", "main")
-    commits = int(git(p.repo, "rev-list", "--count", f"{main}..{branch}", check=False).stdout.strip() or 0)
-    head = git(p.repo, "rev-parse", branch).stdout.strip()
+    commits = int(git(p.repo, "rev-list", "--count", f"{main}..{branch}", check=False).out.strip() or 0)
+    head = git(p.repo, "rev-parse", branch).out.strip()
     tests = tests_at(p, head, iid.lower())
     if ci is None:
-        ci = providers.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
+        ci = registry.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
     if tests == "none" and ci in ("pass", "fail"):  # no test command: the PR's CI stands in for it
         tests = ci
     files = diff_stat(p, branch)
@@ -163,8 +104,8 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
         "commits": commits,
         "risk": risk,
         "reasons": reasons,
-        "head": git(p.repo, "rev-parse", branch).stdout.strip(),
-        "main": git(p.repo, "rev-parse", main).stdout.strip(),
+        "head": git(p.repo, "rev-parse", branch).out.strip(),
+        "main": git(p.repo, "rev-parse", main).out.strip(),
         "conflict": conflicts(p, branch),
         "at": util.now(),
     }
@@ -175,19 +116,19 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
 
 def merges_alone(p: Project, c: dict[str, Any]) -> bool:
     """Autonomy lets this risk in alone; with a PR, only on green CI."""
-    if providers.get(p).name == "github" and c.get("ci") != "pass":
+    if registry.get(p).name == "github" and c.get("ci") != "pass":
         return False
-    return c["risk"] in AUTONOMY.get(p.get("integrate", "autonomy"), ())
+    return allows(p.get("integrate", "autonomy"), c["risk"])
 
 
 def accept(p: Project, iid: str, by: str = "owner") -> str:
     """Records the decision to integrate; it merges nothing. The loop's merge step does the merge (`merge_accepted`)."""
-    providers.get(p)  # a bad [integrate] provider/merge fails here, clearly
+    registry.get(p)  # a bad [integrate] provider/merge fails here, clearly
     d = backlog.load(p)
     i = backlog.get(d, iid)
     if i["status"] != "in review":
         raise IntegrateError(f"{iid} is {i['status']}, not in the integration queue")
-    head = git(p.repo, "rev-parse", i["branch"]).stdout.strip()
+    head = git(p.repo, "rev-parse", i["branch"]).out.strip()
     checked: backlog.Check = i.get("check") or {}
     if checked.get("head") != head:
         raise IntegrateError(f"{i['branch']} moved since it was checked: wait for the next check")
@@ -200,7 +141,7 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
     """After a crash between the merge and storing its ref: the merge commit already in main, or ''."""
     if not i.get("merging"):
         return ""
-    found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {i['id']}: ", f"{i['merging']}..{p.get('project', 'main')}", check=False).stdout.split()
+    found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {i['id']}: ", f"{i['merging']}..{p.get('project', 'main')}", check=False).out.split()
     if found:
         backlog.update(p, i["id"], merge=found[0])
     return found[0] if found else ""
@@ -209,12 +150,12 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
 def merge_accepted(p: Project, iid: str) -> str:
     """The one place that merges: asks the provider to merge an accepted issue (once), then closes the issue, removing
     its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     i = backlog.get(backlog.load(p), iid)
     acc = i.get("accepted")
     if i["status"] != "in review" or not acc:
         raise IntegrateError(f"{iid} is not accepted")
-    head = git(p.repo, "rev-parse", i["branch"]).stdout.strip()
+    head = git(p.repo, "rev-parse", i["branch"]).out.strip()
     if head != acc["head"]:
         backlog.update(p, iid, accepted=None)
         raise IntegrateError(f"{i['branch']} moved after it was accepted: accept again after the next check")
@@ -222,7 +163,7 @@ def merge_accepted(p: Project, iid: str) -> str:
     if not change["merge"]:
         change["merge"] = adopt_merge(p, i)
     if not change["merge"]:
-        backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).stdout.strip())
+        backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
         try:
             ref = provider.merge(change, providers.merge_strategy(p))
         except Exception as e:  # a platform's own errors are an integration error

@@ -3,12 +3,11 @@ running task a draft PR once its first commit is pushed (`[integrate] pr = draft
 branch is pushed and has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 With the local provider every function here does nothing."""
 
-import subprocess
 from typing import Any
 
-from . import backlog, providers, util
+from . import backlog, proc, providers, util
 from .config import Project
-from .providers import Provider
+from .providers import Provider, registry
 
 
 def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
@@ -26,13 +25,12 @@ def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
 
 
 def _head(p: Project, branch: str) -> str:
-    r = subprocess.run(["git", "-C", str(p.repo), "rev-parse", "--verify", branch], capture_output=True, text=True, check=False)
-    return r.stdout.strip()
+    return proc.run(["git", "-C", str(p.repo), "rev-parse", "--verify", branch]).out.strip()
 
 
 def _commits(p: Project, branch: str) -> int:
-    r = subprocess.run(["git", "-C", str(p.repo), "rev-list", "--count", f"{p.get('project', 'main')}..{branch}"], capture_output=True, text=True, check=False)
-    return int(r.stdout.strip() or 0)
+    r = proc.run(["git", "-C", str(p.repo), "rev-list", "--count", f"{p.get('project', 'main')}..{branch}"])
+    return int(r.out.strip() or 0)
 
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
@@ -45,7 +43,7 @@ def open_drafts(p: Project) -> None:
     """Loop step: a task in progress whose branch is pushed (with commits of its own) gets a draft PR. One task's
     failure never stops the others, and none blocks the task (its agent is working fine): the error is noted once and
     the PR is retried next tick."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     if provider.name != "github" or providers.pr_mode(p) != "draft":
         return
     for i in backlog.issues(backlog.load(p)):
@@ -64,7 +62,7 @@ def open_drafts(p: Project) -> None:
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
     running; ('back', note) the agent must push first."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     if provider.name != "github":
         return "ok", ""
     if not provider.pushed(change_of(i, head)):
@@ -84,7 +82,7 @@ def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
 
 def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     """Marks the PR ready for review and posts the risk and verdict (once per checked tip)."""
-    provider = providers.get(p)
+    provider = registry.get(p)
     if provider.name != "github":
         return
     i = backlog.get(backlog.load(p), i["id"])
