@@ -35,7 +35,7 @@ def plan_risk(text: str) -> tuple[str, list[str]]:
     found = [(name, level) for name, level in FACTORS if name in body]
     if found:
         return max((lv for _, lv in found), key=ORDER.index), [name for name, _ in found]
-    if re.search(r"\bnone\b", body):
+    if re.fullmatch(r"\W*none\W*", body):
         return "low", ["declares no risk"]
     return "high", ["Declared risk missing, empty or unrecognised"]
 

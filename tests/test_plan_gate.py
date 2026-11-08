@@ -23,6 +23,9 @@ class PlanRisk(unittest.TestCase):
             ("new dependency; size", "medium"),
             ("", "high"),
             ("it is fine", "high"),
+            ("**none**.", "low"),
+            ("Risk of data loss; none of the tests cover it", "high"),
+            ("not none", "high"),
         ]:
             self.assertEqual(plan_gate.plan_risk(plan(text))[0], level, text)
 
