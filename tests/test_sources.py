@@ -70,6 +70,8 @@ class Signals(unittest.TestCase):
         from fm import integrate
         integrate.check(self.p, iid)
         self.emit({"key": "a1", "task": iid, "action": "accept"})
+        self.assertTrue(self.e.issue(iid)["accepted"])  # as `fm accept`: the decision; the loop merges
+        loop.tick(self.p)
         self.assertEqual(self.e.issue(iid)["status"], "done")
         self.assertTrue(self.e.issue(iid)["commit"])
 
@@ -116,6 +118,8 @@ class Review1(Signals):
         self.assertEqual(len(self.errors()), 1)
         integrate.check(self.p, iid)
         self.emit(sig)
+        self.assertTrue(self.e.issue(iid)["accepted"])
+        loop.tick(self.p)  # the loop's merge step closes it
         self.assertEqual(self.e.issue(iid)["status"], "done")
         n = len(self.errors())
         self.emit(sig)  # once
