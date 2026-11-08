@@ -21,7 +21,8 @@ def cmd_init(a: argparse.Namespace) -> None:
     if not (h / "fm.toml").exists():
         (h / "fm.toml").write_text(
             f'[project]\nname = "{h.name}"\nprefix = "{a.prefix}"\nrepo = "{a.repo}"\nmain = "main"\n\n'
-            '[agents]\nslots = 2\nmodel = "sonnet"\ndefine_model = "sonnet"\n\n'
+            '[agents]\nslots = 2\nmodel = "sonnet"\neffort = "medium"\n'
+            'define_model = "sonnet"\ndefine_effort = "high"\nreview_model = "sonnet"\nreview_effort = "high"\n\n'
             '[integrate]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nmerge = "squash"  # squash | merge\ntest = ""\n',
             encoding="utf-8",
         )

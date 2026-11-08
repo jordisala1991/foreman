@@ -126,6 +126,7 @@
   "isu_verdict": "Verdict",
   "isu_no_goal": "No goal or done criterion yet: its defining agent writes them.",
   "isu_detail": "Detail",
+  "isu_description": "Description",
   "isu_report": "Its agent's report",
   "isu_check": "The queue's check",
   "isu_asked": "Asked and answered",

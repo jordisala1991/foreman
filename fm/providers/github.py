@@ -114,11 +114,28 @@ class GitHub(Provider):
         return r.code == 0 and r.out.split()[:1] == [change["head"]]
 
     def publish(self, change: dict[str, Any], draft: bool) -> dict[str, Any]:
-        body = change.get("claim") or change["title"]
         args = ["pr", "create", "--head", change["branch"], "--base", self.p.get("project", "main")]
-        args += ["--title", f"{change['id']}: {change['title']}", "--body", body]
+        args += ["--title", self.title(change), "--body", change["body"]]
         url = self.run("gh", *args, *(["--draft"] if draft else [])).out.strip().splitlines()[-1]
         return {"number": int(url.rstrip("/").rsplit("/", 1)[-1]), "url": url, "draft": draft}
+
+    @staticmethod
+    def title(change: dict[str, Any]) -> str:
+        return f"{change['id']}: {change['title']}"
+
+    def body(self, change: dict[str, Any]) -> str:
+        r = self.run("gh", "pr", "view", str(change["pr"]), "--json", "body")
+        try:
+            raw = json.loads(r.out)
+        except ValueError:
+            raise ProviderError(f"gh pr view: not JSON: {r.out.strip()[:200]!r}") from None
+        o = util.json_object(raw)
+        if o is None:
+            raise ProviderError(f"gh pr view: expected a JSON object, gh gave {raw!r}"[:300])
+        return _field(o, "body", str, "gh pr view")
+
+    def describe(self, change: dict[str, Any], body: str) -> None:
+        self.run("gh", "pr", "edit", str(change["pr"]), "--title", self.title(change), "--body", body)
 
     def ready(self, change: dict[str, Any]) -> None:
         self.run("gh", "pr", "ready", str(change["pr"]))

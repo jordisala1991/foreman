@@ -27,6 +27,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
 | `fm/plan_gate.py` | ~90 | the plan gate: reads a plan's Declared risk, decides with the autonomy table whether the loop launches it or the owner approves it |
+| `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
@@ -138,9 +139,12 @@ scope claims cite their search, questions stand alone (context, options, recomme
 **Responsible agent** (`fm/briefs/work.md`, from foreman's dev agent and agent procedure): owns the whole task in its
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
-(`<home>/reports/ID.md`: each criterion line with its evidence) and ends with
+(`<home>/reports/ID.md`: the task's description, each criterion line with its evidence; fm sets it as the PR body
+inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
+section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
+`.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
-conversation: fix or refute each H and M with proof, add «Review, round N» to the report, `fm done` again.
+conversation: fix or refute each H and M with proof, add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 
 **Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
 its own session in the branch's worktree, once per delivered tip; it counts against the slots. Stance «not ready until
@@ -206,7 +210,7 @@ The project's `[integrate] autonomy` decides what merges without the owner: `man
 ### Provider, accepted → merged
 
 Integration goes through a *provider* module (`fm/providers/`), one per platform; the rest of fm does not know which.
-Interface: `publish` (open the change), `ready`, `comment` (no-ops locally), `merge(change, strategy)` (the only merge
+Interface: `publish` (open the change), `ready`, `comment`, `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
 in fm: a future queue is just another strategy) and `state` (merged? closed?). Steps:
 
 1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the issue (it stays `in review`).
@@ -278,7 +282,7 @@ The panel's TypeScript is out of this (a dependency check there can come later).
 
 ## Watching itself
 
-Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices), time to the queue and to
+Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices; plan_usd of define sessions and work_usd of work sessions, from `session_kinds`; review rounds), time to the queue and to
 done, rework (sent back), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
 misled its agents (their `--confused` words).
 

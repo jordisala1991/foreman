@@ -52,6 +52,7 @@ class Agent:
     iid: str
     name: str
     model: str
+    effort: str
 
 
 def command(p: Project, agent: Agent, prompt: str, resume: str | None = None) -> list[str]:
@@ -61,6 +62,8 @@ def command(p: Project, agent: Agent, prompt: str, resume: str | None = None) ->
     return cmd + [
         "--model",
         agent.model,
+        "--effort",
+        agent.effort,
         "--permission-mode",
         "bypassPermissions",
         "--settings",

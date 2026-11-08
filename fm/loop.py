@@ -83,7 +83,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             "review",
             f"The independent review of your branch (round {v['round']}) leaves "
             f"H {v['high']}, M {v['medium']} open: read {v['file']}. Fix or refute each H and M finding with "
-            "proof, nothing else; add «Review, round N» to your report and run `fm done` again.",
+            "proof, nothing else; add one `### Round N` to the «Review rounds» section of your report and run `fm done` again.",
         )
         return
     step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now

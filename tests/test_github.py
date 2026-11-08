@@ -26,6 +26,9 @@ FAKE_GH = textwrap.dedent("""\
         json.dump(s, open(f, "w"))
     if s.get("hang") and a[:2] == ["pr", "create"]:
         time.sleep(5)
+    if s.get("fail_always") == a[:2]:
+        print("HTTP 502", file=sys.stderr)
+        sys.exit(1)
     if s.get("fail_once") == a[:2]:
         s["fail_once"] = None
         save()
@@ -44,13 +47,19 @@ FAKE_GH = textwrap.dedent("""\
         sys.exit(0)
     if a[:2] == ["pr", "create"]:
         n = str(len(s["prs"]) + 1)
-        s["prs"][n] = {"draft": "--draft" in a, "state": "OPEN", "comments": [], "head": flag("--head"), "title": flag("--title")}
+        s["prs"][n] = {"draft": "--draft" in a, "state": "OPEN", "comments": [], "head": flag("--head"), "title": flag("--title"), "body": flag("--body")}
         save()
         print("https://github.com/o/r/pull/" + n)
         sys.exit(0)
     pr = s["prs"][a[2]]
     if a[:2] == ["pr", "ready"]:
         pr["draft"] = False
+    elif a[:2] == ["pr", "edit"]:
+        pr["title"] = flag("--title")
+        pr["body"] = flag("--body")
+        pr["edits"] = pr.get("edits", 0) + 1
+    elif a[:2] == ["pr", "view"] and "body" in a:
+        print(json.dumps({"body": pr["body"]}))
     elif a[:2] == ["pr", "comment"]:
         pr["comments"].append(flag("--body"))
     elif a[:2] == ["pr", "merge"]:

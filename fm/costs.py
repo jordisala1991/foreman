@@ -36,9 +36,10 @@ def family(model: str) -> str | None:
     return next((k for k in PRICES if k in (model or "").lower()), None)
 
 
-def usage(files: list[Path]) -> dict[str, Any]:
-    """{usd, tokens, calls, first, last, models: {model: usd}} over the files."""
-    seen: set[str] = set()
+def usage(files: list[Path], seen: set[str] | None = None) -> dict[str, Any]:
+    """{usd, tokens, calls, first, last, models: {model: usd}} over the files. A message id already in `seen` is not
+    counted again; pass one set across several calls to count each message once over all of them."""
+    seen = set() if seen is None else seen
     usd = 0.0
     tokens = calls = 0
     models: dict[str, float] = {}
@@ -81,9 +82,11 @@ def usage(files: list[Path]) -> dict[str, Any]:
         "tokens": tokens,
         "calls": calls,
         "models": models,
+        "first": first,
+        "last": last,
         "minutes": round((last - first).total_seconds() / 60, 1) if first and last else 0,
     }
 
 
-def of_sessions(sids: list[str]) -> dict[str, Any]:
-    return usage([f for s in sids for f in files_of(s)])
+def of_sessions(sids: list[str], seen: set[str] | None = None) -> dict[str, Any]:
+    return usage([f for s in sids for f in files_of(s)], seen)

@@ -59,6 +59,17 @@ class PanelTest(unittest.TestCase):
             with e:
                 return e.code, e.read().decode()
 
+    def test_issue_view_carries_the_description(self) -> None:
+        report = Path(self.tmp.name) / "r.md"
+        report.write_text("Did X")
+        done = {"summary": "s", "confused": "", "file": str(report)}
+        backlog.set_status(self.p, self.work, "in review", report=done, check={"head": "0123456789abcdef", "at": "then"})
+        _, data = self.call(f"/api/issue?p=demo&id={self.work}")
+        self.assertIn("Did X", data["issue"]["description"])
+        self.assertIn("012345678", data["issue"]["description"])
+        _, other = self.call(f"/api/issue?p=demo&id={self.triage}")
+        self.assertNotIn("description", other["issue"])
+
     def test_key_required(self) -> None:
         self.assertEqual(self.call("/api/state", key=False)[0], 403)
         self.assertEqual(self.call("/api/state?key=wrong", key=False)[0], 403)
