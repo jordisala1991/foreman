@@ -223,7 +223,7 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Watching itself
 
-Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices), time to the queue and to
+Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices; plan_usd of define sessions and work_usd of work sessions, from `session_kinds`; review rounds), time to the queue and to
 done, rework (sent back), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
 misled its agents (their `--confused` words).
 

@@ -12,6 +12,7 @@ Statuses, and who moves an issue between them (DESIGN.md has the picture):
   done | canceled | duplicate
 
 Keys added to an issue: `agent` {name, session, short, kind: define|work, started, nudged}, `branch`, `worktree`,
+`sessions` (every session id), `session_kinds` (sid → define|work|review),
 `report` {summary, review, confused, at}, `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went
 back to its agent), `source` (the dedup key of a finding or signal), `blocked` (why the loop leaves it alone).
 A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text,
