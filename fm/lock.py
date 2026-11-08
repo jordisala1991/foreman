@@ -14,8 +14,6 @@ A resource is declared in fm.toml, `[resources.NAME]` with optional `slots` and 
 the machine (`~/.local/state/fm/locks/NAME/`, or $FM_LOCKS), so two projects declaring the same name share its queue.
 """
 
-from __future__ import annotations
-
 import contextlib
 import fcntl
 import json

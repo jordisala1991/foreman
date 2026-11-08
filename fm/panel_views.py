@@ -1,7 +1,5 @@
 """The panel's read side: what each JSON view shows (projects, state, issue, system), with a few seconds of memo for the slow parts."""
 
-from __future__ import annotations
-
 import threading
 import time
 from collections.abc import Callable

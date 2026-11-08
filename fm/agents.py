@@ -1,7 +1,5 @@
 """The agents' side of the loop: the brief, the worktree, launching a task's agent and its reviewer, messaging an agent."""
 
-from __future__ import annotations
-
 import string
 import time
 from pathlib import Path

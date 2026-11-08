@@ -1,8 +1,6 @@
 """A temporary project: a git repo with one commit, a home with fm.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

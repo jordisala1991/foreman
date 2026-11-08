@@ -2,8 +2,6 @@
 in review → done), rework (sent back by the owner), nudges (ended a turn without finishing), questions to the owner,
 guard stops, and what misled its agents (their own words, from `fm done --confused`)."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Any
 

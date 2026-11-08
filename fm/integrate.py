@@ -8,8 +8,6 @@ Accepting only records the decision; the merge step (`merge_accepted`, through t
 and the issue closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
-from __future__ import annotations
-
 import fnmatch
 import subprocess
 from dataclasses import dataclass

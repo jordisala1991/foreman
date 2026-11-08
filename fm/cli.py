@@ -1,8 +1,6 @@
 """`fm`: the one command. Agents use `ask`, `note`, `done`, `ready`, `block`, `add` (their issue comes from FM_ISSUE);
 the owner and the panel use the rest; launchd runs `fm loop`; Claude Code runs `fm guard` as the agents' hook."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

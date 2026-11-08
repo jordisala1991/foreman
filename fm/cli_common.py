@@ -1,7 +1,5 @@
 """What every `fm` command needs: the project it works on and the issue it speaks for."""
 
-from __future__ import annotations
-
 import argparse
 import os
 import sys

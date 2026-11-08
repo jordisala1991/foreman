@@ -7,8 +7,6 @@ own rules (`[guard] ask` in fm.toml). Agents work for the owner: a way around th
 review before integrating is the safety net. Do not grow this file for a new trick.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import re

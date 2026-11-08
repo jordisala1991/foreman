@@ -6,8 +6,6 @@ measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the gua
 `resume` continues a session that ended its turn (an owner's answer, a rejected integration, a nudge) under the same
 id: `claude --bg --resume SID … MESSAGE`."""
 
-from __future__ import annotations
-
 import json
 import os
 import re

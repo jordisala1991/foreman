@@ -1,7 +1,5 @@
 """The loop's talk with running agents: the owner's answers delivered, a silent agent nudged, a task sent back."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from . import backlog, sessions, util

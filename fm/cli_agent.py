@@ -1,7 +1,5 @@
 """The commands an agent runs from its own session: ask, note, done, verdict, ready, block."""
 
-from __future__ import annotations
-
 import argparse
 import os
 

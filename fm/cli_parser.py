@@ -1,7 +1,5 @@
 """fm's command line: the arguments of each command (the handlers are in cli.py, which sets them per command)."""
 
-from __future__ import annotations
-
 import argparse
 from collections.abc import Callable
 

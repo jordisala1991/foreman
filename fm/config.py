@@ -2,13 +2,11 @@
 the repo `fm.toml` points to. The registry (`~/.config/fm/projects.json`, or $FM_REGISTRY) lists the homes the loop
 and the panel serve."""
 
-from __future__ import annotations
-
 import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from . import util
 
@@ -51,7 +49,7 @@ class Project:
     cfg: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
 
     @classmethod
-    def load(cls, home: str | Path) -> Project:
+    def load(cls, home: str | Path) -> Self:
         home = Path(home).resolve()
         raw: dict[str, Any] = {}
         f = home / "fm.toml"

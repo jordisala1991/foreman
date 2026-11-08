@@ -1,7 +1,5 @@
 """Small file helpers: an exclusive lock, atomic writes, JSON and JSON-lines (adapted from foreman's util.py)."""
 
-from __future__ import annotations
-
 import contextlib
 import fcntl
 import json

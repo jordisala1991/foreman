@@ -18,8 +18,6 @@ A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1
 kind: question|permission, action?}; its answer goes back to that agent, never to a coordinator.
 """
 
-from __future__ import annotations
-
 import contextlib
 import re
 from collections.abc import Generator

@@ -12,8 +12,6 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
     hung stop) is logged and the same key is tried again next tick. None is shipped yet: the contract is the point; the health checks (health.py) are the
     first producer of findings."""
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

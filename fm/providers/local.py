@@ -1,7 +1,5 @@
 """The local provider: the branch is merged into the main checkout of the repo with git. Nothing is pushed."""
 
-from __future__ import annotations
-
 import subprocess
 from typing import Any
 

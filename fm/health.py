@@ -8,8 +8,6 @@ session working but its transcript silent for `stuck_minutes`) · agent stopped 
 · orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
 on main's head, every `ci_every_minutes`) · loop step errors."""
 
-from __future__ import annotations
-
 import time
 from pathlib import Path
 from typing import Any

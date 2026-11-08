@@ -15,8 +15,6 @@ POST  /api/add  /api/answer  /api/allow  /api/deny  /api/accept  /api/reject  /a
       /api/pause       (id=..., the text in the body; /api/add takes JSON {title, detail, claim, criterion})
 """
 
-from __future__ import annotations
-
 import gzip
 import hashlib
 import json

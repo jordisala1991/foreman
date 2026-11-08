@@ -2,8 +2,6 @@
 `<session>/subagents/*.jsonl`), priced at the Claude API list prices: a figure to compare, not a bill. Adapted from
 foreman's costs.py and transcripts.py: a response is counted once per message id; unreadable lines are skipped."""
 
-from __future__ import annotations
-
 import json
 import os
 from datetime import datetime

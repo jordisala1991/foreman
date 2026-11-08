@@ -1,8 +1,6 @@
 """The panel's server against a temporary project: the key is required, the state reads, the owner's actions write
 through the same functions as `fm`."""
 
-from __future__ import annotations
-
 import json
 import os
 import tempfile

@@ -1,8 +1,6 @@
 """The panel's write side: the owner's actions. They call what the CLI calls (fm.cli's functions, fm.integrate.accept), so the panel and `fm`
 cannot disagree. `act` routes a POST path to one small handler."""
 
-from __future__ import annotations
-
 import argparse
 import contextlib
 import io
