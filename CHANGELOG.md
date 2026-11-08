@@ -9,6 +9,12 @@ and **Upgrade notes** (anything a user has to do: state, backlog, service or reg
 
 ## [Unreleased]
 
+## [0.67.3] - 2026-11-08
+
+### Fixed
+
+- Switching screens in the new panel is one change: it keeps the old screen until the new one's data is there (TanStack Query and Router), and the last product you pick wins.
+
 ### Changed
 
 - The orchestrator keeps the agent that made a branch alive until its review is over, so review findings go back to it instead of to a new agent that rereads everything.
