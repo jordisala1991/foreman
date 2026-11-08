@@ -9,9 +9,6 @@ $detail
 # Before you start
 Read the project's lessons, `$lessons`: what misled earlier agents in this project.
 
-# Architecture
-Read the Architecture section of DESIGN.md (`$repo/DESIGN.md`) before you write code: the layers, the ports and the rules. Put code where it belongs (pure decisions in the core, I/O in the loop and services) and add no port without need. `make check` enforces it (tach, no subprocess in the core, no new noqa / type: ignore).
-
 $plan_section
 
 # Where
