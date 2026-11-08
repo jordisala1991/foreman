@@ -19,7 +19,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, health, integrate, proc, providers, pulls, sessions, sources, util
+from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -105,15 +105,17 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     if review_pending(p, i, head, rows):  # no verdict on this tip yet: an independent review first
         return
     v: dict[str, Any] = i.get("review") or {}
-    if v["high"] + v["medium"] and v["round"] < MAX_ROUNDS:
+    if risk.review_step(v, MAX_ROUNDS) == "back":
         send_back(
             p,
             i["id"],
             "review",
-            f"The independent review of your branch (round {v['round']}) leaves "
-            f"H {v['high']}, M {v['medium']} open: read {v['file']}. Fix or refute each H and M finding with "
-            "proof, nothing else; add one `### Round N` to the «Review rounds» section of your report and run `fm done` again.",
+            f"The independent review of your branch (round {v['round']}) leaves H {v['high']}, M {v['medium']}, "
+            f"L {v.get('low', 0)} open: read {v['file']}. Every finding in it is yours: for each H and M, fix it or "
+            "refute it with proof; for each L, fix it or say why not. Add one `### Round N` to the «Review rounds» "
+            "section of your report, one line per finding (fixed, refuted, or «not, because …» for an L), and run `fm done` again.",
         )
+        backlog.update(p, i["id"], review={**v, "sent_back": True})
         return
     step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
     if step == "wait":
