@@ -36,6 +36,7 @@ max-complexity = 10
 [tool.pyright]
 include = ["fm"]
 typeCheckingMode = "strict"
+enableTypeIgnoreComments = false  # a `type: ignore` comment does not silence anything
 pythonVersion = "3.12"
 
 # File length is the one thing ruff has no rule for: pylint, with only that check on. Tests get a larger limit (`make size`).

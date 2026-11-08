@@ -26,7 +26,7 @@ make check            # (needs uv) everything CI runs, in order: lint, format, t
 python3 -m unittest discover -s tests   # just the tests
 ```
 
-Architecture: DESIGN.md "Architecture"; layers and adapters are enforced by `tach.toml` (`make arch`), and `bin/suppressions` fails on more noqa / type: ignore than foreman-next.
+Architecture: DESIGN.md "Architecture"; layers and adapters are enforced by `tach.toml` (`make arch`), and a suppression comment silences nothing (`--ignore-noqa`, pyright `enableTypeIgnoreComments = false`, `make suppressions` for the rest).
 
 Limits (pyproject.toml): Python files 300 lines (tests 600, checked by pylint), functions complexity 10 (ruff). No exceptions: a failing rule is a design signal to refactor, and `make lint` runs ruff with `--ignore-noqa`, so a comment cannot turn a rule off. The Python dev tools (ruff, pyright, pylint, tach) are the `dev` dependency group in `pyproject.toml`, locked in `uv.lock`; to change a version, edit it and run `uv lock`. fm itself has no runtime dependencies.
 

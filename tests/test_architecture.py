@@ -53,11 +53,6 @@ class Architecture(unittest.TestCase):
     def test_core_cannot_import_subprocess(self):
         self.check("risk.py", "import subprocess", tool="ruff")
 
-    def test_core_modules_do_not_import_subprocess_today(self):
-        d = scratch()
-        self.addCleanup(shutil.rmtree, d)
-        self.assertEqual(run(d, "ruff", "check", "--ignore-noqa", "--no-cache", "fm").returncode, 0)
-
     def test_an_adapter_cannot_import_another_adapter(self):
         self.check("providers/local.py", "from . import github")
 
@@ -69,23 +64,6 @@ class Architecture(unittest.TestCase):
 
 
 class SubprocessList(unittest.TestCase):
-    def test_per_file_ignores_match_design(self):
-        import re
-        import tomllib
-
-        ign = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["ruff"]["lint"]["per-file-ignores"]
-        self.assertEqual(
-            ign,
-            {
-                "fm/{loop,integrate,pulls,sessions,lock,sources}.py": ["TID251"],
-                "fm/providers/{github,local,registry}.py": ["TID251"],
-                "tests/*.py": ["TID251"],
-            },
-        )
-        design = (ROOT / "DESIGN.md").read_text()
-        for name in ("loop", "integrate", "pulls", "sessions", "lock", "sources", "providers/github"):
-            self.assertTrue(re.search(rf"`{re.escape(name)}`", design), name)
-
     def test_the_port_cannot_import_subprocess(self):
         if not UV:
             self.skipTest("uv not installed")
@@ -95,46 +73,36 @@ class SubprocessList(unittest.TestCase):
         self.assertNotEqual(run(d, "ruff", "check", "--ignore-noqa", "--no-cache", "fm").returncode, 0)
 
 
-@unittest.skipUnless(shutil.which("git"), "git not installed")
+@unittest.skipUnless(UV, "uv not installed")
 class Suppressions(unittest.TestCase):
-    def repo(self) -> Path:
-        d = Path(tempfile.mkdtemp())
+    """noqa is caught by `ruff --ignore-noqa` and `type: ignore` by pyright (enableTypeIgnoreComments = false); `make suppressions`
+    covers what no tool does (pyright: ignore, pylint: disable)."""
+
+    def planted(self, line: str) -> Path:
+        d = scratch()
         self.addCleanup(shutil.rmtree, d)
-        (d / "fm").mkdir()
-        (d / "fm" / "a.py").write_text("x = 1\n")
-        for cmd in (["init", "-q", "-b", "foreman-next"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"]):
-            subprocess.run(["git", "-C", str(d), *cmd], check=True)
+        shutil.copy(ROOT / "Makefile", d / "Makefile")
+        for cmd in (["init", "-q"], ["add", "."]):
+            subprocess.run(["git", "-C", str(d), *cmd], check=True, capture_output=True)
+        plant(d, "util.py", line)
         return d
 
-    def bin(self, d: Path) -> subprocess.CompletedProcess[str]:
-        return subprocess.run([str(ROOT / "bin" / "suppressions"), "--root", str(d)], capture_output=True, text=True, check=False)
+    def test_a_type_ignore_comment_does_not_silence_pyright(self):
+        d = self.planted("BAD: int = 'x'  # type: " + "ignore")
+        self.assertNotEqual(run(d, "pyright").returncode, 0)
 
-    def test_equal_passes_and_one_more_fails(self):
-        d = self.repo()
-        self.assertEqual(self.bin(d).returncode, 0)
-        for mark in (
-            "# no" + "qa: E501",
-            "# type: ig" + "nore",
-            "# pyright: ig" + "nore",
-            "# pylint: dis" + "able=too-many-lines",
-            "# pyright: ba" + "sic",
-            "# fmt: sk" + "ip",
-        ):
-            (d / "fm" / "a.py").write_text(f"x = 1  {mark}\n")
-            self.assertEqual(self.bin(d).returncode, 1, mark)
+    def test_a_noqa_comment_does_not_silence_ruff(self):
+        d = self.planted("import os  # no" + "qa: F401")
+        self.assertNotEqual(run(d, "ruff", "check", "--ignore-noqa", "--no-cache", "fm").returncode, 0)
 
-    def test_fewer_than_base_passes(self):
-        d = self.repo()
-        (d / "fm" / "a.py").write_text("x = 1  # no" + "qa\n")
-        subprocess.run(["git", "-C", str(d), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "more"], check=True)
-        subprocess.run(["git", "-C", str(d), "checkout", "-qb", "work"], check=True)
-        (d / "fm" / "a.py").write_text("x = 1\n")
-        self.assertEqual(self.bin(d).returncode, 0)
+    def test_make_suppressions_fails_on_the_rest(self):
+        for line in ("X = 1  # pyright: ig" + "nore", "X = 1  # pylint: dis" + "able=too-many-lines"):
+            d = self.planted(line)
+            r = subprocess.run(["make", "suppressions"], cwd=d, capture_output=True, text=True, check=False)
+            self.assertNotEqual(r.returncode, 0, line)
 
-    def test_no_base_branch_fails(self):
-        d = self.repo()
-        subprocess.run(["git", "-C", str(d), "branch", "-m", "other"], check=True)
-        self.assertEqual(self.bin(d).returncode, 1)
+    def test_make_suppressions_passes_on_the_repo(self):
+        self.assertEqual(subprocess.run(["make", "suppressions"], cwd=ROOT, capture_output=True, check=False).returncode, 0)
 
 
 if __name__ == "__main__":

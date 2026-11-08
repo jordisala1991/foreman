@@ -255,8 +255,8 @@ Rules (enforced by `make check`):
 - Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services
   gather the facts (git, gh, claude) and apply the result. New decisions go there, not into `integrate` or `loop`.
 - Files stay under 300 lines (`make size`, no exceptions): a module that grows is split along these layers.
-- `make check` also fails when the branch has more `noqa` / `type: ignore` than `foreman-next` (`bin/suppressions`).
-- Loosening a rule (`tach.toml`, the ruff ignores, `pyproject.toml`, `bin/suppressions`) is the owner's call.
+- Suppressions do not work: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments = false`, and `make suppressions` fails on `pyright: ignore` and `pylint: disable`.
+- Loosening a rule (`tach.toml`, the ruff ignores, `pyproject.toml`, the `suppressions` target) is the owner's call.
 
 The panel's TypeScript is out of this (a dependency check there can come later).
 

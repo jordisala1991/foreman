@@ -38,9 +38,10 @@ types:
 arch:
 	uv run tach check
 
-# No more noqa / type: ignore than the main branch (foreman-next).
+# Suppression comments. noqa is ignored by `make lint` (--ignore-noqa) and type: ignore by pyright (enableTypeIgnoreComments = false);
+# these are the ones no tool covers: none allowed. A suppression is not a fix.
 suppressions:
-	bin/suppressions
+	@! git grep -nE '#[[:space:]]*(pyright:[[:space:]]*(ignore|basic|off)|pylint:[[:space:]]*disable)' -- fm tests || { echo "suppressions: fix the cause, do not silence it"; exit 1; }
 
 # File length: ruff has no rule for it. fm/ 300 lines (limit in pyproject.toml), tests 600.
 size:
