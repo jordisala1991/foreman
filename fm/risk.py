@@ -59,18 +59,19 @@ def _high_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]
         (f.conflict, "conflicts with main"),
         (bool(sensitive), "touches sensitive paths: " + ", ".join(sensitive[:5])),
         (not f.review.strip().lower().startswith("clean"), "review not clean: " + (f.review.strip()[:120] or "no review reported")),
-        (lines > p.get("integrate", "medium_lines"), f"{lines} lines changed"),
+        (lines > p.get("integrate", "medium_lines"), f"{lines} lines changed (high risk above {p.get('integrate', 'medium_lines')})"),
     ]
     return [why for hit, why in reasons if hit]
 
 
 def _medium_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
+    small = p.get("integrate", "small_lines")
     reasons = [
-        (p.get("integrate", "small_lines") < lines <= p.get("integrate", "medium_lines"), f"{lines} lines changed"),
+        (small < lines <= p.get("integrate", "medium_lines"), f"{lines} lines changed (medium risk above {small})"),
         (f.tests == "none", "no test command to run"),
         (bool(f.deleted), "deletes files: " + ", ".join(f.deleted[:5])),
         (any(fnmatch.fnmatch(Path(x).name, pat) for x in paths for pat in DEPENDENCY_FILES), "changes dependencies"),
-        (len(paths) > 8, f"{len(paths)} files"),
+        (len(paths) > 8, f"{len(paths)} files (medium risk above 8)"),
     ]
     return [why for hit, why in reasons if hit]
 

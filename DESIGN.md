@@ -26,6 +26,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
+| `fm/verdict.py` | ~80 | the verdict comment: risk and reasons, one line per open finding, the review folded (pure text) |
 | `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
@@ -223,8 +224,8 @@ never forced, never main, 20 s timeout; a failure is `Transient` with git's erro
 comments on and merges PRs through `gh` (the guard keeps stopping `gh pr` for agents). `[integrate] pr = "draft"`
 (default): a task in progress has its commits pushed and gets a **draft PR** as soon as it has its first commit; `pr = "done"`: no PR until
 `fm done`. In the queue, after the independent review: the branch is pushed at its tip if it is not yet, the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
-with no `[integrate] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and a comment
-carries the risk, its reasons and the review's verdict. Accepted → `gh pr merge` with the configured type; the task
+with no `[integrate] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and one comment per PR (found by a hidden `<!-- fm:verdict -->` key, edited on each new tip, never added again)
+carries the risk, its reasons, one line per open finding (the reviewer's `Findings:` lines) and the full review folded; counts decide «clean». Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
 origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of

@@ -1,13 +1,13 @@
 """Pull requests (the loop's side: the loop pushes the task branches, the agents never do).
 `running` and `sync` push a running task's new commits and, once it has some, gives it a draft PR (`[integrate] pr = draft`);
-`prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
+`prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and keeps one verdict comment up to date.
 Every function calls the provider's operations whatever the platform; the local provider answers each as a no-op, and
 a task with no PR (`publish` returned nothing) has nothing to deliver to."""
 
 from pathlib import Path
 from typing import Any
 
-from . import backlog, describe, proc, providers, util
+from . import backlog, describe, proc, providers, util, verdict
 from .config import Project
 from .providers import Provider, registry
 
@@ -93,11 +93,16 @@ def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
     return describe.render(text, describe.footer(head, describe.review_line(i.get("review")), at))
 
 
-def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
-    v: dict[str, Any] = i.get("review") or {}
-    review = "no review" if not v else f"round {v['round']}: H {v['high']}, M {v['medium']}" + (f" ({v['file']})" if v.get("file") else "")
-    reasons = "\n".join(f"- {r}" for r in c.get("reasons", []))
-    return f"**fm: merge risk {c['risk']}**\n\n{reasons}\n\nTests: {c['tests']} · CI: {c.get('ci') or 'none'}\nIndependent review, {review}\n"
+def verdict_for(i: dict[str, Any], c: dict[str, Any]) -> str:
+    """The verdict comment's text for this check: the review file's findings are read here, never its path shown."""
+    review: dict[str, Any] | None = i.get("review")
+    text = ""
+    if review and review.get("file"):
+        try:
+            text = Path(review["file"]).read_text()
+        except OSError:
+            text = ""
+    return verdict.render(c["risk"], c.get("reasons", []), f"Tests: {c['tests']} · CI: {c.get('ci') or 'none'}", review, text)
 
 
 def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: dict[str, Any]) -> dict[str, Any]:
@@ -117,7 +122,7 @@ def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: 
 
 
 def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
-    """Marks the PR ready for review and posts the risk and verdict (once per checked tip)."""
+    """Marks the PR ready for review and updates the one verdict comment (once per checked tip)."""
     provider = registry.get(p)
     i = backlog.get(backlog.load(p), i["id"])
     pr: dict[str, Any] = i.get("pr") or {}
@@ -132,5 +137,5 @@ def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     if pr.get("described") != c["head"]:
         pr = _describe(p, provider, i, c["head"], pr)
     if pr.get("commented") != c["head"]:
-        provider.comment(change, verdict_text(i, c))
+        provider.comment(change, verdict_for(i, c), "verdict")
         backlog.update(p, i["id"], pr={**pr, "commented": c["head"], "at": util.now()})

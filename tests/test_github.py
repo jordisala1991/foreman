@@ -9,7 +9,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, providers, util
+from fm import backlog, integrate, loop, providers, util, verdict
 from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
@@ -43,6 +43,24 @@ FAKE_GH = textwrap.dedent("""\
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
     if a[:1] == ["api"]:
+        path = [x for x in a if x.startswith("repos/")][0].split("/")
+        if "comments" in path:
+            pr = s["prs"][path[path.index("issues") + 1]] if "issues" in path and path[path.index("issues") + 1].isdigit() else None
+            if "-X" in a and flag("-X") == "PATCH":
+                cid = int(path[-1])
+                for c in [c for p in s["prs"].values() for c in p["comments"] if c["id"] == cid]:
+                    c["body"] = flag("-f")[len("body="):]
+                    for p in s["prs"].values():
+                        p["patched"] = p.get("patched", 0) + 1
+            elif "-X" in a and flag("-X") == "POST":
+                pr["comments"].append({"id": s.get("next_id", 1), "body": flag("-f")[len("body="):]})
+                s["next_id"] = s.get("next_id", 1) + 1
+            else:
+                for c in pr["comments"]:
+                    if "<!-- fm:verdict -->" in c["body"]:
+                        print(c["id"])
+            save()
+            sys.exit(0)
         print(s.get("api_sha") or "null")
         sys.exit(0)
     if a[:2] == ["pr", "create"]:
@@ -60,8 +78,6 @@ FAKE_GH = textwrap.dedent("""\
         pr["edits"] = pr.get("edits", 0) + 1
     elif a[:2] == ["pr", "view"] and "body" in a:
         print(json.dumps({"body": pr["body"]}))
-    elif a[:2] == ["pr", "comment"]:
-        pr["comments"].append(flag("--body"))
     elif a[:2] == ["pr", "merge"]:
         pr["strategy"] = a[3].lstrip("-")
         pr["subject"] = flag("--subject")
@@ -251,7 +267,7 @@ class Pulls(unittest.TestCase):
         (create,) = g.calls("pr", "create")
         self.assertNotIn("--draft", create)
 
-    def test_fm_done_readies_the_draft_and_comments_risk_and_verdict_once(self):
+    def test_fm_done_readies_the_draft_and_posts_the_verdict_once(self):
         g = self.make(test="true")
         iid = g.work()
         loop.tick(g.e.p)
@@ -262,8 +278,75 @@ class Pulls(unittest.TestCase):
         pr = g.state["prs"]["1"]
         self.assertFalse(pr["draft"])
         self.assertEqual(len(pr["comments"]), 1)
-        self.assertIn("merge risk low", pr["comments"][0])
-        self.assertIn("round 1: H 0, M 0", pr["comments"][0])
+        self.assertIn(verdict.CLEAN, pr["comments"][0]["body"])
+
+    def review_tip(self, g, iid: str, finding: str) -> None:
+        """A new commit on the task, reviewed with one open M whose Findings line is `finding`."""
+        e = g.e
+        wt = e.repo.parent / e.issue(iid)["worktree"]
+        with open(wt / "app.py", "a") as f:
+            f.write("# more\n")
+        git(wt, "commit", "-qam", "more")
+        git(wt, "push", "-q", "origin", e.issue(iid)["branch"])
+        (e.home / "reviews").mkdir(exist_ok=True)
+        (e.home / f"reviews/{iid}.md").write_text(f"Open: M 1\nFindings:\n{finding}\n")
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
+        e.review(iid, medium=1)
+        backlog.update(e.p, iid, review={**e.issue(iid)["review"], "sent_back": True})  # the loop queues it, as after a send-back
+
+    def test_a_new_tip_edits_the_one_verdict_comment(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        self.review_tip(g, iid, "F1 | M | a.py:3 | first problem")
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        first = g.state["prs"]["1"]
+        self.assertEqual(len(first["comments"]), 1)
+        self.assertIn("first problem", first["comments"][0]["body"])
+        self.review_tip(g, iid, "F1 | M | a.py:9 | second problem")
+        loop.tick(g.e.p)
+        pr = g.state["prs"]["1"]
+        self.assertEqual((len(pr["comments"]), pr.get("patched")), (1, 1))
+        self.assertIn("second problem", pr["comments"][0]["body"])
+        self.assertNotIn("first problem", pr["comments"][0]["body"])
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        self.assertEqual(g.state["prs"]["1"].get("patched"), 1)
+
+    def test_the_verdict_folds_the_review_and_shows_no_local_path(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        self.review_tip(g, iid, "F1 | M | a.py:3 | p\nScenario: long text")
+        loop.tick(g.e.p)
+        body = g.state["prs"]["1"]["comments"][0]["body"]
+        self.assertIn("<details>", body)
+        self.assertLess(body.index("<details>"), body.index("Scenario: long text"))
+        self.assertNotIn(str(g.e.home), body)
+        self.assertNotIn(g.e.issue(iid)["review"]["file"], body)
+
+    def test_a_deleted_verdict_is_posted_again(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        self.review_tip(g, iid, "F1 | M | a.py:3 | first problem")
+        loop.tick(g.e.p)
+        g.set(prs={"1": {**g.state["prs"]["1"], "comments": []}})
+        self.review_tip(g, iid, "F1 | M | a.py:9 | second problem")
+        loop.tick(g.e.p)
+        self.assertEqual(len(g.state["prs"]["1"]["comments"]), 1)
+
+    def test_a_lost_record_does_not_duplicate_the_verdict(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        self.review_tip(g, iid, "F1 | M | a.py:3 | first problem")
+        loop.tick(g.e.p)
+        i = g.e.issue(iid)
+        backlog.update(g.e.p, iid, pr={**i["pr"], "commented": ""})
+        loop.tick(g.e.p)
+        self.assertEqual(len(g.state["prs"]["1"]["comments"]), 1)
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")

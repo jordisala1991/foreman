@@ -336,6 +336,14 @@ class Queue(unittest.TestCase):
         self.assertEqual(risk.score(e.p, risk.Facts(review="", **kw))[0], "high")
         self.assertEqual(risk.score(e.p, risk.Facts(review="clean", **kw))[0], "low")
 
+    def test_size_reasons_name_their_limit(self):
+        e = Env(test="true")
+        kw = dict(tests="pass", deleted=[], conflict=False, commits=1, review="clean")
+        for lines, limit in ((90, "80"), (600, "300")):
+            f = [{"path": "a.py", "added": lines, "deleted": 0}]
+            reasons = risk.score(e.p, risk.Facts(files=f, **kw))[1]
+            self.assertTrue(any("lines changed" in r and limit in r for r in reasons), reasons)
+
     def test_sensitive_path_is_high(self):
         e = Env(test="true")
         self.assertTrue(risk.is_sensitive(".github/workflows/ci.yml", e.p.get("integrate", "sensitive")))

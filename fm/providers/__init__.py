@@ -60,8 +60,9 @@ class Provider:
     def ready(self, change: dict[str, Any]) -> None:
         """Marks the change ready for review."""
 
-    def comment(self, change: dict[str, Any], text: str) -> None:
-        """Leaves a note on the change."""
+    def comment(self, change: dict[str, Any], text: str, key: str) -> None:
+        """Sets fm's one comment on the change, found again by `key`: edits it if it exists, else adds it. Calling it
+        again never adds a second."""
 
     def body(self, change: dict[str, Any]) -> str:
         """The change's description as the platform has it now (nothing locally)."""

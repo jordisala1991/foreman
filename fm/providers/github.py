@@ -156,8 +156,15 @@ class GitHub(Provider):
     def ready(self, change: dict[str, Any]) -> None:
         self.run("gh", "pr", "ready", str(change["pr"]))
 
-    def comment(self, change: dict[str, Any], text: str) -> None:
-        self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
+    def comment(self, change: dict[str, Any], text: str, key: str) -> None:
+        marker = f"<!-- fm:{key} -->"
+        base = f"repos/{{owner}}/{{repo}}/issues/{change['pr']}/comments"
+        found = self.run("gh", "api", base, "--paginate", "--jq", f'.[] | select(.body | contains("{marker}")) | .id').out.split()
+        body = f"body={text}\n\n{marker}"
+        if found:
+            self.run("gh", "api", "-X", "PATCH", f"repos/{{owner}}/{{repo}}/issues/comments/{found[0]}", "-f", body)
+        else:
+            self.run("gh", "api", "-X", "POST", base, "-f", body)
 
     def ci(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "checks", str(change["pr"]), "--json", "bucket", check=False)  # exit 8 = pending
