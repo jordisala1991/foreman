@@ -17,8 +17,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "agents": {
         "slots": 2,
         "model": "sonnet",
-        "define_model": "opus",
-        "define_effort": "medium",
+        "define_model": "sonnet",
+        "define_effort": "high",
         "effort": "",
         "review_model": "sonnet",
         "settings": {},
