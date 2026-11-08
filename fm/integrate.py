@@ -4,7 +4,9 @@ The project's autonomy level decides which risks merge without the owner: `manua
 `medium`. High never merges alone. Everything else waits for the owner's accept in the panel (`fm accept`), or goes
 back to its agent with his note (`fm reject`).
 
-The merge is local, into the main checkout of the repo (`git merge --no-ff`); pushing is the owner's (guard list)."""
+Accepting only records the decision; the merge step (`merge_accepted`, through the project's provider, fm/providers/) merges,
+and the issue closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
+default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import backlog, util
+from . import backlog, providers, util
 from .config import Project
 
 RISKS = ("low", "medium", "high")
@@ -149,28 +151,57 @@ def merges_alone(p: Project, risk: str) -> bool:
 
 
 def accept(p: Project, iid: str, by: str = "owner") -> str:
-    """Merges the issue's branch into main, removes its worktree and branch, closes the issue. The merge commit."""
+    """Records the decision to integrate; it merges nothing. The loop's merge step does the merge (`merge_accepted`)."""
+    providers.get(p)  # a bad [integrate] provider/merge fails here, clearly
     d = backlog.load(p)
     i = backlog.get(d, iid)
     if i["status"] != "in review":
         raise IntegrateError(f"{iid} is {i['status']}, not in the integration queue")
-    main, branch = p.get("project", "main"), i["branch"]
-    head = git(p.repo, "rev-parse", branch).stdout.strip()
+    head = git(p.repo, "rev-parse", i["branch"]).stdout.strip()
     if (i.get("check") or {}).get("head") != head:
-        raise IntegrateError(f"{branch} moved since it was checked: wait for the next check")
-    if git(p.repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != main:
-        raise IntegrateError(f"the main checkout {p.repo} is not on {main}")
-    if git(p.repo, "status", "--porcelain", "--untracked-files=no").stdout.strip():
-        raise IntegrateError(f"the main checkout {p.repo} has uncommitted changes")
-    r = git(p.repo, "merge", "--no-ff", "-m", f"Integrate {iid}: {i['title']}", branch, check=False)
-    if r.returncode != 0:
-        git(p.repo, "merge", "--abort", check=False)
-        raise IntegrateError(f"merge failed: {(r.stderr or r.stdout).strip()[:300]}")
-    commit = git(p.repo, "rev-parse", "HEAD").stdout.strip()
+        raise IntegrateError(f"{i['branch']} moved since it was checked: wait for the next check")
+    backlog.update(p, iid, accepted={"by": by, "head": head, "at": util.now()})
+    backlog.event(p, iid, f"accepted by {by}: waiting for the merge")
+    return head
+
+
+def merge_accepted(p: Project, iid: str) -> str:
+    """The one place that merges: asks the provider to merge an accepted issue (once), then closes the issue, removing
+    its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
+    provider = providers.get(p)
+    i = backlog.get(backlog.load(p), iid)
+    acc = i.get("accepted")
+    if i["status"] != "in review" or not acc:
+        raise IntegrateError(f"{iid} is not accepted")
+    head = git(p.repo, "rev-parse", i["branch"]).stdout.strip()
+    if head != acc["head"]:
+        backlog.update(p, iid, accepted=None)
+        raise IntegrateError(f"{i['branch']} moved after it was accepted: accept again after the next check")
+    change = {"id": iid, "title": i["title"], "branch": i["branch"], "head": head, "merge": i.get("merge", "")}
+    if not change["merge"] and i.get("merging"):  # a crash after the merge, before its ref was stored: adopt it
+        found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {iid}: ", f"{i['merging']}..{p.get('project', 'main')}",
+                    check=False).stdout.split()
+        if found:
+            change["merge"] = found[0]
+            backlog.update(p, iid, merge=found[0])
+    if not change["merge"]:
+        backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).stdout.strip())
+        try:
+            ref = provider.merge(change, providers.merge_strategy(p))
+        except Exception as e:  # noqa: BLE001 - a platform's own errors are an integration error
+            if isinstance(e, providers.ConfigError):
+                raise
+            raise IntegrateError(str(e)) from None
+        backlog.update(p, iid, merge=ref)
+        backlog.event(p, iid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
+        change["merge"] = ref
+    if not provider.state(change)["merged"]:
+        return "merging"
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
-    git(p.repo, "branch", "-D", branch, check=False)
-    backlog.set_status(p, iid, "done", f"integrated by {by} as {commit[:9]}",
-                       result=(i.get("report") or {}).get("summary", ""), commit=commit,
+    git(p.repo, "branch", "-D", i["branch"], check=False)
+    by = acc["by"]
+    backlog.set_status(p, iid, "done", f"integrated, accepted by {by}, as {change['merge'][:9]}",
+                       result=(i.get("report") or {}).get("summary", ""), commit=change["merge"],
                        acceptance={**(i.get("acceptance") or {}), "verdict": f"accepted by {by}"})
-    return commit
+    return "done"

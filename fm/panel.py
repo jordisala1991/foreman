@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import backlog, cli, costs, health, integrate, lock, metrics, sessions, util
+from . import backlog, cli, costs, health, integrate, lock, metrics, providers, sessions, util
 from .config import Project, registered
 
 DIST = Path(__file__).resolve().parent.parent / "panel" / "dist"
@@ -224,8 +224,8 @@ def act(path: str, q: dict[str, list[str]], body: str) -> Obj:
         run_cli(lambda a: cli.cmd_allow(a, path == "/api/allow"), p, qid=iid, text=text or None)
     elif path == "/api/accept":
         try:
-            return {"commit": integrate.accept(p, iid, by="owner (panel)")}
-        except integrate.IntegrateError as e:
+            return {"accepted": integrate.accept(p, iid, by="owner (panel)")}
+        except (integrate.IntegrateError, providers.ConfigError) as e:
             raise Refused(str(e)) from None
     elif path == "/api/reject":
         if not text:
