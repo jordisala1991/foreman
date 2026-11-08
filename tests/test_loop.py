@@ -68,12 +68,12 @@ class Answers(unittest.TestCase):
         self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
 
 
-class Forge(unittest.TestCase):
+class Provider(unittest.TestCase):
     def delivered(self, e):
         return Queue().deliver(e)
 
     def test_accept_only_marks_and_the_issue_closes_when_the_merge_is_seen_in_main(self):
-        from fm.forges import local
+        from fm.providers import local
         e = Env(test="true")
         iid = self.delivered(e)
         loop.tick(e.p)
@@ -83,7 +83,7 @@ class Forge(unittest.TestCase):
         self.assertEqual((i["status"], i["accepted"]["by"]), ("in review", "owner"))
         self.assertEqual(git(e.repo, "rev-parse", "main").strip(), before)
         wt = i["worktree"]
-        # the forge merges but main does not show it yet: the issue stays open, worktree and branch stay
+        # the provider merges but main does not show it yet: the issue stays open, worktree and branch stay
         orig = local.Local.state
         local.Local.state = lambda self, change: {"merged": False, "closed": False}
         try:
@@ -112,25 +112,25 @@ class Forge(unittest.TestCase):
             self.assertEqual(e.issue(iid)["status"], "done")
             self.assertEqual(len(git(e.repo, "log", "-1", "--format=%P", "main").split()), parents)
 
-    def test_unknown_merge_or_forge_is_a_clear_config_error(self):
-        from fm import forges
-        for key, val in (("merge", "rebase"), ("forge", "github")):
+    def test_unknown_merge_or_provider_is_a_clear_config_error(self):
+        from fm import providers
+        for key, val in (("merge", "rebase"), ("provider", "github")):
             e = Env(test="true")
             e.p.cfg["integrate"][key] = val
-            with self.assertRaisesRegex(forges.ConfigError, f"{key} = '{val}'"):
-                forges.get(e.p)
+            with self.assertRaisesRegex(providers.ConfigError, f"{key} = '{val}'"):
+                providers.get(e.p)
             iid = self.delivered(e)
             loop.tick(e.p)
-            with self.assertRaises(forges.ConfigError):
+            with self.assertRaises(providers.ConfigError):
                 integrate.accept(e.p, iid)
 
     def test_defaults_and_nothing_is_published(self):
-        from fm import forges
+        from fm import providers
         e = Env()
-        self.assertEqual((e.p.get("integrate", "forge"), e.p.get("integrate", "merge")), ("local", "squash"))
-        self.assertEqual(forges.get(e.p).name, "local")
+        self.assertEqual((e.p.get("integrate", "provider"), e.p.get("integrate", "merge")), ("local", "squash"))
+        self.assertEqual(providers.get(e.p).name, "local")
         import inspect
-        from fm.forges import local
+        from fm.providers import local
         src = inspect.getsource(local)
         for word in ('"push"', '"tag"', "release"):
             self.assertNotIn(word, src)

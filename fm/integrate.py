@@ -4,8 +4,8 @@ The project's autonomy level decides which risks merge without the owner: `manua
 `medium`. High never merges alone. Everything else waits for the owner's accept in the panel (`fm accept`), or goes
 back to its agent with his note (`fm reject`).
 
-Accepting only records the decision; the merge step (`merge_accepted`, through the project's forge, fm/forges/) merges,
-and the issue closes once the merge is seen in main. The local forge merges into the main checkout (`squash` by
+Accepting only records the decision; the merge step (`merge_accepted`, through the project's provider, fm/providers/) merges,
+and the issue closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import backlog, forges, util
+from . import backlog, providers, util
 from .config import Project
 
 RISKS = ("low", "medium", "high")
@@ -152,7 +152,7 @@ def merges_alone(p: Project, risk: str) -> bool:
 
 def accept(p: Project, iid: str, by: str = "owner") -> str:
     """Records the decision to integrate; it merges nothing. The loop's merge step does the merge (`merge_accepted`)."""
-    forges.get(p)  # a bad [integrate] forge/merge fails here, clearly
+    providers.get(p)  # a bad [integrate] provider/merge fails here, clearly
     d = backlog.load(p)
     i = backlog.get(d, iid)
     if i["status"] != "in review":
@@ -166,9 +166,9 @@ def accept(p: Project, iid: str, by: str = "owner") -> str:
 
 
 def merge_accepted(p: Project, iid: str) -> str:
-    """The one place that merges: asks the forge to merge an accepted issue (once), then closes the issue, removing
-    its worktree and branch, only when the forge shows the merge done in main. Returns what happened."""
-    forge = forges.get(p)
+    """The one place that merges: asks the provider to merge an accepted issue (once), then closes the issue, removing
+    its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
+    provider = providers.get(p)
     i = backlog.get(backlog.load(p), iid)
     acc = i.get("accepted")
     if i["status"] != "in review" or not acc:
@@ -180,15 +180,15 @@ def merge_accepted(p: Project, iid: str) -> str:
     change = {"id": iid, "title": i["title"], "branch": i["branch"], "head": head, "merge": i.get("merge", "")}
     if not change["merge"]:
         try:
-            ref = forge.merge(change, forges.merge_strategy(p))
+            ref = provider.merge(change, providers.merge_strategy(p))
         except Exception as e:  # noqa: BLE001 - a platform's own errors are an integration error
-            if isinstance(e, forges.ConfigError):
+            if isinstance(e, providers.ConfigError):
                 raise
             raise IntegrateError(str(e)) from None
         backlog.update(p, iid, merge=ref)
-        backlog.event(p, iid, f"merged as {ref[:9]} ({forges.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
+        backlog.event(p, iid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
         change["merge"] = ref
-    if not forge.state(change)["merged"]:
+    if not provider.state(change)["merged"]:
         return "merging"
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)

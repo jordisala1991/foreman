@@ -21,7 +21,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "integrate": {
         "autonomy": "manual",
-        "forge": "local",  # where merges happen: only `local` for now (fm/forges/)
+        "provider": "local",  # where merges happen: only `local` for now (fm/providers/)
         "merge": "squash",  # squash | merge (--no-ff)
         "test": "",
         "sensitive": ["fm.toml", ".github/", "*.lock", "*secret*", "*.env"],
