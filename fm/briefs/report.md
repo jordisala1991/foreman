@@ -1,34 +1,30 @@
-# Title: imperative, with the task id
-In one sentence: what is different now.
+# ID: <imperative title: what this change does, under 10 words>
 
-## Why
-The problem, or the data behind it.
+**In one sentence**
+<one sentence: what is different now, for the user or the system>
 
-## What changes
-3-6 bullets grouped by behaviour, not by file.
+**Why**
+<at most 2 lines: the problem, or the data behind the change>
 
-## Look here first
-1-3 `file:line` places that need the owner's judgement, including what went off the plan («Off the plan»).
+**What changes**
+- <at most 4 bullets, one line each, grouped by behaviour, not by file>
 
-## Proof
-Each line of the done criterion, with evidence that fits its kind:
+**Look here first**
+- <at most 3 bullets: a `file:line` that needs the owner's judgement and why, in one line; "Off the plan:" for a departure from the plan or from the task's scope>
 
-| Kind of change | Evidence |
+**Proof**
+| Criterion | Evidence |
 |---|---|
-| behaviour | a test, by name |
-| UI | before and after screenshots of each touched screen or state, saved in `reports/ID/` and named in the line |
-| CLI or output | the command and its real short output |
-| performance or cost | before and after numbers, measured the same way |
-| config or deploy | the command that checks it and its result |
+| <each line of the done criterion, short> | <evidence that fits its kind, one line: behaviour → a test by name; UI → before and after screenshots saved in reports/ID/; CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the check command and its result. Only evidence that exists: no figure without the test or command behind it> |
 
-## Risk
-What could go wrong, or «none known».
+**Risk**
+<at most 2 lines: what could break, including open review findings, or "none known">
 
-## Not done
-What was left out on purpose.
+**Not done**
+<at most 3 short bullets, or "nothing">
 
-## Try it
-1-3 commands for the owner.
+**Try it**
+<1-3 commands the owner can run>
 
 ## Review rounds
-One `### Round N` per round: each finding fixed or refuted, and how. Empty until a review sends the task back.
+<one `### Round N` per round, one line per finding: id, fixed or refuted, how>

@@ -34,7 +34,7 @@ def seed_report(p: Project, iid: str, worktree: Path) -> None:
     if f.exists():
         return
     theirs = worktree / ".github" / "pull_request_template.md"
-    text = (BRIEFS / "report.md").read_text(encoding="utf-8")
+    text = (BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", iid)
     if theirs.is_file():
         text = theirs.read_text(encoding="utf-8").rstrip() + "\n\n## Review rounds\n"
     f.parent.mkdir(parents=True, exist_ok=True)

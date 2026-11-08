@@ -143,8 +143,9 @@ class Template(unittest.TestCase):
 
     def test_a_launched_work_agent_finds_the_template_at_its_report(self):
         e = Env(test="true")
-        _, text = self.launched(e)
-        self.assertIn("## Proof", text)
+        iid, text = self.launched(e)
+        self.assertTrue(text.startswith(f"# {iid}: "))
+        self.assertIn("**Proof**", text)
         self.assertTrue(text.rstrip().splitlines()[-2].startswith("## Review rounds"))
 
     def test_a_repo_pr_template_wins_and_review_rounds_is_added(self):
@@ -156,7 +157,7 @@ class Template(unittest.TestCase):
         git(e.repo, "commit", "-qm", "pr template")
         _, text = self.launched(e)
         self.assertIn("## Their checklist", text)
-        self.assertNotIn("## Proof", text)
+        self.assertNotIn("**Proof**", text)
         self.assertTrue(text.rstrip().endswith("## Review rounds"))
 
     def test_an_existing_report_is_not_overwritten_on_relaunch(self):
