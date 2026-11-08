@@ -8,7 +8,8 @@
 6. queue: a delivered branch is checked (tests, diff, risk); the autonomy level may merge it
 7. health: broken states become triage issues, deduplicated (health.py)
 8. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
-   one. The loop never plans, never reviews, never talks to the owner.
+   one; a ready one whose plan risk the autonomy level does not cover waits for `fm approve-plan` (plan_gate.py).
+   The loop never plans, never reviews, never talks to the owner.
 """
 
 import os
@@ -19,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, health, integrate, proc, providers, pulls, sessions, sources, util
+from . import backlog, health, integrate, plan_gate, proc, providers, pulls, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -124,8 +125,14 @@ def launch_free(p: Project) -> None:
     d = backlog.load(p)
     free = int(p.get("agents", "slots")) - running(d)
     todo = sorted((i for i in backlog.issues(d) if i["status"] in ("backlog", "ready") and not i.get("blocked")), key=sort_key)
+    todo = [i for i in todo if not plan_gate.pending(p, i)]  # a plan above the autonomy level waits for the owner
     for i in todo[: max(0, free)]:
-        guarded(p, i["id"], "launch", lambda i=i: launch(p, i))
+        guarded(p, i["id"], "launch", lambda i=i: launch_gated(p, i))
+
+
+def launch_gated(p: Project, i: dict[str, Any]) -> None:
+    if plan_gate.passes(p, i):
+        launch(p, i)
 
 
 def beat(p: Project, step: str) -> None:

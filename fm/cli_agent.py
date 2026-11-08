@@ -69,6 +69,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
         if a.detail:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
         i["status"], i["blocked"] = "ready", ""
+        i.pop("plan_approved", None)  # a re-defined plan needs a new approval
         i["defined_by"] = agent.get("name")
     backlog.event(p, iid, f"→ ready: {a.criterion}" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)

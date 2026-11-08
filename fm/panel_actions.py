@@ -88,6 +88,18 @@ def reject(p: Project, iid: str, text: str, q: Query) -> Obj:
     return OK
 
 
+def approve_plan(p: Project, iid: str, text: str, q: Query) -> Obj:
+    run_cli(cli.cmd_approve_plan, p, id=iid)
+    return OK
+
+
+def reject_plan(p: Project, iid: str, text: str, q: Query) -> Obj:
+    if not text:
+        raise Refused("say what to change: the note goes back to the definer")
+    run_cli(cli.cmd_reject_plan, p, id=iid, note=text)
+    return OK
+
+
 def go(p: Project, iid: str, text: str, q: Query) -> Obj:
     if backlog.get(backlog.load(p), iid)["status"] != "triage":
         raise Refused(f"{iid} is not in triage")
@@ -117,6 +129,8 @@ BY_ID: dict[str, Callable[[Project, str, str, Query], Obj]] = {
     "/api/deny": permission(False),
     "/api/accept": accept,
     "/api/reject": reject,
+    "/api/approve-plan": approve_plan,
+    "/api/reject-plan": reject_plan,
     "/api/go": go,
     "/api/cancel": cancel,
     "/api/unblock": unblock,

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any
 
-from . import backlog, costs, health, lock, metrics, sessions, util
+from . import backlog, costs, health, lock, metrics, plan_gate, sessions, util
 from .config import Project, registered
 
 RECENT_DAYS = 7  # closed issues the tasks screen still shows
@@ -72,9 +72,13 @@ def paused(p: Project) -> str | None:
     return f.read_text().strip() or "yes" if f.exists() else None
 
 
-def needs(d: Obj) -> int:
+def needs(p: Project, d: Obj) -> int:
     """What waits for the owner: open questions, the queue, triage, blocked issues."""
-    waiting = [i for i in backlog.issues(d) if i["status"] in ("in review", "triage") or (i.get("blocked") and i["status"] not in backlog.CLOSED)]
+    waiting = [
+        i
+        for i in backlog.issues(d)
+        if i["status"] in ("in review", "triage") or (i.get("blocked") and i["status"] not in backlog.CLOSED) or plan_gate.pending(p, i)
+    ]
     return len(d["decisions"]) + len(waiting)
 
 
@@ -85,7 +89,7 @@ def summary(p: Project) -> Obj:
             "name": p.name,
             "paused": paused(p),
             "loop": loop_beat(p),
-            "needs": needs(d),
+            "needs": needs(p, d),
             "running": sum(1 for i in backlog.issues(d) if i["status"] in backlog.RUNNING),
         }
     except Exception as e:
@@ -94,7 +98,7 @@ def summary(p: Project) -> Obj:
 
 def with_session(p: Project, i: Obj, rows: dict[str, Any]) -> Obj:
     a: backlog.Agent = i.get("agent") or {}
-    return {**i, "agent_state": sessions.state(rows, a.get("session")) if a else None}
+    return {**i, "agent_state": sessions.state(rows, a.get("session")) if a else None, "plan_pending": plan_gate.pending(p, i)}
 
 
 def state(p: Project) -> Obj:

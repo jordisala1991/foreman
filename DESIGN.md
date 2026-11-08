@@ -26,6 +26,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
+| `fm/plan_gate.py` | ~90 | the plan gate: reads a plan's Declared risk, decides with the autonomy table whether the loop launches it or the owner approves it |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
@@ -120,6 +121,13 @@ only what only he can decide (`fm ask`, then ends its turn), may split into more
 `fm ready --claim --criterion --detail --plan PATH` (or `--no-plan "why trivial"`). It also reads the code and writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
 risk); the issue gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
+
+Plan gate (`fm/plan_gate.py`): the same `[integrate] autonomy` table (`risk.AUTONOMY`) governs plans and branches. A plan's risk
+is read from its Declared risk line: none → low; new dependency / data-format change / size → medium; sensitive paths /
+architecture / open decision → high; the highest wins; missing or unrecognised → high. `launch_free` launches a ready issue with
+a plan only if the level covers that risk (recording `plan_approved` by the autonomy level) or the owner ran `fm approve-plan`
+(panel: `/api/approve-plan`); `fm reject-plan --note` sends it back to `backlog`. `fm ready` clears the approval. Issues without a
+plan launch as before. The issue view carries a computed `plan_pending`.
 
 Every brief starts by pointing the agent at the project's `LESSONS.md`: what misled earlier agents, in their words
 (each `--misled` text that is not «none» is appended; the owner prunes it).
