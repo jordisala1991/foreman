@@ -22,10 +22,10 @@ Python 3.12+ standard library only; the panel is React + Vite, built into `panel
 bin/fm --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
 bin/fm loop            # or: bin/fm launchd > ~/Library/LaunchAgents/dev.fm.loop.plist
 bin/fm panel --port 7788
-make check            # everything CI runs, in order: lint, format, types, size, panel, test (make fix: the mechanical fixes)
+make check            # (needs uv and node) everything CI runs, in order: lint, format, types, size, panel, test (make fix: the mechanical fixes)
 python3 -m unittest discover -s tests   # just the tests
 ```
 
-Limits (pyproject.toml): Python files 300 lines (tests 600, checked by pylint), functions complexity 10 (ruff). No exceptions: a failing rule is a design signal to refactor, and `make lint` runs ruff with `--ignore-noqa`, so a comment cannot turn a rule off. TypeScript and CSS have no size check yet.
+Limits (pyproject.toml): Python files 300 lines (tests 600, checked by pylint), functions complexity 10 (ruff). No exceptions: a failing rule is a design signal to refactor, and `make lint` runs ruff with `--ignore-noqa`, so a comment cannot turn a rule off. TypeScript and CSS have no size check yet. The Python dev tools (ruff, pyright, pylint) are the `dev` dependency group in `pyproject.toml`, locked in `uv.lock`; to change a version, edit it and run `uv lock`. fm itself has no runtime dependencies.
 
 `DESIGN.md` has the architecture: the states of a task, the loop, the agents' briefs, the guard list, locks, health.

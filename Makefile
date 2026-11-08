@@ -1,8 +1,8 @@
-# One entry point for the code checks (CI runs `make check`). Dev tools run through uvx and npx; nothing is added to fm's runtime.
-# Tool versions live here, in one place, pinned so a new release cannot turn the check red by itself.
-RUFF    := uvx ruff@0.17.4
-PYRIGHT := uvx pyright@1.1.414
-PYLINT  := uvx pylint@4.1.3
+# One entry point for the code checks (CI runs `make check`). Dev tools (ruff, pyright, pylint) are the `dev` dependency group in
+# pyproject.toml, locked in uv.lock, and run through `uv run`; tsc runs through npx. Nothing is added to fm's runtime.
+# To change a tool's version: edit pyproject.toml, then `uv lock`.
+# Fail if uv.lock is out of date with pyproject.toml; never rewrite it silently.
+export UV_LOCKED := 1
 
 .PHONY: check fix lint format types size panel test
 
@@ -18,24 +18,24 @@ check:
 
 # Fix what is mechanical (imports, formatting). What is left is a design signal: refactor, do not silence.
 fix:
-	$(RUFF) check --fix .
-	$(RUFF) format .
+	uv run ruff check --fix .
+	uv run ruff format .
 
 # --ignore-noqa: a rule cannot be turned off with a comment.
 lint:
-	$(RUFF) check --ignore-noqa .
+	uv run ruff check --ignore-noqa .
 
 format:
-	$(RUFF) format --check .
+	uv run ruff format --check .
 
 # Strict on fm/ (see [tool.pyright] in pyproject.toml).
 types:
-	$(PYRIGHT)
+	uv run pyright
 
 # File length: ruff has no rule for it. fm/ 300 lines (limit in pyproject.toml), tests 600.
 size:
-	$(PYLINT) fm
-	$(PYLINT) --max-module-lines=600 tests
+	uv run pylint fm
+	uv run pylint --max-module-lines=600 tests
 
 panel:
 	@[ -d panel/node_modules ] || (cd panel && npm ci --silent --no-audit --no-fund)

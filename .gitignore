@@ -4,6 +4,7 @@ __pycache__/
 node_modules/
 *.lock
 !package-lock.json
+!uv.lock
 # the experiment's own papers and evidence stay local, never committed
 /BRIEF.md
 /IDEA-*.md
