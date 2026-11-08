@@ -155,6 +155,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
     prev = reviews[-1] if reviews else {}
     name = f"{i['id'].lower()}-review"
     model = p.get("agents", "review_model")
+    effort = p.get("agents", "review_effort")
     review_file = p.home / "reviews" / f"{i['id']}-r{rnd}.md"
     review_file.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
@@ -167,7 +168,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
         "previous_tip": prev.get("tip", ""),
     }
     cwd = Path(i["worktree"])
-    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model), brief(p, i, "reviewer", extra), cwd)
+    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, "reviewer", extra), cwd)
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         it["reviewer"] = {
@@ -175,6 +176,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
             "short": short,
             "session": sid,
             "model": model,
+            "effort": effort,
             "started": util.now(),
             "round": rnd,
             "tip": tip,
@@ -191,7 +193,7 @@ def send(p: Project, i: dict[str, Any], message: str) -> bool:
     if not a.get("session"):
         return False
     try:
-        who = sessions.Agent(i["id"], a["name"], a.get("model") or p.get("agents", "model"), a.get("effort", ""))
+        who = sessions.Agent(i["id"], a["name"], a.get("model") or p.get("agents", "model"), a.get("effort") or p.get("agents", "effort"))
         sessions.resume(p, who, a["session"], message, Path(a.get("cwd") or p.repo))
     except sessions.SessionError as e:
         backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")

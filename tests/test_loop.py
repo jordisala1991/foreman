@@ -32,22 +32,40 @@ class Launch(unittest.TestCase):
         self.assertIn("fm/ty-2", git(self.e.repo, "branch"))
         self.assertTrue(self.e.issue(b)["agent"]["session"])
 
-    def test_define_agent_runs_sonnet_high_and_work_agent_sets_no_effort(self):
-        d = backlog.add(self.p, "vague idea")
-        w = backlog.add(self.p, "clear one", status="ready", criterion="x")
-        loop.tick(self.p)
-        by = {c["argv"][-1].split("]")[0]: c["argv"] for c in self.e.calls()}
-        define, work = by[f"[fm define {d}"], by[f"[fm work {w}"]
-        self.assertEqual(define[define.index("--model") :][:4], ["--model", "sonnet", "--effort", "high"])
-        self.assertNotIn("--effort", work)
-        self.assertEqual(self.e.issue(d)["agent"]["effort"], "high")
+    def flags(self, e: Env) -> dict[str, tuple[str, str]]:
+        """(model, effort) of every launched command, by the kind in its prompt."""
+        out = {}
+        for c in e.calls():
+            a = c["argv"]
+            out[a[-1].split(" ")[1]] = (a[a.index("--model") + 1], a[a.index("--effort") + 1])
+        return out
 
-    def test_the_effort_of_work_agents_is_configurable(self):
-        self.p.cfg["agents"]["effort"] = "low"
-        backlog.add(self.p, "clear one", status="ready", criterion="x")
-        loop.tick(self.p)
-        argv = self.e.calls()[0]["argv"]
-        self.assertEqual(argv[argv.index("--effort") + 1], "low")
+    def run_all_kinds(self, e: Env) -> dict[str, tuple[str, str]]:
+        backlog.add(e.p, "vague idea")
+        w = backlog.add(e.p, "clear one", status="ready", criterion="x")
+        loop.tick(e.p)
+        backlog.set_status(e.p, w, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        return self.flags(e)
+
+    def test_every_kind_launches_with_an_explicit_model_and_effort(self):
+        e = Env(test="true")
+        self.assertEqual(
+            self.run_all_kinds(e),
+            {"define": ("sonnet", "high"), "work": ("sonnet", "medium"), "reviewer": ("sonnet", "high")},
+        )
+        i = e.issue("TY-2")
+        self.assertEqual(i["reviewer"]["effort"], "high")
+        self.assertEqual(i["agent"]["effort"], "medium")
+
+    def test_a_configured_model_and_effort_reach_each_command(self):
+        e = Env(test="true")
+        cfg = e.p.cfg["agents"]
+        cfg.update(define_model="opus", define_effort="max", model="haiku", effort="low", review_model="opus", review_effort="xhigh")
+        self.assertEqual(
+            self.run_all_kinds(e),
+            {"define": ("opus", "max"), "work": ("haiku", "low"), "reviewer": ("opus", "xhigh")},
+        )
 
     def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self):
         a = backlog.add(self.p, "vague idea")
