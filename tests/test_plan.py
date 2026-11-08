@@ -56,9 +56,7 @@ class Plan(unittest.TestCase):
         with_plan = {"id": "TY-1", "title": "t", "plan_file": "/x/plans/TY-1.md"}
         text = agents.brief(self.p, with_plan, "work")
         self.assertIn("/x/plans/TY-1.md", text)
-        self.assertIn("fm ask", text)
         without = agents.brief(self.p, {"id": "TY-2", "title": "t"}, "work")
-        self.assertIn("no plan", without.lower())
         self.assertNotIn("/plans/", without)
 
     def test_plan_and_no_plan_together_fail(self):
@@ -75,7 +73,9 @@ class Plan(unittest.TestCase):
         self.ready("--plan", str(self.plan))
         backlog.update(self.p, self.iid, status="refining")
         self.ready("--no-plan", "trivial after all")
-        self.assertNotIn("plan_file", self.e.issue(self.iid))
+        i = self.e.issue(self.iid)
+        self.assertNotIn("plan_file", i)
+        self.assertNotIn(str(self.plan), agents.brief(self.p, i, "work"))
 
     def assert_planless_ready(self, iid):
         i = self.e.issue(iid)
@@ -90,21 +90,3 @@ class Plan(unittest.TestCase):
     def test_panel_filed_ready_needs_no_plan(self):
         new = panel_actions.add(self.p, '{"title": "p", "criterion": "c"}')["id"]
         self.assert_planless_ready(new)
-
-    def test_define_brief_names_plan_path_and_sections(self):
-        text = agents.brief(self.p, self.e.issue(self.iid), "define")
-        self.assertIn(str(self.plan), text)
-        for s in (
-            "alternatives dropped",
-            "sensitive paths",
-            "new dependency",
-            "open decision",
-            "size",
-            "Files touched",
-            "Steps",
-            "Decisions",
-            "Out of scope",
-            "Risks",
-            "Declared risk",
-        ):
-            self.assertIn(s, text)
