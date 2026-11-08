@@ -3,7 +3,8 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop
+from fm import backlog, integrate, loop, risk
+from fm.providers import registry
 
 
 class Launch(unittest.TestCase):
@@ -136,7 +137,7 @@ class Provider(unittest.TestCase):
             e = Env(test="true")
             e.p.cfg["integrate"][key] = val
             with self.assertRaisesRegex(providers.ConfigError, f"{key} = '{val}'"):
-                providers.get(e.p)
+                registry.get(e.p)
             iid = self.delivered(e)
             loop.tick(e.p)
             with self.assertRaises(providers.ConfigError):
@@ -148,7 +149,7 @@ class Provider(unittest.TestCase):
         e = Env()
         e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[integrate]", '[integrate]\nforge = "github"'))
         with self.assertRaisesRegex(providers.ConfigError, "forge was renamed to provider"):
-            providers.get(type(e.p).load(e.home))
+            registry.get(type(e.p).load(e.home))
 
     def test_send_back_forgets_the_merge_of_the_old_tip(self):
         e = Env(test="true")
@@ -195,11 +196,10 @@ class Provider(unittest.TestCase):
         self.assertIn("merge = 'rebase'", e.issue(iid)["blocked"])
 
     def test_defaults_and_nothing_is_published(self):
-        from fm import providers
 
         e = Env()
         self.assertEqual((e.p.get("integrate", "provider"), e.p.get("integrate", "merge")), ("auto", "squash"))
-        self.assertEqual(providers.get(e.p).name, "local")  # no GitHub remote: local
+        self.assertEqual(registry.get(e.p).name, "local")  # no GitHub remote: local
         import inspect
 
         from fm.providers import local
@@ -314,15 +314,15 @@ class Queue(unittest.TestCase):
         e = Env(test="true", autonomy="medium")
         f = [{"path": "a.py", "added": 1, "deleted": 0}]
         kw = dict(tests="pass", files=f, deleted=[], conflict=False, commits=1)
-        self.assertEqual(integrate.score(e.p, integrate.Facts(review="open after round 2: H 0, M 1", **kw))[0], "high")
-        self.assertEqual(integrate.score(e.p, integrate.Facts(review="", **kw))[0], "high")
-        self.assertEqual(integrate.score(e.p, integrate.Facts(review="clean", **kw))[0], "low")
+        self.assertEqual(risk.score(e.p, risk.Facts(review="open after round 2: H 0, M 1", **kw))[0], "high")
+        self.assertEqual(risk.score(e.p, risk.Facts(review="", **kw))[0], "high")
+        self.assertEqual(risk.score(e.p, risk.Facts(review="clean", **kw))[0], "low")
 
     def test_sensitive_path_is_high(self):
         e = Env(test="true")
-        self.assertTrue(integrate.is_sensitive(".github/workflows/ci.yml", e.p.get("integrate", "sensitive")))
-        self.assertTrue(integrate.is_sensitive("conf/fm.toml", e.p.get("integrate", "sensitive")))
-        self.assertFalse(integrate.is_sensitive("src/app.py", e.p.get("integrate", "sensitive")))
+        self.assertTrue(risk.is_sensitive(".github/workflows/ci.yml", e.p.get("integrate", "sensitive")))
+        self.assertTrue(risk.is_sensitive("conf/fm.toml", e.p.get("integrate", "sensitive")))
+        self.assertFalse(risk.is_sensitive("src/app.py", e.p.get("integrate", "sensitive")))
 
     def test_a_branch_that_conflicts_after_main_moved_goes_back_to_its_agent(self):
         e = Env(test="true")

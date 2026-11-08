@@ -9,13 +9,12 @@ id: `claude --bg --resume SID … MESSAGE`."""
 import json
 import os
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import util
+from . import proc, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
@@ -74,12 +73,12 @@ def command(p: Project, agent: Agent, prompt: str, resume: str | None = None) ->
 
 def _run(cmd: list[str], cwd: Path) -> str:
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=120, check=False)
-    except (OSError, subprocess.SubprocessError) as e:
+        r = proc.run(cmd, cwd=cwd, timeout=120)
+    except proc.ProcError as e:
         raise SessionError(f"claude did not start: {e}") from e
-    m = BACKGROUNDED.search(r.stdout + r.stderr)
-    if r.returncode != 0 or not m:
-        raise SessionError(" ".join((r.stderr or r.stdout).split())[:300] or f"exit {r.returncode}")
+    m = BACKGROUNDED.search(r.out + r.err)
+    if r.code != 0 or not m:
+        raise SessionError(" ".join((r.err or r.out).split())[:300] or f"exit {r.code}")
     return m.group(1)
 
 
@@ -97,9 +96,8 @@ def resume(p: Project, agent: Agent, sid: str, message: str, cwd: Path) -> str:
 def listing(p: Project) -> dict[str, dict[str, Any]]:
     """Every background session Claude Code knows (done ones included), by full session id; {} when unreadable."""
     try:
-        r = subprocess.run([p.get("agents", "claude"), "agents", "--json", "--all"], capture_output=True, text=True, timeout=30, check=False)
-        rows = util.json_list(json.loads(r.stdout))
-    except (OSError, subprocess.SubprocessError, ValueError):
+        rows = util.json_list(proc.run_json([p.get("agents", "claude"), "agents", "--json", "--all"], timeout=30))
+    except proc.ProcError:
         return {}
     found: dict[str, dict[str, Any]] = {}
     for item in rows:
@@ -122,4 +120,4 @@ def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
 
 
 def stop(p: Project, short: str) -> None:
-    subprocess.run([p.get("agents", "claude"), "stop", short], capture_output=True, timeout=30, check=False)
+    proc.run([p.get("agents", "claude"), "stop", short], timeout=30)

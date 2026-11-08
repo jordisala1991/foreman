@@ -3,10 +3,11 @@ for agents); the agent only pushes its own branch. Nothing here publishes: no ta
 
 import json
 import re
-import subprocess
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
-from . import Permanent, Provider, Transient
+from .. import proc, util
+from . import Permanent, Provider, ProviderError, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 
@@ -30,32 +31,93 @@ def failure(what: str, text: str) -> Exception:
     return (PermanentError if PERMANENT.search(text) else TransientError)(f"{what}: {text}")
 
 
+State = Literal["OPEN", "MERGED", "CLOSED"]
+Bucket = Literal["pass", "fail", "cancel", "pending", "skipping"]
+STATES: dict[str, State] = {s: s for s in ("OPEN", "MERGED", "CLOSED")}
+BUCKETS: dict[str, Bucket] = {b: b for b in ("pass", "fail", "cancel", "pending", "skipping")}
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    """A pull request as fm sees it: the only shape that leaves this module, never gh's JSON."""
+
+    number: int
+    url: str
+    draft: bool
+    state: State
+    merge_commit: str  # "" until merged
+
+
+def _field[T](o: dict[str, Any], key: str, kind: type[T], what: str) -> T:
+    v = o.get(key)
+    if not isinstance(v, kind) or (kind is int and isinstance(v, bool)):
+        raise ProviderError(f"{what}: `{key}` should be {kind.__name__}, gh gave {v!r}")
+    return v
+
+
+def pull_request(raw: object) -> PullRequest:
+    """`gh pr view --json number,url,isDraft,state,mergeCommit` as a PullRequest; ProviderError if it does not fit."""
+    what = "gh pr view"
+    o = util.json_object(raw)
+    if o is None:
+        raise ProviderError(f"{what}: expected a JSON object, gh gave {raw!r}"[:300])
+    state = STATES.get(_field(o, "state", str, what))
+    if state is None:
+        raise ProviderError(f"{what}: unknown state {o['state']!r}")
+    merge = o.get("mergeCommit")
+    commit = ""
+    if merge is not None:
+        mo = util.json_object(merge)
+        if mo is None:
+            raise ProviderError(f"{what}: `mergeCommit` should be an object or null, gh gave {merge!r}")
+        commit = _field(mo, "oid", str, what)
+    return PullRequest(_field(o, "number", int, what), _field(o, "url", str, what), _field(o, "isDraft", bool, what), state, commit)
+
+
+def buckets(raw: object) -> set[Bucket]:
+    """`gh pr checks --json bucket` as the set of its buckets; ProviderError if it does not fit."""
+    items = util.json_list(raw)
+    if not isinstance(raw, list):
+        raise ProviderError(f"gh pr checks: expected a JSON list, gh gave {raw!r}"[:300])
+    out: set[Bucket] = set()
+    for item in items:
+        o = util.json_object(item)
+        b = BUCKETS.get(o["bucket"]) if o and isinstance(o.get("bucket"), str) else None
+        if b is None:
+            raise ProviderError(f"gh pr checks: unexpected check {item!r}"[:300])
+        out.add(b)
+    return out
+
+
 class GitHub(Provider):
     name = "github"
 
-    def run(self, prog: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = subprocess.run(argv, capture_output=True, text=True, check=False, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise TransientError(f"{prog} {' '.join(args[:3])}: timed out after {TIMEOUT}s") from None
-        if check and r.returncode != 0:
-            raise failure(f"{prog} {' '.join(args[:3])}", r.stderr or r.stdout)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
+        except proc.ProcError as e:
+            raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
+        if check and r.code != 0:
+            raise failure(f"{prog} {' '.join(args[:3])}", r.err or r.out)
         return r
 
-    def view(self, change: dict[str, Any], fields: str) -> dict[str, Any]:
-        out: dict[str, Any] = json.loads(self.run("gh", "pr", "view", str(change["pr"]), "--json", fields).stdout)
-        return out
+    def view(self, change: dict[str, Any]) -> PullRequest:
+        r = self.run("gh", "pr", "view", str(change["pr"]), "--json", "number,url,isDraft,state,mergeCommit")
+        try:
+            return pull_request(json.loads(r.out))
+        except ValueError:
+            raise ProviderError(f"gh pr view: not JSON: {r.out.strip()[:200]!r}") from None
 
     def pushed(self, change: dict[str, Any]) -> bool:
         r = self.run("git", "ls-remote", "origin", f"refs/heads/{change['branch']}", check=False)
-        return r.returncode == 0 and r.stdout.split()[:1] == [change["head"]]
+        return r.code == 0 and r.out.split()[:1] == [change["head"]]
 
     def publish(self, change: dict[str, Any], draft: bool) -> dict[str, Any]:
         body = change.get("claim") or change["title"]
         args = ["pr", "create", "--head", change["branch"], "--base", self.p.get("project", "main")]
         args += ["--title", f"{change['id']}: {change['title']}", "--body", body]
-        url = self.run("gh", *args, *(["--draft"] if draft else [])).stdout.strip().splitlines()[-1]
+        url = self.run("gh", *args, *(["--draft"] if draft else [])).out.strip().splitlines()[-1]
         return {"number": int(url.rstrip("/").rsplit("/", 1)[-1]), "url": url, "draft": draft}
 
     def ready(self, change: dict[str, Any]) -> None:
@@ -67,42 +129,41 @@ class GitHub(Provider):
     def ci(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "checks", str(change["pr"]), "--json", "bucket", check=False)  # exit 8 = pending
         try:
-            buckets = {c["bucket"] for c in json.loads(r.stdout)}
-        except (ValueError, KeyError, TypeError):
-            if "no checks" in (r.stderr + r.stdout).lower():
+            found = buckets(json.loads(r.out))
+        except ValueError:
+            if "no checks" in (r.err + r.out).lower():
                 return "none"
-            raise failure("gh pr checks", r.stderr or r.stdout) from None
-        if buckets & {"fail", "cancel"}:
+            raise failure("gh pr checks", r.err or r.out) from None
+        if found & {"fail", "cancel"}:
             return "fail"
-        if "pending" in buckets:
+        if "pending" in found:
             return "pending"
-        return "pass" if "pass" in buckets else "none"
+        return "pass" if "pass" in found else "none"
 
     def merge(self, change: dict[str, Any], strategy: str) -> str:
         """Merges the PR once (a retry after a crash finds it merged). Returns the merge commit; if GitHub has not
         merged it yet, a marker that the merge was requested, so it is not requested twice."""
-        v = self.view(change, "state,mergeCommit")
-        if v["state"] != "MERGED":
+        v = self.view(change)
+        if v.state != "MERGED":
             msg = ["--subject", f"Integrate {change['id']}: {change['title']}"] if strategy != "rebase" else []
             self.run("gh", "pr", "merge", str(change["pr"]), f"--{strategy}", *msg)
-            v = self.view(change, "state,mergeCommit")
-        return self.merge_commit(change, v) if v["state"] == "MERGED" else f"pr-{change['pr']}-merge-requested"
+            v = self.view(change)
+        return self.merge_commit(change, v) if v.state == "MERGED" else f"pr-{change['pr']}-merge-requested"
 
-    def merge_commit(self, change: dict[str, Any], v: dict[str, Any]) -> str:
+    def merge_commit(self, change: dict[str, Any], v: PullRequest) -> str:
         """The merge commit of a merged PR: from `gh pr view`, else the API. Still none: fail (retried) rather than
         invent a reference."""
-        commit: dict[str, Any] = v.get("mergeCommit") or {}
-        sha = str(commit.get("oid") or "")
+        sha = v.merge_commit
         if not sha:
-            sha = self.run("gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}", "--jq", ".merge_commit_sha").stdout.strip()
+            sha = self.run("gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}", "--jq", ".merge_commit_sha").out.strip()
         if not sha or sha == "null":
             raise TransientError(f"PR #{change['pr']} is merged but GitHub shows no merge commit yet")
         return sha
 
     def state(self, change: dict[str, Any]) -> dict[str, Any]:
-        v = self.view(change, "state,mergeCommit")
-        if v["state"] != "MERGED":
-            return {"merged": False, "closed": v["state"] != "OPEN"}
+        v = self.view(change)
+        if v.state != "MERGED":
+            return {"merged": False, "closed": v.state != "OPEN"}
         self.catch_up()
         return {"merged": True, "closed": True, "commit": self.merge_commit(change, v)}
 
@@ -111,7 +172,7 @@ class GitHub(Provider):
         only; never a push)."""
         main = self.p.get("project", "main")
         self.run("git", "fetch", "-q", "origin", main, check=False)
-        on_main = self.run("git", "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout.strip() == main
-        clean = not self.run("git", "status", "--porcelain", "--untracked-files=no", check=False).stdout.strip()
+        on_main = self.run("git", "rev-parse", "--abbrev-ref", "HEAD", check=False).out.strip() == main
+        clean = not self.run("git", "status", "--porcelain", "--untracked-files=no", check=False).out.strip()
         if on_main and clean:
             self.run("git", "merge", "-q", "--ff-only", f"origin/{main}", check=False)

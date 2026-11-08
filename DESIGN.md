@@ -26,13 +26,14 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
-| `fm/providers/` | ~100 | one module per platform behind a small interface; `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
+| `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
+| `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
 | `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
-| `fm/briefs/*.md` | ~80 | the defining agent's, the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
+| `fm/briefs/*.md` | ~80 | the defining agent's (it plans), the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
 | `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
 
 Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, built to `panel/dist`.
@@ -116,7 +117,9 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-de
 
 **Defining agent** (`fm/briefs/define.md`): reads the repo (read only), settles what the task means, asks the owner
 only what only he can decide (`fm ask`, then ends its turn), may split into more issues (`fm add`), and ends with
-`fm ready --claim --criterion --detail`.
+`fm ready --claim --criterion --detail --plan PATH` (or `--no-plan "why trivial"`). It also reads the code and writes a
+plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
+risk); the issue gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
 
 Every brief starts by pointing the agent at the project's `LESSONS.md`: what misled earlier agents, in their words
 (each `--misled` text that is not «none» is appended; the owner prunes it).
@@ -220,6 +223,50 @@ closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Auton
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
 origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
+
+## Architecture
+
+Hexagonal-lite: a small core, ports only where something external varies, everything else outside. Not Clean Architecture
+nor full DDD; what is shared is a vocabulary: *task* (an issue in the backlog), *round* (one review pass), *risk* (low,
+medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act).
+
+Layers, outside in (`tach.toml`; a module imports its own layer and the ones below, never above):
+
+| Layer | Modules | Role |
+|---|---|---|
+| ui | `cli*`, `panel*` | the owner's and the agents' entry points; call the loop and below |
+| loop | `loop` | the process that ticks: does the I/O, calls the core |
+| steps | `sources`, `talk`, `health`, `metrics` | one step of a tick, or a view over several pieces |
+| services | `agents`, `integrate`, `pulls`, `sessions`, `lock` | the outside world: git, gh, claude, processes |
+| registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
+| adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
+| ports | `providers/__init__` (the `Provider` interface) | |
+| core | `risk`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+
+Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
+launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
+the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
+task.
+
+Rules (enforced by `make check`):
+- The core imports nothing above it. **One module runs programs**: `fm/proc.py` (`run`, `run_json`, `spawn`; it knows
+  nothing of git, gh or claude; a missing program or a timeout is a `ProcError`). Everything else calls it; ruff bans
+  `import subprocess` elsewhere (not `os.system`/`os.popen`). `proc` sits just above the core in the layers: the loop,
+  the services and the adapters use it, the core does not. The only other exceptions in `per-file-ignores`
+  (`pyproject.toml`) are the tests and `fm/lock.py`, which needs a process group and signals to stop a whole job at its
+  time limit (`start_new_session`, `killpg`), which `spawn` deliberately does not offer.
+- Data from outside is typed at the border: `providers/github.py` turns `gh`'s JSON into its own types
+  (`PullRequest`, the check buckets) with a small converter per shape, and a shape that does not fit is a
+  `ProviderError`; only those types go inward, never `gh`'s dicts.
+  The ratchet also counts `pylint: disable`, `pyright: basic|off` and `fmt: off|skip`.
+- An adapter imports neither the loop nor another adapter (tach).
+- Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services
+  gather the facts (git, gh, claude) and apply the result. New decisions go there, not into `integrate` or `loop`.
+- Files stay under 300 lines (`make size`, no exceptions): a module that grows is split along these layers.
+- Suppressions do not work: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments = false`, and `make suppressions` fails on `pyright: ignore` and `pylint: disable`.
+- Loosening a rule (`tach.toml`, the ruff ignores, `pyproject.toml`, the `suppressions` target) is the owner's call.
+
+The panel's TypeScript is out of this (a dependency check there can come later).
 
 ## Watching itself
 

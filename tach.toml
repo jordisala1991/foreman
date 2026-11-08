@@ -1,0 +1,115 @@
+# Architecture of fm (see DESIGN.md, "Architecture"), enforced by `make check` (tach check). Run through `uv run tach`.
+# `layers` goes from the outside in; a module may import its own layer and the ones below it, never above. A module with a
+# `depends_on` is held to that list instead: an adapter cannot reach another adapter.
+# Loosening a rule here is the owner's call.
+exact = false  # layers carry most rules; an unused depends_on is not an error
+forbid_circular_dependencies = true
+source_roots = ["."]
+root_module = "ignore"
+exclude = ["tests", "panel", "demo", ".venv", "**/__pycache__"]
+layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
+
+# ui: the owner's and the agents' entry points; they call the loop and everything below.
+[[modules]]
+path = "fm.cli"
+layer = "ui"
+[[modules]]
+path = "fm.cli_agent"
+layer = "ui"
+[[modules]]
+path = "fm.cli_common"
+layer = "ui"
+[[modules]]
+path = "fm.cli_parser"
+layer = "ui"
+[[modules]]
+path = "fm.panel"
+layer = "ui"
+[[modules]]
+path = "fm.panel_actions"
+layer = "ui"
+[[modules]]
+path = "fm.panel_views"
+layer = "ui"
+
+# loop: the process that ticks; does the I/O and calls the core.
+[[modules]]
+path = "fm.loop"
+layer = "loop"
+
+# steps: one step of a tick, or a view over several pieces.
+[[modules]]
+path = "fm.sources"
+layer = "steps"
+[[modules]]
+path = "fm.talk"
+layer = "steps"
+[[modules]]
+path = "fm.health"
+layer = "steps"
+[[modules]]
+path = "fm.metrics"
+layer = "steps"
+
+# services: git, claude and the lock: the outside world, called by the steps.
+[[modules]]
+path = "fm.agents"
+layer = "services"
+[[modules]]
+path = "fm.integrate"
+layer = "services"
+[[modules]]
+path = "fm.pulls"
+layer = "services"
+[[modules]]
+path = "fm.sessions"
+layer = "services"
+[[modules]]
+path = "fm.lock"
+layer = "services"
+
+# registry: the one place that knows the provider adapters.
+[[modules]]
+path = "fm.providers.registry"
+layer = "registry"
+
+# ports: the provider interface.
+[[modules]]
+path = "fm.providers"
+layer = "ports"
+
+# adapters: one per platform. Layer "adapters" keeps the core from importing them; a layer rule keeps them from the loop, and their `depends_on` from each other.
+[[modules]]
+path = "fm.providers.github"
+layer = "adapters"
+depends_on = ["fm.providers"]
+[[modules]]
+path = "fm.providers.local"
+layer = "adapters"
+depends_on = ["fm.providers"]
+
+# proc: the one module that runs programs; used by the loop, the services and the adapters, never by the core.
+[[modules]]
+path = "fm.proc"
+layer = "proc"
+
+# core: vocabulary and pure rules (risk, autonomy, guard), plus the plain files that do not vary (backlog.json, config).
+# No subprocess here (ruff, TID251 in pyproject.toml).
+[[modules]]
+path = "fm.risk"
+layer = "core"
+[[modules]]
+path = "fm.guard"
+layer = "core"
+[[modules]]
+path = "fm.backlog"
+layer = "core"
+[[modules]]
+path = "fm.costs"
+layer = "core"
+[[modules]]
+path = "fm.config"
+layer = "core"
+[[modules]]
+path = "fm.util"
+layer = "core"

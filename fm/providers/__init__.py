@@ -8,8 +8,6 @@ closed?), `ci` (the platform's checks), `pushed` (is the branch on the platform 
 Config: `[integrate] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
 `merge` (`squash` default | `merge` | `rebase`; local has no rebase) and `pr` (`draft` default | `done`)."""
 
-import re
-import subprocess
 from typing import Any
 
 from ..config import Project
@@ -20,6 +18,10 @@ PRS = ("draft", "done")
 
 class ConfigError(Exception):
     pass
+
+
+class ProviderError(Exception):
+    """A provider call that failed: git said no, or what the platform answered is not the shape fm expects."""
 
 
 class Transient(Exception):
@@ -77,29 +79,3 @@ def pr_mode(p: Project) -> str:
     if v not in PRS:
         raise ConfigError(f"[integrate] pr = {v!r} is not valid: use one of {', '.join(PRS)}")
     return str(v)
-
-
-def detect(p: Project) -> str:
-    """github when the repo's origin is on GitHub, else local."""
-    r = subprocess.run(["git", "-C", str(p.repo), "remote", "get-url", "origin"], capture_output=True, text=True, check=False)
-    return "github" if r.returncode == 0 and re.search(r"github\.com[:/]", r.stdout) else "local"
-
-
-def get(p: Project) -> Provider:
-    """The project's provider; a clear ConfigError on an unknown provider, merge or pr value."""
-    from .github import GitHub
-    from .local import Local
-
-    if "forge" in p.cfg["integrate"]:
-        raise ConfigError('[integrate] forge was renamed to provider: use `provider = "local"`')
-    name = p.get("integrate", "provider")
-    providers: dict[str, type[Provider]] = {"local": Local, "github": GitHub}
-    if name == "auto":
-        name = detect(p)
-    if name not in providers:
-        raise ConfigError(f"[integrate] provider = {name!r} is not valid: use one of auto, {', '.join(providers)}")
-    pr_mode(p)
-    prov = providers[name](p)
-    if merge_strategy(p) not in prov.merges:
-        raise ConfigError(f"[integrate] merge = {merge_strategy(p)!r} is not valid for {name}: use one of {', '.join(prov.merges)}")
-    return prov

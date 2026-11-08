@@ -27,6 +27,20 @@ def report_file(p: Project, iid: str) -> Path:
     return p.home / "reports" / f"{iid}.md"
 
 
+def plan_file(p: Project, iid: str) -> Path:
+    return p.home / "plans" / f"{iid}.md"
+
+
+def plan_section(i: dict[str, Any]) -> str:
+    if i.get("plan_file"):
+        return (
+            f"# The plan\nThe task has a plan: `{i['plan_file']}`. Read it whole and follow it. If it does not hold "
+            "on a detail (a name, a line, the order of steps), decide, and list it in your report under «Off the plan» with why; "
+            "if it would change the goal, the criterion, a decision or the out of scope, `fm ask` and end your turn."
+        )
+    return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and criterion."
+
+
 def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None = None) -> str:
     a: dict[str, Any] = i.get("acceptance") or {}
     values = {
@@ -43,6 +57,8 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "test": p.get("integrate", "test") or "(none configured)",
         "lessons": str(backlog.ensure_lessons(p)),
         "report": str(report_file(p, i["id"])),
+        "plan": str(plan_file(p, i["id"])),
+        "plan_section": plan_section(i),
         "round2": "",
         "resources": lock.describe(p.cfg),
         **(extra or {}),
@@ -58,7 +74,7 @@ def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
     wt = p.path("worktrees") / i["id"].lower()
     if not wt.exists():
         wt.parent.mkdir(parents=True, exist_ok=True)
-        exists = integrate.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).returncode == 0
+        exists = integrate.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).code == 0
         args = ["worktree", "add", str(wt), branch] if exists else ["worktree", "add", "-b", branch, str(wt), p.get("project", "main")]
         integrate.git(p.repo, *args)
     return wt, branch
@@ -77,6 +93,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         cwd = wt
     else:
         cwd = p.repo
+        plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
     backlog.update(p, i["id"], **keys)  # the guard reads the worktree from the backlog
     try:
         short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, kind), cwd)
@@ -142,6 +159,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
     review_file.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
         "round": rnd,
+        "plan": i.get("plan_file", ""),
         "tip": tip,
         "review_file": str(review_file),
         "round2": ROUND2 if rnd > 1 else "",
