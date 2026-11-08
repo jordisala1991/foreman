@@ -4,7 +4,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { LoadFailed, PermissionCard, QuestionCard, askedSince } from "./cards";
 import { useScope } from "./data";
-import { ScreenHead } from "./head";
+import { ScreenHead, Skel } from "./head";
 import { Small } from "./icons";
 import { contextOf, openGrants, openQuestions, summary, waiting } from "./Needs";
 import {
@@ -319,7 +319,7 @@ export function Home({ scope, all }: { scope: Product[]; all: boolean }) {
               </div>
             </div>
           ) : null}
-          {!loaded && !failed ? <div className="card quiet">{t("loading")}</div> : null}
+          {!loaded && !failed ? <Skel h={160} /> : null}
           {failed ? <LoadFailed retry={reload} /> : null}
           {loaded && w.messages.length && !asks ? <p className="note">{summary(w)}</p> : null}
         </section>
@@ -351,7 +351,7 @@ export function Home({ scope, all }: { scope: Product[]; all: boolean }) {
         ) : metricsFailed ? (
           <LoadFailed retry={reload} />
         ) : (
-          <div className="card quiet">{t("loading")}</div>
+          <Skel h={120} />
         )}
       </section>
       {latest.length ? (

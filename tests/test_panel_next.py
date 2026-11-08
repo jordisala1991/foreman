@@ -36,6 +36,7 @@ BUNDLE_URLS = {
     "http://www.w3.org/1999/xhtml",
     "http://www.w3.org/2000/svg",
     "http://www.w3.org/XML/1998/namespace",
+    "http://localhost",  # the base the router parses relative links against; never fetched
     "https://react.dev/errors/",
 }
 URL = re.compile(r"""https?://[^\s"'`)<>]+""")
@@ -344,12 +345,26 @@ class NextFilesTest(PanelCase):
 
     def test_the_bundled_packages_carry_their_licences(self):
         text = (NEXT / "LICENSES.txt").read_text()
-        for package in ("react", "react-dom", "@visx/scale", "@visx/shape", "d3-scale"):
+        for package in (
+            "react",
+            "react-dom",
+            "@visx/scale",
+            "@visx/shape",
+            "d3-scale",
+            "@tanstack/react-query",
+            "@tanstack/react-router",
+            "@tanstack/query-core",
+            "@tanstack/router-core",
+            "@tanstack/history",
+            "@tanstack/store",
+            "@tanstack/react-store",
+        ):
             self.assertRegex(text, rf"(?m)^{re.escape(package)} \d+\.\d+\.\d+ \((MIT|ISC)\)$")
 
-    def test_the_whole_new_panel_gzipped_is_under_150_kb(self):
+    def test_the_whole_new_panel_gzipped_is_under_200_kb(self):
+        # 200 KB, not 150: the owner chose TanStack Query + Router on 2026-11-07 and the panel runs on the local network
         total = sum(len(gzip.compress((NEXT / f).read_bytes(), 9)) for f in SERVED)
-        self.assertLessEqual(total, 150 * 1024, total)
+        self.assertLessEqual(total, 200 * 1024, total)
 
 
 def zero_day():
@@ -702,7 +717,7 @@ class NextPageTest(ProjectCase):
 
     def test_changing_the_period_drops_the_old_chart_until_the_answer_comes(self):
         out = self.how(click="30 días", hang=["/api/metrics?p=alpha&days=30"])
-        self.assertIn("Cargando", out["text"])
+        self.assertEqual(out["skeletons"], 1)  # a block where the chart comes, no «Cargando…» card
         self.assertEqual(out["charts"], [])
 
     def test_a_failed_answer_offers_to_retry(self):
@@ -881,7 +896,8 @@ class NextPageTest(ProjectCase):
     def test_the_agents_screen_waits_for_the_answer(self):
         out = self.mount({"hash": "#/agents", "answers": {"/api/projects": self.PROJECTS},
                           "hang": ["/api/agents?p=alpha"]})  # fmt: skip
-        self.assertIn("Cargando", out["text"])
+        self.assertEqual(out["skeletons"], 1)
+        self.assertIn("Agentes", out["text"])  # the header is there from the first frame
 
     def test_more_lists_backlog_wiki_and_system(self):
         out = self.mount({"hash": "#/more", "answers": {"/api/projects": self.PROJECTS}})

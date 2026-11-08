@@ -4,7 +4,7 @@
 import { useRef, useState } from "react";
 import { LoadFailed, PermissionCard, QuestionCard, askedSince, titleParts } from "./cards";
 import { useScope, type Scope } from "./data";
-import { ScreenHead } from "./head";
+import { ScreenHead, Skel } from "./head";
 import { Small } from "./icons";
 import { dayWord, post, t, type Decision, type Grant, type Message, type Product } from "./lib";
 
@@ -95,7 +95,7 @@ export function Needs({ scope, all }: { scope: Product[]; all: boolean }) {
       <ScreenHead title={t("tab_needs")} product={head} all={all ? scope : undefined} sub={summary(w)} />
       <div className="needs-grid">
         <div className="col">
-          {!loaded && !failed ? <div className="card quiet">{t("loading")}</div> : null}
+          {!loaded && !failed ? <Skel h={160} /> : null}
           {failed ? <LoadFailed retry={reload} /> : null}
           {nothing ? (
             <div className="card empty big">
