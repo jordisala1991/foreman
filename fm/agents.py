@@ -7,6 +7,7 @@ from typing import Any
 
 from . import backlog, costs, integrate, lock, providers, sessions, util
 from .config import Project
+from .providers import registry
 
 BRIEFS = Path(__file__).parent / "briefs"
 
@@ -29,7 +30,7 @@ def report_file(p: Project, iid: str) -> Path:
 
 def push_rule(p: Project, i: dict[str, Any]) -> str:
     """With GitHub and `pr = draft` the branch must be on origin early, so its draft PR opens while the agent works."""
-    if providers.get(p).name != "github" or providers.pr_mode(p) != "draft":
+    if registry.get(p).name != "github" or providers.pr_mode(p) != "draft":
         return ""
     branch = i.get("branch", "")
     return (
