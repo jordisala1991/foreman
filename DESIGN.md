@@ -79,7 +79,9 @@ on). The heartbeat is written before every step, so a long test run does not loo
    `{key, task, action, text}` acts on that open task through the owner's own commands: `note` (text reaches its
    agent like an answer), `reject` (text; as `fm reject`), `accept` (as `fm accept`), `done` (closed as done, merged
    outside fm), `cancel` (as `fm cancel`). Applied once per source and key (`state/applied/`). Unknown or closed
-   task, unknown action, or an action invalid for the task's state: nothing changes, logged in `state/errors.jsonl`.
+   task, unknown action, missing key, or an action invalid for the task's state: nothing changes, logged in
+   `state/errors.jsonl`, not retried. A transient failure (accept before its check, busy checkout, hung stop) is
+   logged and the same key is tried again next tick.
    Cursors in `state/cursors/`. None shipped (the owner's call for now).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
    (`claude --bg --resume SID … MESSAGE`), when that session is not busy; dropped if the task closed meanwhile;

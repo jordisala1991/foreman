@@ -7,8 +7,9 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
     commands: note (text reaches its agent like an answer), reject (text; `fm reject`), accept (`fm accept`),
     done (closed as done: merged outside fm), cancel (`fm cancel`; text is the reason). A review on a task's own
     change targets that task; it is not a new issue. Applied once per source and key (`state/applied/`); an unknown
-    or closed task, an unknown action or one not valid for the task's state changes nothing and is logged in
-    `state/errors.jsonl`. None is shipped yet: the contract is the point; the health checks (health.py) are the
+    or closed task, an unknown action, a missing key or one not valid for the task's state changes nothing and is logged
+    in `state/errors.jsonl` (and is not retried); a transient failure (accept before its check, a busy checkout, a
+    hung stop) is logged and the same key is tried again next tick. None is shipped yet: the contract is the point; the health checks (health.py) are the
     first producer of findings."""
 
 from __future__ import annotations
@@ -44,27 +45,36 @@ def run(p: Project) -> list[str]:
             except ValueError:
                 continue
             if not isinstance(s, dict):
+                fail(p, exe.name, "a signal must be a JSON object", ln)
                 continue
             if "cursor" in s:
                 util.write_text_atomic(cursor_file, str(s["cursor"]))
-            elif s.get("task") and s.get("key"):
+            elif s.get("task") and not s.get("key"):
+                fail(p, exe.name, "a signal with a task needs a key", s)
+            elif s.get("task"):
                 key = str(s["key"])
                 applied = p.state / "applied" / exe.name
-                seen = applied.read_text().splitlines() if applied.exists() else []
-                if key in seen:
+                if key in {x.get("key") for x in util.read_jsonl(applied)}:
                     continue
-                util.write_text_atomic(applied, "\n".join([*seen, key]) + "\n")  # once, even if it fails
                 try:
                     apply(p, f"{exe.name}:{key}", s)
-                except (backlog.BacklogError, integrate.IntegrateError, ValueError) as e:
-                    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}",
-                                                                 "error": str(e), "signal": s})
+                except (backlog.BacklogError, ValueError) as e:  # permanent: it will not become valid by waiting
+                    fail(p, exe.name, str(e), s)
+                except Exception as e:  # noqa: BLE001 - transient (a busy checkout, a hung stop): tried again next tick
+                    fail(p, exe.name, f"{e!r} (will be tried again)", s)
+                    continue
+                util.append_jsonl(applied, {"key": key, "at": util.now()})
             elif s.get("key") and s.get("title"):
                 iid = backlog.add(p, s["title"], detail=s.get("detail", ""), status="triage",
                                   source=f"{exe.name}:{s['key']}")
                 if iid:
                     filed.append(iid)
     return filed
+
+
+def fail(p: Project, name: str, error: str, signal: object) -> None:
+    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {name}", "error": error,
+                                                 "signal": signal})
 
 
 ACTIONS = ("note", "reject", "accept", "done", "cancel")
