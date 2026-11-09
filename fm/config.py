@@ -34,7 +34,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "test": "",
     },
     # risk: label -> path patterns; the label is what the reason says. [risk.high] replaces the default table whole.
+    # large_lines: a change over this many counted lines (tests, generated and lock files excluded) is at least medium
     "risk": {
+        "large_lines": 400,
         "high": {"config, secrets or CI": ["fm.toml", ".github/", "*.lock", "*secret*", "*.env"]},
         "medium": {"dependencies": ["requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "go.mod", "Cargo.toml"]},
     },

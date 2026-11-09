@@ -49,6 +49,14 @@ class Facts:
     ci: str = ""
 
 
+UNCOUNTED = ["tests/", "test/", "test_*", "*_test.*", "*.lock", "package-lock.json", "*.min.js", "*_pb2.py", "*.generated.*", "generated/"]
+
+
+def counted_lines(files: list[dict[str, Any]]) -> int:
+    """Changed lines that count towards size: tests, generated and lock files are left out."""
+    return sum(x["added"] + x["deleted"] for x in files if not path_matches(x["path"], UNCOUNTED))
+
+
 def _path_reasons(rules: Mapping[str, list[str]], paths: list[str]) -> list[str]:
     out: list[str] = []
     for label, patterns in rules.items():
@@ -72,9 +80,11 @@ def score(p: Project, f: Facts) -> tuple[str, list[str]]:
     ]
     high += [why for hit, why in evidence if hit]
     medium = _path_reasons(p.get("risk", "medium"), paths)
+    lines, limit = counted_lines(f.files), p.get("risk", "large_lines")
     doubt = [
         (bool(f.deleted), f"deletes files ({', '.join(f.deleted[:3])}) [diff]"),
         (f.tests == "none", "no test command to run [tests]"),
+        (lines > limit, f"large change, reviews miss more past ~{limit} lines ({lines} lines) [diff]"),
     ]
     medium += [why for hit, why in doubt if hit]
     risk = "high" if high else "medium" if medium else "low"
