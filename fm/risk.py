@@ -12,7 +12,6 @@ from .config import Project
 
 RISKS = ("low", "medium", "high")
 AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
-DEPENDENCY_FILES = ("requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "go.mod", "Cargo.toml")
 
 
 def review_step(v: Mapping[str, Any], max_rounds: int) -> str:
@@ -27,7 +26,7 @@ def review_step(v: Mapping[str, Any], max_rounds: int) -> str:
     return "queue"
 
 
-def is_sensitive(path: str, patterns: list[str]) -> bool:
+def path_matches(path: str, patterns: list[str]) -> bool:
     for pat in patterns:
         if pat.endswith("/"):
             if path.startswith(pat) or f"/{pat}" in f"/{path}":
@@ -50,38 +49,41 @@ class Facts:
     ci: str = ""
 
 
-def _high_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
-    sensitive = [x for x in paths if is_sensitive(x, p.get("integrate", "sensitive"))]
-    reasons = [
-        (f.commits == 0 or not f.files, "the branch has no changes"),
-        (f.tests == "fail", "tests fail"),
-        (f.ci == "fail", "CI fails"),
-        (f.conflict, "conflicts with main"),
-        (bool(sensitive), "touches sensitive paths: " + ", ".join(sensitive[:5])),
-        (not f.review.strip().lower().startswith("clean"), "review not clean: " + (f.review.strip()[:120] or "no review reported")),
-        (lines > p.get("integrate", "medium_lines"), f"{lines} lines changed"),
-    ]
-    return [why for hit, why in reasons if hit]
-
-
-def _medium_risks(p: Project, f: Facts, lines: int, paths: list[str]) -> list[str]:
-    reasons = [
-        (p.get("integrate", "small_lines") < lines <= p.get("integrate", "medium_lines"), f"{lines} lines changed"),
-        (f.tests == "none", "no test command to run"),
-        (bool(f.deleted), "deletes files: " + ", ".join(f.deleted[:5])),
-        (any(fnmatch.fnmatch(Path(x).name, pat) for x in paths for pat in DEPENDENCY_FILES), "changes dependencies"),
-        (len(paths) > 8, f"{len(paths)} files"),
-    ]
-    return [why for hit, why in reasons if hit]
+def _path_reasons(rules: Mapping[str, list[str]], paths: list[str]) -> list[str]:
+    out: list[str] = []
+    for label, patterns in rules.items():
+        hit = [x for x in paths if path_matches(x, patterns)]
+        if hit:
+            out.append(f"touches {label} ({', '.join(hit[:3])}) [diff]")
+    return out
 
 
 def score(p: Project, f: Facts) -> tuple[str, list[str]]:
-    """(risk, reasons): high beats medium beats low; each reason says what raised it."""
-    lines = sum(x["added"] + x["deleted"] for x in f.files)
+    """(risk, reasons): the higher of impact (paths, deletions) and doubt (tests, CI, conflict); a review never lowers it.
+    Open findings add a [review] reason but not a level: they are a gate in integrate.merges_alone. Up to 3 reasons,
+    high ones first, each ending with its source in brackets."""
     paths = [x["path"] for x in f.files]
-    high, medium = _high_risks(p, f, lines, paths), _medium_risks(p, f, lines, paths)
+    high = _path_reasons(p.get("risk", "high"), paths)
+    evidence = [
+        (f.commits == 0 or not f.files, "the branch has no changes [diff]"),
+        (f.tests == "fail", "tests fail [tests]"),
+        (f.ci == "fail", "CI fails [ci]"),
+        (f.conflict, "conflicts with main [git]"),
+    ]
+    high += [why for hit, why in evidence if hit]
+    medium = _path_reasons(p.get("risk", "medium"), paths)
+    doubt = [
+        (bool(f.deleted), f"deletes files ({', '.join(f.deleted[:3])}) [diff]"),
+        (f.tests == "none", "no test command to run [tests]"),
+    ]
+    medium += [why for hit, why in doubt if hit]
     risk = "high" if high else "medium" if medium else "low"
-    return risk, high + medium or ["small, tests green, review clean"]
+    shown = high + medium + ([] if f.review.strip().lower().startswith("clean") else [_review_reason(f.review)])
+    return risk, shown[:3] or ["nothing sensitive touched, tests green, no open findings [diff]"]
+
+
+def _review_reason(review: str) -> str:
+    return f"open review findings ({review.strip()[:120]}) [review]" if review.strip() else "no review reported [review]"
 
 
 def allows(autonomy: str, risk: str) -> bool:

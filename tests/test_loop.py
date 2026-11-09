@@ -279,11 +279,11 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(e.issue(iid)["status"], "done")
 
-    def test_autonomy_low_leaves_medium_and_high(self):
+    def test_a_big_diff_alone_does_not_raise_risk(self):
         e = Env(test="true", autonomy="low")
-        big = self.deliver(e, lines=120)
+        big = self.deliver(e, lines=400)
         loop.tick(e.p)
-        self.assertEqual((e.issue(big)["status"], e.issue(big)["check"]["risk"]), ("in review", "medium"))
+        self.assertEqual((e.issue(big)["status"], e.issue(big)["check"]["risk"]), ("done", "low"))
 
     def test_failing_tests_are_high(self):
         e = Env(test="false", autonomy="medium")
@@ -321,26 +321,12 @@ class Queue(unittest.TestCase):
             f.write("# fixed\n")
         git(e.repo.parent / wt, "commit", "-qam", "fix")
         backlog.set_status(e.p, iid, "in review")
-        e.review(iid, medium=1)  # round 2 still open: to the owner, as high risk
+        e.review(iid, medium=1)  # round 2 still open: to the owner, whatever the autonomy
         self.assertIn("Round: 2", e.calls()[-1]["argv"][-1])
         loop.tick(e.p)
         i = e.issue(iid)
-        self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "high"))
+        self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
         self.assertTrue(any("open after round 2" in r for r in i["check"]["reasons"]))
-
-    def test_open_or_missing_review_is_high(self):
-        e = Env(test="true", autonomy="medium")
-        f = [{"path": "a.py", "added": 1, "deleted": 0}]
-        kw = dict(tests="pass", files=f, deleted=[], conflict=False, commits=1)
-        self.assertEqual(risk.score(e.p, risk.Facts(review="open after round 2: H 0, M 1", **kw))[0], "high")
-        self.assertEqual(risk.score(e.p, risk.Facts(review="", **kw))[0], "high")
-        self.assertEqual(risk.score(e.p, risk.Facts(review="clean", **kw))[0], "low")
-
-    def test_sensitive_path_is_high(self):
-        e = Env(test="true")
-        self.assertTrue(risk.is_sensitive(".github/workflows/ci.yml", e.p.get("integrate", "sensitive")))
-        self.assertTrue(risk.is_sensitive("conf/fm.toml", e.p.get("integrate", "sensitive")))
-        self.assertFalse(risk.is_sensitive("src/app.py", e.p.get("integrate", "sensitive")))
 
     def test_a_branch_that_conflicts_after_main_moved_goes_back_to_its_agent(self):
         e = Env(test="true")
@@ -438,7 +424,16 @@ class Queue(unittest.TestCase):
         backlog.set_status(e.p, iid, "in review")
         loop.tick(e.p)
         i = e.issue(iid)
-        self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "high"))
+        self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
+
+    def test_only_low_findings_open_still_merge_alone(self):
+        e = Env(test="true", autonomy="medium")
+        iid = self.deliver(e, low=1)
+        loop.tick(e.p)
+        self.fix_and_resubmit(e, iid)
+        e.review(iid, low=1)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "done")
 
     def test_review_step_table(self):
         rows = [
