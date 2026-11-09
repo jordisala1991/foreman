@@ -74,7 +74,7 @@ def command(p: Project, agent: Agent, prompt: str, resume: str | None = None) ->
 
 def _run(cmd: list[str], cwd: Path) -> str:
     try:
-        r = proc.run(cmd, cwd=cwd, timeout=120, env=token.child_env())
+        r = proc.run(cmd, cwd=cwd, timeout=120, env=token.child_env(cmd[0]))
     except proc.ProcError as e:
         raise SessionError(f"claude did not start: {e}") from e
     m = BACKGROUNDED.search(r.out + r.err)

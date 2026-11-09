@@ -1,15 +1,21 @@
+import json
 import os
 import plistlib
 import threading
 import time
 import unittest
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from helpers import Env, fm
 
-from fm import backlog, health, loop, token
+from fm import backlog, health, loop, token, util
 
 SECRET = "sk-ant-oat01-SECRET"
+
+
+def LOGIN_OFF(claude: str) -> token.Login:
+    return token.Login(False)
 
 
 class Token(unittest.TestCase):
@@ -26,14 +32,52 @@ class Token(unittest.TestCase):
         loop.tick(self.p)
         return self.e.calls()[0]["token"]
 
-    def test_loop_passes_the_keychain_token_to_the_agents(self):
+    def set_login(self, logged_in: bool, expires: datetime | None = None) -> None:
+        data: dict[str, object] = {"loggedIn": logged_in}
+        if expires:
+            data["loginExpiresAt"] = expires.isoformat().replace("+00:00", "Z")
+        (self.e.bin / "login.json").write_text(json.dumps(data))
+
+    def test_login_works_so_the_agents_get_no_token(self):
+        os.environ[token.ENV] = "from-env"
+        self.set_login(True, datetime.now(UTC) + timedelta(days=30))
+        with mock.patch.object(token, "keychain", lambda: SECRET):
+            self.assertIsNone(self.launch())
+
+    def test_login_expired_so_the_agents_get_the_keychain_token(self):
+        self.set_login(True, datetime.now(UTC) - timedelta(hours=1))
         with mock.patch.object(token, "keychain", lambda: SECRET):
             self.assertEqual(self.launch(), SECRET)
 
-    def test_env_token_wins_over_the_keychain(self):
+    def test_login_not_working_and_env_token_wins_over_the_keychain(self):
         os.environ[token.ENV] = "from-env"
+        self.set_login(False)
         with mock.patch.object(token, "keychain", lambda: SECRET):
             self.assertEqual(self.launch(), "from-env")
+
+    def test_health_on_the_fallback_says_so(self):
+        f = health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: True, login=LOGIN_OFF)
+        self.assertEqual(f[0]["key"], "token-fallback")
+        self.assertIn("do not show in the Claude app; run /login", f[0]["detail"])
+
+    def test_health_is_quiet_while_the_login_works_and_warns_before_it_expires(self):
+        def ok(claude: str) -> token.Login:
+            return token.Login(True, datetime.now(UTC) + timedelta(days=30))
+
+        def soon(claude: str) -> token.Login:
+            return token.Login(True, datetime.now(UTC) + timedelta(days=2))
+
+        self.assertEqual(health.claude_token(self.p, read=lambda: "", login=ok), [])
+        f = health.claude_token(self.p, read=lambda: "", login=soon)
+        self.assertEqual(f[0]["key"], "login-expiring")
+        self.assertIn("/login", f[0]["detail"])
+
+    def test_login_status_reads_claude_auth_status(self):
+        self.set_login(True, datetime.now(UTC) + timedelta(days=1))
+        claude = str(self.e.bin / "claude")
+        self.assertTrue(token.login_status(claude).expiring())
+        self.set_login(False)
+        self.assertFalse(token.login_status(claude).ok)
 
     def test_keychain_is_read_with_the_documented_command(self):
         with mock.patch("fm.proc.run") as run:
@@ -43,7 +87,7 @@ class Token(unittest.TestCase):
         self.assertEqual(run.call_args[0][0][-3:], ["-s", "claude-oauth-token", "-w"])
 
     def test_health_says_no_token_with_the_renew_command(self):
-        f = health.claude_token(self.p, read=lambda: "")
+        f = health.claude_token(self.p, read=lambda: "", login=LOGIN_OFF)
         self.assertEqual(f[0]["title"], "No token")
         self.assertIn("security add-generic-password -U", f[0]["detail"])
 
@@ -55,14 +99,11 @@ class Token(unittest.TestCase):
             return False
 
         for _ in range(2):
-            f = health.claude_token(self.p, read=lambda: SECRET, works=bad)
+            f = health.claude_token(self.p, read=lambda: SECRET, works=bad, login=LOGIN_OFF)
         self.assertEqual(f[0]["title"], "Token does not work")
         self.assertIn("claude setup-token", f[0]["detail"])
         self.assertEqual(len(calls), 1)
         self.assertNotIn(SECRET, (self.p.state / "token.json").read_text())
-
-    def test_health_is_quiet_with_a_working_token(self):
-        self.assertEqual(health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: True), [])
 
     def test_launchd_makes_two_jobs_without_the_token(self):
         os.environ[token.ENV] = SECRET
@@ -81,6 +122,7 @@ class Token(unittest.TestCase):
         self.assertIn("claude setup-token", out)
 
     def test_fm_health_cli_shows_the_renew_command_for_no_token(self):
+        self.set_login(False)
         with mock.patch.object(token, "keychain", lambda: ""):
             out = fm(self.p.home, "health")
         self.assertIn("security add-generic-password -U", out)
@@ -90,12 +132,14 @@ class Token(unittest.TestCase):
         def locked() -> str:
             raise token.Unreadable("locked")
 
-        for _ in range(health.KEYCHAIN_FAILS - 1):
-            self.assertEqual(health.claude_token(self.p, read=locked), [])  # a transient failure shows nothing
-        f = health.claude_token(self.p, read=locked)
+        self.assertEqual(health.claude_token(self.p, read=locked, login=LOGIN_OFF), [])  # a transient failure shows nothing
+        self.assertEqual(health.claude_token(self.p, read=locked, login=LOGIN_OFF), [])  # and a second check does not count
+        stamp = (datetime.now() - timedelta(minutes=health.KEYCHAIN_MINUTES + 1)).strftime("%Y-%m-%d %H:%M:%S")
+        util.write_json(self.p.state / "keychain.json", {"since": stamp})  # unreadable for longer than that
+        f = health.claude_token(self.p, read=locked, login=LOGIN_OFF)
         self.assertEqual(f[0]["title"], "Keychain unreadable: locked")
-        self.assertEqual(health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: True), [])  # a good read resets
-        self.assertEqual(health.claude_token(self.p, read=locked), [])
+        health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: True, login=LOGIN_OFF)  # a good read resets
+        self.assertEqual(health.claude_token(self.p, read=locked, login=LOGIN_OFF), [])
         with mock.patch("fm.proc.run", return_value=mock.Mock(code=36, out="", err="")), self.assertRaises(token.Unreadable):
             token.keychain()
         with mock.patch("fm.proc.run", return_value=mock.Mock(code=44, out="", err="")):
@@ -111,7 +155,8 @@ class Token(unittest.TestCase):
             return False
 
         t0 = time.time()
-        self.assertEqual(health.claude_token(self.p, read=lambda: SECRET, works=slow, wait=False), [])
+        first = health.claude_token(self.p, read=lambda: SECRET, works=slow, wait=False, login=LOGIN_OFF)
+        self.assertEqual(first[0]["key"], "token-fallback")  # until the probe answers
         self.assertLess(time.time() - t0, 2)
         self.assertTrue(started.wait(5))
         gate.set()
@@ -119,7 +164,7 @@ class Token(unittest.TestCase):
             if (self.p.state / "token.json").exists():
                 break
             time.sleep(0.05)
-        self.assertEqual(health.claude_token(self.p, read=lambda: SECRET, works=slow, wait=False)[0]["key"], "token-bad")
+        self.assertEqual(health.claude_token(self.p, read=lambda: SECRET, works=slow, wait=False, login=LOGIN_OFF)[0]["key"], "token-bad")
 
     def fake_claude(self, code: int, err: str) -> str:
         path = self.e.tmp / f"claude{code}"

@@ -49,29 +49,56 @@ def _probe_unlocked(p: Project, tok: str, stamp: str, works: Callable[[str, str]
         _probing.release()
 
 
-KEYCHAIN_FAILS = 3  # consecutive unreadable checks before it is a finding: one transient failure is not
+KEYCHAIN_MINUTES = 5  # unreadable this long before it is a finding: a transient failure is not
 
 
 def keychain_unreadable(p: Project, reason: str) -> list[Finding]:
-    fails = int(util.read_json(p.state / "keychain.json", {}).get("fails") or 0) + 1
-    util.write_json(p.state / "keychain.json", {"fails": fails})
-    if fails < KEYCHAIN_FAILS:
+    """Counted by time, so one `fm health` and the panel agree: the first failure is stamped, a later check shows it."""
+    state = util.read_json(p.state / "keychain.json", {})
+    since = state.get("since") or util.now()
+    util.write_json(p.state / "keychain.json", {"since": since})
+    if (util.age_s(since) or 0) < 60 * KEYCHAIN_MINUTES:
         return []
-    detail = f"The Keychain has failed {fails} checks in a row ({reason}); agents launch without a token."
+    detail = f"The Keychain has been unreadable since {since} ({reason}); agents launch without a token."
     return [{"key": "keychain-unreadable", "title": f"Keychain unreadable: {reason}", "detail": detail}]
 
 
-def claude_token(p: Project, read: Callable[[], str] | None = None, works: Callable[[str, str], bool] = token.works, wait: bool = True) -> list[Finding]:
-    """No token, or one Claude rejects. The probe runs at most every 30 minutes and its result is cached (never the
-    token). With `wait` False (the panel's request thread) a stale probe runs in the background, one at a time, and the
-    last result is shown meanwhile. A Keychain that cannot be read is a finding only after KEYCHAIN_FAILS checks in a row."""
+def login_expiring(login: token.Login) -> list[Finding]:
+    if not login.expiring() or login.expires is None:
+        return []
+    when = login.expires.astimezone().strftime("%Y-%m-%d %H:%M")
+    return [{"key": "login-expiring", "title": "The Claude login expires soon", "detail": f"It expires on {when}. Run /login to renew it."}]
+
+
+def claude_token(
+    p: Project,
+    read: Callable[[], str] | None = None,
+    works: Callable[[str, str], bool] = token.works,
+    wait: bool = True,
+    login: Callable[[str], token.Login] = token.login_status,
+) -> list[Finding]:
+    """The agents' authentication. While the normal login works the token is not used: only a warning when the login
+    is about to expire. When it does not work the agents run on the long-lived token: no token, a token Claude rejects,
+    or (the token works) a line saying they run on it and do not show in the Claude app. The probe runs at most every 30
+    minutes and its result is cached (never the token); with `wait` False (the panel's request thread) a stale probe
+    runs in the background, one at a time. An unreadable Keychain is a finding after KEYCHAIN_MINUTES."""
+    claude = p.get("agents", "claude")
+    status = login(claude)
+    if status.ok:
+        return login_expiring(status)
     try:
         tok = token.get(read)
     except token.Unreadable as e:
         return keychain_unreadable(p, str(e))
-    util.write_json(p.state / "keychain.json", {"fails": 0})
+    util.write_json(p.state / "keychain.json", {})
     if not tok:
-        return [{"key": "token-missing", "title": "No token", "detail": f"No Claude token for the agents. Create it: {token.RENEW_CMD}."}]
+        return [
+            {
+                "key": "token-missing",
+                "title": "No token",
+                "detail": f"The Claude login does not work (run /login) and there is no fallback token. Create it: {token.RENEW_CMD}.",
+            }
+        ]
     cache = util.read_json(p.state / "token.json", {})
     stamp = hashlib.sha256(tok.encode()).hexdigest()[:16]
     if cache.get("stamp") != stamp or (util.age_s(cache.get("at")) or 1e9) > 1800:
@@ -82,8 +109,20 @@ def claude_token(p: Project, read: Callable[[], str] | None = None, works: Calla
         if cache.get("stamp") != stamp:
             cache = {"ok": True}
     if not cache.get("ok"):
-        return [{"key": "token-bad", "title": "Token does not work", "detail": f"Claude rejects the token. Renew it: {token.RENEW_CMD}."}]
-    return []
+        return [
+            {
+                "key": "token-bad",
+                "title": "Token does not work",
+                "detail": f"The login does not work (run /login) and Claude rejects the fallback token. Renew it: {token.RENEW_CMD}.",
+            }
+        ]
+    return [
+        {
+            "key": "token-fallback",
+            "title": "Agents run on the long-lived token",
+            "detail": "Agents run on the long-lived token: they do not show in the Claude app; run /login to renew.",
+        }
+    ]
 
 
 def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:

@@ -24,6 +24,9 @@ FAKE = textwrap.dedent("""\
     if a[:1] == ["agents"]:
         print(open(os.path.join(d, "agents.json")).read() if os.path.exists(os.path.join(d, "agents.json")) else "[]")
         sys.exit(0)
+    if a[:2] == ["auth", "status"]:
+        print(open(os.path.join(d, "login.json")).read() if os.path.exists(os.path.join(d, "login.json")) else '{"loggedIn": true}')
+        sys.exit(0)
     if a[:1] == ["stop"]:
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:

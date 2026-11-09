@@ -72,7 +72,7 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 
 ## The loop
 
-A plain process, no model (`fm loop`; `fm launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. The Claude token is read from the Keychain, never put in the plist); one per registry (a lock file).
+A plain process, no model (`fm loop`; `fm launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Agents use the normal claude.ai login, so they show in the Claude app; only while it does not work (`claude auth status`) the loop puts the Keychain token in their environment, never in the plist); one per registry (a lock file).
 Each tick, per project, each step isolated (an exception goes to `state/errors.jsonl`, which a health check turns
 into a finding), and inside a step each issue isolated (a failure blocks that issue with the reason; the others go
 on). The heartbeat is written before every step, so a long test run does not look like a dead loop.
