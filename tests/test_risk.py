@@ -79,3 +79,30 @@ class Score(unittest.TestCase):
         self.assertTrue(risk.path_matches(".github/workflows/ci.yml", pats))
         self.assertTrue(risk.path_matches("conf/fm.toml", pats))
         self.assertFalse(risk.path_matches("src/app.py", pats))
+
+
+def sized(*pairs: tuple[str, int]) -> risk.Facts:
+    return facts(*[p for p, _ in pairs]).__class__(**{**facts().__dict__, "files": [{"path": p, "added": n, "deleted": 0} for p, n in pairs]})
+
+
+class LargeChange(unittest.TestCase):
+    def test_450_counted_lines_on_an_ordinary_file_is_medium_with_the_reason(self):
+        r, why = risk.score(project(), sized(("app.py", 450)))
+        self.assertEqual(r, "medium")
+        self.assertIn("large change, reviews miss more past ~400 lines (450 lines) [diff]", why)
+
+    def test_lines_under_tests_do_not_count(self):
+        self.assertEqual(risk.score(project(), sized(("app.py", 150), ("tests/test_a.py", 300)))[0], "low")
+
+    def test_lock_and_generated_files_do_not_count(self):
+        self.assertEqual(risk.score(project(), sized(("generated/x.py", 900)))[0], "low")
+        self.assertEqual(risk.score(project("[risk.high]\n"), sized(("uv.lock", 900)))[0], "low")
+
+    def test_large_change_on_a_high_path_is_high_with_the_path_reason_first(self):
+        r, why = risk.score(project(), sized((".github/x.yml", 450)))
+        self.assertEqual(r, "high")
+        self.assertTrue(why[0].startswith("touches config, secrets or CI"))
+        self.assertTrue(why[1].startswith("large change"))
+
+    def test_large_lines_is_configurable(self):
+        self.assertEqual(risk.score(project("[risk]\nlarge_lines = 100\n"), sized(("app.py", 150)))[0], "medium")
