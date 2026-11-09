@@ -213,14 +213,14 @@ class Review_(unittest.TestCase):
         pulls._settle(g.e.p, Down(), g.e.issue(iid), {"head": "h"}, [Thread("A", "k", False), Thread("B", "k", False)])
         self.assertEqual(tried, ["A"])
 
-    def test_rejected_inline_comments_are_not_counted_new_next_tip(self):
+    def test_rejected_inline_comments_are_not_counted_new(self):
         g, iid = self.make()
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
         g.set(reject_inline=True)
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
-        g.set(reject_inline=False)
         commit(g, iid)
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
-        self.assertNotIn("since last push", self.pr(g)["reviews"][0]["body"])
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\nF2 | M | app.py:4 | what two\n", (0, 2, 0))
+        body = self.pr(g)["reviews"][1]["body"]
+        self.assertIn(verdict.SINCE.format(fixed=0, new=0), body)
 
     def test_the_second_review_counts_fixed_and_new(self):
         g, iid = self.make()
