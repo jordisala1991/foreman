@@ -8,8 +8,6 @@ session working but its transcript silent for `stuck_minutes`) · agent stopped 
 · orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
 on main's head, every `ci_every_minutes`) · loop step errors."""
 
-import hashlib
-import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -33,36 +31,6 @@ def loop_dead(p: Project) -> list[Finding]:
     return []
 
 
-_probing = threading.Lock()
-
-
-def _probe(p: Project, tok: str, stamp: str, works: Callable[[str, str], bool]) -> dict[str, Any]:
-    cache = {"stamp": stamp, "at": util.now(), "ok": works(p.get("agents", "claude"), tok)}
-    util.write_json(p.state / "token.json", cache)
-    return cache
-
-
-def _probe_unlocked(p: Project, tok: str, stamp: str, works: Callable[[str, str], bool]) -> None:
-    try:
-        _probe(p, tok, stamp, works)
-    finally:
-        _probing.release()
-
-
-KEYCHAIN_MINUTES = 5  # unreadable this long before it is a finding: a transient failure is not
-
-
-def keychain_unreadable(p: Project, reason: str) -> list[Finding]:
-    """Counted by time, so one `fm health` and the panel agree: the first failure is stamped, a later check shows it."""
-    state = util.read_json(p.state / "keychain.json", {})
-    since = state.get("since") or util.now()
-    util.write_json(p.state / "keychain.json", {"since": since})
-    if (util.age_s(since) or 0) < 60 * KEYCHAIN_MINUTES:
-        return []
-    detail = f"The Keychain has been unreadable since {since} ({reason}); agents launch without a token."
-    return [{"key": "keychain-unreadable", "title": f"Keychain unreadable: {reason}", "detail": detail}]
-
-
 def login_expiring(login: token.Login) -> list[Finding]:
     if not login.expiring() or login.expires is None:
         return []
@@ -74,23 +42,17 @@ def claude_token(
     p: Project,
     read: Callable[[], str] | None = None,
     works: Callable[[str, str], bool] = token.works,
-    wait: bool = True,
+    probe: bool = True,
     login: Callable[[str], token.Login] = token.login_status,
 ) -> list[Finding]:
     """The agents' authentication. While the normal login works the token is not used: only a warning when the login
-    is about to expire. When it does not work the agents run on the long-lived token: no token, a token Claude rejects,
-    or (the token works) a line saying they run on it and do not show in the Claude app. The probe runs at most every 30
-    minutes and its result is cached (never the token); with `wait` False (the panel's request thread) a stale probe
-    runs in the background, one at a time. An unreadable Keychain is a finding after KEYCHAIN_MINUTES."""
+    is about to expire. When it does not work the agents run on the long-lived token: no token, a token Claude rejects
+    (only with `probe`; the panel does not probe), or a line saying they run on it and do not show in the Claude app."""
     claude = p.get("agents", "claude")
     status = login(claude)
     if status.ok:
         return login_expiring(status)
-    try:
-        tok = token.get(read)
-    except token.Unreadable as e:
-        return keychain_unreadable(p, str(e))
-    util.write_json(p.state / "keychain.json", {})
+    tok = token.get(read)
     if not tok:
         return [
             {
@@ -99,16 +61,7 @@ def claude_token(
                 "detail": f"The Claude login does not work (run /login) and there is no fallback token. Create it: {token.RENEW_CMD}.",
             }
         ]
-    cache = util.read_json(p.state / "token.json", {})
-    stamp = hashlib.sha256(tok.encode()).hexdigest()[:16]
-    if cache.get("stamp") != stamp or (util.age_s(cache.get("at")) or 1e9) > 1800:
-        if wait:
-            cache = _probe(p, tok, stamp, works)
-        elif _probing.acquire(blocking=False):
-            threading.Thread(target=_probe_unlocked, args=(p, tok, stamp, works), daemon=True).start()
-        if cache.get("stamp") != stamp:
-            cache = {"ok": True}
-    if not cache.get("ok"):
+    if probe and not works(claude, tok):
         return [
             {
                 "key": "token-bad",
@@ -204,8 +157,8 @@ def loop_errors(p: Project) -> list[Finding]:
     return out
 
 
-def findings(p: Project, rows: dict[str, Any], outside: bool = False, wait: bool = True) -> list[Finding]:
-    out = [*loop_dead(p), *claude_token(p, wait=wait)] if outside else []
+def findings(p: Project, rows: dict[str, Any], outside: bool = False, probe: bool = True) -> list[Finding]:
+    out = [*loop_dead(p), *claude_token(p, probe=probe)] if outside else []
     for check in (lambda: agents(p, rows), lambda: orphan_worktrees(p), lambda: main_tests(p, run=not outside), lambda: loop_errors(p)):
         try:
             out += check()

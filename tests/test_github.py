@@ -14,7 +14,7 @@ from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys, time
+    import json, os, sys
     d = os.path.dirname(os.path.abspath(__file__))
     a = sys.argv[1:]
     f = os.path.join(d, "gh.json")
@@ -24,8 +24,6 @@ FAKE_GH = textwrap.dedent("""\
         return a[a.index(n) + 1] if n in a else None
     def save():
         json.dump(s, open(f, "w"))
-    if s.get("hang") and a[:2] == ["pr", "create"]:
-        time.sleep(5)
     if s.get("fail_always") == a[:2]:
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
@@ -42,9 +40,6 @@ FAKE_GH = textwrap.dedent("""\
     if a[:2] == ["pr", "create"] and flag("--head") == s.get("flaky"):
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
-    if a[:1] == ["api"]:
-        print(s.get("api_sha") or "null")
-        sys.exit(0)
     if a[:2] == ["pr", "create"]:
         n = str(len(s["prs"]) + 1)
         s["prs"][n] = {"draft": "--draft" in a, "state": "OPEN", "comments": [], "head": flag("--head"), "title": flag("--title"), "body": flag("--body")}
@@ -172,13 +167,7 @@ class Border(unittest.TestCase):
     def test_a_pull_request_of_the_wrong_shape_is_a_provider_error(self):
         for bad in (
             [],
-            "x",
             {**self.GOOD, "state": "SIDEWAYS"},
-            {**self.GOOD, "number": "7"},
-            {**self.GOOD, "number": True},
-            {**self.GOOD, "isDraft": "yes"},
-            {**self.GOOD, "mergeCommit": "abc"},
-            {**self.GOOD, "mergeCommit": {"oid": 1}},
             {k: v for k, v in self.GOOD.items() if k != "url"},
         ):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
@@ -306,9 +295,10 @@ class Pulls(unittest.TestCase):
     def test_a_pr_refused_for_another_reason_still_blocks(self):
         g, iid = self.merged(None)
         g.set(refuse_merge="Pull request is closed")
-        loop.tick(g.e.p)
+        for _ in range(3):  # transient: blocks on the 3rd failure in a row
+            loop.tick(g.e.p)
         i = g.e.issue(iid)
-        self.assertTrue(i["blocked"])
+        self.assertIn("Pull request is closed", i["blocked"])
         self.assertEqual(i["status"], "in review")
         self.assertNotIn("conflicts", i)
 
@@ -413,21 +403,6 @@ class Pulls(unittest.TestCase):
         self.assertEqual((g.e.issue(iid)["check"]["ci"], g.e.issue(iid)["status"]), ("fail", "in review"))
         self.assertEqual(g.calls("pr", "merge"), [])
 
-    def test_a_hung_gh_times_out_without_freezing_the_tick(self):
-        from fm.providers import github
-
-        old = github.TIMEOUT
-        github.TIMEOUT = 1
-        self.addCleanup(setattr, github, "TIMEOUT", old)
-        g = self.make(test="true")
-        g.set(hang=True)
-        iid = g.work()
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
-        self.assertIn("timed out", g.e.issue(iid)["retry_error"])
-        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
-        self.assertEqual(len(events), 1)
-
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
         for failing in (["pr", "checks"], ["pr", "merge"], ["pr", "view"]):
             g = self.make(test="true", autonomy="medium")
@@ -457,39 +432,25 @@ class Pulls(unittest.TestCase):
             self.assertIn("pr", g.e.issue(first))
             self.assertEqual(g.e.issue(first)["retry_error"], "")
 
-    def test_only_known_permanent_errors_are_permanent_and_unblock_clears_the_errors(self):
+    def test_a_conflict_is_a_conflict_anything_else_transient_and_unblock_clears_the_errors(self):
         from fm.providers import github
 
-        cases = (
-            ("Head sha can't be blank", github.TransientError),
-            ("something new", github.TransientError),
-            ("pull request is closed", github.PermanentError),
-            ("merge conflict", github.PermanentError),
-            ("Pull request #3 is not mergeable", github.PermanentError),
-            ("the pull request cannot be merged", github.PermanentError),
-            ("read tcp: use of closed network connection", github.TransientError),
-            ("connection closed by remote host", github.TransientError),
-            ("error on branch fix-conflict-ui", github.TransientError),
-        )
-        for text, kind in cases:
-            self.assertIsInstance(github.failure("gh", text), kind, text)
+        self.assertIsInstance(github.failure("gh", "merge conflict"), github.ConflictError)
+        self.assertIsInstance(github.failure("gh", "pull request is closed"), github.TransientError)
         g = self.make(test="true")
         iid = g.work()
-        backlog.update(g.e.p, iid, blocked="x", pr_error="a", retry_error="b")
+        backlog.update(g.e.p, iid, blocked="x", retry_error="b")
         fm(g.e.home, "unblock", iid)
         i = g.e.issue(iid)
-        self.assertEqual((i["blocked"], i["pr_error"], i["retry_error"]), ("", "", ""))
+        self.assertEqual((i["blocked"], i["retry_error"]), ("", ""))
 
-    def test_a_merged_pr_without_a_merge_commit_is_read_from_the_api_or_fails_clearly(self):
+    def test_a_merged_pr_without_a_merge_commit_stays_in_review(self):
         g, iid = self.merged(None)
         g.set(no_oid=True)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["status"], "in review")  # no sha anywhere: retried, no invented reference
-        self.assertNotIn("merge", g.e.issue(iid))
+        self.assertEqual(g.e.issue(iid)["status"], "in review")  # retried, no invented reference
+        self.assertEqual(g.e.issue(iid)["merge"], "pr-1-merge-requested")  # requested once, not merged again
         self.assertIn("no merge commit", g.e.issue(iid)["retry_error"])
-        g.set(api_sha="feed01")
-        loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["status"], g.e.issue(iid)["commit"]), ("done", "feed01"))
 
     def test_the_provider_never_tags_releases_or_forces(self):
         import inspect

@@ -22,8 +22,6 @@ class Local(Provider):
 
     def merge(self, change: dict[str, Any], strategy: str) -> str:
         main, branch = self.p.get("project", "main"), change["branch"]
-        if self.git("rev-parse", "--abbrev-ref", "HEAD").out.strip() != main:
-            raise ProviderError(f"the main checkout {self.p.repo} is not on {main}")
         if self.git("status", "--porcelain", "--untracked-files=no").out.strip():
             raise ProviderError(f"the main checkout {self.p.repo} has uncommitted changes")
         msg = f"Integrate {change['id']}: {change['title']}"
@@ -45,9 +43,5 @@ class Local(Provider):
     def state(self, change: dict[str, Any]) -> dict[str, Any]:
         main = self.p.get("project", "main")
         ref = change.get("merge") or ""
-        merged = False
-        if ref:  # the merge commit we made: is it in main?
-            merged = self.git("merge-base", "--is-ancestor", ref, main, check=False).code == 0
-        elif change.get("head"):  # merged some other way (by hand): the branch tip is in main
-            merged = self.git("merge-base", "--is-ancestor", change["head"], main, check=False).code == 0
+        merged = bool(ref) and self.git("merge-base", "--is-ancestor", ref, main, check=False).code == 0
         return {"merged": merged, "closed": merged}

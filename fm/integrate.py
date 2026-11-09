@@ -145,20 +145,9 @@ def accept(p: Project, iid: str, by: str = "owner") -> str:
     return head
 
 
-def adopt_merge(p: Project, i: dict[str, Any]) -> str:
-    """After a crash between the merge and storing its ref: the merge commit already in main, or ''."""
-    if not i.get("merging"):
-        return ""
-    found = git(p.repo, "log", "--format=%H", f"--grep=^Integrate {i['id']}: ", f"{i['merging']}..{p.get('project', 'main')}", check=False).out.split()
-    if found:
-        backlog.update(p, i["id"], merge=found[0])
-    return found[0] if found else ""
-
-
 def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, change: dict[str, Any]) -> str:
-    """Asks the provider to merge (marking `merging` first) and returns the merge ref. A refusal for a conflict that
-    the local check confirms is a `MergeConflict`; any other platform error is an `IntegrateError`."""
-    backlog.update(p, i["id"], merging=git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
+    """Asks the provider to merge and returns the merge ref. A refusal for a conflict that the local check confirms
+    is a `MergeConflict`; any other platform error is an `IntegrateError`."""
     try:
         return provider.merge(change, providers.merge_strategy(p))
     except Exception as e:  # a platform's own errors are an integration error
@@ -182,8 +171,6 @@ def merge_accepted(p: Project, iid: str) -> str:
         backlog.update(p, iid, accepted=None)
         raise IntegrateError(f"{i['branch']} moved after it was accepted: accept again after the next check")
     change = pulls.change_of(i, head)
-    if not change["merge"]:
-        change["merge"] = adopt_merge(p, i)
     if not change["merge"]:
         ref = request_merge(p, i, provider, change)
         backlog.update(p, iid, merge=ref)

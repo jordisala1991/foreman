@@ -49,8 +49,9 @@ def _agent_side(c: Command) -> None:
     s.add_argument("--claim", required=True)
     s.add_argument("--criterion", required=True)
     s.add_argument("--detail")
-    s.add_argument("--plan", metavar="PATH", help="the written plan (file, not empty)")
-    s.add_argument("--no-plan", metavar="WHY", help="no plan, because the task is trivial")
+    g = s.add_mutually_exclusive_group(required=True)
+    g.add_argument("--plan", metavar="PATH", help="the written plan (file, not empty)")
+    g.add_argument("--no-plan", metavar="WHY", help="no plan, because the task is trivial")
     s.add_argument("--misled", default="")
     s.add_argument("--issue")
     s = c("block", "(agent) it cannot go on without the owner")
@@ -104,7 +105,6 @@ def _operations(c: Command) -> None:
     s = c("launchd", "print the two launchd jobs (loop and panel) that start at login and restart if they die")
     s.add_argument("--dir", help="write dev.fm.loop.plist and dev.fm.panel.plist here (e.g. ~/Library/LaunchAgents) instead of printing")
     s.add_argument("--panel-host", default="127.0.0.1")
-    s.add_argument("--panel-port", type=int, default=7788)
 
 
 def parser(description: str | None) -> argparse.ArgumentParser:
