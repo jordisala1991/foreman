@@ -3,6 +3,7 @@ the merge is (low, medium, high, with the reasons) and `allows` says whether the
 merge without the owner. High never merges alone. The checks that find the facts, and the merge itself, are in fm/integrate.py."""
 
 import fnmatch
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,18 @@ from .config import Project
 RISKS = ("low", "medium", "high")
 AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
 DEPENDENCY_FILES = ("requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "go.mod", "Cargo.toml")
+
+
+def review_step(v: Mapping[str, Any], max_rounds: int) -> str:
+    """What the loop does with a verdict: `back` to the agent, or `queue`. H/M go back until the last round; an L-only
+    verdict gets one pass (round 1; an H/M round already carried the L); a verdict already sent back never goes twice."""
+    if v.get("sent_back"):
+        return "queue"
+    if v["high"] + v["medium"] > 0 and v["round"] < max_rounds:
+        return "back"
+    if v.get("low", 0) > 0 and v["round"] == 1:
+        return "back"
+    return "queue"
 
 
 def is_sensitive(path: str, patterns: list[str]) -> bool:

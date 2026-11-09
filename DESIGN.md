@@ -136,14 +136,14 @@ inside `<!-- fm:description -->` markers, adds a footer with the commit and revi
 section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
-conversation: fix or refute each H and M with proof, add a `### Round N` to the report's «Review rounds» section, `fm done` again.
+conversation: every finding goes back: fix or refute each H and M with proof, fix each L or say «not, because …», add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 
 **Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
 its own session in the branch's worktree, once per delivered tip; it counts against the slots. Stance «not ready until
 shown»; reads the criterion, then the diff, then the agent's report last; a table criterion line → met / not met /
 not shown with evidence; findings F1… with H/M/L, confirmed or plausible, file:line, a scenario and the test that
-would prove it. It writes `<home>/reviews/ID-rN.md` (header `Branch/Tip/Round/Open`) and runs
-`fm verdict --high --medium --low --file`. Open H or M in round 1 → back to the responsible agent; round 2 checks
+would prove it. It writes `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`) and runs
+`fm verdict --tip --high --medium --low --file`; a verdict for a tip other than the newest launch is stored in the review history but decides nothing. Open H or M in round 1 → back to the responsible agent with every finding, L included; an L-only verdict in round 1 gets one pass, never a second round only for L, and an L never blocks by itself (`risk.review_step`); round 2 checks
 the fixes only; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
 verdict blocks the task.
 
@@ -230,8 +230,8 @@ closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Auton
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
 origin when it is clean on main (fetch only, never a push). The images a report names (`![what](x.png)`, bare file
 names saved in `reports/ID/`) go, by git plumbing and never forced, to `ID/` on the orphan branch `fm-evidence`, the
-only push fm makes (agents may not: guard `push-evidence`); the PR body links them with `?raw=true` blob URLs and the
-panel serves them at `/evidence`. Conflicts with main go back to the agent as before. Out of
+only push fm makes besides the task branch (agents may not: guard `push-evidence`); the PR body links them with
+`?raw=true` blob URLs and the panel serves them at `/evidence`. Conflicts with main go back to the agent as before, also when the merge itself is refused for a conflict after acceptance: the acceptance is dropped and the new tip is checked and accepted again. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Architecture

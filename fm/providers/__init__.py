@@ -4,7 +4,8 @@ no tag, no release): that is the owner's, and releases are a separate concept.
 
 Operations: `publish` (make the branch visible: open the change), `ready` (mark it ready for review), `comment`,
 `body` (its description now), `describe` (set its body and title), `evidence` (publish the report's images),
-`merge(change, strategy)` (the one merge in fm; a future queue is just another strategy), `state` (is it merged?
+`merge(change, strategy)` (the one merge in fm; a future queue is just another strategy; raises `Conflict` when the
+branch conflicts with main), `state` (is it merged?
 closed?), `ci` (the platform's checks),
 `has_ci` (attribute: is there CI that must be green? github yes, local no; autonomy merges only on a pass when so),
 `pushed` (is the branch on the platform at its tip?), `push` (put it there:
@@ -36,6 +37,11 @@ class Transient(Exception):
 class Permanent(Exception):
     """A platform call that will fail the same way if repeated (the platform rejects it, the branch is not there): the
     task is blocked with the reason instead of retried."""
+
+
+class Conflict(Permanent):
+    """The platform refused the merge because the branch conflicts with main: unlike other permanent failures, the
+    agent can fix it. `merge` raises it for that case."""
 
 
 class Provider:
