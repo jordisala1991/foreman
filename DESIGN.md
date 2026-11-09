@@ -194,7 +194,7 @@ Every delivered branch gets a risk score:
 - **doubt**, from the evidence: high = no changes, tests fail, CI fails, conflicts with main; medium = no test command.
 - Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
   `[ci]`, `[git]`, `[review]`). Line and file counts are not reasons.
-- Open review findings are not risk: they go back to the agent and add a `[review]` reason, but do not raise the level.
+- Open review findings are a gate, not a level: they go back to the agent and add a `[review]` reason, but never change the risk.
   After the last round, an open H or M never merges alone, at any autonomy or risk (`integrate.merges_alone`); L-only
   findings do not block.
 
