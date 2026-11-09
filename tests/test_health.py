@@ -120,10 +120,6 @@ class Lessons(unittest.TestCase):
         self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.issue(iid), "work"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class Copies(unittest.TestCase):
     def setUp(self):
         self.e = Env()
@@ -157,6 +153,7 @@ class Copies(unittest.TestCase):
 
     def test_no_finding_when_the_rows_agree(self):
         self.assertEqual(health.agent_copies(self.p, self.rows("done")), [])
+        self.assertEqual(health.agent_copies(self.p, self.rows("working")), [])
         self.assertEqual(health.agent_copies(self.p, self.rows("working", {})), [])
         self.assertEqual(health.agent_copies(self.p, self.rows("done", {"state": "done"})), [])
         self.assertEqual(health.agent_copies(self.p, {}), [])
@@ -191,3 +188,7 @@ class Copies(unittest.TestCase):
         t = [i for i in backlog.issues(backlog.load(self.p)) if i["status"] == "triage"]
         self.assertEqual(len(t), 1)
         self.assertEqual(t[0]["source"], f"health:copy:{self.iid}:{self.sid[:8]}")
+
+
+if __name__ == "__main__":
+    unittest.main()
