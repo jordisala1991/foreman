@@ -10,7 +10,7 @@ from typing import Any
 
 from . import backlog, describe, inline, proc, providers, util, verdict
 from .config import Project
-from .inline import Review, Thread
+from .inline import LineComment, Review, Thread
 from .providers import Permanent, Provider, ProviderError, Transient, registry
 from .verdict import Case, Finding
 
@@ -139,6 +139,8 @@ def _settle(p: Project, provider: Provider, i: dict[str, Any], change: dict[str,
             provider.settle(change, t, change["head"])
         except (ProviderError, Transient, Permanent) as e:
             backlog.event(p, i["id"], f"could not settle a fixed finding, will retry next tip: {e}"[:300])
+            if isinstance(e, Transient):
+                return  # the network is down: do not spend 30 s per remaining thread
 
 
 def _post_review(p: Project, provider: Provider, i: dict[str, Any], c: dict[str, Any]) -> None:
@@ -148,16 +150,20 @@ def _post_review(p: Project, provider: Provider, i: dict[str, Any], c: dict[str,
     threads = _threads(p, provider, i, change)
     case = case_of(i, c)
     gone = inline.fixed(threads, found) if verdict.complete(case, found) else []
-    since = (len(gone), len(inline.fresh(comments, threads))) if threads else None
-    body = verdict.render(replace(case, since=since), found, {x.place for x in comments})
-    review = Review(f"review-{c['head']}", body, comments)
+
+    def review_of(placed: list[LineComment]) -> Review:
+        since = (len(gone), len(inline.fresh(placed, threads))) if threads else None
+        body = verdict.render(replace(case, since=since), found, {x.place for x in placed})
+        return Review(f"review-{c['head']}", body, placed)
+
+    review = review_of(comments)
     try:
         provider.review(change, review)
     except (Transient, Permanent) as e:
         if not comments:
             raise
         backlog.event(p, i["id"], f"inline comments rejected, review posted without them: {e}"[:300])
-        provider.review(change, replace(review, comments=[]))
+        provider.review(change, review_of([]))
     _settle(p, provider, i, change, gone)
 
 

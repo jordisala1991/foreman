@@ -7,7 +7,7 @@ from test_github import GH
 
 from fm import backlog, loop, pulls, verdict
 from fm.inline import Review, Thread
-from fm.providers import registry
+from fm.providers import Provider, Transient, registry
 
 DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @@\n a\n+b\n+c\n d\n"
 
@@ -197,6 +197,30 @@ class Review_(unittest.TestCase):
         commit(g, iid)
         tip(g, iid, "none\n", (0, 0, 0))
         self.assertEqual(len(self.pr(g)["threads"][0]["bodies"]), 2)
+
+    def test_a_transient_settle_failure_stops_the_rest(self):
+        g, iid = self.make()
+        tried: list[str] = []
+
+        class Down(Provider):
+            def __init__(self) -> None:
+                pass
+
+            def settle(self, change, thread, sha):
+                tried.append(thread.id)
+                raise Transient("down")
+
+        pulls._settle(g.e.p, Down(), g.e.issue(iid), {"head": "h"}, [Thread("A", "k", False), Thread("B", "k", False)])
+        self.assertEqual(tried, ["A"])
+
+    def test_rejected_inline_comments_are_not_counted_new_next_tip(self):
+        g, iid = self.make()
+        g.set(reject_inline=True)
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        g.set(reject_inline=False)
+        commit(g, iid)
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        self.assertNotIn("since last push", self.pr(g)["reviews"][0]["body"])
 
     def test_the_second_review_counts_fixed_and_new(self):
         g, iid = self.make()

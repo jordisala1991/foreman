@@ -29,8 +29,10 @@ def _thread(line: str) -> tuple[str, bool, list[str]]:
         o = util.json_object(json.loads(line))
     except ValueError:
         raise ProviderError(f"gh api graphql: not JSON: {line[:200]!r}") from None
-    bodies = util.json_list(o.get("bodies")) if o else []
-    if o is None or not isinstance(o.get("id"), str) or not isinstance(o.get("resolved"), bool) or not all(isinstance(b, str) for b in bodies):
+    raw = o.get("bodies") if o else None
+    bodies = util.json_list(raw)
+    shaped = isinstance(raw, list) and all(isinstance(b, str) for b in bodies)
+    if o is None or not isinstance(o.get("id"), str) or not isinstance(o.get("resolved"), bool) or not shaped:
         raise ProviderError(f"gh api graphql: unexpected thread {line[:200]!r}")
     return str(o["id"]), bool(o["resolved"]), [str(b) for b in bodies]
 
