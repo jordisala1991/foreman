@@ -18,6 +18,7 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
 from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
@@ -199,8 +200,8 @@ def launchd_plist(fm_bin: str, job: str = "loop", args: tuple[str, ...] = ()) ->
     """A launchd job (`loop` or `panel`) that starts at login and is restarted if it dies. Only PATH goes in the
     environment: the Claude token is never written here; the loop reads it from the Keychain (token.py)."""
     py = proc.run(["/usr/bin/which", "python3"]).out.strip() or "python3"
-    argv = "".join(f"<string>{a}</string>" for a in (py, fm_bin, job, *args))
-    log = f"{Path.home()}/Library/Logs/fm-{job}.log"
+    argv = "".join(f"<string>{escape(a)}</string>" for a in (py, fm_bin, job, *args))
+    log = f"{escape(str(Path.home()))}/Library/Logs/fm-{job}.log"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -208,7 +209,7 @@ def launchd_plist(fm_bin: str, job: str = "loop", args: tuple[str, ...] = ()) ->
   <key>ProgramArguments</key><array>{argv}</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{os.environ.get("PATH", "")}</string></dict>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{escape(os.environ.get("PATH", ""))}</string></dict>
   <key>StandardOutPath</key><string>{log}</string>
   <key>StandardErrorPath</key><string>{log}</string>
 </dict></plist>

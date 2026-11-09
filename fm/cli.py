@@ -188,6 +188,7 @@ def cmd_launchd(a: argparse.Namespace) -> None:
         text = loop.launchd_plist(fm_bin, job, args)
         if a.dir:
             out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
+            out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(text, encoding="utf-8")
             print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
         else:
