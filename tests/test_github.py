@@ -266,7 +266,7 @@ class Pulls(unittest.TestCase):
         self.assertFalse(pr["draft"])
         self.assertEqual(len(pr["comments"]), 1)
         self.assertIn("merge risk low", pr["comments"][0])
-        self.assertIn("round 1: H 0, M 0", pr["comments"][0])
+        self.assertIn("round 1: 0 open", pr["comments"][0])
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")

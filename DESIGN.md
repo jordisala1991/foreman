@@ -136,15 +136,16 @@ inside `<!-- fm:description -->` markers, adds a footer with the commit and revi
 section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
-conversation: every finding goes back: fix or refute each H and M with proof, fix each L or say «not, because …», add a `### Round N` to the report's «Review rounds» section, `fm done` again.
+conversation: each finding gets the smallest change that settles it, or a one-line answer if the agent thinks it is wrong; add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 
 **Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
-its own session in the branch's worktree, once per delivered tip; it counts against the slots. Stance «not ready until
-shown»; reads the criterion, then the diff, then the agent's report last; a table criterion line → met / not met /
-not shown with evidence; findings F1… with H/M/L, confirmed or plausible, file:line, a scenario and the test that
-would prove it. It writes `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`) and runs
-`fm verdict --tip --high --medium --low --file`; a verdict for a tip other than the newest launch is stored in the review history but decides nothing. Open H or M in round 1 → back to the responsible agent with every finding, L included; an L-only verdict in round 1 gets one pass, never a second round only for L, and an L never blocks by itself (`risk.review_step`); round 2 checks
-the fixes only; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
+its own session in the branch's worktree, once per delivered tip; it counts against the slots. It reads the criterion, the diff,
+then the agent's report last, and checks each criterion line by using it the way the owner will (met / not met, with
+what it ran and saw). A finding is one of three things: Wrong (shown, not «could»), Missing (a criterion line or an
+owner's note not met) or Too much (code the task does not need); nothing else is written, and there are no
+severities: every finding is one to fix. It writes `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`) and runs
+`fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but decides nothing. Open findings in round 1 → back to the responsible agent (`risk.review_step`); round 2 checks the fixes only and
+opens nothing new unless a fix is itself Wrong or Too much; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
 verdict blocks the task.
 
 What was dropped because it only served a coordinator: memory renewal, session marking, interface mods and band,
@@ -195,8 +196,7 @@ Every delivered branch gets a risk score:
 - Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
   `[ci]`, `[git]`, `[review]`). Size is only the large-change reason; file counts are not a reason.
 - Open review findings are a gate, not a level: they go back to the agent and add a `[review]` reason, but never change the risk.
-  After the last round, an open H or M never merges alone, at any autonomy or risk (`integrate.merges_alone`); L-only
-  findings do not block.
+  After the last round, an open finding never merges alone, at any autonomy or risk (`integrate.merges_alone`).
 
 The project's `[integrate] autonomy` decides what merges without the owner: `manual` (nothing; the default),
 `low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or sends it back with a note

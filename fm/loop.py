@@ -111,10 +111,10 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             p,
             i["id"],
             "review",
-            f"The independent review of your branch (round {v['round']}) leaves H {v['high']}, M {v['medium']}, "
-            f"L {v.get('low', 0)} open: read {v['file']}. Every finding in it is yours: for each H and M, fix it or "
-            "refute it with proof; for each L, fix it or say why not. Add one `### Round N` to the «Review rounds» "
-            "section of your report, one line per finding (fixed, refuted, or «not, because …» for an L), and run `fm done` again.",
+            f"The independent review of your branch (round {v['round']}) leaves {backlog.open_findings(v)} open: read {v['file']}. "
+            "For each one, make the smallest change that settles it, or answer it in one line if you think it is wrong; add "
+            "nothing it does not ask for. Add one `### Round N` to the «Review rounds» section of your report, one line per "
+            "finding, and run `fm done` again.",
         )
         backlog.update(p, i["id"], review={**v, "sent_back": True})
         return

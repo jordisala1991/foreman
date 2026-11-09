@@ -16,11 +16,10 @@ def agent_name(p: Project, iid: str, kind: str) -> str:
 
 
 ROUND2 = (
-    "7. **Round 2 checks the fixes**, it does not reopen the branch: read the previous review (`$previous`), "
-    "`git diff $previous_tip..$branch` and the «Review rounds» section of the report. Each earlier finding is "
-    "fixed (the commit or test that shows it), refuted (proof you accept) or still open; an L the report answers with «not, because …» is closed "
-    "unless the reason is false, an L with neither fix nor reason is still open. "
-    "New findings only in what the fixes changed."
+    "4. **Round $round checks the fixes**, not the whole branch again: read the previous review "
+    "(`$previous`), `git diff $previous_tip..$branch` and the «Review rounds» section of the report. Each "
+    "earlier finding is fixed, answered (with a reason you accept), or still open. No new findings, "
+    "except a fix that is itself Wrong (shown) or Too much."
 )
 
 

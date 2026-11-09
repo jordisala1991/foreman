@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import backlog
 from .config import Project
 
 RISKS = ("low", "medium", "high")
@@ -15,13 +16,9 @@ AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
 
 
 def review_step(v: Mapping[str, Any], max_rounds: int) -> str:
-    """What the loop does with a verdict: `back` to the agent, or `queue`. H/M go back until the last round; an L-only
-    verdict gets one pass (round 1; an H/M round already carried the L); a verdict already sent back never goes twice."""
-    if v.get("sent_back"):
-        return "queue"
-    if v["high"] + v["medium"] > 0 and v["round"] < max_rounds:
-        return "back"
-    if v.get("low", 0) > 0 and v["round"] == 1:
+    """What the loop does with a verdict: `back` to the agent while findings are open before the last round, else `queue`
+    (what is still open then goes to the owner); a verdict already sent back never goes twice."""
+    if not v.get("sent_back") and backlog.open_findings(v) > 0 and v["round"] < max_rounds:
         return "back"
     return "queue"
 
