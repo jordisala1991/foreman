@@ -110,6 +110,31 @@ if __name__ == "__main__":
 
 
 class Review1(Signals):
+    def test_failed_accept_is_logged_and_retried_then_applied_once(self):  # F1, F4
+        from fm import integrate
+
+        iid, _ = self.queued()
+        sig = {"key": "a1", "task": iid, "action": "accept"}
+        self.emit(sig)  # no check yet: "moved since it was checked"
+        self.assertEqual(self.e.issue(iid)["status"], "in review")
+        self.assertEqual(len(self.errors()), 1)
+        integrate.check(self.p, iid)
+        self.emit(sig)
+        self.assertTrue(self.e.issue(iid)["accepted"])
+        loop.tick(self.p)  # the loop's merge step closes it
+        self.assertEqual(self.e.issue(iid)["status"], "done")
+        n = len(self.errors())
+        self.emit(sig)  # once
+        self.assertEqual(len(self.errors()), n)
+
+    def test_a_retried_signal_leaves_one_error_line_per_key(self):  # F7
+        iid, _ = self.queued()
+        sig = {"key": "a1", "task": iid, "action": "accept"}
+        for _ in range(3):
+            self.emit(sig)  # still no check: fails every tick
+        self.assertEqual(len(self.errors()), 1)
+        self.assertEqual(self.e.issue(iid)["status"], "in review")
+
     def test_unexpected_failure_is_logged_and_does_not_stop_the_next_signal(self):  # F2
         from unittest import mock
 
@@ -120,6 +145,12 @@ class Review1(Signals):
         self.assertEqual(self.e.issue(b)["status"], "done")
         self.assertEqual(self.e.issue(a)["status"], "in progress")
         self.assertTrue(any("hung" in e["error"] for e in self.errors()))
+
+    def test_signal_without_key_or_not_an_object_is_logged(self):  # F3
+        iid = self.running()
+        self.emit({"task": iid, "action": "cancel"}, [1, 2])
+        self.assertEqual(self.e.issue(iid)["status"], "in progress")
+        self.assertEqual(len(self.errors()), 2)
 
     def test_reject_and_done_applied_once(self):  # F4
         iid, _ = self.queued()
