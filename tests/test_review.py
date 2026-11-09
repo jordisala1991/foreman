@@ -117,6 +117,16 @@ class Review_(unittest.TestCase):
         self.assertEqual(len(pulls.findings_of(i, "aaa")), 1)
         self.assertIsNone(pulls.case_of(i, c).counts)
 
+    def test_a_review_with_a_null_body_does_not_stop_the_review(self):
+        g, iid = self.make()
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        prs = g.state["prs"]
+        prs["1"]["reviews"].append({"body": None, "comments": []})
+        g.set(prs=prs)
+        commit(g, iid)
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        self.assertEqual(len(self.pr(g)["reviews"]), 3)
+
     def test_local_provider_reviews_nothing(self):
         e = Env()
         provider = registry.get(e.p)

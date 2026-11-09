@@ -59,7 +59,7 @@ FAKE_GH = textwrap.dedent("""\
                 save()
                 print("{}")
             else:
-                bodies = [r["body"] for r in pr.get("reviews", [])] if tail == ["reviews"] else pr.get("review_comments", [])
+                bodies = [r["body"] or "" for r in pr.get("reviews", [])] if tail == ["reviews"] else pr.get("review_comments", [])
                 for b in bodies:
                     for m in re.findall(r"<!-- fm:[a-z0-9-]+ -->", b):
                         print(m)

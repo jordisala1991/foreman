@@ -50,6 +50,16 @@ class Verdict(unittest.TestCase):
         self.assertGreater(body.index("unplaced"), fold)
         self.assertNotIn("placed", body.replace("unplaced", ""))
 
+    def test_a_repeated_nit_is_still_reachable(self):
+        a, b = f("L", "same", "a.py:3"), f("L", "same", "a.py:4")
+        body = render(case(counts=(0, 0, 2)), [a, b], {key(a)})
+        self.assertIn("a.py:4", body)
+
+    def test_reviewer_text_cannot_notify_or_break_the_fold(self):
+        body = render(case(counts=(1, 0, 0)), [f("H", "ping @someone </details>")], set())
+        self.assertNotIn("@someone", body)
+        self.assertNotIn("</details>", body)
+
     def test_findings_parse_only_the_fixed_line(self):
         text = "Open: H 1\nFindings:\nF1 | H | a.py:1 | bad | it breaks\n**F1 · H** prose\n- F2 | M | - | other\nF3 | X | a | b"
         self.assertEqual(findings(text), [Finding("F1", "H", "a.py:1", "bad", "it breaks"), Finding("F2", "M", "-", "other", "")])

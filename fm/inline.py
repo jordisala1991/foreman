@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 
-from .verdict import WORDS, Finding, key
+from .verdict import WORDS, Finding, key, safe
 
 _HUNK = re.compile(r"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 _PLACE = re.compile(r"^(.+):(\d+)$")
@@ -64,8 +64,8 @@ def visible_lines(diff: str) -> dict[str, set[int]]:
 
 
 def _body(f: Finding) -> str:
-    text = f"**{WORDS[f.severity]}** · {f.what}"
-    return text + (f"\n\n<details>\n<summary>Why</summary>\n\n{f.why}\n\n</details>" if f.why else "")
+    text = f"**{WORDS[f.severity]}** · {safe(f.what)}"
+    return text + (f"\n\n<details>\n<summary>Why</summary>\n\n{safe(f.why)}\n\n</details>" if f.why else "")
 
 
 def line_comments(found: list[Finding], visible: dict[str, set[int]]) -> list[LineComment]:

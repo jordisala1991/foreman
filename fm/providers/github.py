@@ -167,7 +167,7 @@ class GitHub(Provider):
     def markers(self, change: dict[str, Any], what: str) -> set[str]:
         """The `<!-- fm:KEY -->` markers in the bodies of the PR's reviews or review comments."""
         url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/{what}"
-        r = self.run("gh", "api", url, "--paginate", "--jq", '.[].body | scan("<!-- fm:[a-z0-9-]+ -->")')
+        r = self.run("gh", "api", url, "--paginate", "--jq", '.[] | (.body // "") | scan("<!-- fm:[a-z0-9-]+ -->")')
         return set(r.out.split("\n")) - {""}
 
     def review(self, change: dict[str, Any], review: Review) -> int:

@@ -47,6 +47,11 @@ def findings(text: str) -> list[Finding]:
     return found
 
 
+def safe(text: str) -> str:
+    """Reviewer text on a PR: an `@name` must not notify anyone and a `</details>` must not close our fold."""
+    return re.sub(r"</?details[^>]*>", "", text, flags=re.IGNORECASE).replace("@", "@\u200b")
+
+
 def path_of(f: Finding) -> str:
     return f.place.rsplit(":", 1)[0] if ":" in f.place else f.place
 
@@ -74,13 +79,19 @@ def headline(case: Case, found: list[Finding]) -> str:
 
 
 def _item(f: Finding) -> str:
-    return f"- {'' if f.place == '-' else f'`{f.place}` '}{f.what}"
+    return f"- {'' if f.place == '-' else f'`{f.place}` '}{safe(f.what)}"
 
 
 def _fold(case: Case, found: list[Finding], placed: set[str]) -> list[str]:
     _, should, nits = levels(case, found)
     count = " · ".join(x for x in (f"{should} should fix" if should else "", f"{nits} nits" if nits else "") if x)
-    items = [_item(f) for f in found if f.severity == "M" or (f.severity == "L" and key(f) not in placed)]
+    items: list[str] = []
+    shown: set[str] = set()
+    for f in found:
+        first = key(f) not in shown  # a repeat of a placed key has no comment of its own
+        shown.add(key(f))
+        if f.severity == "M" or (f.severity == "L" and (key(f) not in placed or not first)):
+            items.append(_item(f))
     if not count:
         return []
     if not items:
