@@ -27,7 +27,7 @@ FAKE = textwrap.dedent("""\
     if a[:1] == ["stop"]:
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:
-        f.write(json.dumps({"argv": a, "cwd": os.getcwd()}) + "\\n")
+        f.write(json.dumps({"argv": a, "cwd": os.getcwd(), "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")}) + "\\n")
     name = a[a.index("-n") + 1]
     short = hashlib.sha1(name.encode()).hexdigest()[:8]
     if "--resume" not in a:
