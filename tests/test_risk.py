@@ -28,9 +28,10 @@ class Score(unittest.TestCase):
     def test_default_ci_file_is_high(self):
         self.assertEqual(risk.score(project(), facts(".github/workflows/ci.yml"))[0], "high")
 
-    def test_size_is_not_a_reason(self):
+    def test_file_count_is_not_a_reason(self):
         f = facts(*[f"m{n}.py" for n in range(12)])
-        f.files[0]["added"] = 489
+        for x in f.files:
+            x["added"] = 30
         self.assertEqual(risk.score(project(), f)[0], "low")
 
     def test_open_review_is_a_reason_not_a_level(self):
