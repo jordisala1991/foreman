@@ -1,10 +1,13 @@
 """A temporary project: a git repo with one commit, a home with fm.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
+import atexit
 import contextlib
 import io
 import json
 import os
+import pwd
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +18,16 @@ from fm import backlog, util
 from fm.config import Project
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# A test run must not write the owner's real ~/.config/fm (registry, panel token, locks): HOME and FM_REGISTRY point
+# at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
+REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
+REAL_REGISTRY = REAL_HOME / ".config/fm/projects.json"
+REGISTRY_BEFORE = REAL_REGISTRY.read_bytes() if REAL_REGISTRY.exists() else None
+SANDBOX = Path(tempfile.mkdtemp(prefix="fmhome-")).resolve()
+os.environ["HOME"] = str(SANDBOX)
+os.environ["FM_REGISTRY"] = str(SANDBOX / "projects.json")
+atexit.register(shutil.rmtree, SANDBOX, ignore_errors=True)
 
 FAKE = textwrap.dedent("""\
     #!/usr/bin/env python3
