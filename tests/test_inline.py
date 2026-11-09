@@ -3,7 +3,7 @@
 import unittest
 
 from fm import inline
-from fm.verdict import Finding
+from fm.verdict import Finding, key
 
 
 class Inline(unittest.TestCase):
@@ -28,3 +28,15 @@ class Inline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Threads(unittest.TestCase):
+    def test_fixed_are_the_unsettled_threads_not_in_the_findings(self):
+        a, b = Finding("F1", "M", "a.py:1", "a", ""), Finding("F2", "M", "a.py:1", "b", "")
+        ts = [inline.Thread("1", key(a), False), inline.Thread("2", key(b), False), inline.Thread("3", "finding-c", True)]
+        self.assertEqual(inline.fixed(ts, [a]), [ts[1]])
+
+    def test_fresh_are_the_comments_without_a_thread(self):
+        cs = [inline.LineComment("a", "x", 1, ""), inline.LineComment("d", "x", 2, "")]
+        ts = [inline.Thread("1", "a", True), inline.Thread("2", "b", False)]
+        self.assertEqual(inline.fresh(cs, ts), [cs[1]])

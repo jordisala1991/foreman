@@ -28,6 +28,27 @@ class Review:
     comments: list[LineComment]
 
 
+@dataclass(frozen=True)
+class Thread:
+    """An fm finding thread on the PR: `id` is the platform's, `key` the finding's, `settled` = resolved or answered fixed."""
+
+    id: str
+    key: str
+    settled: bool
+
+
+def fixed(threads: list[Thread], found: list[Finding]) -> list[Thread]:
+    """The threads still to settle: not settled, and their finding is no longer among `found`."""
+    open_keys = {key(f) for f in found}
+    return [t for t in threads if not t.settled and t.key not in open_keys]
+
+
+def fresh(comments: list[LineComment], threads: list[Thread]) -> list[LineComment]:
+    """The comments whose finding has no thread yet (settled or not)."""
+    have = {t.key for t in threads}
+    return [c for c in comments if c.key not in have]
+
+
 def _hunk(rows: list[str], n: int, old: int, new: int, cur: int) -> tuple[set[int], int]:
     """Walks one hunk from row `n` by its counts; returns the visible new-side lines and the next row."""
     lines: set[int] = set()

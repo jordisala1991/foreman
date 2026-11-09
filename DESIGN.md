@@ -204,7 +204,7 @@ The project's `[integrate] autonomy` decides what merges without the owner: `man
 ### Provider, accepted → merged
 
 Integration goes through a *provider* module (`fm/providers/`), one per platform; the rest of fm does not know which.
-Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `diff` (its unified diff; empty locally), `review` (post the verdict as one PR review with its inline comments; no-op locally), `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
+Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `diff` (its unified diff; empty locally), `review` (post the verdict as one PR review with its inline comments; no-op locally), `threads` / `settle` (the fm finding threads of the PR; resolve one, else reply «Fixed in <sha>.»; `[]` / no-op locally), `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
 in fm: a future queue is just another strategy) and `state` (merged? closed?). Steps:
 
 1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the issue (it stays `in review`).
@@ -226,7 +226,7 @@ comments on and merges PRs through `gh` (the guard keeps stopping `gh pr` for ag
 (default): a task in progress has its commits pushed and gets a **draft PR** as soon as it has its first commit; `pr = "done"`: no PR until
 `fm done`. In the queue, after the independent review: the branch is pushed at its tip if it is not yet, the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
 with no `[integrate] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and a pull request review
-(event COMMENT) carries the verdict (decision, risk and its reasons, checks); each finding inside the diff is also a comment on its line. Accepted → `gh pr merge` with the configured type; the task
+(event COMMENT) carries the verdict (decision, risk and its reasons, checks); each finding inside the diff is also a comment on its line. A later tip's review says «since last push: N fixed, N new» and, once posted, resolves the threads of findings fixed since (or replies «Fixed in <sha>.»), only when its verdict itemizes every finding it counts. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
 origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of

@@ -10,6 +10,7 @@ FIX = "⛔ Fix first — {n} blocking"
 LOOK = "⚠️ Look first — {n} to check"
 READY = "✅ Ready to merge"
 SUMMARY_LIMIT = 200
+SINCE = "since last push: {fixed} fixed, {new} new"
 _LINE = re.compile(r"^\s*[-*]?\s*F\d+\s*\|")
 
 
@@ -33,6 +34,7 @@ class Case:
     files: int
     lines: int
     counts: tuple[int, int, int] | None  # open H, M, L of the verdict; None = no usable review
+    since: tuple[int, int] | None = None  # (fixed, new) since the last review of the PR; None = no earlier review
 
 
 def findings(text: str) -> list[Finding]:
@@ -69,6 +71,13 @@ def levels(case: Case, found: list[Finding]) -> tuple[int, int, int]:
     return n[0], n[1], n[2]
 
 
+def complete(case: Case, found: list[Finding]) -> bool:
+    """Does the verdict itemize every finding it counts? Only then is a finding that is not listed a fixed one."""
+    if case.counts is None:
+        return False
+    return all(sum(1 for f in found if f.severity == s) >= case.counts[k] for k, s in enumerate("HML"))
+
+
 def headline(case: Case, found: list[Finding]) -> str:
     blocking, should, _ = levels(case, found)
     if blocking:
@@ -102,7 +111,8 @@ def _fold(case: Case, found: list[Finding], placed: set[str]) -> list[str]:
 def render(case: Case, found: list[Finding], placed: set[str]) -> str:
     lines = [headline(case, found), (case.summary.strip().splitlines() or [""])[0][:SUMMARY_LIMIT]]
     lines.append(f"Why {case.risk}: " + "; ".join(case.reasons))
-    lines.append(f"Checks: tests {case.tests} · CI {case.ci or 'none'} · reviewed {case.head[:9]}")
+    checks = f"Checks: tests {case.tests} · CI {case.ci or 'none'} · reviewed {case.head[:9]}"
+    lines.append(checks + (f" · {SINCE.format(fixed=case.since[0], new=case.since[1])}" if case.since else ""))
     blocking = [f for f in found if f.severity == "H"]
     lines += [_item(f) for f in blocking]
     counted = case.counts[0] if case.counts else 0

@@ -5,8 +5,8 @@ import unittest
 from helpers import Env, git
 from test_github import GH
 
-from fm import backlog, loop, pulls
-from fm.inline import Review
+from fm import backlog, loop, pulls, verdict
+from fm.inline import Review, Thread
 from fm.providers import registry
 
 DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @@\n a\n+b\n+c\n d\n"
@@ -145,6 +145,113 @@ class Review_(unittest.TestCase):
         tip(g, iid, "Findings:\nF2 | M | app.py:3 | mid\n", (0, 1, 0))
         (r,) = self.pr(g)["reviews"]
         self.assertIn(f"/blob/{head}/app.py#L3", r["body"])
+
+    def sha(self, g: GH, iid: str) -> str:
+        return git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+
+    def resolves(self, g: GH) -> list[list[str]]:
+        return [c for c in g.calls("api", "graphql") if any("resolveReviewThread" in x for x in c)]
+
+    def fixed_once(self, g: GH, iid: str) -> None:
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        commit(g, iid)
+        tip(g, iid, "no findings\n", (0, 0, 0))
+
+    def test_a_fixed_finding_resolves_its_thread(self):
+        g, iid = self.make()
+        self.fixed_once(g, iid)
+        self.assertEqual(len(self.pr(g)["reviews"]), 2)
+        self.assertTrue(self.pr(g)["threads"][0]["resolved"])
+
+    def test_a_settled_thread_is_not_settled_again(self):
+        g, iid = self.make()
+        self.fixed_once(g, iid)
+        backlog.update(g.e.p, iid, pr={**g.e.issue(iid)["pr"], "commented": ""})
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        commit(g, iid)
+        tip(g, iid, "none\n", (0, 0, 0))
+        self.assertEqual(len(self.resolves(g)), 1)
+
+    def test_an_open_finding_keeps_its_thread(self):
+        g, iid = self.make()
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        commit(g, iid)
+        tip(g, iid, "Findings:\nF2 | M | app.py:4 | what one\n", (0, 1, 0))
+        self.assertFalse(self.pr(g)["threads"][0]["resolved"])
+        self.assertEqual(self.resolves(g), [])
+        self.assertEqual(len(self.pr(g)["review_comments"]), 1)
+        self.assertIn(verdict.SINCE.format(fixed=0, new=0), self.pr(g)["reviews"][1]["body"])
+
+    def test_a_refused_resolve_is_answered_with_the_sha_once(self):
+        g, iid = self.make()
+        g.set(reject_resolve=True)
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        commit(g, iid)
+        sha = self.sha(g, iid)
+        tip(g, iid, "none\n", (0, 0, 0))
+        t = self.pr(g)["threads"][0]
+        self.assertFalse(t["resolved"])
+        self.assertEqual(len(t["bodies"]), 2)
+        self.assertIn(sha[:9], t["bodies"][1])
+        commit(g, iid)
+        tip(g, iid, "none\n", (0, 0, 0))
+        self.assertEqual(len(self.pr(g)["threads"][0]["bodies"]), 2)
+
+    def test_the_second_review_counts_fixed_and_new(self):
+        g, iid = self.make()
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        commit(g, iid)
+        tip(g, iid, "Findings:\nF2 | M | app.py:4 | what two\n", (0, 1, 0))
+        first, second = self.pr(g)["reviews"]
+        self.assertIn(verdict.SINCE.format(fixed=1, new=1), second["body"])
+        self.assertNotIn("since last push", first["body"])
+
+    def test_an_unlisted_verdict_settles_nothing(self):
+        g, iid = self.make()
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        commit(g, iid)
+        tip(g, iid, "old format, no findings line\n", (0, 1, 0))
+        self.assertEqual(self.resolves(g), [])
+        self.assertEqual(len(self.pr(g)["reviews"]), 2)
+
+    def test_a_failed_thread_read_still_posts_the_review_once(self):
+        g, iid = self.make()
+        g.set(fail_always=["api", "graphql"])
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        loop.tick(g.e.p)
+        (r,) = self.pr(g)["reviews"]
+        self.assertNotIn("since last push", r["body"])
+
+    def test_threads_without_a_marker_are_ignored(self):
+        g, iid = self.make()
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        prs = g.state["prs"]
+        prs["1"]["threads"].append({"id": "X", "resolved": False, "bodies": ["hi"]})
+        g.set(prs=prs)
+        commit(g, iid)
+        tip(g, iid, "none\n", (0, 0, 0))
+        x = next(t for t in self.pr(g)["threads"] if t["id"] == "X")
+        self.assertFalse(x["resolved"])
+        self.assertEqual(x["bodies"], ["hi"])
+
+    def test_old_issue_comments_are_left_alone(self):
+        g, iid = self.make()
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | what one\n", (0, 1, 0))
+        prs = g.state["prs"]
+        prs["1"]["comments"].append("fm: merge risk low")
+        g.set(prs=prs)
+        commit(g, iid)
+        tip(g, iid, "none\n", (0, 0, 0))
+        self.assertEqual(self.pr(g)["comments"], ["fm: merge risk low"])
+        self.assertEqual(g.calls("pr", "comment"), [])
+
+    def test_local_provider_settles_nothing(self):
+        e = Env()
+        provider = registry.get(e.p)
+        c = {"id": "FN-1", "head": "abc", "pr": None}
+        self.assertEqual(provider.threads(c), [])
+        self.assertIsNone(provider.settle(c, Thread("t", "k", False), "abc"))
 
     def test_local_provider_reviews_nothing(self):
         e = Env()

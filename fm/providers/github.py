@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
-from ..inline import LineComment, Review, resolve_links
-from . import Permanent, Provider, ProviderError, Transient
+from ..inline import LineComment, Review, Thread, resolve_links
+from . import Permanent, Provider, ProviderError, Transient, gh_threads
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -186,6 +186,17 @@ class GitHub(Provider):
         posted = self.run("gh", "api", "-X", "POST", url, "--input", "-", input=json.dumps(payload))
         self.link_comments(change, review, new, (base, posted.out))
         return len(new)
+
+    def threads(self, change: dict[str, Any]) -> list[Thread]:
+        args = ["api", "graphql", "--paginate", "-F", "owner={owner}", "-F", "repo={repo}", "-F", f"number={change['pr']}"]
+        return gh_threads.parse(self.run("gh", *args, "-f", f"query={gh_threads.READ}", "--jq", gh_threads.JQ).out)
+
+    def settle(self, change: dict[str, Any], thread: Thread, sha: str) -> None:
+        try:
+            self.run("gh", "api", "graphql", "-f", f"query={gh_threads.RESOLVE}", "-f", f"id={thread.id}")
+        except (Transient, Permanent):
+            body = gh_threads.fixed_text(thread.key, sha)
+            self.run("gh", "api", "graphql", "-f", f"query={gh_threads.REPLY}", "-f", f"id={thread.id}", "-f", f"body={body}")
 
     def link_comments(self, change: dict[str, Any], review: Review, new: list[LineComment], posted: tuple[str, str]) -> None:
         """Best effort: the body's links to findings that got an inline comment point at that comment instead of the

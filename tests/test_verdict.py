@@ -1,6 +1,7 @@
 """The verdict as a review body: pure."""
 
 import unittest
+from dataclasses import replace
 
 from fm import verdict
 from fm.verdict import FIX, LOOK, READY, Case, Finding, findings, key, render
@@ -78,3 +79,23 @@ class Verdict(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Since(unittest.TestCase):
+    def test_since_last_push_shows_only_with_an_earlier_review(self):
+        for since in ((2, 7), (0, 0)):
+            out = render(replace(case(), since=since), [], set())
+            self.assertIn(verdict.SINCE.format(fixed=since[0], new=since[1]), out)
+        self.assertNotIn("since last push", render(case(), [], set()))
+
+    def test_complete_means_every_counted_finding_is_listed(self):
+        m = [f("M", "x")]
+        for counts, listed, want in (
+            (None, [], False),
+            ((0, 0, 0), [], True),
+            ((0, 1, 0), [], False),
+            ((0, 1, 0), m, True),
+            ((1, 1, 0), m, False),
+            ((0, 1, 0), m + [f("M", "y")], True),
+        ):
+            self.assertEqual(verdict.complete(case(counts=counts), listed), want, (counts, listed))

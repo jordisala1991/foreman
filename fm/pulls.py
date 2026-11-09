@@ -10,7 +10,7 @@ from typing import Any
 
 from . import backlog, describe, inline, proc, providers, util, verdict
 from .config import Project
-from .inline import Review
+from .inline import Review, Thread
 from .providers import Permanent, Provider, ProviderError, Transient, registry
 from .verdict import Case, Finding
 
@@ -124,11 +124,32 @@ def _visible(p: Project, provider: Provider, i: dict[str, Any], change: dict[str
         return {}
 
 
+def _threads(p: Project, provider: Provider, i: dict[str, Any], change: dict[str, Any]) -> list[Thread]:
+    try:
+        return provider.threads(change)
+    except (ProviderError, Transient, Permanent) as e:
+        backlog.event(p, i["id"], f"could not read the review threads, nothing settled: {e}"[:300])
+        return []
+
+
+def _settle(p: Project, provider: Provider, i: dict[str, Any], change: dict[str, Any], gone: list[Thread]) -> None:
+    """Resolves the threads of fixed findings, after the review is posted. A failure is noted; the thread is tried again next tip."""
+    for t in gone:
+        try:
+            provider.settle(change, t, change["head"])
+        except (ProviderError, Transient, Permanent) as e:
+            backlog.event(p, i["id"], f"could not settle a fixed finding, will retry next tip: {e}"[:300])
+
+
 def _post_review(p: Project, provider: Provider, i: dict[str, Any], c: dict[str, Any]) -> None:
     change = change_of(i, c["head"])
     found = findings_of(i, c["head"])
     comments = inline.line_comments(found, _visible(p, provider, i, change, found))
-    body = verdict.render(case_of(i, c), found, {x.place for x in comments})
+    threads = _threads(p, provider, i, change)
+    case = case_of(i, c)
+    gone = inline.fixed(threads, found) if verdict.complete(case, found) else []
+    since = (len(gone), len(inline.fresh(comments, threads))) if threads else None
+    body = verdict.render(replace(case, since=since), found, {x.place for x in comments})
     review = Review(f"review-{c['head']}", body, comments)
     try:
         provider.review(change, review)
@@ -137,6 +158,7 @@ def _post_review(p: Project, provider: Provider, i: dict[str, Any], c: dict[str,
             raise
         backlog.event(p, i["id"], f"inline comments rejected, review posted without them: {e}"[:300])
         provider.review(change, replace(review, comments=[]))
+    _settle(p, provider, i, change, gone)
 
 
 def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: dict[str, Any]) -> dict[str, Any]:

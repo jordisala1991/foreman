@@ -4,6 +4,7 @@ no tag, no release): that is the owner's, and releases are a separate concept.
 
 Operations: `publish` (make the branch visible: open the change), `ready` (mark it ready for review),
 `diff` (its unified diff), `review` (post the verdict as one review with its inline comments),
+`threads` (its fm finding threads) and `settle` (resolve one, or reply that it is fixed in a commit),
 `body` (its description now), `describe` (set its body and title),
 `merge(change, strategy)` (the one merge in fm; a future queue is just another strategy), `state` (is it merged?
 closed?), `ci` (the platform's checks),
@@ -16,7 +17,7 @@ Config: `[integrate] provider` (`auto` default: github when `origin` is on GitHu
 from typing import Any
 
 from ..config import Project
-from ..inline import Review
+from ..inline import Review, Thread
 
 MERGES = ("squash", "merge", "rebase")
 PRS = ("draft", "done")
@@ -71,6 +72,14 @@ class Provider:
         comments it posted. The same review key already posted: posts nothing, returns 0. An inline comment whose key
         the change already carries is skipped. Nothing locally."""
         return 0
+
+    def threads(self, change: dict[str, Any]) -> list[Thread]:
+        """The fm finding threads of the change (empty locally)."""
+        return []
+
+    def settle(self, change: dict[str, Any], thread: Thread, sha: str) -> None:
+        """Marks the thread's finding fixed in `sha`: resolves it, or when the platform refuses, replies `Fixed in
+        <sha[:9]>.` once. Nothing locally."""
 
     def body(self, change: dict[str, Any]) -> str:
         """The change's description as the platform has it now (nothing locally)."""

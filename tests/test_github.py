@@ -45,6 +45,26 @@ FAKE_GH = textwrap.dedent("""\
     if a[:2] == ["repo", "view"]:
         print("https://github.com/o/r")
         sys.exit(0)
+    if a[:2] == ["api", "graphql"]:
+        kv = dict(x.split("=", 1) for x in a if "=" in x and not x.startswith("-"))
+        q = kv["query"]
+        pr = next(iter(s["prs"].values()))
+        threads = pr.setdefault("threads", [])
+        if "resolveReviewThread" in q or "addPullRequestReviewThreadReply" in q:
+            if "resolveReviewThread" in q and s.get("reject_resolve"):
+                print("HTTP 403", file=sys.stderr)
+                sys.exit(1)
+            t = next(t for t in threads if t["id"] == kv["id"])
+            if "resolveReviewThread" in q:
+                t["resolved"] = True
+            else:
+                t["bodies"].append(kv["body"])
+            save()
+            print("{}")
+        else:
+            for t in threads:
+                print(json.dumps(t))
+        sys.exit(0)
     if a[:1] == ["api"]:
         url = next(x for x in a if x.startswith("repos/"))
         parts = url.split("/")
@@ -73,6 +93,7 @@ FAKE_GH = textwrap.dedent("""\
                 pr.setdefault("reviews", []).append(body)
                 for c in body["comments"]:
                     pr.setdefault("review_comments", []).append(c["body"])
+                    pr.setdefault("threads", []).append({"id": "T" + str(len(pr.get("threads", [])) + 1), "resolved": False, "bodies": [c["body"]]})
                 save()
                 print(json.dumps({"id": len(pr["reviews"])}))
             else:
