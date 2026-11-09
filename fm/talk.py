@@ -3,7 +3,7 @@
 from typing import Any
 
 from . import backlog, sessions, util
-from .agents import idle_s, send
+from .agents import idle_s, send, update_agent
 from .config import Project
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
@@ -12,13 +12,14 @@ MAX_SEND_FAILS = 3
 
 def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
     d = backlog.load(p)
+    sent: set[str] = set()  # one answer per task per tick: the session is working after the first
     for q in backlog.undelivered(d):
         i = backlog.get(d, q["issue"])
         if i["status"] in backlog.CLOSED:
             backlog.mark_delivered(p, q["id"])
             continue
         agent: dict[str, Any] = i.get("agent") or {}
-        if sessions.busy(rows, agent.get("session")):
+        if i["id"] in sent or sessions.busy(rows, agent.get("session")):
             continue  # it is busy (maybe talking with the owner): next tick
         if q.get("kind") in ("conflict", "review"):
             msg = q["answer"]
@@ -37,7 +38,8 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
             msg = f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
         if send(p, i, msg):
             backlog.mark_delivered(p, q["id"])
-            backlog.update(p, i["id"], agent={**i["agent"], "nudged": None, "started": util.now()})
+            sent.add(i["id"])
+            update_agent(p, i["id"], nudged=None, started=util.now())
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
         else:
             fails = i.get("undelivered", 0) + 1
@@ -68,7 +70,8 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
                 f"`{how}`; if you need the owner, `fm ask`; if it cannot be done, `fm block`. "
                 "Otherwise carry on.",
             ):
-                backlog.update(p, i["id"], agent={**a, "nudged": util.now()}, nudges=i.get("nudges", 0) + 1)
+                update_agent(p, i["id"], nudged=util.now())
+                backlog.update(p, i["id"], nudges=i.get("nudges", 0) + 1)
                 backlog.event(p, i["id"], f"{a.get('name')} ended its turn without finishing: nudged")
                 continue
         if (util.age_s(a.get("nudged")) or 0) > NUDGE_IDLE_S and idle_s(a) > NUDGE_IDLE_S:

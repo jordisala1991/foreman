@@ -4,7 +4,8 @@ measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the gua
 `--settings`.
 
 `resume` continues a session that ended its turn (an owner's answer, a rejected integration, a nudge) under the same
-id: `claude --bg --resume SID … MESSAGE`."""
+id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
+id instead, so a resume carries none; if it starts a copy anyway, `resume` returns the copy's ids."""
 
 import json
 import os
@@ -55,11 +56,12 @@ class Agent:
     effort: str
 
 
-def command(p: Project, agent: Agent, prompt: str, resume: str | None = None) -> list[str]:
-    cmd = [p.get("agents", "claude"), "--bg", "-n", agent.name]
-    if resume:
-        cmd += ["--resume", resume]
-    return cmd + [
+def command(p: Project, agent: Agent, prompt: str) -> list[str]:
+    return [
+        p.get("agents", "claude"),
+        "--bg",
+        "-n",
+        agent.name,
         "--model",
         agent.model,
         "--effort",
@@ -83,15 +85,25 @@ def _run(cmd: list[str], cwd: Path) -> str:
     return m.group(1)
 
 
+def resume_command(p: Project, sid: str, message: str) -> list[str]:
+    """No flag besides the message: the session keeps its saved options and its id."""
+    return [p.get("agents", "claude"), "--bg", "--resume", sid, message]
+
+
+def _find(p: Project, short: str) -> str | None:
+    return next((sid for sid, row in listing(p).items() if row.get("id") == short or sid.startswith(short)), None)
+
+
 def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | None]:
     """(short id, full session id or None)."""
     short = _run(command(p, agent, prompt), cwd)
-    sid = next((sid for sid, row in listing(p).items() if row.get("id") == short or sid.startswith(short)), None)
-    return short, sid
+    return short, _find(p, short)
 
 
-def resume(p: Project, agent: Agent, sid: str, message: str, cwd: Path) -> str:
-    return _run(command(p, agent, message, resume=sid), cwd)
+def resume(p: Project, sid: str, message: str, cwd: Path) -> tuple[str, str | None]:
+    """(short id, full session id or None) of the session that got the message: `sid`'s own, or a copy's."""
+    short = _run(resume_command(p, sid, message), cwd)
+    return short, sid if sid.startswith(short) else _find(p, short)
 
 
 def listing(p: Project) -> dict[str, dict[str, Any]]:

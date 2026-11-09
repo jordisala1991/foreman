@@ -294,6 +294,7 @@ class Stopped(unittest.TestCase):
         self.assertIn("not finished", e.calls()[-1]["argv"][-1])
         self.assertEqual(e.issue(iid)["nudges"], 1)
         backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "nudged": "2000-01-01 00:00:00"})
+        e.set_state(iid.lower(), "done")  # the nudge woke it; it ended its turn again
         loop.tick(e.p)
         self.assertIn("stopped without finishing", e.issue(iid)["blocked"])
         self.assertEqual(len(e.calls()), 2)

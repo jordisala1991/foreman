@@ -31,12 +31,35 @@ FAKE = textwrap.dedent("""\
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:
         f.write(json.dumps({"argv": a, "cwd": os.getcwd(), "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")}) + "\\n")
+    def rows_of(fn):
+        path = os.path.join(d, fn)
+        return json.load(open(path)) if os.path.exists(path) else []
+    def save(fn, rows):
+        json.dump(rows, open(os.path.join(d, fn), "w"))
+    if "--resume" in a:
+        sid = a[a.index("--resume") + 1]
+        rows = rows_of("agents.json")
+        row = next(r for r in rows if r["sessionId"] == sid)
+        extra = [x for x in a[:-1] if x not in ("--bg", "--resume", sid)]
+        if extra or os.path.exists(os.path.join(d, "copy_next")) or row["state"] == "working":
+            new = hashlib.sha1((sid + "copy" + str(len(rows))).encode()).hexdigest()[:8]
+            copy = {"id": new, "sessionId": new + "-0000-0000", "name": row["name"], "state": "working"}
+            if os.path.exists(os.path.join(d, "copy_unlisted")):
+                save("pending.json", rows_of("pending.json") + [copy])
+            else:
+                save("agents.json", rows + [copy])
+            print(f"note: started a copy as {new}")
+            print(f"backgrounded · {new} · {row['name']}")
+        else:
+            row["state"] = "working"
+            save("agents.json", rows)
+            print(f"backgrounded · {sid[:8]} · {row['name']}")
+        sys.exit(0)
     name = a[a.index("-n") + 1]
     short = hashlib.sha1(name.encode()).hexdigest()[:8]
-    if "--resume" not in a:
-        rows = json.load(open(os.path.join(d, "agents.json"))) if os.path.exists(os.path.join(d, "agents.json")) else []
-        rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "state": "working"})
-        json.dump(rows, open(os.path.join(d, "agents.json"), "w"))
+    rows = rows_of("agents.json")
+    rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "state": "working"})
+    save("agents.json", rows)
     print(f"backgrounded · {short} · {name}")
 """)
 
