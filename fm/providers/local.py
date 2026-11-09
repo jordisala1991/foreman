@@ -3,7 +3,7 @@
 from typing import Any
 
 from .. import proc
-from . import Provider, ProviderError
+from . import Conflict, Provider, ProviderError
 
 
 class Local(Provider):
@@ -36,7 +36,10 @@ class Local(Provider):
         if r.code != 0:
             self.git("merge", "--abort", check=False)
             self.git("reset", "--hard", "-q", "HEAD", check=False)  # a failed squash leaves no merge to abort
-            raise ProviderError(f"merge failed: {(r.err or r.out).strip()[:300]}")
+            why = f"merge failed: {(r.err or r.out).strip()[:300]}"
+            if self.git("merge-tree", "--write-tree", main, branch, check=False).code == 1:  # 1 = conflicts
+                raise Conflict(why)
+            raise ProviderError(why)
         return self.git("rev-parse", "HEAD").out.strip()
 
     def state(self, change: dict[str, Any]) -> dict[str, Any]:

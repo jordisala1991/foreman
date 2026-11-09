@@ -110,6 +110,9 @@ FAKE_GH = textwrap.dedent("""\
         save()
         print("https://github.com/o/r/pull/" + n)
         sys.exit(0)
+    if s.get("refuse_merge") and a[:2] == ["pr", "merge"]:
+        print(s["refuse_merge"], file=sys.stderr)
+        sys.exit(1)
     pr = s["prs"][a[2]]
     if a[:2] == ["pr", "ready"]:
         pr["draft"] = False
@@ -343,6 +346,47 @@ class Pulls(unittest.TestCase):
             self.assertEqual(g.e.issue(iid)["status"], "done")
             self.assertEqual(g.e.issue(iid)["commit"], "c0ffee")
             self.assertEqual(g.calls("pr", "merge")[0][:3], ["pr", "merge", "1"])
+
+    def main_changes_app(self, g: GH) -> None:
+        (g.e.repo / "app.py").write_text("changed on main\n")
+        git(g.e.repo, "commit", "-qam", "main moved")
+
+    def test_a_pr_refused_for_conflicts_goes_back_as_a_conflict(self):
+        g, iid = self.merged(None)
+        self.main_changes_app(g)
+        g.set(refuse_merge="Pull Request has merge conflicts")
+        loop.tick(g.e.p)
+        i = g.e.issue(iid)
+        self.assertEqual(i["status"], "in progress")
+        self.assertEqual(i["conflicts"], 1)
+        self.assertEqual(backlog.load(g.e.p)["decisions_resolved"][-1]["kind"], "conflict")
+        self.assertFalse(i.get("blocked"))
+        self.assertNotIn("accepted", i)
+        self.assertEqual(len(g.calls("pr", "merge")), 1)
+        self.assertEqual(git(g.e.repo, "status", "--porcelain", "--untracked-files=no").strip(), "")
+
+    def test_a_pr_refused_for_another_reason_still_blocks(self):
+        g, iid = self.merged(None)
+        g.set(refuse_merge="Pull request is closed")
+        loop.tick(g.e.p)
+        i = g.e.issue(iid)
+        self.assertTrue(i["blocked"])
+        self.assertEqual(i["status"], "in review")
+        self.assertNotIn("conflicts", i)
+
+    def test_a_refusal_the_local_check_cannot_reproduce_stays_blocked(self):
+        g, iid = self.merged(None)
+        g.set(refuse_merge="Pull Request has merge conflicts")
+        loop.tick(g.e.p)
+        i = g.e.issue(iid)
+        self.assertTrue(i["blocked"])
+        self.assertEqual(i["status"], "in review")
+        self.assertNotIn("conflicts", i)
+
+    def test_only_merge_conflict_text_is_a_conflict(self):
+        self.assertIsInstance(github.failure("gh", "Pull Request has merge conflicts"), providers.Conflict)
+        for text in ("pull request is closed", "Pull request #3 is not mergeable", "error on branch fix-conflict-ui"):
+            self.assertNotIsInstance(github.failure("gh", text), providers.Conflict)
 
     def test_the_task_closes_only_once_the_pr_is_seen_merged(self):
         g, iid = self.merged(None)
