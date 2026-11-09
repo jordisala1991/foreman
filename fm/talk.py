@@ -10,6 +10,24 @@ NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this lon
 MAX_SEND_FAILS = 3
 
 
+def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
+    """What the agent is told about a delivered answer, by its kind."""
+    if q.get("kind") in ("conflict", "review"):
+        return q["answer"]
+    elif q.get("kind") == "rejection":
+        return (
+            f"The owner sent task {i['id']} back from the integration queue: «{q['answer']}». Fix it, review again if you change much, and run `fm done` again."
+        )
+    elif q.get("kind") == "note":
+        return f"A note from outside fm for task {i['id']} ({q.get('source')}): «{q['answer']}»."
+    elif q.get("kind") == "permission":
+        return f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». " + (
+            "It is allowed once: run it again." if q.get("allowed") else "It is not allowed."
+        )
+    else:
+        return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
+
+
 def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
     d = backlog.load(p)
     sent: set[str] = set()  # one answer per task per tick: the session is working after the first
@@ -19,23 +37,11 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
             backlog.mark_delivered(p, q["id"])
             continue
         agent: dict[str, Any] = i.get("agent") or {}
-        if i["id"] in sent or sessions.busy(rows, agent.get("session")):
+        if i["id"] in sent or (agent.get("short") and not agent.get("session")):
+            continue  # one answer per tick; or its copy is not listed yet (fill_sessions): next tick
+        if sessions.busy(rows, agent.get("session")):
             continue  # it is busy (maybe talking with the owner): next tick
-        if q.get("kind") in ("conflict", "review"):
-            msg = q["answer"]
-        elif q.get("kind") == "rejection":
-            msg = (
-                f"The owner sent task {i['id']} back from the integration queue: «{q['answer']}». Fix it, review "
-                "again if you change much, and run `fm done` again."
-            )
-        elif q.get("kind") == "note":
-            msg = f"A note from outside fm for task {i['id']} ({q.get('source')}): «{q['answer']}»."
-        elif q.get("kind") == "permission":
-            msg = f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». " + (
-                "It is allowed once: run it again." if q.get("allowed") else "It is not allowed."
-            )
-        else:
-            msg = f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
+        msg = message_for(i, q)
         if send(p, i, msg):
             backlog.mark_delivered(p, q["id"])
             sent.add(i["id"])

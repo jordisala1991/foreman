@@ -99,3 +99,35 @@ class Resume(unittest.TestCase):
         self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
         self.assertEqual(len(rows(e)), 1)
         self.assertEqual(e.calls()[-1]["argv"][1:3], ["--resume", e.issue(iid)["agent"]["session"]])
+
+    def test_an_idle_session_still_alive_is_stopped_before_the_resume(self):
+        e = Env()
+        iid = launched(e)
+        e.set_state(iid.lower(), "done")  # the fake copies a done row unless it was stopped first
+        answer(e, iid)
+        loop.tick(e.p)
+        self.assertEqual(len(rows(e)), 1)
+
+    def test_a_copy_still_not_listed_makes_the_next_answer_wait(self):
+        e = Env()
+        iid = launched(e)
+        (e.bin / "copy_next").write_text("")
+        (e.bin / "copy_unlisted").write_text("")
+        e.set_state(iid.lower(), "done")
+        answer(e, iid, "B")
+        loop.tick(e.p)
+        answer(e, iid, "C")
+        loop.tick(e.p)
+        loop.tick(e.p)
+        self.assertEqual(backlog.get(backlog.load(e.p), iid).get("undelivered", 0), 0)
+        self.assertEqual(len(backlog.undelivered(backlog.load(e.p))), 1)
+
+    def test_a_copy_is_recorded_in_one_edit(self):
+        e = Env()
+        iid = launched(e)
+        (e.bin / "copy_next").write_text("")
+        e.set_state(iid.lower(), "done")
+        answer(e, iid)
+        loop.tick(e.p)
+        i = e.issue(iid)
+        self.assertIn(i["agent"]["session"], i["sessions"])

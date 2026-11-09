@@ -7,10 +7,12 @@ measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the gua
 id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
 id instead, so a resume carries none; if it starts a copy anyway, `resume` returns the copy's ids."""
 
+import contextlib
 import json
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,7 @@ from .config import Project
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "bin"
+STOP_SETTLE_S = 3.0  # `claude stop` returns before the process is gone; a resume right after it still copies (0 s: copy, 2 s: ok)
 
 
 class SessionError(Exception):
@@ -102,6 +105,10 @@ def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | 
 
 def resume(p: Project, sid: str, message: str, cwd: Path) -> tuple[str, str | None]:
     """(short id, full session id or None) of the session that got the message: `sid`'s own, or a copy's."""
+    # an idle session whose process is still alive makes claude start a copy: it wakes in place only stopped
+    with contextlib.suppress(proc.ProcError):  # best effort: the resume says if the session cannot be reached
+        stop(p, sid[:8])
+    time.sleep(STOP_SETTLE_S)
     short = _run(resume_command(p, sid, message), cwd)
     return short, sid if sid.startswith(short) else _find(p, short)
 

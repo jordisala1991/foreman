@@ -88,7 +88,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
    logged and the same key is tried again next tick.
    Cursors in `state/cursors/`. None shipped (the owner's call for now).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
-   (`claude --bg --resume SID MESSAGE`, no other flag: any flag makes claude start a copy), when that session is not
+   (`claude --bg --resume SID MESSAGE`, no other flag: any flag makes claude start a copy; an idle session is stopped first and given 3 s, or its live process
+   makes claude copy it anyway), when that session is not
    busy, at most one answer per task per tick; if claude starts a copy anyway, fm records the new session; dropped if the task closed meanwhile;
    after 3 failed tries the task is blocked with the answer in the reason. A session id not listed yet at launch is
    filled in from its short id on a later tick.

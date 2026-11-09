@@ -11,9 +11,10 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from fm import backlog, util
+from fm import backlog, sessions, util
 from fm.config import Project
 
+sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent
 
 FAKE = textwrap.dedent("""\
@@ -28,6 +29,12 @@ FAKE = textwrap.dedent("""\
         print(open(os.path.join(d, "login.json")).read() if os.path.exists(os.path.join(d, "login.json")) else '{"loggedIn": true}')
         sys.exit(0)
     if a[:1] == ["stop"]:
+        path = os.path.join(d, "agents.json")
+        rows = json.load(open(path)) if os.path.exists(path) else []
+        for r in rows:
+            if r["id"] == a[1] or r["sessionId"].startswith(a[1]):
+                r["state"] = "stopped"
+        json.dump(rows, open(path, "w"))
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:
         f.write(json.dumps({"argv": a, "cwd": os.getcwd(), "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")}) + "\\n")
@@ -36,12 +43,12 @@ FAKE = textwrap.dedent("""\
         return json.load(open(path)) if os.path.exists(path) else []
     def save(fn, rows):
         json.dump(rows, open(os.path.join(d, fn), "w"))
-    if "--resume" in a:
+    if "--resume" in a:  # alive (not stopped) rows are copied, as claude does
         sid = a[a.index("--resume") + 1]
         rows = rows_of("agents.json")
         row = next(r for r in rows if r["sessionId"] == sid)
         extra = [x for x in a[:-1] if x not in ("--bg", "--resume", sid)]
-        if extra or os.path.exists(os.path.join(d, "copy_next")) or row["state"] == "working":
+        if extra or os.path.exists(os.path.join(d, "copy_next")) or row["state"] in ("working", "done", "blocked"):
             new = hashlib.sha1((sid + "copy" + str(len(rows))).encode()).hexdigest()[:8]
             copy = {"id": new, "sessionId": new + "-0000-0000", "name": row["name"], "state": "working"}
             if os.path.exists(os.path.join(d, "copy_unlisted")):
