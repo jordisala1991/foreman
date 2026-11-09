@@ -128,7 +128,7 @@ def _post_review(p: Project, provider: Provider, i: dict[str, Any], c: dict[str,
     change = change_of(i, c["head"])
     found = findings_of(i, c["head"])
     comments = inline.line_comments(found, _visible(p, provider, i, change, found))
-    body = verdict.render(case_of(i, c), found, {x.key for x in comments})
+    body = verdict.render(case_of(i, c), found, {x.place for x in comments})
     review = Review(f"review-{c['head']}", body, comments)
     try:
         provider.review(change, review)

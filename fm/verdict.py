@@ -79,19 +79,19 @@ def headline(case: Case, found: list[Finding]) -> str:
 
 
 def _item(f: Finding) -> str:
-    return f"- {'' if f.place == '-' else f'`{f.place}` '}{safe(f.what)}"
+    """One line; its place links to the inline comment or the file (`fm-link:` is resolved by the provider)."""
+    place = "" if f.place == "-" else f"[`{f.place}`](fm-link:{f.place}) "
+    return f"- {place}{safe(f.what)}"
+
+
+def _plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
 
 
 def _fold(case: Case, found: list[Finding], placed: set[str]) -> list[str]:
     _, should, nits = levels(case, found)
-    count = " · ".join(x for x in (f"{should} should fix" if should else "", f"{nits} nits" if nits else "") if x)
-    items: list[str] = []
-    shown: set[str] = set()
-    for f in found:
-        first = key(f) not in shown  # a repeat of a placed key has no comment of its own
-        shown.add(key(f))
-        if f.severity == "M" or (f.severity == "L" and (key(f) not in placed or not first)):
-            items.append(_item(f))
+    count = " · ".join(x for x in (f"{should} should fix" if should else "", _plural(nits, "nit", "nits") if nits else "") if x)
+    items = [_item(f) for f in found if f.severity == "M" or (f.severity == "L" and f.place not in placed)]
     if not count:
         return []
     if not items:

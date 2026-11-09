@@ -42,10 +42,27 @@ FAKE_GH = textwrap.dedent("""\
     if a[:2] == ["pr", "create"] and flag("--head") == s.get("flaky"):
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
+    if a[:2] == ["repo", "view"]:
+        print("https://github.com/o/r")
+        sys.exit(0)
     if a[:1] == ["api"]:
         url = next(x for x in a if x.startswith("repos/"))
         parts = url.split("/")
         tail = parts[5:]
+        if parts[4].isdigit() and tail[:1] == ["reviews"] and len(tail) == 3:
+            bodies = s["prs"][parts[4]].get("review_comments", [])
+            for n, b in enumerate(bodies, 1):
+                print(n, *re.findall(r"<!-- fm:[a-z0-9-]+ -->", b))
+            sys.exit(0)
+        if parts[4].isdigit() and tail[:1] == ["reviews"] and len(tail) == 2:
+            if s.get("fail_put"):
+                print("HTTP 404", file=sys.stderr)
+                sys.exit(1)
+            pr = s["prs"][parts[4]]
+            pr["reviews"][int(tail[1]) - 1]["body"] = json.load(sys.stdin)["body"]
+            save()
+            print("{}")
+            sys.exit(0)
         if parts[4].isdigit() and tail in (["reviews"], ["comments"]):
             pr = s["prs"][parts[4]]
             if "-X" in a:
@@ -57,7 +74,7 @@ FAKE_GH = textwrap.dedent("""\
                 for c in body["comments"]:
                     pr.setdefault("review_comments", []).append(c["body"])
                 save()
-                print("{}")
+                print(json.dumps({"id": len(pr["reviews"])}))
             else:
                 bodies = [r["body"] or "" for r in pr.get("reviews", [])] if tail == ["reviews"] else pr.get("review_comments", [])
                 for b in bodies:

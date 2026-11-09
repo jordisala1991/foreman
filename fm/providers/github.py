@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
-from ..inline import Review
+from ..inline import LineComment, Review, resolve_links
 from . import Permanent, Provider, ProviderError, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
@@ -175,14 +175,37 @@ class GitHub(Provider):
             return 0
         known = self.markers(change, "comments")
         new = [c for c in review.comments if _marker(c.key) not in known]
+        base = self.run("gh", "repo", "view", "--json", "url", "-q", ".url").out.strip()
         payload = {
             "commit_id": change["head"],
             "event": "COMMENT",
-            "body": f"{review.body}\n\n{_marker(review.key)}",
+            "body": resolve_links(f"{review.body}\n\n{_marker(review.key)}", base, change["head"], {}),
             "comments": [{"path": c.path, "line": c.line, "side": "RIGHT", "body": f"{c.body}\n\n{_marker(c.key)}"} for c in new],
         }
-        self.run("gh", "api", "-X", "POST", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews", "--input", "-", input=json.dumps(payload))
+        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews"
+        posted = self.run("gh", "api", "-X", "POST", url, "--input", "-", input=json.dumps(payload))
+        self.link_comments(change, review, new, (base, posted.out))
         return len(new)
+
+    def link_comments(self, change: dict[str, Any], review: Review, new: list[LineComment], posted: tuple[str, str]) -> None:
+        """Best effort: the body's links to findings that got an inline comment point at that comment instead of the
+        file. A failure leaves the file links, which are right too."""
+        base, out = posted
+        if not new or "fm-link:" not in review.body:
+            return
+        try:
+            rid = json.loads(out)["id"]
+            listing = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}/comments"
+            r = self.run("gh", "api", listing, "--jq", r'.[] | "\(.id) \(.body | scan("<!-- fm:[a-z0-9-]+ -->"))"')
+            ids: dict[str, str] = {}
+            for line in r.out.splitlines():
+                num, _, mark = line.partition(" ")
+                ids[mark] = num
+            urls = {c.place: f"{base}/pull/{change['pr']}#discussion_r{ids[_marker(c.key)]}" for c in new if _marker(c.key) in ids}
+            body = resolve_links(review.body, base, change["head"], urls) + f"\n\n{_marker(review.key)}"
+            self.run("gh", "api", "-X", "PUT", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}", "--input", "-", input=json.dumps({"body": body}))
+        except (ValueError, KeyError, TypeError, ProviderError, Transient, Permanent):
+            return
 
     def ci(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "checks", str(change["pr"]), "--json", "bucket", check=False)  # exit 8 = pending

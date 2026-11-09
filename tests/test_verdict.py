@@ -40,8 +40,8 @@ class Verdict(unittest.TestCase):
         self.assertNotIn("secret why", render(case(counts=(0, 1, 0)), [placed], set()))
 
     def test_only_blocking_findings_sit_outside_the_fold(self):
-        found = [f("H", "hhh"), f("M", "mmm"), f("L", "placed"), f("L", "unplaced")]
-        placed = {key(found[2])}
+        found = [f("H", "hhh"), f("M", "mmm"), f("L", "placed", "a.py:2"), f("L", "unplaced", "a.py:3")]
+        placed = {found[2].place}
         body = render(case(counts=(1, 1, 2)), found, placed)
         fold = body.index("<details")
         self.assertLess(body.index("hhh"), fold)
@@ -51,9 +51,15 @@ class Verdict(unittest.TestCase):
         self.assertNotIn("placed", body.replace("unplaced", ""))
 
     def test_a_repeated_nit_is_still_reachable(self):
-        a, b = f("L", "same", "a.py:3"), f("L", "same", "a.py:4")
-        body = render(case(counts=(0, 0, 2)), [a, b], {key(a)})
-        self.assertIn("a.py:4", body)
+        a, b = f("L", "same", "a.py:999"), f("L", "same", "a.py:3")
+        body = render(case(counts=(0, 0, 2)), [a, b], {"a.py:3"})
+        self.assertIn("a.py:999", body)
+        self.assertNotIn("a.py:3", body)
+
+    def test_counts_use_the_singular_for_one(self):
+        self.assertIn("1 nit<", render(case(counts=(0, 0, 1)), [f("L", "x", "-")], set()))
+        self.assertNotIn("1 nits", render(case(counts=(0, 1, 1)), [f("L", "x", "-")], set()))
+        self.assertIn("2 nits", render(case(counts=(0, 0, 2)), [f("L", "x", "-")], set()))
 
     def test_reviewer_text_cannot_notify_or_break_the_fold(self):
         body = render(case(counts=(1, 0, 0)), [f("H", "ping @someone </details>")], set())

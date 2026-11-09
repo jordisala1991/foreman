@@ -127,6 +127,25 @@ class Review_(unittest.TestCase):
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
         self.assertEqual(len(self.pr(g)["reviews"]), 3)
 
+    def test_body_links_point_at_the_comment_or_the_reviewed_commit_and_line(self):
+        g, iid = self.make()
+        head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+        tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | M | app.py:3 | mid | why: because\n", (1, 1, 0))
+        (r,) = self.pr(g)["reviews"]
+        self.assertIn(f"https://github.com/o/r/blob/{head}/app.py#L99", r["body"])
+        self.assertIn("https://github.com/o/r/pull/1#discussion_r1", r["body"])
+        self.assertNotIn("fm-link", r["body"])
+        self.assertNotIn("why: because", r["comments"][0]["body"])
+        self.assertIn("because", r["comments"][0]["body"])
+
+    def test_a_failed_comment_link_edit_keeps_the_file_links(self):
+        g, iid = self.make()
+        g.set(fail_put=True)
+        head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+        tip(g, iid, "Findings:\nF2 | M | app.py:3 | mid\n", (0, 1, 0))
+        (r,) = self.pr(g)["reviews"]
+        self.assertIn(f"/blob/{head}/app.py#L3", r["body"])
+
     def test_local_provider_reviews_nothing(self):
         e = Env()
         provider = registry.get(e.p)

@@ -16,6 +16,10 @@ class LineComment:
     line: int
     body: str
 
+    @property
+    def place(self) -> str:
+        return f"{self.path}:{self.line}"
+
 
 @dataclass(frozen=True)
 class Review:
@@ -65,7 +69,8 @@ def visible_lines(diff: str) -> dict[str, set[int]]:
 
 def _body(f: Finding) -> str:
     text = f"**{WORDS[f.severity]}** · {safe(f.what)}"
-    return text + (f"\n\n<details>\n<summary>Why</summary>\n\n{safe(f.why)}\n\n</details>" if f.why else "")
+    why = re.sub(r"^\s*why\s*:\s*", "", f.why, flags=re.IGNORECASE)
+    return text + (f"\n\n<details>\n<summary>Why</summary>\n\n{safe(why)}\n\n</details>" if why else "")
 
 
 def line_comments(found: list[Finding], visible: dict[str, set[int]]) -> list[LineComment]:
@@ -75,3 +80,22 @@ def line_comments(found: list[Finding], visible: dict[str, set[int]]) -> list[Li
         if m and int(m.group(2)) in visible.get(m.group(1), set()):
             out.setdefault(key(f), LineComment(key(f), m.group(1), int(m.group(2)), _body(f)))
     return list(out.values())
+
+
+LINK = re.compile(r"fm-link:([^)\s]*)")
+
+
+def resolve_links(body: str, base: str, head: str, comments: dict[str, str]) -> str:
+    """Replaces each `fm-link:PLACE` of a review body: with the URL of its inline comment (`comments`: place -> URL),
+    else with the file at the reviewed commit, on its line (`base` is the repository's URL)."""
+
+    def url(m: re.Match[str]) -> str:
+        place = m.group(1)
+        if place in comments:
+            return comments[place]
+        path, _, line = place.rpartition(":")
+        if not line.isdigit():
+            path, line = place, ""
+        return f"{base}/blob/{head}/{path}" + (f"#L{line}" if line else "")
+
+    return LINK.sub(url, body)
