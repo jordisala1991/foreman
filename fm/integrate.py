@@ -21,6 +21,10 @@ class IntegrateError(Exception):
     pass
 
 
+class MergeConflict(IntegrateError):
+    """The accepted branch conflicts with main: it goes back to its agent."""
+
+
 def git(repo: Path, *args: str, check: bool = True) -> proc.Result:
     try:
         r = proc.run(["git", "-C", str(repo), *args])
@@ -151,6 +155,20 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
     return found[0] if found else ""
 
 
+def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, change: dict[str, Any]) -> str:
+    """Asks the provider to merge (marking `merging` first) and returns the merge ref. A refusal for a conflict that
+    the local check confirms is a `MergeConflict`; any other platform error is an `IntegrateError`."""
+    backlog.update(p, i["id"], merging=git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
+    try:
+        return provider.merge(change, providers.merge_strategy(p))
+    except Exception as e:  # a platform's own errors are an integration error
+        if isinstance(e, providers.ConfigError | providers.Transient):
+            raise
+        if isinstance(e, providers.Conflict) and conflicts(p, i["branch"]):
+            raise MergeConflict(str(e)) from None
+        raise IntegrateError(str(e)) from None
+
+
 def merge_accepted(p: Project, iid: str) -> str:
     """The one place that merges: asks the provider to merge an accepted issue (once), then closes the issue, removing
     its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
@@ -167,13 +185,7 @@ def merge_accepted(p: Project, iid: str) -> str:
     if not change["merge"]:
         change["merge"] = adopt_merge(p, i)
     if not change["merge"]:
-        backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
-        try:
-            ref = provider.merge(change, providers.merge_strategy(p))
-        except Exception as e:  # a platform's own errors are an integration error
-            if isinstance(e, providers.ConfigError | providers.Transient):
-                raise
-            raise IntegrateError(str(e)) from None
+        ref = request_merge(p, i, provider, change)
         backlog.update(p, iid, merge=ref)
         backlog.event(p, iid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
         change["merge"] = ref

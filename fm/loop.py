@@ -34,9 +34,23 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
         if i["status"] != "in review" or i.get("blocked"):
             continue
         if i.get("accepted"):
-            guarded(p, i["id"], "merge it", lambda i=i: integrate.merge_accepted(p, i["id"]))
+            guarded(p, i["id"], "merge it", lambda i=i: merge_one(p, i, main))
             continue
         guarded(p, i["id"], "check it", lambda i=i: queue_one(p, i, main, rows))
+
+
+def conflict_note(main: str) -> str:
+    return (
+        f"{main} moved and your branch conflicts with it. Merge {main} into your branch, resolve keeping both changes, run the tests, and run `fm done` again."
+    )
+
+
+def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
+    """The merge step of an accepted task; a conflict with main sends it back to its agent."""
+    try:
+        integrate.merge_accepted(p, i["id"])
+    except integrate.MergeConflict:
+        send_back(p, i["id"], "conflict", conflict_note(main))
 
 
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
@@ -111,13 +125,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     if c.get("head") != head or c.get("main") != main_head or stale:
         c = integrate.check(p, i["id"], why if i.get("pr") else None)
     if c.get("conflict"):
-        send_back(
-            p,
-            i["id"],
-            "conflict",
-            f"{main} moved and your branch conflicts with it. Merge {main} into "
-            "your branch, resolve keeping both changes, run the tests, and run `fm done` again.",
-        )
+        send_back(p, i["id"], "conflict", conflict_note(main))
         return
     pulls.deliver(p, i, c)
     if integrate.merges_alone(p, c):
