@@ -48,6 +48,11 @@ class Score(unittest.TestCase):
         self.assertEqual(risk.score(project(), facts("pyproject.toml"))[0], "medium")
         self.assertEqual(risk.score(project(), facts("app.py", deleted=["old.py"]))[0], "medium")
 
+    def test_a_lock_file_alone_is_medium_dependencies(self):
+        r, why = risk.score(project(), facts("uv.lock"))
+        self.assertEqual(r, "medium")
+        self.assertIn("dependencies", why[0])
+
     def test_evidence_is_high_with_its_tag(self):
         rows = [
             (facts("a.py", tests="fail"), "[tests]"),
@@ -96,7 +101,8 @@ class LargeChange(unittest.TestCase):
 
     def test_lock_and_generated_files_do_not_count(self):
         self.assertEqual(risk.score(project(), sized(("generated/x.py", 900)))[0], "low")
-        self.assertEqual(risk.score(project("[risk.high]\n"), sized(("uv.lock", 900)))[0], "low")
+        why = risk.score(project(), sized(("uv.lock", 900)))[1]  # medium as a dependency change, not as a large one
+        self.assertFalse(any("large change" in x for x in why), why)
 
     def test_large_change_on_a_high_path_is_high_with_the_path_reason_first(self):
         r, why = risk.score(project(), sized((".github/x.yml", 450)))

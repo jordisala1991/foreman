@@ -37,8 +37,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # large_lines: a change over this many counted lines (tests, generated and lock files excluded) is at least medium
     "risk": {
         "large_lines": 400,
-        "high": {"config, secrets or CI": ["fm.toml", ".github/", "*.lock", "*secret*", "*.env"]},
-        "medium": {"dependencies": ["requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "go.mod", "Cargo.toml"]},
+        "high": {"config, secrets or CI": ["fm.toml", ".github/", "*secret*", "*.env"]},
+        "medium": {"dependencies": ["requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "*.lock", "go.mod", "Cargo.toml"]},
     },
     "guard": {"ask": []},  # extra rules: [{"name": "deploy", "pattern": "regex on a Bash command"}]
     "health": {"stuck_minutes": 60, "loop_seconds": 30, "ci_every_minutes": 30},
