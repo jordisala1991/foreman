@@ -108,7 +108,10 @@ def _operations(c: Command) -> None:
     s = c("panel", "serve the panel")
     s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from other devices (the key is required)")
     s.add_argument("--port", type=int, default=7788)
-    c("launchd", "print the launchd job that keeps the loop alive")
+    s = c("launchd", "print the two launchd jobs (loop and panel) that start at login and restart if they die")
+    s.add_argument("--dir", help="write dev.fm.loop.plist and dev.fm.panel.plist here (e.g. ~/Library/LaunchAgents) instead of printing")
+    s.add_argument("--panel-host", default="127.0.0.1")
+    s.add_argument("--panel-port", type=int, default=7788)
 
 
 def parser(description: str | None) -> argparse.ArgumentParser:

@@ -19,6 +19,7 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
 from . import backlog, health, integrate, plan_gate, proc, providers, pulls, risk, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
@@ -35,9 +36,23 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
         if i["status"] != "in review" or i.get("blocked"):
             continue
         if i.get("accepted"):
-            guarded(p, i["id"], "merge it", lambda i=i: integrate.merge_accepted(p, i["id"]))
+            guarded(p, i["id"], "merge it", lambda i=i: merge_one(p, i, main))
             continue
         guarded(p, i["id"], "check it", lambda i=i: queue_one(p, i, main, rows))
+
+
+def conflict_note(main: str) -> str:
+    return (
+        f"{main} moved and your branch conflicts with it. Merge {main} into your branch, resolve keeping both changes, run the tests, and run `fm done` again."
+    )
+
+
+def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
+    """The merge step of an accepted task; a conflict with main sends it back to its agent."""
+    try:
+        integrate.merge_accepted(p, i["id"])
+    except integrate.MergeConflict:
+        send_back(p, i["id"], "conflict", conflict_note(main))
 
 
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
@@ -112,13 +127,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     if c.get("head") != head or c.get("main") != main_head or stale:
         c = integrate.check(p, i["id"], why if i.get("pr") else None)
     if c.get("conflict"):
-        send_back(
-            p,
-            i["id"],
-            "conflict",
-            f"{main} moved and your branch conflicts with it. Merge {main} into "
-            "your branch, resolve keeping both changes, run the tests, and run `fm done` again.",
-        )
+        send_back(p, i["id"], "conflict", conflict_note(main))
         return
     pulls.deliver(p, i, c)
     if integrate.merges_alone(p, c):
@@ -194,17 +203,21 @@ def forever(homes: list[str] | None = None, once: bool = False) -> None:
             time.sleep(min((int(p.get("health", "loop_seconds")) for p in projects), default=30))
 
 
-def launchd_plist(fm_bin: str, label: str = "dev.fm.loop") -> str:
-    """The launchd job that keeps the loop alive (KeepAlive restarts it if it dies)."""
+def launchd_plist(fm_bin: str, job: str = "loop", args: tuple[str, ...] = ()) -> str:
+    """A launchd job (`loop` or `panel`) that starts at login and is restarted if it dies. Only PATH goes in the
+    environment: the Claude token is never written here; the loop reads it from the Keychain (token.py)."""
     py = proc.run(["/usr/bin/which", "python3"]).out.strip() or "python3"
+    argv = "".join(f"<string>{escape(a)}</string>" for a in (py, fm_bin, job, *args))
+    log = f"{escape(str(Path.home()))}/Library/Logs/fm-{job}.log"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>{label}</string>
-  <key>ProgramArguments</key><array><string>{py}</string><string>{fm_bin}</string><string>loop</string></array>
+  <key>Label</key><string>dev.fm.{job}</string>
+  <key>ProgramArguments</key><array>{argv}</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{os.environ.get("PATH", "")}</string></dict>
-  <key>StandardErrorPath</key><string>{Path.home()}/Library/Logs/fm-loop.log</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{escape(os.environ.get("PATH", ""))}</string></dict>
+  <key>StandardOutPath</key><string>{log}</string>
+  <key>StandardErrorPath</key><string>{log}</string>
 </dict></plist>
 """

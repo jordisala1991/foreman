@@ -1,5 +1,5 @@
 """Integration: a queue. When a responsible agent says `fm done`, the loop checks its branch (tests in the worktree,
-diff size, sensitive paths, conflicts with main) and scores the merge risk: low, medium or high, with the reasons.
+the paths it touches, conflicts with main) and scores the merge risk: low, medium or high, with the reasons.
 The project's autonomy level decides which risks merge without the owner: `manual` (none: the default), `low`, or
 `medium`. High never merges alone. Everything else waits for the owner's accept in the panel (`fm accept`), or goes
 back to its agent with his note (`fm reject`).
@@ -19,6 +19,10 @@ from .risk import Facts, allows, score
 
 class IntegrateError(Exception):
     pass
+
+
+class MergeConflict(IntegrateError):
+    """The accepted branch conflicts with main: it goes back to its agent."""
 
 
 def git(repo: Path, *args: str, check: bool = True) -> proc.Result:
@@ -103,6 +107,7 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
         "paths": [f["path"] for f in files][:30],
         "commits": commits,
         "risk": risk,
+        "review": review,
         "reasons": reasons,
         "head": git(p.repo, "rev-parse", branch).out.strip(),
         "main": git(p.repo, "rev-parse", main).out.strip(),
@@ -115,7 +120,10 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
 
 
 def merges_alone(p: Project, c: dict[str, Any]) -> bool:
-    """Autonomy lets this risk in alone; when the provider has CI that must be green, only on a pass."""
+    """Autonomy lets this risk in alone; when the provider has CI that must be green, only on a pass; open H/M findings
+    never merge alone (quality is not risk, but unresolved quality waits for the owner)."""
+    if str(c.get("review", "")).startswith("open"):
+        return False
     if registry.get(p).has_ci and c.get("ci") != "pass":
         return False
     return allows(p.get("integrate", "autonomy"), c["risk"])
@@ -147,6 +155,20 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
     return found[0] if found else ""
 
 
+def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, change: dict[str, Any]) -> str:
+    """Asks the provider to merge (marking `merging` first) and returns the merge ref. A refusal for a conflict that
+    the local check confirms is a `MergeConflict`; any other platform error is an `IntegrateError`."""
+    backlog.update(p, i["id"], merging=git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
+    try:
+        return provider.merge(change, providers.merge_strategy(p))
+    except Exception as e:  # a platform's own errors are an integration error
+        if isinstance(e, providers.ConfigError | providers.Transient):
+            raise
+        if isinstance(e, providers.Conflict) and conflicts(p, i["branch"]):
+            raise MergeConflict(str(e)) from None
+        raise IntegrateError(str(e)) from None
+
+
 def merge_accepted(p: Project, iid: str) -> str:
     """The one place that merges: asks the provider to merge an accepted issue (once), then closes the issue, removing
     its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
@@ -163,13 +185,7 @@ def merge_accepted(p: Project, iid: str) -> str:
     if not change["merge"]:
         change["merge"] = adopt_merge(p, i)
     if not change["merge"]:
-        backlog.update(p, iid, merging=git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
-        try:
-            ref = provider.merge(change, providers.merge_strategy(p))
-        except Exception as e:  # a platform's own errors are an integration error
-            if isinstance(e, providers.ConfigError | providers.Transient):
-                raise
-            raise IntegrateError(str(e)) from None
+        ref = request_merge(p, i, provider, change)
         backlog.update(p, iid, merge=ref)
         backlog.event(p, iid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
         change["merge"] = ref

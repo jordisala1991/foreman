@@ -32,9 +32,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "merge": "squash",  # squash | merge (--no-ff) | rebase (github only)
         "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `fm done`
         "test": "",
-        "sensitive": ["fm.toml", ".github/", "*.lock", "*secret*", "*.env"],
-        "small_lines": 80,
-        "medium_lines": 300,
+    },
+    # risk: label -> path patterns; the label is what the reason says. [risk.high] replaces the default table whole.
+    # large_lines: a change over this many counted lines (tests, generated and lock files excluded) is at least medium
+    "risk": {
+        "large_lines": 400,
+        "high": {"config, secrets or CI": ["fm.toml", ".github/", "*secret*", "*.env"]},
+        "medium": {"dependencies": ["requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "*.lock", "go.mod", "Cargo.toml"]},
     },
     "guard": {"ask": []},  # extra rules: [{"name": "deploy", "pattern": "regex on a Bash command"}]
     "health": {"stuck_minutes": 60, "loop_seconds": 30, "ci_every_minutes": 30},

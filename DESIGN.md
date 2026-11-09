@@ -46,7 +46,7 @@ A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `wo
 `fm.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
 (`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Every setting is per
 project: `[agents] slots` (how many at once), models, extra session settings; `[integrate] autonomy`, `provider`, `merge`, `test`,
-`sensitive`; `[guard] ask`; `[health]` timings.
+`[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`; `[health]` timings.
 
 ## The states of a task
 
@@ -73,7 +73,7 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 
 ## The loop
 
-A plain process, no model (`fm loop`; `fm launchd` prints a job with `KeepAlive`); one per registry (a lock file).
+A plain process, no model (`fm loop`; `fm launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Agents use the normal claude.ai login, so they show in the Claude app; only while it does not work (`claude auth status`) the loop puts the Keychain token in their environment, never in the plist); one per registry (a lock file).
 Each tick, per project, each step isolated (an exception goes to `state/errors.jsonl`, which a health check turns
 into a finding), and inside a step each issue isolated (a failure blocks that issue with the reason; the others go
 on). The heartbeat is written before every step, so a long test run does not look like a dead loop.
@@ -96,7 +96,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
 5. **queue**: a branch in review whose head or main's head changed is checked: tests on exactly its committed head
    (a fresh detached worktree, never uncommitted files), diff, deleted files,
-   dependencies, sensitive paths, conflicts with main, the agent's review verdict → risk `low|medium|high` with
+   dependencies, the paths it touches, conflicts with main, the agent's review verdict → risk `low|medium|high` with
    reasons. A branch that conflicts with main goes back to its agent with a note to merge main. If the project's
    autonomy level allows the risk, it merges (`git merge --no-ff` into the main checkout),
    removes the worktree and branch and closes the issue.
@@ -197,11 +197,14 @@ integrating are the safety net. Each stop is logged (`state/guard.jsonl`) and co
 
 Every delivered branch gets a risk score:
 
-- **high**: no changes, tests fail, conflicts with main, sensitive paths (`[integrate] sensitive`), the independent
-  review leaves H or M open after round 2,
-  more than `medium_lines` lines.
-- **medium**: more than `small_lines` lines, no test command, deleted files, dependency files, more than 8 files.
-- **low**: the rest (small, tests green, review clean).
+- **impact**, from what the change touches: high = paths in `[risk.high]`; medium = paths in `[risk.medium]` and deleted
+  files; low = the rest. A review never lowers it.
+- **doubt**, from the evidence: high = no changes, tests fail, CI fails, conflicts with main; medium = no test command, or a large change: over `[risk] large_lines` (400) changed lines, not counting tests, generated and lock files; size never makes a change high by itself.
+- Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
+  `[ci]`, `[git]`, `[review]`). Size is only the large-change reason; file counts are not a reason.
+- Open review findings are a gate, not a level: they go back to the agent and add a `[review]` reason, but never change the risk.
+  After the last round, an open H or M never merges alone, at any autonomy or risk (`integrate.merges_alone`); L-only
+  findings do not block.
 
 The project's `[integrate] autonomy` decides what merges without the owner: `manual` (nothing; the default),
 `low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or sends it back with a note
@@ -235,7 +238,7 @@ with no `[integrate] test` the PR's CI **replaces the local test**. Then the dra
 carries the risk, its reasons and the review's verdict. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
-origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before. Out of
+origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the agent as before, also when the merge itself is refused for a conflict after acceptance: the acceptance is dropped and the new tip is checked and accepted again. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Architecture

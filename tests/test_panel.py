@@ -9,14 +9,18 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 from urllib.parse import quote
 
-from fm import backlog, panel, util
+from fm import backlog, panel, token, util
 from fm.config import Project, register
 
 
 class PanelTest(unittest.TestCase):
     def setUp(self) -> None:
+        patcher = mock.patch.object(token, "keychain", lambda: "")  # never the real Keychain
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.env = {k: os.environ.get(k) for k in ("FM_REGISTRY",)}

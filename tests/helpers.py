@@ -24,10 +24,13 @@ FAKE = textwrap.dedent("""\
     if a[:1] == ["agents"]:
         print(open(os.path.join(d, "agents.json")).read() if os.path.exists(os.path.join(d, "agents.json")) else "[]")
         sys.exit(0)
+    if a[:2] == ["auth", "status"]:
+        print(open(os.path.join(d, "login.json")).read() if os.path.exists(os.path.join(d, "login.json")) else '{"loggedIn": true}')
+        sys.exit(0)
     if a[:1] == ["stop"]:
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:
-        f.write(json.dumps({"argv": a, "cwd": os.getcwd()}) + "\\n")
+        f.write(json.dumps({"argv": a, "cwd": os.getcwd(), "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")}) + "\\n")
     name = a[a.index("-n") + 1]
     short = hashlib.sha1(name.encode()).hexdigest()[:8]
     if "--resume" not in a:
