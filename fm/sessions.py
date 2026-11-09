@@ -120,5 +120,16 @@ def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
     return state(rows, sid) not in ("done", "stopped", "gone")
 
 
+def copies(rows: dict[str, dict[str, Any]], sid: str, name: str, cwd: str) -> list[str]:
+    """Full ids of the other sessions with this name and folder that are working: copies that may hold the work.
+    Never ordered by startedAt (Claude resets it when its daemon restarts)."""
+    here = os.path.realpath(cwd)
+    return sorted(
+        other
+        for other, row in rows.items()
+        if other != sid and row.get("name") == name and row.get("state") == "working" and os.path.realpath(row.get("cwd") or "") == here
+    )
+
+
 def stop(p: Project, short: str) -> None:
     proc.run([p.get("agents", "claude"), "stop", short], timeout=30)

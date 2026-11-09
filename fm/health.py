@@ -5,7 +5,7 @@ only if it went away and came back.
 
 Checks: loop dead (heartbeat too old: seen from outside the loop, `fm health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
-· orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
+· agent's work in an untracked copy · orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
 on main's head, every `ci_every_minutes`) · loop step errors."""
 
 import hashlib
@@ -15,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, costs, integrate, token, util
+from . import backlog, costs, integrate, sessions, token, util
 from .config import Project
 
 Finding = dict[str, str]
@@ -148,6 +148,28 @@ def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
     return out
 
 
+def agent_copies(p: Project, rows: dict[str, Any]) -> list[Finding]:
+    """A task's recorded session is idle while another session with its name and folder is working."""
+    out: list[Finding] = []
+    for i in backlog.issues(backlog.load(p)):
+        a: backlog.Agent = i.get("agent") or {}
+        sid, name, cwd = a.get("session"), a.get("name"), a.get("cwd")
+        if i["status"] not in backlog.RUNNING or not (sid and name and cwd) or sessions.busy(rows, sid):
+            continue
+        found = sessions.copies(rows, sid, name, cwd)
+        if found:
+            out.append(
+                {
+                    "key": f"copy:{i['id']}:{sid[:8]}",
+                    "title": f"{i['id']}'s work is in a session fm does not track",
+                    "detail": f"{name} is recorded in session {sid[:8]} ({sessions.state(rows, sid)}), but "
+                    f"{', '.join(c[:8] for c in found)} (same name and folder) is working: the work is there. "
+                    f"Open it with `claude attach {found[0][:8]}`, or stop it so the task goes on in the recorded one.",
+                }
+            )
+    return out
+
+
 def orphan_worktrees(p: Project) -> list[Finding]:
     root = p.path("worktrees").resolve()
     live = {str(Path(i["worktree"]).resolve()) for i in backlog.issues(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
@@ -206,7 +228,14 @@ def loop_errors(p: Project) -> list[Finding]:
 
 def findings(p: Project, rows: dict[str, Any], outside: bool = False, wait: bool = True) -> list[Finding]:
     out = [*loop_dead(p), *claude_token(p, wait=wait)] if outside else []
-    for check in (lambda: agents(p, rows), lambda: orphan_worktrees(p), lambda: main_tests(p, run=not outside), lambda: loop_errors(p)):
+    checks: tuple[Callable[[], list[Finding]], ...] = (
+        lambda: agents(p, rows),
+        lambda: agent_copies(p, rows),
+        lambda: orphan_worktrees(p),
+        lambda: main_tests(p, run=not outside),
+        lambda: loop_errors(p),
+    )
+    for check in checks:
         try:
             out += check()
         except Exception as e:

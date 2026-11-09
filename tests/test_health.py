@@ -7,7 +7,7 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import agents, backlog, health, loop, util
+from fm import agents, backlog, health, loop, sessions, util
 
 
 class Health(unittest.TestCase):
@@ -122,3 +122,72 @@ class Lessons(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Copies(unittest.TestCase):
+    def setUp(self):
+        self.e = Env()
+        self.p = self.e.p
+        self.iid = backlog.add(self.p, "x", status="ready", criterion="y")
+        loop.tick(self.p)
+        self.agent = self.e.issue(self.iid)["agent"]
+        self.sid = self.agent["session"]
+
+    def rows(self, state="done", *extra, drop=False):
+        self.e.set_state("ty-1", state)
+        f = self.e.bin / "agents.json"
+        rows = json.loads(f.read_text())
+        if drop:
+            rows = [r for r in rows if r["name"] != "ty-1"]
+        base = {"id": "c0ffee01", "sessionId": "c0ffee01-0000-0000", "name": "ty-1", "cwd": self.agent["cwd"], "state": "working"}
+        for k, over in enumerate(extra):
+            row = {**base, **over}
+            row["id"] = f"c0ffee0{k + 1}"
+            row["sessionId"] = f"c0ffee0{k + 1}-0000-0000"
+            rows.append({key: v for key, v in row.items() if v is not None})
+        f.write_text(json.dumps(rows))
+        return sessions.listing(self.p)
+
+    def test_copy_working_while_recorded_is_idle_is_one_finding(self):
+        rows = self.rows("done", {})
+        found = health.agent_copies(self.p, rows)
+        self.assertEqual([f["key"] for f in found], [f"copy:{self.iid}:{self.sid[:8]}"])
+        self.assertIn("c0ffee01", found[0]["detail"])
+        self.assertIn(found[0], health.findings(self.p, rows))
+
+    def test_no_finding_when_the_rows_agree(self):
+        self.assertEqual(health.agent_copies(self.p, self.rows("done")), [])
+        self.assertEqual(health.agent_copies(self.p, self.rows("working", {})), [])
+        self.assertEqual(health.agent_copies(self.p, self.rows("done", {"state": "done"})), [])
+        self.assertEqual(health.agent_copies(self.p, {}), [])
+        self.rows("done", {})
+        backlog.update(self.p, self.iid, agent={**self.agent, "session": None})
+        self.assertEqual(health.agent_copies(self.p, sessions.listing(self.p)), [])
+
+    def test_other_name_or_folder_is_not_a_copy(self):
+        self.assertEqual(health.agent_copies(self.p, self.rows("done", {"name": "ty-2"})), [])
+        self.assertEqual(health.agent_copies(self.p, self.rows("done", {"cwd": "/elsewhere"})), [])
+        self.assertEqual(health.agent_copies(self.p, self.rows("done", {"cwd": None})), [])
+
+    def test_stopped_or_missing_recorded_session_counts_as_idle(self):
+        self.assertEqual(len(health.agent_copies(self.p, self.rows("stopped", {}))), 1)
+        self.assertEqual(len(health.agent_copies(self.p, self.rows("done", {}, drop=True))), 1)
+
+    def test_two_copies_are_one_finding(self):
+        found = health.agent_copies(self.p, self.rows("done", {}, {}))
+        self.assertEqual(len(found), 1)
+        self.assertIn("c0ffee01", found[0]["detail"])
+        self.assertIn("c0ffee02", found[0]["detail"])
+
+    def test_closed_task_has_no_finding(self):
+        rows = self.rows("done", {})
+        backlog.set_status(self.p, self.iid, "done")
+        self.assertEqual(health.agent_copies(self.p, rows), [])
+
+    def test_the_finding_is_filed_once(self):
+        rows = self.rows("done", {})
+        health.run(self.p, rows)
+        health.run(self.p, rows)
+        t = [i for i in backlog.issues(backlog.load(self.p)) if i["status"] == "triage"]
+        self.assertEqual(len(t), 1)
+        self.assertEqual(t[0]["source"], f"health:copy:{self.iid}:{self.sid[:8]}")

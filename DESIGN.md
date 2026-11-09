@@ -285,5 +285,5 @@ misled its agents (their `--confused` words).
 
 Health checks (`fm/health.py`), each finding a triage issue, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its
-transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
+transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), agent's work in an untracked copy (its recorded session idle while another with its name and folder works), orphan worktree,
 tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`), loop step errors.
