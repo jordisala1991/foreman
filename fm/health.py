@@ -49,14 +49,27 @@ def _probe_unlocked(p: Project, tok: str, stamp: str, works: Callable[[str, str]
         _probing.release()
 
 
+KEYCHAIN_FAILS = 3  # consecutive unreadable checks before it is a finding: one transient failure is not
+
+
+def keychain_unreadable(p: Project, reason: str) -> list[Finding]:
+    fails = int(util.read_json(p.state / "keychain.json", {}).get("fails") or 0) + 1
+    util.write_json(p.state / "keychain.json", {"fails": fails})
+    if fails < KEYCHAIN_FAILS:
+        return []
+    detail = f"The Keychain has failed {fails} checks in a row ({reason}); agents launch without a token."
+    return [{"key": "keychain-unreadable", "title": f"Keychain unreadable: {reason}", "detail": detail}]
+
+
 def claude_token(p: Project, read: Callable[[], str] | None = None, works: Callable[[str, str], bool] = token.works, wait: bool = True) -> list[Finding]:
     """No token, or one Claude rejects. The probe runs at most every 30 minutes and its result is cached (never the
     token). With `wait` False (the panel's request thread) a stale probe runs in the background, one at a time, and the
-    last result is shown meanwhile. A Keychain that cannot be read right now is not a finding."""
+    last result is shown meanwhile. A Keychain that cannot be read is a finding only after KEYCHAIN_FAILS checks in a row."""
     try:
         tok = token.get(read)
-    except token.Unreadable:
-        return []
+    except token.Unreadable as e:
+        return keychain_unreadable(p, str(e))
+    util.write_json(p.state / "keychain.json", {"fails": 0})
     if not tok:
         return [{"key": "token-missing", "title": "No token", "detail": f"No Claude token for the agents. Create it: {token.RENEW_CMD}."}]
     cache = util.read_json(p.state / "token.json", {})

@@ -11,9 +11,10 @@ from . import proc
 
 ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 ITEM = "claude-oauth-token"
-RENEW = f"claude setup-token, then: security add-generic-password -U -a $USER -s {ITEM} -w"
 RENEW_CMD = f"`claude setup-token`, then `security add-generic-password -U -a $USER -s {ITEM} -w`"
-AUTH_ERROR = re.compile(r"401|unauthori[sz]ed|authenticat|invalid[^\n]*(token|credential|api key)|expired|/login|oauth", re.I)
+AUTH_ERROR = re.compile(
+    r"failed to authenticate|authentication_error|invalid bearer token|invalid api key|oauth token has (expired|been revoked)|please run /login", re.I
+)
 NOT_FOUND = 44  # `security`'s exit code for "item not found"
 SETUP = (
     f"The agents' token lives only in the macOS Keychain. Create it with `claude setup-token`, then store it with\n"

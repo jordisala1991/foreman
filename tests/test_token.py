@@ -90,6 +90,11 @@ class Token(unittest.TestCase):
         def locked() -> str:
             raise token.Unreadable("locked")
 
+        for _ in range(health.KEYCHAIN_FAILS - 1):
+            self.assertEqual(health.claude_token(self.p, read=locked), [])  # a transient failure shows nothing
+        f = health.claude_token(self.p, read=locked)
+        self.assertEqual(f[0]["title"], "Keychain unreadable: locked")
+        self.assertEqual(health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: True), [])  # a good read resets
         self.assertEqual(health.claude_token(self.p, read=locked), [])
         with mock.patch("fm.proc.run", return_value=mock.Mock(code=36, out="", err="")), self.assertRaises(token.Unreadable):
             token.keychain()
@@ -126,7 +131,8 @@ class Token(unittest.TestCase):
         self.assertTrue(token.works(self.fake_claude(0, ""), SECRET))
         self.assertTrue(token.works(self.fake_claude(1, "API Error: 529 overloaded, usage limit reached"), SECRET))
         self.assertTrue(token.works(self.fake_claude(1, "getaddrinfo ENOTFOUND api.anthropic.com"), SECRET))
-        self.assertFalse(token.works(self.fake_claude(1, "401 Invalid authentication credentials"), SECRET))
+        self.assertTrue(token.works(self.fake_claude(1, "API Error: 503 request_id req_401abc, session expired, oauth proxy down"), SECRET))
+        self.assertFalse(token.works(self.fake_claude(1, "Failed to authenticate. API Error: 401 Invalid bearer token"), SECRET))
         self.assertFalse(token.works(self.fake_claude(1, "OAuth token has expired. Please run /login"), SECRET))
 
     def test_launchd_dir_writes_both_jobs_with_the_panel_args_and_escapes(self):
