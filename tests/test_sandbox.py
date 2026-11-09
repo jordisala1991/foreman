@@ -1,5 +1,6 @@
 """A test run never writes the owner's real ~/.config/fm: HOME and FM_REGISTRY point at a temp dir (see helpers)."""
 
+import json
 import os
 import shutil
 import tempfile
@@ -7,13 +8,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from helpers import REAL_REGISTRY, REGISTRY_BEFORE, SANDBOX, fm
+from helpers import REAL_REGISTRY, SANDBOX, fm
 
 from fm import config, lock, panel
 
 
-def real_registry() -> bytes | None:
-    return REAL_REGISTRY.read_bytes() if REAL_REGISTRY.exists() else None
+def leaked(registry: Path) -> list[str]:
+    """Entries of `registry` that point into this run's sandbox: what a leaking test would have registered."""
+    if not registry.exists():
+        return []
+    return [e for e in json.loads(registry.read_text()) if Path(e).resolve().is_relative_to(SANDBOX)]
 
 
 class Sandbox(unittest.TestCase):
@@ -37,5 +41,13 @@ class Sandbox(unittest.TestCase):
         self.assertIn(d, config.registered())
         self.assertTrue(config.registry_file().is_relative_to(SANDBOX))
 
-    def test_the_real_registry_is_unchanged(self) -> None:
-        self.assertEqual(real_registry(), REGISTRY_BEFORE)
+    def test_the_real_registry_has_nothing_of_this_run(self) -> None:
+        self.assertEqual(leaked(REAL_REGISTRY), [])
+
+    def test_the_guard_sees_only_this_runs_entries(self) -> None:
+        registry = SANDBOX / "guard.json"
+        registry.write_text(json.dumps(["/somewhere/else/home"]))  # another run, or the owner's own project
+        self.assertEqual(leaked(registry), [])
+        mine = str(SANDBOX / "tmp" / "fmtest-x" / "home")
+        registry.write_text(json.dumps(["/somewhere/else/home", mine]))
+        self.assertEqual(leaked(registry), [mine])
