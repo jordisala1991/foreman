@@ -14,7 +14,7 @@ from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys, time
+    import json, os, re, sys, time
     d = os.path.dirname(os.path.abspath(__file__))
     a = sys.argv[1:]
     f = os.path.join(d, "gh.json")
@@ -43,6 +43,27 @@ FAKE_GH = textwrap.dedent("""\
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
     if a[:1] == ["api"]:
+        url = next(x for x in a if x.startswith("repos/"))
+        parts = url.split("/")
+        tail = parts[5:]
+        if parts[4].isdigit() and tail in (["reviews"], ["comments"]):
+            pr = s["prs"][parts[4]]
+            if "-X" in a:
+                body = json.load(sys.stdin)
+                if s.get("reject_inline") and body["comments"]:
+                    print("HTTP 422", file=sys.stderr)
+                    sys.exit(1)
+                pr.setdefault("reviews", []).append(body)
+                for c in body["comments"]:
+                    pr.setdefault("review_comments", []).append(c["body"])
+                save()
+                print("{}")
+            else:
+                bodies = [r["body"] for r in pr.get("reviews", [])] if tail == ["reviews"] else pr.get("review_comments", [])
+                for b in bodies:
+                    for m in re.findall(r"<!-- fm:[a-z0-9-]+ -->", b):
+                        print(m)
+            sys.exit(0)
         print(s.get("api_sha") or "null")
         sys.exit(0)
     if a[:2] == ["pr", "create"]:
@@ -60,6 +81,8 @@ FAKE_GH = textwrap.dedent("""\
         pr["edits"] = pr.get("edits", 0) + 1
     elif a[:2] == ["pr", "view"] and "body" in a:
         print(json.dumps({"body": pr["body"]}))
+    elif a[:2] == ["pr", "diff"]:
+        print(s.get("diff", ""))
     elif a[:2] == ["pr", "comment"]:
         pr["comments"].append(flag("--body"))
     elif a[:2] == ["pr", "merge"]:
@@ -251,7 +274,7 @@ class Pulls(unittest.TestCase):
         (create,) = g.calls("pr", "create")
         self.assertNotIn("--draft", create)
 
-    def test_fm_done_readies_the_draft_and_comments_risk_and_verdict_once(self):
+    def test_fm_done_readies_the_draft_and_reviews_the_verdict_once(self):
         g = self.make(test="true")
         iid = g.work()
         loop.tick(g.e.p)
@@ -261,9 +284,10 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         pr = g.state["prs"]["1"]
         self.assertFalse(pr["draft"])
-        self.assertEqual(len(pr["comments"]), 1)
-        self.assertIn("merge risk low", pr["comments"][0])
-        self.assertIn("round 1: H 0, M 0", pr["comments"][0])
+        self.assertEqual(pr["comments"], [])
+        self.assertEqual(len(pr["reviews"]), 1)
+        self.assertEqual(pr["reviews"][0]["event"], "COMMENT")
+        self.assertIn("Why low", pr["reviews"][0]["body"])
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")

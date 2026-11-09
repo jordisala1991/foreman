@@ -2,7 +2,8 @@
 interface and does not know which platform is behind it. Only `merge` changes main, and it never publishes (no push,
 no tag, no release): that is the owner's, and releases are a separate concept.
 
-Operations: `publish` (make the branch visible: open the change), `ready` (mark it ready for review), `comment`,
+Operations: `publish` (make the branch visible: open the change), `ready` (mark it ready for review),
+`diff` (its unified diff), `review` (post the verdict as one review with its inline comments),
 `body` (its description now), `describe` (set its body and title),
 `merge(change, strategy)` (the one merge in fm; a future queue is just another strategy), `state` (is it merged?
 closed?), `ci` (the platform's checks),
@@ -15,6 +16,7 @@ Config: `[integrate] provider` (`auto` default: github when `origin` is on GitHu
 from typing import Any
 
 from ..config import Project
+from ..inline import Review
 
 MERGES = ("squash", "merge", "rebase")
 PRS = ("draft", "done")
@@ -60,8 +62,15 @@ class Provider:
     def ready(self, change: dict[str, Any]) -> None:
         """Marks the change ready for review."""
 
-    def comment(self, change: dict[str, Any], text: str) -> None:
-        """Leaves a note on the change."""
+    def diff(self, change: dict[str, Any]) -> str:
+        """The change's unified diff as the platform has it (empty locally)."""
+        return ""
+
+    def review(self, change: dict[str, Any], review: Review) -> int:
+        """Posts one review on the change's commit `change['head']`, with its inline comments; returns how many inline
+        comments it posted. The same review key already posted: posts nothing, returns 0. An inline comment whose key
+        the change already carries is skipped. Nothing locally."""
+        return 0
 
     def body(self, change: dict[str, Any]) -> str:
         """The change's description as the platform has it now (nothing locally)."""

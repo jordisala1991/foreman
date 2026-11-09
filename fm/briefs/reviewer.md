@@ -27,7 +27,11 @@ Branch: $branch
 Tip: $tip
 Round: $round
 Open: H n, M n, L n
+Findings:
+F1 | M | path:line | what is wrong, one line | why: the failing case, one line
 ```
-then the criterion table, the findings (H, then M, then L), and a line `Misled: …` (what in this brief or the task was wrong or unclear, or none).
+`Findings:` has one line per open finding (H, then M, then L), five fields separated by `|` (none of the first four may contain a `|`); `path:line` is the line in the branch's final file, or `-` when it has none; leave `Findings:` out when nothing is open. The owner reads these lines on the PR.
+
+Then the criterion table, the findings in prose if useful, and a line `Misled: …` (what in this brief or the task was wrong or unclear, or none).
 
 Then run `fm verdict --tip $tip --high N --medium N --low N --file $review_file --misled "…or none"` with the open counts, and end your turn.

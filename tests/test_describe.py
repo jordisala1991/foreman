@@ -129,7 +129,7 @@ class OnGitHub(unittest.TestCase):
         self.g.e.review(iid)
         self.g.set(fail_always=["pr", "edit"])
         self.run_ticks(3)
-        self.assertEqual(len(self.pr()["comments"]), 1)
+        self.assertEqual(len(self.pr()["reviews"]), 1)
         i = self.g.e.issue(iid)
         self.assertIn("HTTP 502", i["pr_error"])
         self.assertFalse(i["pr"].get("described"))

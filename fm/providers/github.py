@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
+from ..inline import Review
 from . import Permanent, Provider, ProviderError, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
@@ -90,14 +91,18 @@ def buckets(raw: object) -> set[Bucket]:
     return out
 
 
+def _marker(key: str) -> str:
+    return f"<!-- fm:{key} -->"
+
+
 class GitHub(Provider):
     has_ci = True
     name = "github"
 
-    def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
+    def run(self, prog: str, *args: str, check: bool = True, input: str | None = None) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT, input=input)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if check and r.code != 0:
@@ -156,8 +161,28 @@ class GitHub(Provider):
     def ready(self, change: dict[str, Any]) -> None:
         self.run("gh", "pr", "ready", str(change["pr"]))
 
-    def comment(self, change: dict[str, Any], text: str) -> None:
-        self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
+    def diff(self, change: dict[str, Any]) -> str:
+        return self.run("gh", "pr", "diff", str(change["pr"]), "--color=never").out
+
+    def markers(self, change: dict[str, Any], what: str) -> set[str]:
+        """The `<!-- fm:KEY -->` markers in the bodies of the PR's reviews or review comments."""
+        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/{what}"
+        r = self.run("gh", "api", url, "--paginate", "--jq", '.[].body | scan("<!-- fm:[a-z0-9-]+ -->")')
+        return set(r.out.split("\n")) - {""}
+
+    def review(self, change: dict[str, Any], review: Review) -> int:
+        if _marker(review.key) in self.markers(change, "reviews"):
+            return 0
+        known = self.markers(change, "comments")
+        new = [c for c in review.comments if _marker(c.key) not in known]
+        payload = {
+            "commit_id": change["head"],
+            "event": "COMMENT",
+            "body": f"{review.body}\n\n{_marker(review.key)}",
+            "comments": [{"path": c.path, "line": c.line, "side": "RIGHT", "body": f"{c.body}\n\n{_marker(c.key)}"} for c in new],
+        }
+        self.run("gh", "api", "-X", "POST", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews", "--input", "-", input=json.dumps(payload))
+        return len(new)
 
     def ci(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "checks", str(change["pr"]), "--json", "bucket", check=False)  # exit 8 = pending
