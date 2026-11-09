@@ -204,6 +204,57 @@ class Provider(unittest.TestCase):
         self.assertIn("uncommitted changes", i["blocked"])
         self.assertNotIn("merge", i)
 
+    def accepted_then_main_moves(self, e):
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        (e.repo / "app.py").write_text("changed on main\n")
+        git(e.repo, "commit", "-qam", "main moved")
+        return iid
+
+    def test_an_accepted_branch_that_conflicts_at_merge_goes_back_as_a_conflict(self):
+        for strategy in ("squash", "merge"):
+            e = Env(test="true")
+            e.p.cfg["integrate"]["merge"] = strategy
+            iid = self.accepted_then_main_moves(e)
+            main = git(e.repo, "rev-parse", "main").strip()
+            loop.tick(e.p)
+            loop.tick(e.p)
+            i = e.issue(iid)
+            self.assertEqual(i["status"], "in progress")
+            self.assertEqual(i["conflicts"], 1)
+            self.assertEqual(backlog.load(e.p)["decisions_resolved"][-1]["kind"], "conflict")
+            self.assertFalse(i.get("blocked"))
+            self.assertNotIn("accepted", i)
+            self.assertEqual(git(e.repo, "rev-parse", "main").strip(), main)
+            self.assertEqual(git(e.repo, "status", "--porcelain").strip(), "")
+
+    def test_an_accepted_branch_whose_merge_fails_otherwise_is_still_blocked(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        (e.repo / "app.py").write_text("dirty\n")
+        loop.tick(e.p)
+        i = e.issue(iid)
+        self.assertTrue(i["blocked"])
+        self.assertEqual(i["status"], "in review")
+        self.assertIn("accepted", i)
+        self.assertNotIn("conflicts", i)
+
+    def test_after_the_fix_the_task_is_accepted_again_and_merges(self):
+        e = Env(test="true")
+        iid = self.accepted_then_main_moves(e)
+        loop.tick(e.p)
+        wt = e.repo.parent / e.issue(iid)["worktree"]
+        git(wt, "merge", "-X", "ours", "main", "-m", "fix")
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
+        e.review(iid)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "done")
+
     def test_a_bad_provider_blocks_at_the_merge_step(self):
         e = Env(test="true")
         iid = self.delivered(e)

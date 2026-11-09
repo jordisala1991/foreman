@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from .. import proc, util
 from ..inline import LineComment, Review, resolve_links
-from . import Permanent, Provider, ProviderError, Transient
+from . import Conflict, Permanent, Provider, ProviderError, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -16,6 +16,9 @@ PUSH_TIMEOUT = 20  # seconds for a push
 
 # Only these exact phrases will not fix themselves; anything else (a network error that says "closed") is transient.
 PERMANENT = re.compile(r"pull request is closed|is not mergeable|merge conflict|cannot be merged", re.I)
+
+
+CONFLICT = re.compile(r"merge conflict", re.I)
 
 
 class TransientError(Transient):
@@ -26,10 +29,16 @@ class PermanentError(Permanent):
     pass
 
 
+class ConflictError(PermanentError, Conflict):
+    pass
+
+
 def failure(what: str, text: str) -> Exception:
     """What went wrong with a gh/git call: transient by default (retried, noted once); permanent only what is known
     not to fix itself: a closed PR, a conflict."""
     text = text.strip()[:300]
+    if CONFLICT.search(text):
+        return ConflictError(f"{what}: {text}")
     return (PermanentError if PERMANENT.search(text) else TransientError)(f"{what}: {text}")
 
 
