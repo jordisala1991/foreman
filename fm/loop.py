@@ -18,6 +18,7 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
 from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
@@ -195,17 +196,21 @@ def forever(homes: list[str] | None = None, once: bool = False) -> None:
             time.sleep(min((int(p.get("health", "loop_seconds")) for p in projects), default=30))
 
 
-def launchd_plist(fm_bin: str, label: str = "dev.fm.loop") -> str:
-    """The launchd job that keeps the loop alive (KeepAlive restarts it if it dies)."""
+def launchd_plist(fm_bin: str, job: str = "loop", args: tuple[str, ...] = ()) -> str:
+    """A launchd job (`loop` or `panel`) that starts at login and is restarted if it dies. Only PATH goes in the
+    environment: the Claude token is never written here; the loop reads it from the Keychain (token.py)."""
     py = proc.run(["/usr/bin/which", "python3"]).out.strip() or "python3"
+    argv = "".join(f"<string>{escape(a)}</string>" for a in (py, fm_bin, job, *args))
+    log = f"{escape(str(Path.home()))}/Library/Logs/fm-{job}.log"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>{label}</string>
-  <key>ProgramArguments</key><array><string>{py}</string><string>{fm_bin}</string><string>loop</string></array>
+  <key>Label</key><string>dev.fm.{job}</string>
+  <key>ProgramArguments</key><array>{argv}</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{os.environ.get("PATH", "")}</string></dict>
-  <key>StandardErrorPath</key><string>{Path.home()}/Library/Logs/fm-loop.log</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{escape(os.environ.get("PATH", ""))}</string></dict>
+  <key>StandardOutPath</key><string>{log}</string>
+  <key>StandardErrorPath</key><string>{log}</string>
 </dict></plist>
 """

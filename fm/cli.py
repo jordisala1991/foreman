@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from . import backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, util
+from . import backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
 from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_note, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -31,6 +31,7 @@ def cmd_init(a: argparse.Namespace) -> None:
         util.write_json(p.backlog_file, backlog.empty())
     register(h)
     print(f"project {p.name} at {h} (registered)")
+    print(token.SETUP)
 
 
 def cmd_add(a: argparse.Namespace) -> None:
@@ -181,7 +182,17 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
-    print(loop.launchd_plist(str(Path(__file__).resolve().parent.parent / "bin/fm")))
+    fm_bin = str(Path(__file__).resolve().parent.parent / "bin/fm")
+    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", str(a.panel_port))}
+    for job, args in jobs.items():
+        text = loop.launchd_plist(fm_bin, job, args)
+        if a.dir:
+            out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(text, encoding="utf-8")
+            print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
+        else:
+            print(f"<!-- dev.fm.{job}.plist -->\n{text}")
 
 
 HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
