@@ -8,8 +8,8 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
-from unittest import mock
 from pathlib import Path
+from unittest import mock
 from urllib.parse import quote
 
 from fm import backlog, panel, token, util
