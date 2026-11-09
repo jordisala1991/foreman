@@ -7,15 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
-from . import Conflict, Permanent, Provider, ProviderError, Transient
+from . import Conflict, Provider, ProviderError, Transient
 
-TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
-
-
-# Only these exact phrases will not fix themselves; anything else (a network error that says "closed") is transient.
-PERMANENT = re.compile(r"pull request is closed|is not mergeable|merge conflict|cannot be merged", re.I)
-
 
 CONFLICT = re.compile(r"merge conflict", re.I)
 
@@ -24,21 +18,14 @@ class TransientError(Transient):
     pass
 
 
-class PermanentError(Permanent):
-    pass
-
-
-class ConflictError(PermanentError, Conflict):
+class ConflictError(Conflict):
     pass
 
 
 def failure(what: str, text: str) -> Exception:
-    """What went wrong with a gh/git call: transient by default (retried, noted once); permanent only what is known
-    not to fix itself: a closed PR, a conflict."""
+    """What went wrong with a gh/git call: a conflict, or else transient (retried; blocks on the 3rd in a row)."""
     text = text.strip()[:300]
-    if CONFLICT.search(text):
-        return ConflictError(f"{what}: {text}")
-    return (PermanentError if PERMANENT.search(text) else TransientError)(f"{what}: {text}")
+    return (ConflictError if CONFLICT.search(text) else TransientError)(f"{what}: {text}")
 
 
 State = Literal["OPEN", "MERGED", "CLOSED"]
@@ -60,7 +47,7 @@ class PullRequest:
 
 def _field[T](o: dict[str, Any], key: str, kind: type[T], what: str) -> T:
     v = o.get(key)
-    if not isinstance(v, kind) or (kind is int and isinstance(v, bool)):
+    if not isinstance(v, kind):
         raise ProviderError(f"{what}: `{key}` should be {kind.__name__}, gh gave {v!r}")
     return v
 
@@ -106,9 +93,9 @@ class GitHub(Provider):
     def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None)
         except proc.ProcError as e:
-            raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
+            raise TransientError(str(e)) from None
         if check and r.code != 0:
             raise failure(f"{prog} {' '.join(args[:3])}", r.err or r.out)
         return r
@@ -183,24 +170,18 @@ class GitHub(Provider):
         return "pass" if "pass" in found else "none"
 
     def merge(self, change: dict[str, Any], strategy: str) -> str:
-        """Merges the PR once (a retry after a crash finds it merged). Returns the merge commit; if GitHub has not
-        merged it yet, a marker that the merge was requested, so it is not requested twice."""
+        """Merges the PR. Returns the merge commit; if GitHub has not merged it yet, a marker that the merge was
+        requested, so it is not requested twice."""
+        msg = ["--subject", f"Integrate {change['id']}: {change['title']}"] if strategy != "rebase" else []
+        self.run("gh", "pr", "merge", str(change["pr"]), f"--{strategy}", *msg)
         v = self.view(change)
-        if v.state != "MERGED":
-            msg = ["--subject", f"Integrate {change['id']}: {change['title']}"] if strategy != "rebase" else []
-            self.run("gh", "pr", "merge", str(change["pr"]), f"--{strategy}", *msg)
-            v = self.view(change)
-        return self.merge_commit(change, v) if v.state == "MERGED" else f"pr-{change['pr']}-merge-requested"
+        return v.merge_commit if v.state == "MERGED" and v.merge_commit else f"pr-{change['pr']}-merge-requested"
 
     def merge_commit(self, change: dict[str, Any], v: PullRequest) -> str:
-        """The merge commit of a merged PR: from `gh pr view`, else the API. Still none: fail (retried) rather than
-        invent a reference."""
-        sha = v.merge_commit
-        if not sha:
-            sha = self.run("gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}", "--jq", ".merge_commit_sha").out.strip()
-        if not sha or sha == "null":
+        """The merge commit of a merged PR; none yet: fail (retried) rather than invent a reference."""
+        if not v.merge_commit:
             raise TransientError(f"PR #{change['pr']} is merged but GitHub shows no merge commit yet")
-        return sha
+        return v.merge_commit
 
     def state(self, change: dict[str, Any]) -> dict[str, Any]:
         v = self.view(change)

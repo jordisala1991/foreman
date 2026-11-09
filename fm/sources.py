@@ -6,11 +6,9 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
   - with "task" (an issue id): `{"key", "task", "action", "text"}` acts on that open task, with the owner's own
     commands: note (text reaches its agent like an answer), reject (text; `fm reject`), accept (`fm accept`),
     done (closed as done: merged outside fm), cancel (`fm cancel`; text is the reason). A review on a task's own
-    change targets that task; it is not a new issue. Applied once per source and key (`state/applied/`); an unknown
-    or closed task, an unknown action, a missing key or one not valid for the task's state changes nothing and is logged
-    in `state/errors.jsonl` (and is not retried); a transient failure (accept before its check, a busy checkout, a
-    hung stop) is logged and the same key is tried again next tick. None is shipped yet: the contract is the point; the health checks (health.py) are the
-    first producer of findings."""
+    change targets that task; it is not a new issue. Applied once per source and key (`state/applied/`); one that
+    fails changes nothing and is logged in `state/errors.jsonl`. None is shipped yet: the contract is the point; the
+    health checks (health.py) are the first producer of findings."""
 
 import json
 import os
@@ -52,18 +50,13 @@ def _signal(p: Project, name: str, ln: str, cursor_file: Path) -> str | None:
         s = util.json_object(json.loads(ln))
     except ValueError:
         return None
-    if s is None:
-        fail(p, name, "a signal must be a JSON object", ln)
-        return None
-    return _handle(p, name, s, cursor_file)
+    return _handle(p, name, s, cursor_file) if s is not None else None
 
 
 def _handle(p: Project, name: str, s: dict[str, Any], cursor_file: Path) -> str | None:
     if "cursor" in s:
         util.write_text_atomic(cursor_file, str(s["cursor"]))
-    elif s.get("task") and not s.get("key"):
-        fail(p, name, "a signal with a task needs a key", s)
-    elif s.get("task"):
+    elif s.get("task") and s.get("key"):
         _on_task(p, name, s)
     elif s.get("key") and s.get("title"):
         return backlog.add(p, s["title"], detail=s.get("detail", ""), status="triage", source=f"{name}:{s['key']}") or None
@@ -78,14 +71,8 @@ def _on_task(p: Project, name: str, s: dict[str, Any]) -> None:
         return
     try:
         apply(p, f"{name}:{key}", s)
-    except (backlog.BacklogError, ValueError) as e:  # permanent: it will not become valid by waiting
+    except Exception as e:
         fail(p, name, str(e), s)
-    except Exception as e:  # transient (a busy checkout, a hung stop): tried again next tick
-        logged = p.state / "retrying" / name  # one line per key, not one per tick
-        if key not in {x.get("key") for x in util.read_jsonl(logged)}:
-            util.append_jsonl(logged, {"key": key, "at": util.now()})
-            fail(p, name, f"{e!r} (will be tried again)", s)
-        return
     util.append_jsonl(applied, {"key": key, "at": util.now()})
 
 

@@ -8,7 +8,6 @@ the login works."""
 import getpass
 import json
 import os
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -18,10 +17,6 @@ from . import proc, util
 ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 ITEM = "claude-oauth-token"
 RENEW_CMD = f"`claude setup-token`, then `security add-generic-password -U -a $USER -s {ITEM} -w`"
-AUTH_ERROR = re.compile(
-    r"failed to authenticate|authentication_error|invalid bearer token|invalid api key|oauth token has (expired|been revoked)|please run /login", re.I
-)
-NOT_FOUND = 44  # `security`'s exit code for "item not found"
 SETUP = (
     f"Agents use your normal Claude login (so they show in the Claude app). As a fallback for when it expires, keep a\n"
     f"long-lived token in the macOS Keychain: create it with `claude setup-token`, then store it with\n"
@@ -48,34 +43,25 @@ def login_status(claude: str) -> Login:
     env = {k: v for k, v in os.environ.items() if k != ENV}
     try:
         r = proc.run([claude, "auth", "status", "--json"], env=env, timeout=15)
-        data = util.json_object(json.loads(r.out))
-    except (proc.ProcError, ValueError):
-        return Login(True)
-    if data is None or "loggedIn" not in data:
+        data = util.json_object(json.loads(r.out)) or {}
+        logged = bool(data["loggedIn"])
+    except (proc.ProcError, ValueError, KeyError):
         return Login(True)
     try:
         expires = datetime.fromisoformat(str(data["loginExpiresAt"]).replace("Z", "+00:00"))
     except (KeyError, ValueError):
         expires = None
     gone = expires is not None and expires <= datetime.now(UTC)
-    return Login(bool(data["loggedIn"]) and not gone, expires)
-
-
-class Unreadable(Exception):
-    """The Keychain could not be read right now (locked, slow, `security` missing): not the same as having no token."""
+    return Login(logged and not gone, expires)
 
 
 def keychain() -> str:
-    """The token from the Keychain; "" when there is no such item; Unreadable when the read itself failed."""
+    """The token from the Keychain; "" when it cannot be read."""
     try:
         r = proc.run(["security", "find-generic-password", "-a", os.environ.get("USER") or getpass.getuser(), "-s", ITEM, "-w"], timeout=5)
-    except proc.ProcError as e:
-        raise Unreadable(str(e)) from e
-    if r.code == NOT_FOUND:
+    except proc.ProcError:
         return ""
-    if r.code != 0:
-        raise Unreadable(f"security exited {r.code}")
-    return r.out.strip()
+    return r.out.strip() if r.code == 0 else ""
 
 
 def get(read: Callable[[], str] | None = None) -> str:
@@ -88,18 +74,14 @@ def child_env(claude: str, read: Callable[[], str] | None = None, login: Callabl
     env = {k: v for k, v in os.environ.items() if k != ENV}
     if login(claude).ok:
         return env
-    try:
-        tok = get(read)
-    except Unreadable:
-        tok = ""  # launch anyway: the agent then fails with Claude's own message, and `fm health` says why
+    tok = get(read)
     return {**env, ENV: tok} if tok else env
 
 
 def works(claude: str, tok: str, env: Mapping[str, str] | None = None) -> bool:
-    """A cheap real call with the token. False only when Claude's own words say the token is refused; a rate limit, no
-    network or a slow call is not a token problem."""
+    """A cheap real call with the token."""
     try:
         r = proc.run([claude, "-p", "ok", "--model", "haiku"], env={**(env or os.environ), ENV: tok}, timeout=60)
     except proc.ProcError:
-        return True
-    return r.code == 0 or not AUTH_ERROR.search(r.out + r.err)
+        return False
+    return r.code == 0

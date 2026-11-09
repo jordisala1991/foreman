@@ -161,36 +161,14 @@ class Provider(unittest.TestCase):
             with self.assertRaises(providers.ConfigError):
                 integrate.accept(e.p, iid)
 
-    def test_the_old_forge_key_is_a_clear_config_error(self):
-        from fm import providers
-
-        e = Env()
-        e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[integrate]", '[integrate]\nforge = "github"'))
-        with self.assertRaisesRegex(providers.ConfigError, "forge was renamed to provider"):
-            registry.get(type(e.p).load(e.home))
-
     def test_send_back_forgets_the_merge_of_the_old_tip(self):
         e = Env(test="true")
         iid = self.delivered(e)
         loop.tick(e.p)
-        backlog.update(e.p, iid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
+        backlog.update(e.p, iid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc")
         loop.send_back(e.p, iid, "rejection", "again")
         i = e.issue(iid)
-        self.assertFalse({"accepted", "merge", "merging"} & set(i))
-
-    def test_a_crash_after_the_merge_adopts_it_instead_of_merging_twice(self):
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        base = git(e.repo, "rev-parse", "main").strip()
-        git(e.repo, "merge", "--squash", "fm/ty-1")
-        git(e.repo, "commit", "-qm", f"Integrate {iid}: x")  # the merge happened; its ref was never stored
-        backlog.update(e.p, iid, merging=base)
-        merged = git(e.repo, "rev-parse", "main").strip()
-        loop.tick(e.p)
-        self.assertEqual(e.issue(iid)["status"], "done")
-        self.assertEqual(git(e.repo, "rev-parse", "main").strip(), merged)
+        self.assertFalse({"accepted", "merge"} & set(i))
 
     def test_a_failing_merge_blocks_the_issue_with_the_reason(self):
         e = Env(test="true")

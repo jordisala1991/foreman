@@ -17,8 +17,6 @@ def detect(p: Project) -> str:
 
 def get(p: Project) -> Provider:
     """The project's provider; a clear ConfigError on an unknown provider, merge or pr value."""
-    if "forge" in p.cfg["integrate"]:
-        raise ConfigError('[integrate] forge was renamed to provider: use `provider = "local"`')
     name = p.get("integrate", "provider")
     providers: dict[str, type[Provider]] = {"local": Local, "github": GitHub}
     if name == "auto":

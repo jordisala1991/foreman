@@ -55,10 +55,6 @@ def cmd_verdict(a: argparse.Namespace) -> None:
 def cmd_ready(a: argparse.Namespace) -> None:
     p = home(a)
     iid = mine(a)
-    if not (a.plan or a.no_plan):
-        sys.exit('fm: say how the task is planned: --plan PATH (the written plan) or --no-plan "why it is trivial"')
-    if a.plan and a.no_plan:
-        sys.exit("fm: --plan and --no-plan exclude each other: either the task has a plan or it is trivial")
     if a.plan:
         f = Path(a.plan)
         if not f.is_file() or not f.read_text(encoding="utf-8").strip():
@@ -67,8 +63,6 @@ def cmd_ready(a: argparse.Namespace) -> None:
         i = backlog.get(d, iid)
         if a.plan:
             i["plan_file"] = str(Path(a.plan).resolve())
-        else:
-            i.pop("plan_file", None)  # a relaunched definer that now says «trivial» leaves no stale plan
         acceptance: backlog.Acceptance = i.get("acceptance") or {}
         agent: backlog.Agent = i.get("agent") or {}
         i["acceptance"] = {**acceptance, "claim": a.claim, "criterion": a.criterion}

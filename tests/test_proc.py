@@ -33,15 +33,5 @@ class RunJson(unittest.TestCase):
             proc.run_json([sys.executable, "-c", "print('oops')"])
 
 
-class Spawn(unittest.TestCase):
-    def test_spawn_gives_a_live_process(self):
-        with proc.spawn([sys.executable, "-c", "import sys; sys.exit(4)"]) as p:
-            self.assertEqual(p.wait(timeout=10), 4)
-
-    def test_spawn_of_a_missing_program_is_a_proc_error(self):
-        with self.assertRaises(proc.ProcError):
-            proc.spawn(["no-such-program-fm"])
-
-
 if __name__ == "__main__":
     unittest.main()

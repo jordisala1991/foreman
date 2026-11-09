@@ -124,16 +124,6 @@ class OnGitHub(unittest.TestCase):
         self.assertEqual(self.pr().get("edits"), 1)
         self.assertEqual(self.g.e.issue(iid)["pr"]["described"], git(self.g.e.repo, "rev-parse", self.g.e.issue(iid)["branch"]).strip())
 
-    def test_github_a_failing_description_does_not_hold_back_the_verdict_comment(self):
-        iid = self.deliver()
-        self.g.e.review(iid)
-        self.g.set(fail_always=["pr", "edit"])
-        self.run_ticks(3)
-        self.assertEqual(len(self.pr()["comments"]), 1)
-        i = self.g.e.issue(iid)
-        self.assertIn("HTTP 502", i["pr_error"])
-        self.assertFalse(i["pr"].get("described"))
-
 
 class Template(unittest.TestCase):
     def launched(self, e: Env) -> tuple[str, str]:

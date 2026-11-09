@@ -128,7 +128,7 @@ def cmd_cancel(a: argparse.Namespace) -> None:
 
 def cmd_unblock(a: argparse.Namespace) -> None:
     p = home(a)
-    i = backlog.update(p, a.id, blocked="", pr_error="", retry_error="", retry_count=0)
+    i = backlog.update(p, a.id, blocked="", retry_error="", retry_count=0)
     if i["status"] in backlog.RUNNING and a.relaunch:
         backlog.set_status(p, a.id, "backlog" if i["status"] == "refining" else "ready", "relaunch")
 
@@ -201,12 +201,11 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 def cmd_launchd(a: argparse.Namespace) -> None:
     fm_bin = str(Path(__file__).resolve().parent.parent / "bin/fm")
-    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", str(a.panel_port))}
+    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
     for job, args in jobs.items():
         text = loop.launchd_plist(fm_bin, job, args)
         if a.dir:
             out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
-            out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(text, encoding="utf-8")
             print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
         else:
