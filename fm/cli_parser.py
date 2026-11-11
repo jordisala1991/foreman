@@ -40,7 +40,7 @@ def _agent_side(c: Command) -> None:
     s.add_argument("--misled", default="", help="what was wrong or unclear in what you were given, or none")
     s.add_argument("--issue")
     s = c("verdict", "(reviewer) the open findings of your review")
-    s.add_argument("--open", type=int, required=True, help="findings to fix")
+    s.add_argument("--too-much", dest="too_much", type=int, default=0, help="findings of kind Too much; fm counts the checks itself")
     s.add_argument("--file", required=True)
     s.add_argument("--tip", default="", help="the tip you reviewed (the brief gives it)")
     s.add_argument("--misled", default="")

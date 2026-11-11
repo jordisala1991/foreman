@@ -140,13 +140,20 @@ conversation: each finding gets the smallest change that settles it, or a one-li
 
 **Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
 its own session in the branch's worktree, once per delivered tip; it counts against the slots. It reads the criterion, the diff,
-then the agent's report last, and checks each criterion line by using it the way the owner will (met / not met, with
-what it ran and saw). A finding is one of three things: Wrong (shown, not «could»), Missing (a criterion line or an
-owner's note not met) or Too much (code the task does not need); nothing else is written, and there are no
-severities: every finding is one to fix. It writes `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`) and runs
-`fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but decides nothing. Open findings in round 1 → back to the responsible agent (`risk.review_step`); round 2 checks the fixes only and
-opens nothing new unless a fix is itself Wrong or Too much; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
-verdict blocks the task.
+then the agent's report last. Its evidence is scripts, not prose: a check is a short script in `<home>/reviews/ID-checks/` that
+exits 0 when the behaviour is right. Every criterion line gets one (`C1.sh`…), which uses the line the way the owner will; a line
+no script can check is written `not checked: why`, for the owner. A finding is one of three things: Missing (a criterion line
+or an owner's note whose check fails), Wrong (a case normal use reaches, with its own failing check, `F1.sh`…; «could» has no
+check) or Too much (code the task does not need; prose, since no script shows it); nothing else is written, and there are no
+severities: every finding is one to fix. A check does not make a dependency fail to reach its case unless the criterion names
+that case or it was seen to happen: that is the rule that keeps defensive code out. It writes `<home>/reviews/ID-rN-<tip>.md`
+(header `Branch/Tip/Round`) and runs `fm verdict --tip --too-much N --file`. fm, not the reviewer, says what is open: it runs
+every check from the worktree and counts the ones that fail, plus N (`agents.failing_checks`). A verdict for a tip other than
+the newest launch is stored in the review history but decides nothing. Open findings in round 1 → back to the responsible
+agent (`risk.review_step`) with the names of the failing checks: a finding is settled when its check passes. Round 2 checks
+the fixes only: the same checks run again on the new tip, so a fixed finding closes and a fix that broke a criterion line
+opens without anyone's judgement; the reviewer deletes a check whose answer it accepts and may add one for a Wrong it can
+show. What is still open after round 2 goes to the owner as high risk. A reviewer that ends without a verdict blocks the task.
 
 What was dropped because it only served a coordinator: memory renewal, session marking, interface mods and band,
 catch-up summaries, the pass as a message, plans written by someone else, sub-issues assigned from outside, the

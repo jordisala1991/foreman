@@ -76,6 +76,7 @@ class Review(TypedDict):
     round: int
     tip: str
     open: NotRequired[int]  # verdicts from before it carry high/medium/low instead: see open_findings
+    failing: NotRequired[list[str]]
     sent_back: NotRequired[bool]
 
 

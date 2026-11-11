@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, util
+from . import agents, backlog, proc, util
 from .cli_common import home, mine
 
 
@@ -33,6 +33,12 @@ def cmd_done(a: argparse.Namespace) -> None:
 def cmd_verdict(a: argparse.Namespace) -> None:
     p = home(a)
     iid = mine(a)
+    issue = backlog.get(backlog.load(p), iid)
+    try:
+        failing = agents.failing_checks(p, issue)
+    except proc.ProcError as e:
+        sys.exit(f"fm: a check did not end ({e}): fix or delete it, then run fm verdict again")
+    opened = len(failing) + a.too_much
     with backlog.edit(p) as d:
         i = backlog.get(d, iid)
         latest: backlog.Reviewer = i.get("reviewer") or {}
@@ -41,15 +47,25 @@ def cmd_verdict(a: argparse.Namespace) -> None:
         tip = next((t for t in launched if t and t.startswith(a.tip)), "") if a.tip else newest
         if a.tip and not tip:
             sys.exit(f"fm: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
-        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
+        v = {
+            "round": len(i.get("reviews", [])) + 1,
+            "tip": tip,
+            "open": opened,
+            "failing": failing,
+            "file": a.file,
+            "at": util.now(),
+        }
         i["reviews"] = [*i.get("reviews", []), v]
         if tip == newest:  # a verdict for an older launch is history: it decides nothing
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
-            i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
+            i["report"] = {**report, "review": "clean" if opened == 0 else f"open: {opened}"}
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
-    backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
-    print("Verdict recorded. End your turn.")
+    suffix = f", failing: {', '.join(failing)}" if failing else ""
+    backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: {opened} open{suffix} ({a.file})")
+    for name in failing:
+        print(f"fails: {name}")
+    print(f"Open: {opened} (failing checks: {len(failing)}, too much: {a.too_much}). Verdict recorded. End your turn.")
 
 
 def cmd_ready(a: argparse.Namespace) -> None:

@@ -110,7 +110,7 @@ class Lessons(unittest.TestCase):
         os.environ.update(FM_ISSUE=iid, FM_AGENT="ty-1")
         try:
             fm(e.home, "done", "--summary", "s", "--misled", "brief: the test command is wrong")
-            fm(e.home, "verdict", "--open", "0", "--file", "r", "--misled", "none")
+            fm(e.home, "verdict", "--file", "r", "--misled", "none")
         finally:
             os.environ.pop("FM_ISSUE")
             os.environ.pop("FM_AGENT")

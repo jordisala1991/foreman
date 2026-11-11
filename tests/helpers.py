@@ -115,7 +115,7 @@ class Env:
         loop.tick(self.p)
         os.environ["FM_ISSUE"] = iid
         try:
-            fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{iid}.md"))
+            fm(self.home, "verdict", "--too-much", str(open_findings), "--file", str(self.home / f"reviews/{iid}.md"))
         finally:
             os.environ.pop("FM_ISSUE")
 

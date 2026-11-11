@@ -21,7 +21,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, util
-from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
+from .agents import checks_dir, fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
 
@@ -107,11 +107,19 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
         return
     v: dict[str, Any] = i.get("review") or {}
     if risk.review_step(v, MAX_ROUNDS) == "back":
+        failing: list[str] = v.get("failing") or []
+        checks_note = (
+            f"These checks fail: {', '.join(failing)} (in {checks_dir(p, i['id'])}); each is settled when `sh <check>` "
+            "exits 0 in your worktree, and they are the reviewer's: do not edit them. "
+            if failing
+            else ""
+        )
         send_back(
             p,
             i["id"],
             "review",
             f"The independent review of your branch (round {v['round']}) leaves {backlog.open_findings(v)} open: read {v['file']}. "
+            f"{checks_note}"
             "For each one, make the smallest change that settles it, or answer it in one line if you think it is wrong; add "
             "nothing it does not ask for. Add one `### Round N` to the «Review rounds» section of your report, one line per "
             "finding, and run `fm done` again.",

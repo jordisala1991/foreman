@@ -30,7 +30,7 @@ def start(e: Env) -> tuple[str, str]:
 def verdict(e: Env, iid: str, tip: str) -> None:
     os.environ["FM_ISSUE"] = iid
     try:
-        fm(e.home, "verdict", "--tip", tip, "--open", "0", "--file", "r.md")
+        fm(e.home, "verdict", "--tip", tip, "--file", "r.md")
     finally:
         os.environ.pop("FM_ISSUE")
 

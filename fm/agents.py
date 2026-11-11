@@ -5,10 +5,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import backlog, costs, integrate, lock, sessions, util
+from . import backlog, costs, integrate, lock, proc, sessions, util
 from .config import Project
 
 BRIEFS = Path(__file__).parent / "briefs"
+CHECK_SECONDS = 300  # A check that runs longer is not a check.
 
 
 def agent_name(p: Project, iid: str, kind: str) -> str:
@@ -17,14 +18,26 @@ def agent_name(p: Project, iid: str, kind: str) -> str:
 
 ROUND2 = (
     "4. **Round $round checks the fixes**, not the whole branch again: read the previous review "
-    "(`$previous`), `git diff $previous_tip..$branch` and the «Review rounds» section of the report. Each "
-    "earlier finding is fixed, answered (with a reason you accept), or still open. No new findings, "
-    "except a fix that is itself Wrong (shown) or Too much."
+    "(`$previous`), `git diff $previous_tip..$branch` and the «Review rounds» section of the report. The "
+    "checks of round 1 are still in `$checks`: run them. One that passes now is fixed. One that still fails "
+    "and the agent answered: delete it if you accept the answer, leave it if you do not. A fix that is itself "
+    "Wrong gets a new check, and so does any other Wrong you come to show on the way; a fix that is Too much "
+    "is a finding. Nothing else is new, and step 2 is not done again."
 )
 
 
 def report_file(p: Project, iid: str) -> Path:
     return p.home / "reports" / f"{iid}.md"
+
+
+def checks_dir(p: Project, iid: str) -> Path:
+    return p.home / "reviews" / f"{iid}-checks"
+
+
+def failing_checks(p: Project, i: dict[str, Any]) -> list[str]:
+    """The task's review checks that fail now, run from its worktree: these are what is open, not the reviewer's count."""
+    files = sorted(checks_dir(p, i["id"]).glob("*.sh"))
+    return [f.name for f in files if proc.run(["sh", str(f)], cwd=Path(i["worktree"]), timeout=CHECK_SECONDS).code != 0]
 
 
 def seed_report(p: Project, iid: str, worktree: Path) -> None:
@@ -194,6 +207,8 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
     effort = p.get("agents", "review_effort")
     review_file = p.home / "reviews" / f"{i['id']}-r{rnd}-{tip[:9]}.md"
     review_file.parent.mkdir(parents=True, exist_ok=True)
+    folder = checks_dir(p, i["id"])
+    folder.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
         "round": rnd,
         "plan": i.get("plan_file", ""),
@@ -202,6 +217,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
         "round2": ROUND2 if rnd > 1 else "",
         "previous": prev.get("file", ""),
         "previous_tip": prev.get("tip", ""),
+        "checks": str(folder),
     }
     cwd = Path(i["worktree"])
     short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, "reviewer", extra), cwd)
