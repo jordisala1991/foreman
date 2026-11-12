@@ -32,6 +32,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "merge": "squash",  # squash | merge (--no-ff) | rebase (github only)
         "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `fm done`
         "test": "",
+        "ci_poll_seconds": 120,  # github: a task's CI is read at most this often (0 = every tick)
     },
     # risk: label -> path patterns; the label is what the reason says. [risk.high] replaces the default table whole.
     # large_lines: a change over this many counted lines (tests, generated and lock files excluded) is at least medium

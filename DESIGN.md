@@ -44,7 +44,7 @@ Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, b
 A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `worktrees/`, optional `sources/`.
 `fm.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
 (`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Every setting is per
-project: `[agents] slots` (how many at once), models, extra session settings; `[integrate] autonomy`, `provider`, `merge`, `test`,
+project: `[agents] slots` (how many at once), models, extra session settings; `[integrate] autonomy`, `provider`, `merge`, `test`, `ci_poll_seconds` (github: a task's CI is read at most this often),
 `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`; `[health]` timings.
 
 ## The states of a task

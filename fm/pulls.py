@@ -4,6 +4,7 @@
 Every function calls the provider's operations whatever the platform; the local provider answers each as a no-op, and
 a task with no PR (`publish` returned nothing) has nothing to deliver to."""
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +66,21 @@ def sync(p: Project, i: dict[str, Any]) -> None:
         _open(p, provider, i, head, True)
 
 
+def ci_of(p: Project, provider: Provider, i: dict[str, Any], head: str) -> str:
+    """The CI result of a delivered branch. With a CI (github) it is read at most once per `ci_poll_seconds` and per tip,
+    remembered on the issue (`ci_read`) so a loop restart does not burst; a failed read is not remembered."""
+    change = change_of(i, head)
+    if not provider.has_ci:
+        return provider.ci(change)
+    read: dict[str, Any] | None = i.get("ci_read")
+    now = time.time()
+    if read and not util.ci_read_due(read, head, now, float(p.get("integrate", "ci_poll_seconds"))):
+        return read["result"]
+    result = provider.ci(change)
+    backlog.update(p, i["id"], ci_read={"head": head, "result": result, "epoch": time.time()})
+    return result
+
+
 def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     """For a delivered branch: ('ok', ci) ready to be checked, with the CI result read now; ('wait', why) CI still
     running. An unpushed branch is pushed here; failures are the caller's (`loop.guarded`)."""
@@ -73,7 +89,7 @@ def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
         provider.push(change_of(i, head))
     if not i.get("pr"):
         _open(p, provider, i, head, False)
-    ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))
+    ci = ci_of(p, provider, backlog.get(backlog.load(p), i["id"]), head)
     return ("wait", "CI is still running") if ci == "pending" else ("ok", ci)
 
 

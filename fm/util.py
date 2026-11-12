@@ -94,3 +94,10 @@ def json_object(v: object) -> dict[str, Any] | None:
 def json_list(v: object) -> list[Any]:
     """The JSON value as a list; [] when it is anything else."""
     return cast(list[Any], v) if isinstance(v, list) else []
+
+
+def ci_read_due(read: dict[str, Any] | None, head: str, now: float, every: float) -> bool:
+    """Whether a task's CI must be read again: no read yet, another head, a clock that went back, or `every` s passed."""
+    if not read or read.get("head") != head or now < read["epoch"]:
+        return True
+    return now - read["epoch"] >= every

@@ -6,6 +6,7 @@ import os
 import subprocess
 import textwrap
 import unittest
+from unittest import mock
 
 from helpers import Env, fm, git
 
@@ -100,7 +101,8 @@ class GH:
         self.path = os.environ["PATH"]
         os.environ["PATH"] = f"{e.bin}:{self.path}"
         toml = e.home / "fm.toml"
-        toml.write_text(toml.read_text().replace("[integrate]", f'[integrate]\nprovider = "github"\n{extra}'))
+        poll = "" if "ci_poll_seconds" in extra else "ci_poll_seconds = 0\n"  # every tick, as before the throttle
+        toml.write_text(toml.read_text().replace("[integrate]", f'[integrate]\nprovider = "github"\n{poll}{extra}'))
         e.p = type(e.p).load(e.home)
 
     def close(self) -> None:
@@ -412,6 +414,88 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual((g.e.issue(iid)["check"]["ci"], g.e.issue(iid)["status"]), ("fail", "in review"))
         self.assertEqual(g.calls("pr", "merge"), [])
+
+    def throttled(self, **kw) -> tuple[GH, list[float]]:
+        """A github project with a 120 s CI window and a clock the test moves."""
+        g = self.make(test="true", extra="ci_poll_seconds = 120\n", **kw)
+        clock = [1000.0]
+        patch = mock.patch("fm.pulls.time.time", lambda: clock[0])
+        patch.start()
+        self.addCleanup(patch.stop)
+        return g, clock
+
+    def settle(self, g: GH, clock: list[float]) -> int:
+        """One tick at clock 1000 (the PRs of the delivered tasks are opened and read once), then the clock jumps; the
+        number of `pr checks` calls so far."""
+        loop.tick(g.e.p)
+        clock[0] = 5000.0
+        return len(g.calls("pr", "checks"))
+
+    def tick_at(self, g: GH, clock: list[float], at: float) -> None:
+        clock[0] = at
+        loop.tick(g.e.p)
+
+    def test_ci_is_read_once_per_task_within_the_poll_window(self):
+        g, clock = self.throttled(slots=3)
+        ids = [g.work() for _ in range(3)]
+        for iid in ids:
+            g.deliver(iid)
+        base = self.settle(g, clock)
+        for at in (5000, 5030, 5060, 5090):
+            self.tick_at(g, clock, at)
+        self.assertEqual(len(g.calls("pr", "checks")) - base, 3)
+
+    def test_ci_is_read_again_after_the_poll_window(self):
+        g, clock = self.throttled()
+        iid = g.work()
+        g.deliver(iid)
+        base = self.settle(g, clock)
+        self.tick_at(g, clock, 5000)
+        self.tick_at(g, clock, 5121)
+        self.assertEqual(len(g.calls("pr", "checks")) - base, 2)
+
+    def test_pending_ci_is_not_reread_inside_the_window(self):
+        g, clock = self.throttled()
+        g.set(ci="pending")
+        iid = g.work()
+        g.deliver(iid)
+        base = self.settle(g, clock)
+        self.tick_at(g, clock, 5000)
+        self.assertNotIn("check", g.e.issue(iid))
+        g.set(ci="pass")
+        self.tick_at(g, clock, 5030)
+        self.assertNotIn("check", g.e.issue(iid))
+        self.assertEqual(len(g.calls("pr", "checks")) - base, 1)
+        self.tick_at(g, clock, 5121)
+        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")
+        self.assertEqual(len(g.calls("pr", "checks")) - base, 2)
+
+    def test_a_new_tip_reads_ci_at_once(self):
+        g, clock = self.throttled()
+        iid = g.work()
+        g.deliver(iid)
+        base = self.settle(g, clock)
+        self.tick_at(g, clock, 5000)
+        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+        with open(wt / "app.py", "a") as f:
+            f.write("# more\n")
+        git(wt, "commit", "-qam", "more")
+        git(wt, "push", "-q", "origin", g.e.issue(iid)["branch"])
+        g.e.review(iid)
+        self.tick_at(g, clock, 5010)
+        self.assertEqual(len(g.calls("pr", "checks")) - base, 2)
+
+    def test_a_failed_ci_read_is_not_cached(self):
+        g, clock = self.throttled()
+        iid = g.work()
+        g.deliver(iid)
+        g.set(fail_once=["pr", "checks"])
+        self.tick_at(g, clock, 5000)
+        self.assertNotIn("ci_read", g.e.issue(iid))
+        self.tick_at(g, clock, 5010)
+        i = g.e.issue(iid)
+        self.assertEqual(i["check"]["ci"], "pass")
+        self.assertFalse(i.get("retry_count"))
 
     def test_a_hung_gh_times_out_without_freezing_the_tick(self):
         from fm.providers import github

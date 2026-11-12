@@ -3,7 +3,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, risk
+from fm import backlog, integrate, loop, risk, util
 from fm.providers import registry
 
 
@@ -505,3 +505,24 @@ class Queue(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CiThrottle(unittest.TestCase):
+    def test_ci_read_due(self):
+        read = {"head": "a", "epoch": 2000.0, "result": "pass"}
+        self.assertTrue(util.ci_read_due(None, "a", 2000.0, 120))
+        self.assertTrue(util.ci_read_due(read, "b", 2001.0, 120))
+        self.assertTrue(util.ci_read_due(read, "a", 2120.0, 120))
+        self.assertFalse(util.ci_read_due(read, "a", 2119.0, 120))
+        self.assertTrue(util.ci_read_due(read, "a", 1500.0, 120))  # the clock went back
+        self.assertTrue(util.ci_read_due(read, "a", 2000.0, 0))
+
+    def test_the_local_provider_stores_no_ci_read(self):
+        e = Env()
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
+        e.review(iid)
+        loop.tick(e.p)
+        loop.tick(e.p)
+        self.assertNotIn("ci_read", e.issue(iid))
