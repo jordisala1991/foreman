@@ -57,10 +57,34 @@ class Health(unittest.TestCase):
         health.run(self.p, {})
         t = self.triage()
         self.assertEqual(len(t), 1)
-        self.assertIn("..", t[0]["detail"])
+        self.assertRegex(t[0]["detail"], r"10 integrations since the last prune: review `git log [0-9a-f]{12}\.\.main`")
         self.integrate_commits(10)
         health.run(self.p, {})
         self.assertEqual(len(self.triage()), 1)
+
+    def test_next_prune_is_filed_after_the_last_one_closed_and_10_more_integrations(self):
+        self.integrate_commits(10)
+        health.run(self.p, {})
+        first = self.triage()[0]
+        time.sleep(2)  # commits must fall after the task's `created` (1 s resolution)
+        self.integrate_commits(10)
+        health.run(self.p, {})
+        backlog.set_status(self.p, first["id"], "done")
+        health.run(self.p, {})
+        second = [i for i in self.triage() if i["id"] != first["id"]]
+        self.assertEqual(len(second), 1)
+        self.assertNotEqual(second[0]["detail"], first["detail"])
+
+    def test_a_failing_git_read_is_not_taken_as_nothing_to_prune(self):
+        self.integrate_commits(10)
+        self.p.cfg["project"]["main"] = "nonexistent-branch"
+        with self.assertRaises(Exception):
+            health.prune_due(self.p)
+
+    def test_only_a_commit_subject_counts_as_an_integration(self):
+        git(self.e.repo, "commit", "-q", "--allow-empty", "-m", "Fix thing", "-m", "Integrate TY-9: pasted line")
+        self.integrate_commits(9)
+        self.assertEqual(health.prune_due(self.p), [])
 
     def test_live_worktree_is_not_an_orphan(self):
         backlog.add(self.p, "x", status="ready", criterion="y")

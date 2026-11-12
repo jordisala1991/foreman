@@ -209,17 +209,18 @@ PRUNE_EVERY = 10
 
 
 def prune_due(p: Project) -> list[Finding]:
-    """The range starts where the last prune task was filed (or at the first commit). The task only looks at what was
-    integrated in it and removes what no criterion asks for, never what the owner asked for."""
+    """Due when 10 integrations came after the last prune task was filed (or ever, if none) and no prune task is open.
+    The range starts where that task was filed. The task only looks at what was integrated in it and removes what no
+    criterion asks for, never what the owner asked for."""
     main = p.get("project", "main")
-    last = [i["created"] for i in backlog.issues(backlog.load(p)) if i.get("source") == "health:prune"]
-    since = integrate.git(p.repo, "rev-list", "--max-parents=0", main, check=False).out.split()[:1]
-    if last:
-        since = integrate.git(p.repo, "rev-list", "-1", f"--before={max(last)}", main, check=False).out.split() or since
-    if not since:
+    prunes = [i for i in backlog.issues(backlog.load(p)) if i.get("source") == "health:prune"]
+    if any(i["status"] not in backlog.CLOSED for i in prunes):
         return []
+    since = integrate.git(p.repo, "rev-list", "--max-parents=0", main).out.split()
+    if prunes:
+        since = integrate.git(p.repo, "rev-list", "-1", f"--before={max(i['created'] for i in prunes)}", main).out.split() or since
     rng = f"{since[0][:12]}..{main}"
-    n = len(integrate.git(p.repo, "log", "--format=%H", "--grep=^Integrate ", rng, check=False).out.split())
+    n = sum(s.startswith("Integrate ") for s in integrate.git(p.repo, "log", "--format=%s", rng).out.splitlines())
     if n < PRUNE_EVERY:
         return []
     detail = (
