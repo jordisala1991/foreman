@@ -6,7 +6,7 @@ only if it went away and came back.
 Checks: loop dead (heartbeat too old: seen from outside the loop, `fm health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
 · orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
-on main's head, every `ci_every_minutes`) · loop step errors."""
+on main's head, every `ci_every_minutes`) · answer not delivered for 10 minutes · loop step errors."""
 
 import hashlib
 import threading
@@ -148,6 +148,23 @@ def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
     return out
 
 
+UNDELIVERED_MINUTES = 10
+
+
+def answers_undelivered(p: Project) -> list[Finding]:
+    out: list[Finding] = []
+    for q in backlog.undelivered(backlog.load(p)):
+        if (util.age_s(q.get("answered_at")) or 0) > 60 * UNDELIVERED_MINUTES:
+            out.append(
+                {
+                    "key": f"undelivered:{q['id']}",
+                    "title": f"{q['issue']}'s agent has not received the owner's answer",
+                    "detail": f"{q['id']} was answered at {q['answered_at']} and is still not delivered: «{q.get('answer')}».",
+                }
+            )
+    return out
+
+
 def orphan_worktrees(p: Project) -> list[Finding]:
     root = p.path("worktrees").resolve()
     live = {str(Path(i["worktree"]).resolve()) for i in backlog.issues(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
@@ -206,7 +223,14 @@ def loop_errors(p: Project) -> list[Finding]:
 
 def findings(p: Project, rows: dict[str, Any], outside: bool = False, wait: bool = True) -> list[Finding]:
     out = [*loop_dead(p), *claude_token(p, wait=wait)] if outside else []
-    for check in (lambda: agents(p, rows), lambda: orphan_worktrees(p), lambda: main_tests(p, run=not outside), lambda: loop_errors(p)):
+    checks = (
+        lambda: agents(p, rows),
+        lambda: answers_undelivered(p),
+        lambda: orphan_worktrees(p),
+        lambda: main_tests(p, run=not outside),
+        lambda: loop_errors(p),
+    )
+    for check in checks:
         try:
             out += check()
         except Exception as e:

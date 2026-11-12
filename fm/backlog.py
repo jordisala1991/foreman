@@ -258,6 +258,7 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
             raise BacklogError(f"no open question {qid}")
         d["decisions"].remove(q)
         q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}", "free": True, "delivered": False})
+        q["answered_at"] = util.now()
         d["decisions_resolved"].append(q)
     event(p, q["issue"], f"owner answered {qid}: {text}")
     return q
@@ -280,6 +281,7 @@ def note(p: Project, iid: str, text: str, source: str) -> None:
                 "source": source,
                 "resolved": util.now()[:10],
                 "delivered": False,
+                "answered_at": util.now(),
                 "options": [],
                 "title": i["title"],
             }

@@ -103,6 +103,18 @@ class Answers(unittest.TestCase):
         self.assertIn("«B»", resume[-1])
         self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
 
+    def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self):
+        e = Env()
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        qid = backlog.ask(e.p, iid, iid.lower(), "A or B?")
+        backlog.answer(e.p, qid, "B")
+        e.set_state(iid.lower(), "blocked")
+        e.set_status(iid.lower(), "idle")
+        loop.tick(e.p)
+        self.assertIn("--resume", e.calls()[-1]["argv"])
+        self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
+
 
 class Provider(unittest.TestCase):
     def delivered(self, e):
