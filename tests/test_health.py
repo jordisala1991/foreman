@@ -14,6 +14,7 @@ class Health(unittest.TestCase):
     def setUp(self):
         self.e = Env()
         self.p = self.e.p
+        self.p.state.mkdir(parents=True, exist_ok=True)
 
     def triage(self):
         return [i for i in backlog.issues(backlog.load(self.p)) if i["status"] == "triage"]
@@ -22,6 +23,25 @@ class Health(unittest.TestCase):
         self.assertEqual(health.loop_dead(self.p)[0]["key"], "loop-dead")
         util.write_json(self.p.state / "loop.json", {"epoch": time.time(), "time": util.now()})
         self.assertEqual(health.loop_dead(self.p), [])
+
+    def test_a_github_pause_is_not_a_finding(self):
+        util.write_json(self.p.state / "github_quota.json", {"until": time.time() + 600, "resources": {}})
+        self.assertFalse([f["key"] for f in health.findings(self.p, {}, outside=True) if "github" in f["key"]])
+        health.run(self.p, {})
+        self.assertFalse([i for i in self.triage() if "GitHub" in i["title"]])
+
+    def test_github_pause_ignores_bad_files(self):
+        f = self.p.state / "github_quota.json"
+        for text in ("not json", "[]", '{"until": "soon"}', '{"until": true}', "{}", '{"until": 1000}'):
+            f.write_text(text)
+            self.assertIsNone(health.github_pause(self.p, 1000.0), text)
+
+    def test_github_pause_without_usable_quota_still_shows_the_pause(self):
+        f = self.p.state / "github_quota.json"
+        for res in ("", ', "resources": "x"', ', "resources": {"core": {"remaining": "0"}, "b": "x"}'):
+            f.write_text('{"until": 2000' + res + "}")
+            g = health.github_pause(self.p, 1000.0)
+            self.assertTrue(g and g["quota"] == [], res)
 
     def test_orphan_worktree_is_filed_once(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")

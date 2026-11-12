@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -38,6 +39,7 @@ class PanelTest(unittest.TestCase):
         self.qid = backlog.ask(self.p, self.work, "de-2", "Which colour?")
         self.perm = backlog.ask(self.p, self.work, "de-2", "push the tag", kind="permission", action="publish")
         panel.forget()
+        self.p.state.mkdir(parents=True, exist_ok=True)
         self.srv, self.key = panel.make_server(0, token="test-key")
         self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
@@ -73,6 +75,30 @@ class PanelTest(unittest.TestCase):
         self.assertIn("012345678", data["issue"]["description"])
         _, other = self.call(f"/api/issue?p=demo&id={self.triage}")
         self.assertNotIn("description", other["issue"])
+
+    RES = {"core": {"limit": 5000, "remaining": 4000, "reset": 1}, "graphql": {"limit": 5000, "remaining": 0, "reset": 2}}
+
+    def githubs(self) -> list[object]:
+        _, projects = self.call("/api/projects")
+        _, state = self.call("/api/state?p=demo")
+        _, system = self.call("/api/system?p=demo")
+        return [projects["projects"][0]["github"], state["github"], system["github"]]
+
+    def test_github_pause_is_in_every_view_while_until_is_ahead(self) -> None:
+        until = int(time.time()) + 600
+        util.write_json(self.p.state / "github_quota.json", {"until": until, "resources": self.RES})
+        want = {
+            "until": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(until)),
+            "quota": [{"name": "core", "remaining": 4000, "limit": 5000}, {"name": "graphql", "remaining": 0, "limit": 5000}],
+        }
+        self.assertEqual(self.githubs(), [want, want, want])
+
+    def test_github_pause_ends_at_until(self) -> None:
+        util.write_json(self.p.state / "github_quota.json", {"until": int(time.time()) - 5, "resources": self.RES})
+        self.assertEqual(self.githubs(), [None, None, None])
+
+    def test_no_quota_file_means_no_pause(self) -> None:
+        self.assertEqual(self.githubs(), [None, None, None])
 
     def test_key_required(self) -> None:
         self.assertEqual(self.call("/api/state", key=False)[0], 403)

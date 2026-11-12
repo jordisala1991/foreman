@@ -51,10 +51,15 @@ export interface Loop {
   time: string | null;
   alive: boolean;
 }
+export interface Github {
+  until: string;
+  quota: { name: string; remaining: number; limit: number }[];
+}
 export interface Product {
   name: string;
   paused?: string | null;
   loop?: Loop;
+  github?: Github | null;
   needs?: number;
   running?: number;
   broken?: string;
@@ -123,6 +128,7 @@ export interface State {
   name: string;
   paused: string | null;
   loop: Loop;
+  github: Github | null;
   issues: Issue[];
   questions: Question[];
   events: Event[];
@@ -158,6 +164,7 @@ export interface SystemAnswer {
   name: string;
   paused: string | null;
   loop: Loop;
+  github: Github | null;
   findings: Finding[];
   metrics: MetricRow[];
   total: number;

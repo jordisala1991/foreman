@@ -158,5 +158,9 @@
   "lock_free": "free",
   "lock_busy": "in use",
   "lock_since": "since {when}",
-  "lock_waiting": "{who} waits: {what}"
+  "lock_waiting": "{who} waits: {what}",
+  "state_limited": "GitHub limit",
+  "state_limited_tip": "GitHub's API limit is used up: the loop's gh calls wait until {when}.",
+  "github_paused": "GitHub's API limit is used up: gh calls paused until {when}",
+  "github_quota": "Quota read then: {quota}"
 }

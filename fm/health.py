@@ -6,7 +6,8 @@ only if it went away and came back.
 Checks: loop dead (heartbeat too old: seen from outside the loop, `fm health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
 · orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
-on main's head, every `ci_every_minutes`) · loop step errors."""
+on main's head, every `ci_every_minutes`) · loop step errors.
+The GitHub pause is shown, not filed (`github_pause`)."""
 
 import hashlib
 import threading
@@ -19,6 +20,20 @@ from . import backlog, costs, integrate, token, util
 from .config import Project
 
 Finding = dict[str, str]
+
+
+def github_pause(p: Project, now: float) -> dict[str, Any] | None:
+    """The loop's gh calls wait for a GitHub rate limit (state/github_quota.json): until when, and the quota read then."""
+    d = util.json_object(util.read_json(p.state / "github_quota.json", {})) or {}
+    until = d.get("until")
+    if not isinstance(until, int | float) or isinstance(until, bool) or until <= now:
+        return None
+    quota: list[dict[str, Any]] = []
+    for name, raw in sorted((util.json_object(d.get("resources")) or {}).items()):
+        r = util.json_object(raw) or {}
+        if isinstance(r.get("remaining"), int) and isinstance(r.get("limit"), int):
+            quota.append({"name": name, "remaining": r["remaining"], "limit": r["limit"]})
+    return {"until": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(until)), "quota": quota}
 
 
 def loop_dead(p: Project) -> list[Finding]:

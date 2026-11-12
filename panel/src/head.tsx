@@ -1,18 +1,19 @@
 // What every screen's header shows: its title, its controls, and on a wide screen the project's status pill (on the
-// phone the pill sits by the picker, in the shell). The pill is the loop's: running, paused, or not running.
+// phone the pill sits by the picker, in the shell). The pill is the loop's: running, paused, not running, or limited by GitHub.
 import type { ReactNode } from "react";
-import { t, type Key, type Product } from "./lib";
+import { t, when, type Key, type Product } from "./lib";
 
-export type LoopState = "running" | "paused" | "silent";
+export type LoopState = "running" | "paused" | "silent" | "limited";
 export function loopState(p: Product): LoopState {
   if (p.paused) return "paused";
-  return p.loop?.alive ? "running" : "silent";
+  if (!p.loop?.alive) return "silent";
+  return p.github ? "limited" : "running";
 }
 
 export function StatusPill({ product }: { product: Product }) {
   const s = loopState(product);
   return (
-    <span className={`pill ${s}`} title={t(`state_${s}_tip` as Key)}>
+    <span className={`pill ${s}`} title={t(`state_${s}_tip` as Key, { when: when(product.github?.until) })}>
       <span className="dot" />
       {t(`state_${s}` as Key)}
     </span>

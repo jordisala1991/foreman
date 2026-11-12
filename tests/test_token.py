@@ -128,6 +128,20 @@ class Token(unittest.TestCase):
         self.assertIn("security add-generic-password -U", out)
         self.assertIn("claude setup-token", out)
 
+    def test_fm_health_prints_the_github_pause(self):
+        self.set_login(True)
+        self.p.state.mkdir(parents=True, exist_ok=True)
+        quota = util.write_json
+        until = int(time.time()) + 600
+        quota(self.p.state / "github_quota.json", {"until": until, "resources": {"graphql": {"limit": 5000, "remaining": 0, "reset": 2}}})
+        with mock.patch.object(token, "keychain", lambda: ""):
+            out = fm(self.p.home, "health")
+        self.assertIn(time.strftime("%H:%M:%S", time.localtime(until)), out)
+        self.assertIn("graphql 0/5000", out)
+        quota(self.p.state / "github_quota.json", {"until": int(time.time()) - 5})
+        with mock.patch.object(token, "keychain", lambda: ""):
+            self.assertNotIn("GitHub", fm(self.p.home, "health"))
+
     def test_unreadable_keychain_is_not_no_token_and_files_nothing(self):
         def locked() -> str:
             raise token.Unreadable("locked")

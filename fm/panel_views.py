@@ -85,6 +85,7 @@ def summary(p: Project) -> Obj:
             "name": p.name,
             "paused": paused(p),
             "loop": loop_beat(p),
+            "github": health.github_pause(p, time.time()),
             "needs": needs(d),
             "running": sum(1 for i in backlog.issues(d) if i["status"] in backlog.RUNNING),
         }
@@ -103,7 +104,15 @@ def state(p: Project) -> Obj:
     rows = session_rows(p)
     shown = [with_session(p, i, rows) for i in backlog.issues(d) if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
-    return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "issues": shown, "questions": d["decisions"], "events": events}
+    return {
+        "name": p.name,
+        "paused": paused(p),
+        "loop": loop_beat(p),
+        "github": health.github_pause(p, time.time()),
+        "issues": shown,
+        "questions": d["decisions"],
+        "events": events,
+    }
 
 
 def issue(p: Project, iid: str) -> Obj:
@@ -131,6 +140,7 @@ def system(p: Project) -> Obj:
         "name": p.name,
         "paused": paused(p),
         "loop": loop_beat(p),
+        "github": health.github_pause(p, time.time()),
         "findings": found,
         "metrics": rows,
         "total": round(sum(r["usd"] for r in rows), 2),

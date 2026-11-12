@@ -27,6 +27,10 @@ export function System({ product }: { product: Product }) {
                 <div className="title">{t(d.loop.alive ? "loop_alive" : "loop_dead")}</div>
                 <div className="sub">{d.loop.time ? t("loop_last", { when: when(d.loop.time) }) : t("loop_never")}</div>
                 {d.paused ? <div className="sub warn">{t("paused_since", { when: when(d.paused) })}</div> : null}
+                {d.github ? <div className="sub warn">{t("github_paused", { when: when(d.github.until) })}</div> : null}
+                {d.github?.quota.length ? (
+                  <div className="sub">{t("github_quota", { quota: d.github.quota.map((q) => `${q.name} ${q.remaining}/${q.limit}`).join(" · ") })}</div>
+                ) : null}
               </div>
               <button type="button" className={d.paused ? "btn primary small-btn" : "btn small-btn"} disabled={w.busy}
                 onClick={() => void w.run(`/api/pause?p=${enc(product.name)}&on=${d.paused ? "0" : "1"}`)}>

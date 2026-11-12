@@ -158,5 +158,9 @@
   "lock_free": "libre",
   "lock_busy": "en uso",
   "lock_since": "desde las {when}",
-  "lock_waiting": "espera {who}: {what}"
+  "lock_waiting": "espera {who}: {what}",
+  "state_limited": "Límite de GitHub",
+  "state_limited_tip": "Se agotó el límite de la API de GitHub: las llamadas gh del bucle esperan hasta {when}.",
+  "github_paused": "Límite de la API de GitHub agotado: llamadas gh en pausa hasta {when}",
+  "github_quota": "Cuota leída entonces: {quota}"
 }

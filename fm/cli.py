@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -135,6 +136,10 @@ def cmd_health(a: argparse.Namespace) -> None:
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
         print(f"! {f['title']}: {f['detail'].splitlines()[0] if f['detail'] else ''}")
+    g = health.github_pause(p, time.time())
+    if g:
+        quota = "".join(f" · {q['name']} {q['remaining']}/{q['limit']}" for q in g["quota"])
+        print(f"GitHub's API limit is used up: gh calls wait until {g['until'][11:]}{quota}")
     if a.file:
         print("filed:", " ".join(health.run(p, rows, outside=True)) or "nothing new")
 
