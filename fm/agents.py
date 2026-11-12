@@ -16,10 +16,15 @@ def agent_name(p: Project, iid: str, kind: str) -> str:
 
 
 ROUND2 = (
-    "4. **Round $round checks the fixes**, not the whole branch again: read the previous review "
+    "7. **Round $round checks the fixes**, not the whole branch again: read the previous review "
     "(`$previous`), `git diff $previous_tip..$branch` and the «Review rounds» section of the report. Each "
     "earlier finding is fixed, answered (with a reason you accept), or still open. No new findings, "
     "except a fix that is itself Wrong (shown) or Too much."
+)
+HUNTER_ROUND2 = (
+    "7. **Round $round looks at the fixes**, not the whole branch again: read the previous review (`$previous`), "
+    "`git diff $previous_tip..$branch` and the «Review rounds» section of the report. List only earlier findings "
+    "that are still open and anything wrong or too much in the fixes themselves."
 )
 
 
@@ -205,16 +210,17 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
     name = f"{i['id'].lower()}-{'hunt' if role == 'hunter' else 'review'}"
     model = p.get("agents", "review_model")
     effort = p.get("agents", "review_effort")
-    hunter_file = review_file(p, i, tip, "hunter")
+    hunt: dict[str, Any] = i.get("hunter") or {}
+    hunter_file = str(hunt["file"]) if role == "reviewer" else str(review_file(p, i, tip, "hunter"))
     out = review_file(p, i, tip, role)
     out.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
         "round": rnd,
         "plan": i.get("plan_file", ""),
         "tip": tip,
-        "hunter_file": str(hunter_file),
+        "hunter_file": hunter_file,
         "review_file": str(out),
-        "round2": ROUND2 if rnd > 1 else "",
+        "round2": (HUNTER_ROUND2 if role == "hunter" else ROUND2) if rnd > 1 else "",
         "previous": prev.get("file", ""),
         "previous_tip": prev.get("tip", ""),
     }

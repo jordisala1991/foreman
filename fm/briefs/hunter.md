@@ -13,6 +13,7 @@ $owner_notes
 4. **Too much inventory:** list what the diff adds: each new function, option, flag, branch, check, fallback, file, dependency. Tie each to the criterion line or plan item that needs it. An item tied to neither is a finding of kind Too much («remove X»). Error handling, validation or a fallback for a state the code cannot reach is Too much: cite the line that makes it unreachable.
 5. **Look where reviews miss:** a slow or blocking call inside a loop tick, hook or handler; something missing, failed or timed out read as «none», «zero» or «clean»; a check that also blocks normal work; the project's own rules (its CLAUDE.md and the docs it points to).
 6. **Evidence:** every finding names a file:line; anything you say you ran is a command from this session, with its output. Never describe output you did not see.
+$round2
 
 # Output
 Write `${hunter_file}`:
