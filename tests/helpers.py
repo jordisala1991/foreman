@@ -23,9 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
 REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
 REAL_REGISTRY = REAL_HOME / ".config/fm/projects.json"
+REGISTRY_BEFORE = REAL_REGISTRY.read_bytes() if REAL_REGISTRY.exists() else None
 SANDBOX = Path(tempfile.mkdtemp(prefix="fmhome-")).resolve()
-(SANDBOX / "tmp").mkdir()
-tempfile.tempdir = str(SANDBOX / "tmp")  # every temp dir of this run lives in the sandbox: a leak into the real registry is recognisable
 os.environ["HOME"] = str(SANDBOX)
 os.environ["FM_REGISTRY"] = str(SANDBOX / "projects.json")
 atexit.register(shutil.rmtree, SANDBOX, ignore_errors=True)
