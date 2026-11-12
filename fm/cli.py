@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from . import backlog, guard, health, integrate, lock, loop, metrics, plan_gate, providers, sessions, token, util
+from . import agents, backlog, guard, health, integrate, lock, loop, metrics, plan_gate, providers, sessions, token, util
 from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_note, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -102,6 +102,24 @@ def cmd_approve_plan(a: argparse.Namespace) -> None:
 
 def cmd_reject_plan(a: argparse.Namespace) -> None:
     plan_gate.reject(home(a), a.id, a.note)
+
+
+def cmd_review(a: argparse.Namespace) -> None:
+    p = home(a)
+    with backlog.edit(p) as d:
+        i = backlog.get(d, a.id)
+        if i["status"] != "in review":
+            sys.exit(f"fm: {a.id} is not in the integration queue")
+        if i.get("accepted"):
+            sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
+        if agents.review_running(i):
+            sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
+        for k in ("review", "hunter", "reviewer", "check"):
+            i.pop(k, None)
+        i["blocked"] = ""
+        i["review_from"] = len(i.get("reviews", []))
+    backlog.event(p, a.id, "owner asked for a fresh review from round 1")
+    print(f"{a.id}: the loop reviews it again from scratch")
 
 
 def cmd_go(a: argparse.Namespace) -> None:
@@ -221,6 +239,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "reject": cmd_reject,
     "approve-plan": cmd_approve_plan,
     "reject-plan": cmd_reject_plan,
+    "review": cmd_review,
     "go": cmd_go,
     "cancel": cmd_cancel,
     "unblock": cmd_unblock,
