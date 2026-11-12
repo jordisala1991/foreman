@@ -40,9 +40,7 @@ def _agent_side(c: Command) -> None:
     s.add_argument("--misled", default="", help="what was wrong or unclear in what you were given, or none")
     s.add_argument("--issue")
     s = c("verdict", "(reviewer) the open findings of your review")
-    s.add_argument("--high", type=int, required=True)
-    s.add_argument("--medium", type=int, required=True)
-    s.add_argument("--low", type=int, default=0)
+    s.add_argument("--open", type=int, required=True, help="findings to fix")
     s.add_argument("--file", required=True)
     s.add_argument("--tip", default="", help="the tip you reviewed (the brief gives it)")
     s.add_argument("--misled", default="")
@@ -103,7 +101,10 @@ def _operations(c: Command) -> None:
     s = c("panel", "serve the panel")
     s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from other devices (the key is required)")
     s.add_argument("--port", type=int, default=7788)
-    c("launchd", "print the launchd job that keeps the loop alive")
+    s = c("launchd", "print the two launchd jobs (loop and panel) that start at login and restart if they die")
+    s.add_argument("--dir", help="write dev.fm.loop.plist and dev.fm.panel.plist here (e.g. ~/Library/LaunchAgents) instead of printing")
+    s.add_argument("--panel-host", default="127.0.0.1")
+    s.add_argument("--panel-port", type=int, default=7788)
 
 
 def parser(description: str | None) -> argparse.ArgumentParser:

@@ -33,7 +33,7 @@ class Case:
     summary: str
     files: int
     lines: int
-    counts: tuple[int, int, int] | None  # open H, M, L of the verdict; None = no usable review
+    counts: tuple[int, int, int] | None  # open H, M, L of the verdict (a single count is (0, n, 0)); None = no usable review
     since: tuple[int, int] | None = None  # (fixed, new) since the last review of the PR; None = no earlier review
 
 
@@ -75,7 +75,7 @@ def complete(case: Case, found: list[Finding]) -> bool:
     """Does the verdict itemize every finding it counts? Only then is a finding that is not listed a fixed one."""
     if case.counts is None:
         return False
-    return all(sum(1 for f in found if f.severity == s) >= case.counts[k] for k, s in enumerate("HML"))
+    return len(found) >= sum(case.counts)
 
 
 def headline(case: Case, found: list[Finding]) -> str:

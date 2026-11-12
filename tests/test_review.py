@@ -15,7 +15,7 @@ DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @
 def tip(g: GH, iid: str, text: str, counts: tuple[int, int, int] = (0, 0, 0)) -> None:
     """Delivers the task's current tip with a verdict (already sent back, so it is delivered) and ticks."""
     backlog.set_status(g.e.p, iid, "in review", report={"summary": "does x", "confused": ""})
-    g.e.review(iid, *counts)
+    g.e.review(iid, sum(counts))
     (g.e.home / "reviews" / f"{iid}.md").write_text(text)
     backlog.update(g.e.p, iid, review={**g.e.issue(iid)["review"], "sent_back": True})
     loop.tick(g.e.p)
