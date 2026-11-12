@@ -7,7 +7,7 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import agents, backlog, health, loop, util
+from fm import agents, backlog, health, integrate, loop, util
 
 
 class Health(unittest.TestCase):
@@ -78,7 +78,7 @@ class Health(unittest.TestCase):
     def test_a_failing_git_read_is_not_taken_as_nothing_to_prune(self):
         self.integrate_commits(10)
         self.p.cfg["project"]["main"] = "nonexistent-branch"
-        with self.assertRaises(Exception):
+        with self.assertRaises(integrate.IntegrateError):
             health.prune_due(self.p)
 
     def test_only_a_commit_subject_counts_as_an_integration(self):
