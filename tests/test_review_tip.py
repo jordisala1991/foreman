@@ -199,3 +199,10 @@ class FreshReview(unittest.TestCase):
         with self.assertRaises(SystemExit):
             fm(e.home, "review", iid)
         self.assertIn("accepted", e.issue(iid))
+
+    def test_fm_review_refuses_a_running_review_even_when_the_task_is_blocked(self):
+        e = Env(test="true")
+        iid, _ = start(e)  # its reviewer has launched, no verdict yet
+        backlog.update(e.p, iid, blocked="something")
+        with self.assertRaises(SystemExit):
+            fm(e.home, "review", iid)

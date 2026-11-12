@@ -104,7 +104,7 @@ def cmd_review(a: argparse.Namespace) -> None:
             sys.exit(f"fm: {a.id} is not in the integration queue")
         if i.get("accepted"):
             sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
-        if agents.reviewer_active(i):
+        if agents.review_running(i):
             sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
         for k in ("review", "hunter", "reviewer", "check"):
             i.pop(k, None)
