@@ -32,7 +32,7 @@ class Health(unittest.TestCase):
 
     def test_github_pause_ignores_bad_files(self):
         f = self.p.state / "github_quota.json"
-        for text in ("not json", "[]", '{"until": "soon"}', '{"until": true}', "{}", '{"until": 1000}'):
+        for text in ("not json", "[]", '{"until": "soon"}', '{"until": true}', '{"until": NaN}', '{"until": Infinity}', '{"until": 1e30}', "{}", '{"until": 1000}'):
             f.write_text(text)
             self.assertIsNone(health.github_pause(self.p, 1000.0), text)
 

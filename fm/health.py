@@ -10,6 +10,7 @@ on main's head, every `ci_every_minutes`) · loop step errors.
 The GitHub pause is shown, not filed (`github_pause`)."""
 
 import hashlib
+import math
 import threading
 import time
 from collections.abc import Callable
@@ -26,14 +27,18 @@ def github_pause(p: Project, now: float) -> dict[str, Any] | None:
     """The loop's gh calls wait for a GitHub rate limit (state/github_quota.json): until when, and the quota read then."""
     d = util.json_object(util.read_json(p.state / "github_quota.json", {})) or {}
     until = d.get("until")
-    if not isinstance(until, int | float) or isinstance(until, bool) or until <= now:
+    if not isinstance(until, int | float) or isinstance(until, bool) or not math.isfinite(until) or until <= now:
         return None
     quota: list[dict[str, Any]] = []
     for name, raw in sorted((util.json_object(d.get("resources")) or {}).items()):
         r = util.json_object(raw) or {}
         if isinstance(r.get("remaining"), int) and isinstance(r.get("limit"), int):
             quota.append({"name": name, "remaining": r["remaining"], "limit": r["limit"]})
-    return {"until": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(until)), "quota": quota}
+    try:
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(until))
+    except (OverflowError, OSError, ValueError):  # a huge number is not a time: no pause
+        return None
+    return {"until": stamp, "quota": quota}
 
 
 def loop_dead(p: Project) -> list[Finding]:
