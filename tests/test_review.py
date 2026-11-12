@@ -12,10 +12,10 @@ from fm.providers import registry
 DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @@\n a\n+b\n+c\n d\n"
 
 
-def tip(g: GH, iid: str, text: str, counts: tuple[int, int, int] = (0, 0, 0)) -> None:
+def tip(g: GH, iid: str, text: str, open: int = 0) -> None:
     """Delivers the task's current tip with a verdict (already sent back, so it is delivered) and ticks."""
     backlog.set_status(g.e.p, iid, "in review", report={"summary": "does x", "confused": ""})
-    g.e.review(iid, *counts)
+    g.e.review(iid, open)
     (g.e.home / "reviews" / f"{iid}.md").write_text(text)
     backlog.update(g.e.p, iid, review={**g.e.issue(iid)["review"], "sent_back": True})
     loop.tick(g.e.p)
@@ -42,7 +42,7 @@ class Review_(unittest.TestCase):
 
     def test_a_delivered_tip_posts_one_review_and_no_comment(self):
         g, iid = self.make()
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", 1)
         loop.tick(g.e.p)
         pr = self.pr(g)
         self.assertEqual(len(pr["reviews"]), 1)
@@ -58,7 +58,7 @@ class Review_(unittest.TestCase):
 
     def test_findings_outside_the_diff_are_listed_in_the_body(self):
         g, iid = self.make()
-        tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | L | - | nit\n", (1, 0, 1))
+        tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | L | - | nit\n", 1)
         (r,) = self.pr(g)["reviews"]
         self.assertEqual(r["comments"], [])
         self.assertIn("boom", r["body"])
@@ -67,18 +67,18 @@ class Review_(unittest.TestCase):
 
     def test_a_finding_already_commented_is_not_posted_again(self):
         g, iid = self.make()
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", 1)
         commit(g, iid)
-        tip(g, iid, "Findings:\nF2 | M | app.py:4 | the what\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF2 | M | app.py:4 | the what\n", 1)
         self.assertEqual(len(self.pr(g)["reviews"]), 2)
         self.assertEqual(len(self.pr(g)["review_comments"]), 1)
         commit(g, iid)
-        tip(g, iid, "Findings:\nF2 | M | app.py:4 | another what\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF2 | M | app.py:4 | another what\n", 1)
         self.assertEqual(len(self.pr(g)["review_comments"]), 2)
 
     def test_a_lost_record_does_not_post_the_review_twice(self):
         g, iid = self.make()
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         backlog.update(g.e.p, iid, pr={**g.e.issue(iid)["pr"], "commented": ""})
         loop.tick(g.e.p)
         loop.tick(g.e.p)
@@ -87,7 +87,7 @@ class Review_(unittest.TestCase):
     def test_a_failed_diff_read_posts_the_review_without_inline_comments(self):
         g, iid = self.make()
         g.set(fail_always=["pr", "diff"])
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         loop.tick(g.e.p)
         (r,) = self.pr(g)["reviews"]
         self.assertEqual(r["comments"], [])
@@ -95,14 +95,14 @@ class Review_(unittest.TestCase):
     def test_rejected_inline_comments_still_post_the_review(self):
         g, iid = self.make()
         g.set(reject_inline=True)
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         loop.tick(g.e.p)
         (r,) = self.pr(g)["reviews"]
         self.assertEqual(r["comments"], [])
 
     def test_unlisted_findings_are_never_read_as_ready(self):
         g, iid = self.make()
-        tip(g, iid, "no findings line here\n", (0, 1, 0))
+        tip(g, iid, "no findings line here\n", 1)
         (r,) = self.pr(g)["reviews"]
         self.assertNotIn("Ready", r["body"])
         self.assertEqual(g.calls("pr", "diff"), [])
@@ -111,26 +111,26 @@ class Review_(unittest.TestCase):
         g, iid = self.make()
         f = g.e.home / "x.md"
         f.write_text("Findings:\nF1 | M | app.py:3 | w\n")
-        i = {"id": iid, "title": "t", "review": {"tip": "aaa", "file": str(f), "high": 0, "medium": 1, "low": 0}}
+        i = {"id": iid, "title": "t", "review": {"tip": "aaa", "file": str(f), "open": 1}}
         c = {"head": "bbb", "risk": "low", "tests": "pass", "files": 1, "lines": 1}
         self.assertEqual(pulls.findings_of(i, "bbb"), [])
         self.assertEqual(len(pulls.findings_of(i, "aaa")), 1)
-        self.assertIsNone(pulls.case_of(i, c).counts)
+        self.assertIsNone(pulls.case_of(i, c).open)
 
     def test_a_review_with_a_null_body_does_not_stop_the_review(self):
         g, iid = self.make()
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         prs = g.state["prs"]
         prs["1"]["reviews"].append({"body": None, "comments": []})
         g.set(prs=prs)
         commit(g, iid)
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         self.assertEqual(len(self.pr(g)["reviews"]), 3)
 
     def test_body_links_point_at_the_comment_or_the_reviewed_commit_and_line(self):
         g, iid = self.make()
         head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
-        tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | M | app.py:3 | mid | why: because\n", (1, 1, 0))
+        tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | M | app.py:3 | mid | why: because\n", 2)
         (r,) = self.pr(g)["reviews"]
         self.assertIn(f"https://github.com/o/r/blob/{head}/app.py#L99", r["body"])
         self.assertIn("https://github.com/o/r/pull/1#discussion_r1", r["body"])
@@ -142,7 +142,7 @@ class Review_(unittest.TestCase):
         g, iid = self.make()
         g.set(fail_put=True)
         head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
-        tip(g, iid, "Findings:\nF2 | M | app.py:3 | mid\n", (0, 1, 0))
+        tip(g, iid, "Findings:\nF2 | M | app.py:3 | mid\n", 1)
         (r,) = self.pr(g)["reviews"]
         self.assertIn(f"/blob/{head}/app.py#L3", r["body"])
 

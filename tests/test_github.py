@@ -398,7 +398,7 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         c = g.e.issue(iid)["check"]
         self.assertEqual((c["risk"], c["ci"]), ("high", "fail"))
-        self.assertIn("CI fails", c["reasons"])
+        self.assertIn("CI fails [ci]", c["reasons"])
         self.assertEqual(g.e.issue(iid)["status"], "in review")
 
     def test_ci_replaces_the_local_test_without_a_test_command(self):

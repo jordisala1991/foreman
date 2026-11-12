@@ -3,6 +3,8 @@ Pure text: no I/O here. fm owns only the block between the markers; text a human
 
 from typing import Any
 
+from . import backlog
+
 OPEN = "<!-- fm:description -->"
 CLOSE = "<!-- /fm:description -->"
 ROUNDS = "## Review rounds"
@@ -26,7 +28,7 @@ def merge_body(body: str, block: str) -> str:
 def review_line(v: dict[str, Any] | None) -> str:
     if not v:
         return "no review"
-    return f"review round {v['round']}, open H {v['high']} M {v['medium']}"
+    return f"review round {v['round']}, {backlog.open_findings(v)} open"
 
 
 def footer(commit: str, review: str, at: str) -> str:

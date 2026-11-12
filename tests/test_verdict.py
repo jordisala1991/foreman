@@ -6,8 +6,8 @@ from fm import verdict
 from fm.verdict import FIX, LOOK, READY, Case, Finding, findings, key, render
 
 
-def case(risk="low", tests="pass", ci="pass", counts=(0, 0, 0), reasons=None) -> Case:
-    return Case(risk, reasons or ["r"], tests, ci, "abcdef1234567", "does x", 3, 120, counts)
+def case(risk="low", tests="pass", ci="pass", open=0, reasons=None) -> Case:
+    return Case(risk, reasons or ["r"], tests, ci, "abcdef1234567", "does x", 3, 120, open)
 
 
 def f(sev: str, what: str, place: str = "a.py:1", why: str = "") -> Finding:
@@ -18,14 +18,14 @@ class Verdict(unittest.TestCase):
     def test_the_headline_follows_the_findings_checks_and_risk(self):
         rows = [
             (case(), [], READY),
-            (case(counts=(0, 0, 2)), [f("L", "a"), f("L", "b")], READY),
-            (case(counts=(0, 1, 0)), [f("M", "a")], LOOK.format(n=1)),
+            (case(open=0), [f("L", "a"), f("L", "b")], READY),
+            (case(open=1), [f("M", "a")], LOOK.format(n=1)),
             (case("medium"), [], LOOK.format(n=1)),
-            (case("medium", counts=(0, 2, 0)), [f("M", "a"), f("M", "b")], LOOK.format(n=3)),
-            (case("high", counts=(1, 0, 0)), [f("H", "a")], FIX.format(n=1)),
+            (case("medium", open=2), [f("M", "a"), f("M", "b")], LOOK.format(n=3)),
+            (case("high", open=1), [f("H", "a")], FIX.format(n=1)),
             (case(tests="fail"), [], FIX.format(n=1)),
-            (case("high", "fail", "fail", (1, 0, 0)), [f("H", "a")], FIX.format(n=3)),
-            (case(counts=(0, 1, 0)), [], LOOK.format(n=1)),
+            (case("high", "fail", "fail", 1), [f("H", "a")], FIX.format(n=3)),
+            (case(open=1), [], LOOK.format(n=1)),
         ]
         for c, found, want in rows:
             self.assertEqual(verdict.headline(c, found), want)
@@ -37,12 +37,12 @@ class Verdict(unittest.TestCase):
         self.assertEqual(order, sorted(order))
         self.assertIn("r two", body)
         placed = f("M", "w", why="secret why")
-        self.assertNotIn("secret why", render(case(counts=(0, 1, 0)), [placed], set()))
+        self.assertNotIn("secret why", render(case(open=1), [placed], set()))
 
     def test_only_blocking_findings_sit_outside_the_fold(self):
         found = [f("H", "hhh"), f("M", "mmm"), f("L", "placed", "a.py:2"), f("L", "unplaced", "a.py:3")]
         placed = {found[2].place}
-        body = render(case(counts=(1, 1, 2)), found, placed)
+        body = render(case(open=2), found, placed)
         fold = body.index("<details")
         self.assertLess(body.index("hhh"), fold)
         self.assertNotIn("mmm", body[:fold])
@@ -52,17 +52,17 @@ class Verdict(unittest.TestCase):
 
     def test_a_repeated_nit_is_still_reachable(self):
         a, b = f("L", "same", "a.py:999"), f("L", "same", "a.py:3")
-        body = render(case(counts=(0, 0, 2)), [a, b], {"a.py:3"})
+        body = render(case(open=0), [a, b], {"a.py:3"})
         self.assertIn("a.py:999", body)
         self.assertNotIn("a.py:3", body)
 
     def test_counts_use_the_singular_for_one(self):
-        self.assertIn("1 nit<", render(case(counts=(0, 0, 1)), [f("L", "x", "-")], set()))
-        self.assertNotIn("1 nits", render(case(counts=(0, 1, 1)), [f("L", "x", "-")], set()))
-        self.assertIn("2 nits", render(case(counts=(0, 0, 2)), [f("L", "x", "-")], set()))
+        self.assertIn("1 nit<", render(case(open=0), [f("L", "x", "-")], set()))
+        self.assertNotIn("1 nits", render(case(open=1), [f("L", "x", "-")], set()))
+        self.assertIn("2 nits", render(case(open=0), [f("L", "x", "-"), f("L", "y", "-")], set()))
 
     def test_reviewer_text_cannot_notify_or_break_the_fold(self):
-        body = render(case(counts=(1, 0, 0)), [f("H", "ping @someone </details>")], set())
+        body = render(case(open=1), [f("H", "ping @someone </details>")], set())
         self.assertNotIn("@someone", body)
         self.assertNotIn("</details>", body)
 

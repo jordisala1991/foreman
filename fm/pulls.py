@@ -109,9 +109,9 @@ def findings_of(i: dict[str, Any], head: str) -> list[Finding]:
 
 def case_of(i: dict[str, Any], c: dict[str, Any]) -> Case:
     v: dict[str, Any] = i.get("review") or {}
-    counts = (v.get("high", 0), v.get("medium", 0), v.get("low", 0)) if v.get("tip") == c["head"] else None
+    counted = backlog.open_findings(v) if v.get("tip") == c["head"] else None
     report: dict[str, Any] = i.get("report") or {}
-    return Case(c["risk"], c.get("reasons", []), c["tests"], c.get("ci", ""), c["head"], report.get("summary") or i["title"], c["files"], c["lines"], counts)
+    return Case(c["risk"], c.get("reasons", []), c["tests"], c.get("ci", ""), c["head"], report.get("summary") or i["title"], c["files"], c["lines"], counted)
 
 
 def _visible(p: Project, provider: Provider, i: dict[str, Any], change: dict[str, Any], found: list[Finding]) -> dict[str, set[int]]:

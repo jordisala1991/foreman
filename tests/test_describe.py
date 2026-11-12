@@ -30,10 +30,10 @@ class Text(unittest.TestCase):
         self.assertNotIn("<details>", describe.render("Body", "FOOT"))
 
     def test_footer_and_review_line(self):
-        f = describe.footer("0123456789abc", describe.review_line({"round": 1, "high": 0, "medium": 0}), "t")
+        f = describe.footer("0123456789abc", describe.review_line({"round": 1, "open": 0}), "t")
         self.assertIn("commit 012345678 ", f + " ")
         self.assertNotIn("9a", f)
-        self.assertIn("review round 1, open H 0 M 0", f)
+        self.assertIn("review round 1, 0 open", f)
         self.assertEqual(describe.review_line(None), "no review")
 
     def test_render_description_falls_back_to_the_claim(self):
@@ -101,7 +101,7 @@ class OnGitHub(unittest.TestCase):
         head = git(self.g.e.repo, "rev-parse", self.g.e.issue(iid)["branch"]).strip()
         self.assertIn(head[:9], self.pr()["body"])
         self.assertNotIn(head[:10], self.pr()["body"])
-        self.assertIn("review round 1, open H 0 M 0", self.pr()["body"])
+        self.assertIn("review round 1, 0 open", self.pr()["body"])
 
     def test_github_title_follows_a_renamed_task(self):
         iid = self.deliver()

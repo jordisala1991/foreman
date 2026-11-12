@@ -32,7 +32,7 @@ class Case:
     summary: str
     files: int
     lines: int
-    counts: tuple[int, int, int] | None  # open H, M, L of the verdict; None = no usable review
+    open: int | None  # findings to fix, as the verdict counts them; None = no usable review
 
 
 def findings(text: str) -> list[Finding]:
@@ -61,12 +61,16 @@ def key(f: Finding) -> str:
     return "finding-" + hashlib.sha1(f"{path_of(f)}\n{f.what}".encode()).hexdigest()[:12]
 
 
+def unlisted(case: Case, found: list[Finding]) -> int:
+    """Open findings the verdict counts but the review does not list."""
+    return max(0, (case.open or 0) - sum(1 for f in found if f.severity in "HM"))
+
+
 def levels(case: Case, found: list[Finding]) -> tuple[int, int, int]:
-    """Open (blocking, should fix, nits): the verdict's count or the listed ones, whichever is more."""
-    counted = case.counts or (0, 0, 0)
-    n = [max(counted[k], sum(1 for f in found if f.severity == s)) for k, s in enumerate("HML")]
-    n[0] += (case.tests == "fail") + (case.ci == "fail")
-    return n[0], n[1], n[2]
+    """Open (blocking, should fix, nits): the listed ones; an unlisted open finding counts as should fix, so a verdict
+    with open findings is never read as ready."""
+    n = [sum(1 for f in found if f.severity == s) for s in "HML"]
+    return n[0] + (case.tests == "fail") + (case.ci == "fail"), n[1] + unlisted(case, found), n[2]
 
 
 def headline(case: Case, found: list[Finding]) -> str:
@@ -105,9 +109,8 @@ def render(case: Case, found: list[Finding], placed: set[str]) -> str:
     lines.append(f"Checks: tests {case.tests} · CI {case.ci or 'none'} · reviewed {case.head[:9]}")
     blocking = [f for f in found if f.severity == "H"]
     lines += [_item(f) for f in blocking]
-    counted = case.counts[0] if case.counts else 0
-    if counted > len(blocking):
-        lines.append(f"- {counted - len(blocking)} more open, not itemized")
+    if unlisted(case, found):
+        lines.append(f"- {unlisted(case, found)} more open, not itemized")
     lines += _fold(case, found, placed)
     lines.append(f"<sub>{case.files} files · {case.lines} lines</sub>")
     return "\n\n".join(lines) + "\n"
