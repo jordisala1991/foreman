@@ -119,6 +119,3 @@ layer = "core"
 [[modules]]
 path = "fm.describe"
 layer = "core"
-[[modules]]
-path = "fm.verdict"
-layer = "core"

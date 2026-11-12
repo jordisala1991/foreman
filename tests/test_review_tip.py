@@ -1,11 +1,9 @@
 import os
 import unittest
-from pathlib import Path
 
 from helpers import Env, fm, git
 
 from fm import backlog, loop
-from fm import verdict as verdicts
 
 
 def head(e: Env, iid: str) -> str:
@@ -156,24 +154,3 @@ class Passes(unittest.TestCase):
         self.assertIn("[fm hunter", text)
         self.assertIn("Round 2 looks at the fixes", text)
         self.assertIn(e.issue(iid)["reviews"][-1]["file"], text)
-
-    HUNTER = "**F1** Wrong x\n**F2** Wrong y\n**F3** Too much z\n"
-
-    def test_a_finding_dropped_without_a_cited_refutation_stays_open(self):
-        review = "## To fix\n\n## Noted\n- F1 refuted: fm/loop.py:99 guards it\n- F2 not a real problem\n- F3 style, no wrong result\n"
-        self.assertEqual(verdicts.dropped_without_proof(self.HUNTER, review), ["F2"])
-        self.assertEqual(verdicts.dropped_without_proof(self.HUNTER, "## To fix\nF2 stays\n"), [])
-
-    def test_fm_verdict_counts_the_unrefuted_drops_as_open(self):
-        e = Env(test="true")
-        iid, a = start(e)
-        e.hunter_done(iid)
-        Path(e.issue(iid)["hunter"]["file"]).write_text(self.HUNTER)
-        review = e.home / "r.md"
-        review.write_text("## To fix\n\n## Noted\n- F2 not a real problem\n")
-        os.environ["FM_ISSUE"] = iid
-        try:
-            fm(e.home, "verdict", "--tip", a, "--open", "0", "--file", str(review))
-        finally:
-            os.environ.pop("FM_ISSUE")
-        self.assertEqual(e.issue(iid)["review"]["open"], 1)

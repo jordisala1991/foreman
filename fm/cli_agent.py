@@ -4,9 +4,8 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
-from . import backlog, util, verdict
+from . import backlog, util
 from .cli_common import home, mine
 
 
@@ -31,16 +30,6 @@ def cmd_done(a: argparse.Namespace) -> None:
     print(f"{iid} is in the integration queue: an independent reviewer reads it, then the owner. End your turn.")
 
 
-def unrefuted(hunter: dict[str, Any], tip: str, review_file: str) -> list[str]:
-    """Hunter findings (of this tip) the review dropped without a cited refutation: they stay open."""
-    if hunter.get("tip") != tip:
-        return []
-    try:
-        return verdict.dropped_without_proof(Path(hunter["file"]).read_text(encoding="utf-8"), Path(review_file).read_text(encoding="utf-8"))
-    except (KeyError, OSError):
-        return []
-
-
 def cmd_verdict(a: argparse.Namespace) -> None:
     p = home(a)
     iid = mine(a)
@@ -52,15 +41,14 @@ def cmd_verdict(a: argparse.Namespace) -> None:
         tip = next((t for t in launched if t and t.startswith(a.tip)), "") if a.tip else newest
         if a.tip and not tip:
             sys.exit(f"fm: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
-        n = a.open + len(unrefuted(i.get("hunter") or {}, tip, a.file))
-        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "open": n, "file": a.file, "at": util.now()}
+        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
         i["reviews"] = [*i.get("reviews", []), v]
         if tip == newest:  # a verdict for an older launch is history: it decides nothing
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
-            i["report"] = {**report, "review": "clean" if n == 0 else f"open: {n}"}
+            i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
-    backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: {n} open ({a.file})")
+    backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
     print("Verdict recorded. End your turn.")
 
 

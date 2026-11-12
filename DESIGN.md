@@ -144,7 +144,7 @@ and the owner's notes. The **hunter** lists everything it suspects (with a confi
 inventory of what the diff adds) in `<home>/reviews/ID-rN-<tip>-hunter.md`. When that file exists and the hunter has ended,
 the **reviewer** starts; it sees only the file, never the hunter's reasoning. It checks each Wrong or Missing finding
 (confirmed, refuted, or neither) and each Too much item; a finding leaves only with a cited line or output that refutes it,
-so what it could not refute stays in To fix: `fm verdict` adds to `--open` every hunter finding the review put under Noted with no file:line or output cited (`fm/verdict.py`). What was dropped goes under Noted and is not sent to the worker. It writes
+so what it could not refute stays in To fix. What was dropped goes under Noted and is not sent to the worker. It writes
 `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`, N = items under To fix) and runs
 `fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but
 decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`risk.review_step`);
