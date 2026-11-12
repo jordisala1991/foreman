@@ -503,10 +503,6 @@ class Queue(unittest.TestCase):
         self.assertEqual(risk.review_step({"high": 0, "medium": 0, "round": 1}, 2), "queue")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CiThrottle(unittest.TestCase):
     def test_ci_read_due(self):
         read = {"head": "a", "epoch": 2000.0, "result": "pass"}
@@ -526,3 +522,7 @@ class CiThrottle(unittest.TestCase):
         loop.tick(e.p)
         loop.tick(e.p)
         self.assertNotIn("ci_read", e.issue(iid))
+
+
+if __name__ == "__main__":
+    unittest.main()
