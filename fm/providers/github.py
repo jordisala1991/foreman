@@ -9,6 +9,7 @@ from typing import Any, Literal
 from .. import ghcalls, proc, util
 from . import Conflict, Permanent, Provider, ProviderError, Transient
 
+NONE_TTL = 600  # seconds a no-checks answer is reused: CI that registers late is seen within 10 minutes
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -114,7 +115,7 @@ class GitHub(Provider):
     def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         if prog == "gh":
-            ghcalls.record(self.p, "loop")
+            ghcalls.record(self.p)
         try:
             r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
         except proc.ProcError as e:
@@ -179,17 +180,26 @@ class GitHub(Provider):
         self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
 
     def ci(self, change: dict[str, Any]) -> str:
-        """The PR's CI. A pass or fail is kept for its commit and not read again; the rest (pending, none) is reused for
-        POLL seconds. A read asks GitHub once for every open PR (`refresh`), so all tasks of a poll share one call."""
+        """The PR's CI. A pass or fail is kept for its commit and not read again. No checks is reused for NONE_TTL; pending
+        (or a commit GitHub has not shown yet) for POLL seconds after the last read. A read asks GitHub once for every
+        open PR (`refresh`), so all tasks of a poll share one call."""
         pr, head = str(change["pr"]), change["head"]
-        e = util.read_json(self.p.state / "pr_ci.json", {}).get(pr)
-        if not (e and e["head"] == head and (e["ci"] in ("pass", "fail") or (util.age_s(e["at"]) or 1e9) < POLL)):
+        c = util.read_json(self.p.state / "pr_ci.json", {})
+        e = c.get("prs", {}).get(pr)
+        if e and e["head"] == head:
+            age = util.age_s(e["at"]) or 1e9
+            fresh = e["ci"] in ("pass", "fail") or age < (NONE_TTL if e["ci"] == "none" else POLL)
+        else:
+            e, fresh = None, (util.age_s(c.get("at")) or 1e9) < POLL
+        if not fresh:
             self.refresh()
-            e = util.read_json(self.p.state / "pr_ci.json", {}).get(pr)
-        return e["ci"] if e and e["head"] == head else "pending"  # GitHub has not seen this commit yet
+            e = util.read_json(self.p.state / "pr_ci.json", {})["prs"].get(pr)
+            e = e if e and e["head"] == head else None
+        return e["ci"] if e else "pending"  # GitHub has not shown this commit yet
 
     def refresh(self) -> None:
-        """One GraphQL call: head commit and check state of every open PR, into state/pr_ci.json."""
+        """One GraphQL call: head commit and check state of every open PR, into state/pr_ci.json. A pass or fail already
+        kept for the same commit stays."""
         query = (
             "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: 100) "
             "{ nodes { number headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } } }"
@@ -200,7 +210,11 @@ class GitHub(Provider):
         except ValueError:
             raise ProviderError(f"gh api graphql: not JSON: {r.out.strip()[:200]!r}") from None
         at = util.now()
-        util.write_json(self.p.state / "pr_ci.json", {pr: {**e, "at": at} for pr, e in found.items()})
+        kept = util.read_json(self.p.state / "pr_ci.json", {}).get("prs", {})
+        prs = {
+            pr: kept[pr] if pr in kept and kept[pr]["head"] == e["head"] and kept[pr]["ci"] in ("pass", "fail") else {**e, "at": at} for pr, e in found.items()
+        }
+        util.write_json(self.p.state / "pr_ci.json", {"at": at, "prs": prs})
 
     def merge(self, change: dict[str, Any], strategy: str) -> str:
         """Merges the PR once (a retry after a crash finds it merged). Returns the merge commit; if GitHub has not

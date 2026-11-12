@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, util
+from . import backlog, ghcalls, health, integrate, proc, providers, pulls, risk, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -176,6 +176,7 @@ def beat(p: Project, step: str) -> None:
 
 
 def tick(p: Project) -> None:
+    ghcalls.ORIGIN = "loop"
     beat(p, "start")
     rows = sessions.listing(p)
     steps = [

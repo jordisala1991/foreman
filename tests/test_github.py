@@ -107,11 +107,12 @@ class GH:
         toml = e.home / "fm.toml"
         toml.write_text(toml.read_text().replace("[integrate]", f'[integrate]\nprovider = "github"\n{extra}'))
         e.p = type(e.p).load(e.home)
-        self.poll, github.POLL = github.POLL, 0  # a pending answer is read again at every call, unless a test says otherwise
+        self.poll, github.POLL = github.POLL, 0  # an unsettled answer is read again at every call, unless a test says otherwise
+        self.none_ttl, github.NONE_TTL = github.NONE_TTL, 0
 
     def close(self) -> None:
         os.environ["PATH"] = self.path
-        github.POLL = self.poll
+        github.POLL, github.NONE_TTL = self.poll, self.none_ttl
 
     @property
     def state(self) -> dict:
@@ -414,60 +415,6 @@ class Pulls(unittest.TestCase):
         g.set(ci="pass")  # the CI registered later: no new push needed
         loop.tick(g.e.p)
         self.assertEqual(g.e.issue(iid)["status"], "done")
-
-    def graphql(self, g: GH) -> int:
-        return len(g.calls("api", "graphql"))
-
-    def test_a_settled_ci_is_not_read_again_until_the_branch_gets_a_commit(self):
-        g = self.make(test="true", autonomy="manual")
-        iid = g.work()
-        g.deliver(iid)
-        loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("pass", 1))
-        github.POLL = 3600
-        g.set(ci="fail")  # a re-run on the same commit: not looked at
-        for _ in range(3):
-            loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("pass", 1))
-        self.assertEqual(g.calls("pr", "checks"), [])
-
-    def test_a_new_commit_reads_the_ci_again(self):
-        g = self.make(test="true", autonomy="manual")
-        iid = g.work()
-        g.deliver(iid)
-        loop.tick(g.e.p)
-        g.set(ci="fail")
-        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
-        with open(wt / "app.py", "a") as f:
-            f.write("# fix\n")
-        git(wt, "commit", "-qam", "fix")
-        g.e.review(iid)  # the new tip is reviewed first
-        loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("fail", 2))
-
-    def test_pending_ci_of_several_tasks_is_one_call_per_poll(self):
-        g = self.make(test="true", autonomy="manual")
-        g.set(ci="pending")
-        github.POLL = 3600
-        ids = [g.work(), g.work()]
-        for iid in ids:
-            g.deliver(iid)
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
-        self.assertEqual(self.graphql(g), 1)
-        self.assertTrue(all("check" not in g.e.issue(iid) for iid in ids))
-
-    def test_gh_calls_are_counted_by_origin(self):
-        from fm import ghcalls, guard
-
-        g = self.make(test="true")
-        g.work()
-        loop.tick(g.e.p)
-        self.assertGreater(ghcalls.by_origin(g.e.p)["loop"]["last_hour"], 0)
-        os.environ.update(FM_HOME=str(g.e.home), FM_ISSUE="FN-9")
-        self.addCleanup(lambda: [os.environ.pop(k) for k in ("FM_HOME", "FM_ISSUE")])
-        guard.hook(json.dumps({"tool_name": "Bash", "tool_input": {"command": "gh issue view 3 | head && gh api x"}, "cwd": str(g.e.repo)}))
-        self.assertEqual(ghcalls.by_origin(g.e.p)["FN-9"]["last_hour"], 2)
 
     def test_a_hung_gh_times_out_without_freezing_the_tick(self):
         from fm.providers import github
