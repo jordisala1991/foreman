@@ -173,6 +173,7 @@ class Border(unittest.TestCase):
             "x",
             {**self.GOOD, "state": "SIDEWAYS"},
             {**self.GOOD, "number": "7"},
+            {**self.GOOD, "number": True},
             {**self.GOOD, "isDraft": "yes"},
             {**self.GOOD, "mergeCommit": "abc"},
             {**self.GOOD, "mergeCommit": {"oid": 1}},

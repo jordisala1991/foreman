@@ -59,7 +59,7 @@ class PullRequest:
 
 def _field[T](o: dict[str, Any], key: str, kind: type[T], what: str) -> T:
     v = o.get(key)
-    if not isinstance(v, kind):
+    if not isinstance(v, kind) or (kind is int and isinstance(v, bool)):
         raise ProviderError(f"{what}: `{key}` should be {kind.__name__}, gh gave {v!r}")
     return v
 

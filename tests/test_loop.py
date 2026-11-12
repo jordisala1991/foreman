@@ -173,10 +173,24 @@ class Provider(unittest.TestCase):
         e = Env(test="true")
         iid = self.delivered(e)
         loop.tick(e.p)
-        backlog.update(e.p, iid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc")
+        backlog.update(e.p, iid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
         loop.send_back(e.p, iid, "rejection", "again")
         i = e.issue(iid)
-        self.assertFalse({"accepted", "merge"} & set(i))
+        self.assertFalse({"accepted", "merge", "merging"} & set(i))
+
+    def test_a_crash_after_the_merge_adopts_it_instead_of_merging_twice(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        base = git(e.repo, "rev-parse", "main").strip()
+        git(e.repo, "merge", "--squash", "fm/ty-1")
+        git(e.repo, "commit", "-qm", f"Integrate {iid}: x")  # the merge happened; its ref was never stored
+        backlog.update(e.p, iid, merging=base)
+        merged = git(e.repo, "rev-parse", "main").strip()
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "done")
+        self.assertEqual(git(e.repo, "rev-parse", "main").strip(), merged)
 
     def test_a_failing_merge_blocks_the_issue_with_the_reason(self):
         e = Env(test="true")
@@ -189,6 +203,17 @@ class Provider(unittest.TestCase):
         self.assertEqual(i["status"], "in review")
         self.assertIn("uncommitted changes", i["blocked"])
         self.assertNotIn("merge", i)
+
+
+    def test_a_main_checkout_on_another_branch_blocks_the_merge(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        git(e.repo, "checkout", "-q", "-b", "elsewhere")
+        loop.tick(e.p)
+        self.assertIn("is not on main", e.issue(iid)["blocked"])
+        self.assertNotIn("merge", e.issue(iid))
 
     def accepted_then_main_moves(self, e):
         iid = self.delivered(e)

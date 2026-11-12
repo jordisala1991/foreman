@@ -83,7 +83,7 @@ def send_back(p: Project, iid: str, kind: str, note: str) -> None:
         n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == iid and q.get("kind") in ("rejection", "conflict", "review"))
         i["status"] = "in progress"
         i.pop("check", None)
-        for k in ("accepted", "merge"):  # a merge ref or marker of the old tip must not close the new work
+        for k in ("accepted", "merge", "merging"):  # a merge ref or marker of the old tip must not close the new work
             i.pop(k, None)
         if kind == "rejection":
             i["rework"] = i.get("rework", 0) + 1
