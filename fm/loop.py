@@ -65,6 +65,8 @@ def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
         i = backlog.get(backlog.load(p), iid)
         if i.get("retry_error") or i.get("retry_count"):
             backlog.update(p, iid, retry_error="", retry_count=0)
+    except providers.RateLimited:
+        return  # GitHub's quota: gh waits for the reset; not the task's failure
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), iid)
         count = int(i.get("retry_count") or 0) + 1

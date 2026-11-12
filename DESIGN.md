@@ -9,7 +9,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
             owner ──── panel (React, today's /next/ panel adapted) ── fm/panel.py (JSON API, local, key)
               │  └─── claude attach / agent view / Claude app: talks to any agent directly
               │
-   backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, loop heartbeat)
+   backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, github quota, loop heartbeat)
               │
    fm loop (plain process, launchd KeepAlive) ── every N s, per registered project:
       sources → answers → agents → queue → health → launch

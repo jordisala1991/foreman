@@ -3,11 +3,12 @@ for agents); the loop also pushes the task branches. Nothing here publishes: no 
 
 import json
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
-from . import Conflict, Permanent, Provider, ProviderError, Transient
+from . import Conflict, Permanent, Provider, ProviderError, RateLimited, Transient
 
 TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -18,6 +19,30 @@ PERMANENT = re.compile(r"pull request is closed|is not mergeable|merge conflict|
 
 
 CONFLICT = re.compile(r"merge conflict", re.I)
+RATE = re.compile(r"rate limit", re.I)
+QUOTA = "github_quota.json"  # in state/: until when gh is paused, and the figures GitHub gave
+FALLBACK_PAUSE = 60  # seconds, when the reset cannot be read
+
+
+def resources_of(raw: object) -> dict[str, dict[str, Any]]:
+    """The quota resources of `gh api rate_limit` (name -> limit, remaining, reset); {} when it does not fit."""
+    found = (util.json_object(raw) or {}).get("resources")
+    items = (util.json_object(found) or {}).items()
+    return {k: o for k, v in items if (o := util.json_object(v)) is not None}
+
+
+def reset_at(raw: object, now: float) -> float:
+    """When the exhausted quota resets, from `gh api rate_limit`; `now` + a minute when that cannot be read."""
+    resets: list[float] = []
+    for r in resources_of(raw).values():
+        reset = r.get("reset")
+        if r.get("remaining") == 0 and isinstance(reset, (int, float)) and reset > now:
+            resets.append(reset)
+    return float(max(resets)) if resets else now + FALLBACK_PAUSE
+
+
+def waiting(until: float) -> str:
+    return f"GitHub API rate limit: gh paused until {time.strftime('%H:%M:%S', time.localtime(until))}"
 
 
 class TransientError(Transient):
@@ -103,12 +128,38 @@ class GitHub(Provider):
     has_ci = True
     name = "github"
 
+    def paused_until(self) -> float:
+        until = (util.json_object(util.read_json(self.p.state / QUOTA, None)) or {}).get("until")
+        return float(until) if isinstance(until, (int, float)) else 0.0
+
+    def hold(self) -> None:
+        """No gh call while GitHub's limit is used up."""
+        until = self.paused_until()
+        if time.time() < until:
+            raise RateLimited(waiting(until), until)
+
+    def limited(self, text: str) -> RateLimited:
+        """gh said the limit is exceeded: read when it resets (free call), keep it in state/, and pause."""
+        try:
+            raw: object = json.loads(proc.run(["gh", "api", "rate_limit"], cwd=self.p.repo, timeout=TIMEOUT).out)
+        except (proc.ProcError, ValueError):
+            raw = None
+        until = reset_at(raw, time.time())
+        keep = ("limit", "remaining", "reset")
+        resources = {k: {f: v[f] for f in keep if f in v} for k, v in resources_of(raw).items()}
+        util.write_json(self.p.state / QUOTA, {"seen": util.now(), "until": until, "error": text.strip()[:200], "resources": resources})
+        return RateLimited(waiting(until), until)
+
     def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
+        if prog == "gh":
+            self.hold()
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
             r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
+        if prog == "gh" and r.code != 0 and RATE.search(r.err + r.out):
+            raise self.limited(r.err or r.out)
         if check and r.code != 0:
             raise failure(f"{prog} {' '.join(args[:3])}", r.err or r.out)
         return r
@@ -151,7 +202,7 @@ class GitHub(Provider):
     def body(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "view", str(change["pr"]), "--json", "body")
         try:
-            raw = json.loads(r.out)
+            raw: object = json.loads(r.out)
         except ValueError:
             raise ProviderError(f"gh pr view: not JSON: {r.out.strip()[:200]!r}") from None
         o = util.json_object(raw)
