@@ -108,6 +108,14 @@ class Env:
                 r["state"] = state
         f.write_text(json.dumps(rows))
 
+    def set_status(self, name: str, status: str) -> None:
+        f = self.bin / "agents.json"
+        rows = json.loads(f.read_text())
+        for r in rows:
+            if r["name"] == name:
+                r["status"] = status
+        f.write_text(json.dumps(rows))
+
     def hunter_done(self, iid: str) -> None:
         """The hunter wrote its findings file and ended."""
         h = self.issue(iid)["hunter"]

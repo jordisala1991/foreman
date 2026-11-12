@@ -102,6 +102,7 @@ def send_back(p: Project, iid: str, kind: str, note: str) -> None:
                 "resolved": util.now()[:10],
                 "at": util.now(),
                 "delivered": False,
+                "answered_at": util.now(),
                 "options": [],
                 "title": i["title"],
             }
