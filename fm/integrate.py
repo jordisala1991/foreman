@@ -97,7 +97,7 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     files = diff_stat(p, branch)
     deleted = deleted_files(p, branch)
     v: backlog.Review | None = i.get("review")
-    review = "" if not v else "clean" if v["high"] + v["medium"] == 0 else f"open after round {v['round']}: H {v['high']}, M {v['medium']}"
+    review = "" if not v else "clean" if backlog.open_findings(v) == 0 else f"open after round {v['round']}: {backlog.open_findings(v)}"
     risk, reasons = score(p, Facts(tests, review, files, deleted, conflicts(p, branch), commits, ci))
     c = {
         "tests": tests,
@@ -120,7 +120,7 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
 
 
 def merges_alone(p: Project, c: dict[str, Any]) -> bool:
-    """Autonomy lets this risk in alone; when the provider has CI that must be green, only on a pass; open H/M findings
+    """Autonomy lets this risk in alone; when the provider has CI that must be green, only on a pass; open findings
     never merge alone (quality is not risk, but unresolved quality waits for the owner)."""
     if str(c.get("review", "")).startswith("open"):
         return False

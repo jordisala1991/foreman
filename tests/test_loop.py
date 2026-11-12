@@ -45,14 +45,14 @@ class Launch(unittest.TestCase):
         w = backlog.add(e.p, "clear one", status="ready", criterion="x")
         loop.tick(e.p)
         backlog.set_status(e.p, w, "in review", report={"summary": "s"})
-        loop.tick(e.p)
+        e.hunt_then_review(w)
         return self.flags(e)
 
     def test_every_kind_launches_with_an_explicit_model_and_effort(self):
         e = Env(test="true")
         self.assertEqual(
             self.run_all_kinds(e),
-            {"define": ("sonnet", "high"), "work": ("sonnet", "medium"), "reviewer": ("sonnet", "high")},
+            {"define": ("sonnet", "high"), "work": ("sonnet", "medium"), "hunter": ("sonnet", "high"), "reviewer": ("sonnet", "high")},
         )
         i = e.issue("TY-2")
         self.assertEqual(i["reviewer"]["effort"], "high")
@@ -64,7 +64,7 @@ class Launch(unittest.TestCase):
         cfg.update(define_model="opus", define_effort="max", model="haiku", effort="low", review_model="opus", review_effort="xhigh")
         self.assertEqual(
             self.run_all_kinds(e),
-            {"define": ("opus", "max"), "work": ("haiku", "low"), "reviewer": ("opus", "xhigh")},
+            {"define": ("opus", "max"), "work": ("haiku", "low"), "hunter": ("opus", "xhigh"), "reviewer": ("opus", "xhigh")},
         )
 
     def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self):
@@ -300,7 +300,7 @@ class Stopped(unittest.TestCase):
 
 
 class Queue(unittest.TestCase):
-    def deliver(self, e: Env, lines: int = 1, high: int = 0, medium: int = 0, low: int = 0) -> str:
+    def deliver(self, e: Env, lines: int = 1, open_findings: int = 0) -> str:
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         wt = e.issue(iid)["worktree"]
@@ -308,7 +308,7 @@ class Queue(unittest.TestCase):
             f.write("".join(f"# {n}\n" for n in range(lines)))
         git(e.repo.parent / wt, "commit", "-qam", "change")
         backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
-        e.review(iid, high, medium, low)
+        e.review(iid, open_findings)
         return iid
 
     def test_manual_waits_for_the_owner_who_accepts(self):
@@ -344,35 +344,63 @@ class Queue(unittest.TestCase):
         self.assertEqual((e.issue(iid)["status"], c["risk"]), ("in review", "high"))
         self.assertTrue(any("tests fail" in r for r in c["reasons"]))
 
-    def test_the_loop_launches_an_independent_reviewer_in_the_worktree(self):
+    def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y", detail="DETAIL-OF-THE-TASK")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        call = e.calls()[-1]
+        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{iid.lower()}-hunt")
+        hunter = call["argv"][-1]
+        self.assertIn("[fm hunter TY-1]", hunter)
+        self.assertEqual(call["cwd"], e.issue(iid)["worktree"])
+        hunter_file = e.issue(iid)["hunter"]["file"]
+        self.assertIn(hunter_file, hunter)
+        loop.tick(e.p)
+        self.assertEqual(len(e.calls()), 2)  # no reviewer while the hunter has no file
+        e.hunter_done(iid)
+        loop.tick(e.p)
+        call = e.calls()[-1]
+        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{iid.lower()}-review")
+        reviewer = call["argv"][-1]
+        self.assertIn("[fm reviewer TY-1]", reviewer)
+        self.assertIn("Round: 1", reviewer)
+        self.assertIn(hunter_file, reviewer)  # it reads the file, nothing else of the hunter
+        self.assertIn("DETAIL-OF-THE-TASK", hunter)
+        self.assertIn("DETAIL-OF-THE-TASK", reviewer)
+        self.assertIn("a finding leaves only with a cited refutation", reviewer)  # no cited refutation: it stays in To fix
+        self.assertEqual(call["cwd"], e.issue(iid)["worktree"])
+        self.assertNotIn("check", e.issue(iid))  # no check before the verdict
+        loop.tick(e.p)
+        self.assertEqual(len(e.calls()), 3)  # not launched twice
+
+    def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         loop.tick(e.p)
-        call = e.calls()[-1]
-        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{iid.lower()}-review")
-        self.assertIn("[fm reviewer TY-1]", call["argv"][-1])
-        self.assertIn("Round: 1", call["argv"][-1])
-        self.assertEqual(call["cwd"], e.issue(iid)["worktree"])
-        self.assertNotIn("check", e.issue(iid))  # no check before the verdict
+        e.set_state(e.issue(iid)["hunter"]["name"], "done")
+        backlog.update(e.p, iid, hunter={**e.issue(iid)["hunter"], "started": "2000-01-01 00:00:00"})
         loop.tick(e.p)
-        self.assertEqual(len(e.calls()), 2)  # not launched twice
+        self.assertIn("hunter ended without its findings file", e.issue(iid)["blocked"])
+        self.assertEqual(len(e.calls()), 2)
 
     def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self):
         e = Env(test="true", autonomy="medium")
-        iid = self.deliver(e, high=1)
+        iid = self.deliver(e, open_findings=1)
         loop.tick(e.p)
         self.assertEqual(e.issue(iid)["status"], "in progress")
         e.set_state(iid.lower(), "done")
         loop.tick(e.p)
-        self.assertIn("H 1, M 0", e.calls()[-1]["argv"][-1])
+        self.assertIn("leaves 1 open", e.calls()[-1]["argv"][-1])
         wt = e.issue(iid)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
             f.write("# fixed\n")
         git(e.repo.parent / wt, "commit", "-qam", "fix")
         backlog.set_status(e.p, iid, "in review")
-        e.review(iid, medium=1)  # round 2 still open: to the owner, whatever the autonomy
+        e.review(iid, 1)  # round 2 still open: to the owner, whatever the autonomy
         self.assertIn("Round: 2", e.calls()[-1]["argv"][-1])
         loop.tick(e.p)
         i = e.issue(iid)
@@ -410,28 +438,14 @@ class Queue(unittest.TestCase):
         git(e.repo.parent / wt, "commit", "-qam", "fix")
         backlog.set_status(e.p, iid, "in review")
 
-    def test_review_with_h_m_open_sends_back_with_low_included(self):
+    def test_open_findings_send_the_review_back(self):
         e = Env(test="true")
-        iid = self.deliver(e, high=1, low=2)
+        iid = self.deliver(e, open_findings=1)
         loop.tick(e.p)
         self.assertEqual(e.issue(iid)["status"], "in progress")
         e.set_state(iid.lower(), "done")
         loop.tick(e.p)
         self.assertIn(f"reviews/{iid}.md", e.calls()[-1]["argv"][-1])
-
-    def test_l_only_review_gives_one_pass_then_the_queue(self):
-        e = Env(test="true")
-        iid = self.deliver(e, low=2)
-        loop.tick(e.p)
-        self.assertEqual(e.issue(iid)["status"], "in progress")
-        self.fix_and_resubmit(e, iid)
-        e.review(iid, low=2)
-        n = len(e.calls())
-        loop.tick(e.p)
-        i = e.issue(iid)
-        self.assertEqual(i["status"], "in review")
-        self.assertIn("check", i)
-        self.assertEqual(len(e.calls()), n)
 
     def test_clean_review_sends_nothing(self):
         e = Env(test="true")
@@ -443,32 +457,9 @@ class Queue(unittest.TestCase):
         d = backlog.load(e.p)
         self.assertFalse([x for x in d["decisions_resolved"] if x.get("kind") == "review"])
 
-    def test_low_findings_leave_the_risk_low(self):
-        e = Env(test="true")
-        iid = self.deliver(e, low=2)
-        loop.tick(e.p)
-        self.fix_and_resubmit(e, iid)
-        e.review(iid, low=2)
-        loop.tick(e.p)
-        self.assertEqual(e.issue(iid)["check"]["risk"], "low")
-
-    def test_l_only_pass_answered_without_a_commit_goes_to_the_queue(self):
-        e = Env(test="true")
-        iid = self.deliver(e, low=1)
-        loop.tick(e.p)
-        e.set_state(iid.lower(), "done")
-        loop.tick(e.p)
-        backlog.set_status(e.p, iid, "in review")
-        n = len(e.calls())
-        loop.tick(e.p)
-        i = e.issue(iid)
-        self.assertEqual(i["status"], "in review")
-        self.assertIn("check", i)
-        self.assertEqual(len(e.calls()), n)
-
     def test_refuted_without_commit_is_not_sent_back_twice(self):
         e = Env(test="true")
-        iid = self.deliver(e, high=1)
+        iid = self.deliver(e, open_findings=1)
         loop.tick(e.p)
         e.set_state(iid.lower(), "done")
         loop.tick(e.p)
@@ -477,30 +468,17 @@ class Queue(unittest.TestCase):
         i = e.issue(iid)
         self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
 
-    def test_only_low_findings_open_still_merge_alone(self):
-        e = Env(test="true", autonomy="medium")
-        iid = self.deliver(e, low=1)
-        loop.tick(e.p)
-        self.fix_and_resubmit(e, iid)
-        e.review(iid, low=1)
-        loop.tick(e.p)
-        self.assertEqual(e.issue(iid)["status"], "done")
-
     def test_review_step_table(self):
         rows = [
-            (1, 0, 0, 1, False, "back"),
-            (0, 1, 3, 1, False, "back"),
-            (0, 0, 2, 1, False, "back"),
-            (0, 0, 0, 1, False, "queue"),
-            (0, 0, 2, 2, False, "queue"),
-            (1, 0, 2, 2, False, "queue"),
-            (0, 0, 2, 1, True, "queue"),
-            (1, 0, 0, 1, True, "queue"),
+            ({"open": 1, "round": 1}, "back"),
+            ({"open": 0, "round": 1}, "queue"),
+            ({"open": 1, "round": 2}, "queue"),
+            ({"open": 1, "round": 1, "sent_back": True}, "queue"),
+            ({"high": 1, "medium": 0, "low": 2, "round": 1}, "back"),  # a verdict from before the single count
+            ({"high": 0, "medium": 0, "low": 2, "round": 1}, "queue"),
         ]
-        for h, m, low, rnd, sent, want in rows:
-            v = {"high": h, "medium": m, "low": low, "round": rnd, "sent_back": sent}
+        for v, want in rows:
             self.assertEqual(risk.review_step(v, 2), want, v)
-        self.assertEqual(risk.review_step({"high": 0, "medium": 0, "round": 1}, 2), "queue")
 
 
 if __name__ == "__main__":

@@ -41,14 +41,14 @@ def cmd_verdict(a: argparse.Namespace) -> None:
         tip = next((t for t in launched if t and t.startswith(a.tip)), "") if a.tip else newest
         if a.tip and not tip:
             sys.exit(f"fm: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
-        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "high": a.high, "medium": a.medium, "low": a.low, "file": a.file, "at": util.now()}
+        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
         i["reviews"] = [*i.get("reviews", []), v]
         if tip == newest:  # a verdict for an older launch is history: it decides nothing
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
-            i["report"] = {**report, "review": "clean" if a.high + a.medium == 0 else f"open: H {a.high}, M {a.medium}"}
+            i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
-    backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: H {a.high}, M {a.medium}, L {a.low} ({a.file})")
+    backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
     print("Verdict recorded. End your turn.")
 
 

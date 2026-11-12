@@ -82,9 +82,10 @@ class Recording(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(list(e.issue(d)["session_kinds"].values()), ["define"])
         self.assertEqual(list(e.issue(w)["session_kinds"].values()), ["work"])
+        agents.launch_reviewer(e.p, e.issue(w), "abc123", "hunter")
         agents.launch_reviewer(e.p, e.issue(w), "abc123")
         i = e.issue(w)
-        self.assertEqual(sorted(i["session_kinds"].values()), ["review", "work"])
+        self.assertEqual(sorted(i["session_kinds"].values()), ["review", "review", "work"])
         self.assertEqual(sorted(i["sessions"]), sorted(i["session_kinds"]))
 
     def test_fill_sessions_stores_agent_kind_and_review(self):
