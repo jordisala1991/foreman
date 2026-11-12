@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from . import backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
+from . import agents, backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
 from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_note, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -102,8 +102,13 @@ def cmd_review(a: argparse.Namespace) -> None:
         i = backlog.get(d, a.id)
         if i["status"] != "in review":
             sys.exit(f"fm: {a.id} is not in the integration queue")
+        if i.get("accepted"):
+            sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
+        if agents.reviewer_active(i):
+            sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
         for k in ("review", "hunter", "reviewer", "check"):
             i.pop(k, None)
+        i["blocked"] = ""
         i["review_from"] = len(i.get("reviews", []))
     backlog.event(p, a.id, "owner asked for a fresh review from round 1")
     print(f"{a.id}: the loop reviews it again from scratch")

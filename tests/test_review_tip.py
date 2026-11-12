@@ -179,3 +179,23 @@ class FreshReview(unittest.TestCase):
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         with self.assertRaises(SystemExit):
             fm(e.home, "review", iid)
+
+    def test_fm_review_clears_a_block_so_the_review_starts(self):
+        e = Env(test="true")
+        iid, a = start(e)
+        verdict(e, iid, a)
+        backlog.update(e.p, iid, blocked="its hunter ended without its findings file")
+        fm(e.home, "review", iid)
+        loop.tick(e.p)
+        self.assertIn("[fm hunter", e.calls()[-1]["argv"][-1])
+
+    def test_fm_review_refuses_an_accepted_task_and_one_with_a_review_running(self):
+        e = Env(test="true")
+        iid, a = start(e)  # its reviewer has launched, no verdict yet
+        with self.assertRaises(SystemExit):
+            fm(e.home, "review", iid)
+        verdict(e, iid, a)
+        backlog.update(e.p, iid, accepted={"by": "owner", "head": a, "at": ""})
+        with self.assertRaises(SystemExit):
+            fm(e.home, "review", iid)
+        self.assertIn("accepted", e.issue(iid))
