@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import backlog, util
+from . import backlog, ghcalls, util
 from .config import Project
 
 PUBLISH = {
@@ -217,6 +217,10 @@ def hook(stdin: str) -> str:
         except backlog.BacklogError:
             issue = None
         tool_input: dict[str, Any] = d.get("tool_input") or {}
+        if d.get("tool_name") == "Bash":  # who spends GitHub's quota: every `gh` an agent runs is counted (fm/ghcalls.py)
+            for w in segments(str(tool_input.get("command", ""))):
+                if w and w[0] == "gh":
+                    ghcalls.record(p, iid or "agent")
         action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), issue)
         if not action or granted(p, iid, action):
             return ""

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any
 
-from . import backlog, costs, health, lock, metrics, pulls, sessions, util
+from . import backlog, costs, ghcalls, health, lock, metrics, pulls, sessions, util
 from .config import Project, registered
 
 RECENT_DAYS = 7  # closed issues the tasks screen still shows
@@ -133,6 +133,7 @@ def system(p: Project) -> Obj:
         "loop": loop_beat(p),
         "findings": found,
         "metrics": rows,
+        "github_calls": ghcalls.by_origin(p),
         "total": round(sum(r["usd"] for r in rows), 2),
         "locks": locks,
     }

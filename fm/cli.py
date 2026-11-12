@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from . import agents, backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
+from . import agents, backlog, ghcalls, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
 from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_note, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -158,8 +158,9 @@ def cmd_health(a: argparse.Namespace) -> None:
 
 
 def cmd_metrics(a: argparse.Namespace) -> None:
-    rows = metrics.per_issue(home(a))
-    print(json.dumps(rows, indent=2, ensure_ascii=False) if a.json else metrics.text(rows))
+    p = home(a)
+    rows = metrics.per_issue(p)
+    print(json.dumps(rows, indent=2, ensure_ascii=False) if a.json else metrics.text(rows, ghcalls.by_origin(p)))
 
 
 def cmd_check(a: argparse.Namespace) -> None:

@@ -66,7 +66,7 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
     return out
 
 
-def text(rows: list[dict[str, Any]]) -> str:
+def text(rows: list[dict[str, Any]], calls: dict[str, dict[str, float]] | None = None) -> str:
     head = (
         f"{'id':8} {'status':12} {'$':>7} {'plan$':>6} {'work$':>6} {'rounds':>6} {'min':>6} {'rework':>6} "
         f"{'confl':>5} {'nudge':>5} {'ask':>3} {'stop':>4} {'risk':6}"
@@ -82,4 +82,6 @@ def text(rows: list[dict[str, Any]]) -> str:
     for r in rows:
         if r["confused"] and r["confused"].strip().lower() not in ("none", "nothing", "-"):
             lines.append(f"{r['id']} misled by: {r['confused']}")
+    for o, n in (calls or {}).items():
+        lines.append(f"GitHub calls {o:8} last hour {n['last_hour']:5.0f} · average {n['per_hour']:6.1f}/h (24 h)")
     return "\n".join(lines)
