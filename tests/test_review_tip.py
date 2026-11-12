@@ -23,7 +23,7 @@ def start(e: Env) -> tuple[str, str]:
     loop.tick(e.p)
     commit(e, iid)
     backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
-    loop.tick(e.p)
+    e.hunt_then_review(iid)
     return iid, head(e, iid)
 
 
@@ -44,7 +44,7 @@ class Tip(unittest.TestCase):
         i = e.issue(iid)
         self.assertEqual(i["reviews"][-1]["tip"], a)
         self.assertNotEqual(i["review"]["tip"], b)  # not the head: it decides nothing
-        loop.tick(e.p)
+        e.hunt_then_review(iid)
         self.assertNotIn("check", e.issue(iid))
         self.assertIn(f"Tip: {b}", e.calls()[-1]["argv"][-1])
 
@@ -54,7 +54,7 @@ class Tip(unittest.TestCase):
         verdict(e, iid, a)
         self.assertEqual(e.issue(iid)["review"]["tip"], a)
         b = commit(e, iid)
-        loop.tick(e.p)
+        e.hunt_then_review(iid)
         self.assertNotIn("check", e.issue(iid))
         last = e.calls()[-1]["argv"][-1]
         self.assertIn("Round: 2", last)
@@ -74,7 +74,7 @@ class Tip(unittest.TestCase):
             e = Env(test="true")
             iid, a = start(e)
             b = commit(e, iid)
-            loop.tick(e.p)
+            e.hunt_then_review(iid)
             files = [r["file"] for r in e.issue(iid)["reviewers"]]
             self.assertEqual(len(set(files)), 2)
             tips = {"a": a, "b": b}
@@ -91,7 +91,7 @@ class Tip(unittest.TestCase):
         e = Env(test="true")
         iid, a = start(e)
         b = commit(e, iid)
-        loop.tick(e.p)
+        e.hunt_then_review(iid)
         verdict(e, iid, a)
         loop.tick(e.p)
         self.assertNotIn("check", e.issue(iid))
@@ -123,7 +123,7 @@ class Tip(unittest.TestCase):
         self.assertEqual(len(e.calls()), n)
         verdict(e, iid, a)
         self.assertEqual(e.issue(iid)["review"]["tip"], a)
-        loop.tick(e.p)
+        e.hunt_then_review(iid)
         last = e.calls()[-1]["argv"][-1]
         self.assertIn("Round: 2", last)
         self.assertIn(f"Tip: {b}", last)

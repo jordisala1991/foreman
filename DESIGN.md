@@ -17,7 +17,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
    claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
       defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block / fm add
       responsible agent (cwd: its worktree, branch)  → subagents, fm ask, fm done / fm block
-      reviewer (launched by the loop, read only)     → review file, fm verdict
+      hunter, then reviewer (launched by the loop, read only) → hunter file, review file, fm verdict
 ```
 
 | File | Lines | What |
@@ -138,15 +138,18 @@ section in `<details>`, and the panel shows it; the loop seeds the file from `fm
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
 conversation: each finding gets the smallest change that settles it, or a one-line answer if the agent thinks it is wrong; add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 
-**Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
-its own session in the branch's worktree, once per delivered tip; it counts against the slots. It reads the criterion, the diff,
-then the agent's report last, and checks each criterion line by using it the way the owner will (met / not met, with
-what it ran and saw). A finding is one of three things: Wrong (shown, not «could»), Missing (a criterion line or an
-owner's note not met) or Too much (code the task does not need); nothing else is written, and there are no
-severities: every finding is one to fix. It writes `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`) and runs
-`fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but decides nothing. Open findings in round 1 → back to the responsible agent (`risk.review_step`); round 2 checks the fixes only and
-opens nothing new unless a fix is itself Wrong or Too much; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
-verdict blocks the task.
+**Review in two passes** (`fm/briefs/hunter.md`, `fm/briefs/reviewer.md`): launched by the loop, not by the agent, each as
+its own session in the branch's worktree, once per delivered tip; each counts against the slots. Both get the task's detail
+and the owner's notes. The **hunter** lists everything it suspects (with a confidence each, plus the criterion table and an
+inventory of what the diff adds) in `<home>/reviews/ID-rN-<tip>-hunter.md`. When that file exists and the hunter has ended,
+the **reviewer** starts; it sees only the file, never the hunter's reasoning. It checks each Wrong or Missing finding
+(confirmed, refuted, or neither) and each Too much item; a finding leaves only with a cited line or output that refutes it,
+so what it could not refute stays in To fix. What was dropped goes under Noted and is not sent to the worker. It writes
+`<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`, N = items under To fix) and runs
+`fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but
+decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`risk.review_step`);
+round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
+round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
 
 What was dropped because it only served a coordinator: memory renewal, session marking, interface mods and band,
 catch-up summaries, the pass as a message, plans written by someone else, sub-issues assigned from outside, the

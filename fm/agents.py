@@ -87,7 +87,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
         "round2": "",
-        "owner_notes": owner_notes_section(p, i["id"]) if kind == "reviewer" else "",
+        "owner_notes": owner_notes_section(p, i["id"]) if kind in ("reviewer", "hunter") else "",
         "resources": lock.describe(p.cfg),
         **(extra or {}),
     }
@@ -155,7 +155,7 @@ def record_session(it: dict[str, Any], sid: str, kind: str) -> None:
 def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
     """A session not listed yet at launch: its full id from the short one, on a later tick."""
     for i in backlog.issues(backlog.load(p)):
-        for role in ("agent", "reviewer"):
+        for role in ("agent", "hunter", "reviewer"):
             a: dict[str, Any] = i.get(role) or {}
             if a.get("short") and not a.get("session"):
                 sid = next((s for s, r in rows.items() if r.get("id") == a["short"] or s.startswith(a["short"])), None)
@@ -163,7 +163,7 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        record_session(it, sid, "review" if role == "reviewer" else a.get("kind", ""))
+                        record_session(it, sid, a.get("kind", "") if role == "agent" else "review")
 
 
 def idle_s(a: dict[str, Any]) -> float:
@@ -175,39 +175,54 @@ def idle_s(a: dict[str, Any]) -> float:
 
 
 def reviewer_active(i: dict[str, Any]) -> bool:
-    """Its reviewer works on the current tip and has given no verdict for it yet."""
-    r: dict[str, Any] = i.get("reviewer") or {}
+    """A review pass works on the current tip: the reviewer without a verdict, or the hunter before its file exists."""
     v: dict[str, Any] = i.get("review") or {}
-    return i["status"] == "in review" and bool(r) and r.get("tip") != v.get("tip") and not i.get("blocked")
+    h: dict[str, Any] = i.get("hunter") or {}
+    r: dict[str, Any] = i.get("reviewer") or {}
+    if i["status"] != "in review" or i.get("blocked"):
+        return False
+    if r and r["tip"] != v.get("tip"):
+        return True
+    return bool(h) and h["tip"] not in (v.get("tip"), r.get("tip")) and not Path(h["file"]).exists()
 
 
 def running(d: dict[str, Any]) -> int:
     return sum(1 for i in backlog.issues(d) if (i["status"] in backlog.RUNNING and not i.get("blocked")) or reviewer_active(i))
 
 
-def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
+def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
+    """The hunter's findings file or the verifier's review of this round and tip."""
+    rnd = len(i.get("reviews", [])) + 1
+    suffix = "-hunter" if role == "hunter" else ""
+    return p.home / "reviews" / f"{i['id']}-r{rnd}-{tip[:9]}{suffix}.md"
+
+
+def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "reviewer") -> None:
+    """One of the two review passes: the `hunter` lists what it suspects, then the `reviewer` checks each finding."""
     rnd = len(i.get("reviews", [])) + 1
     reviews: list[dict[str, Any]] = i.get("reviews") or []
     prev = reviews[-1] if reviews else {}
-    name = f"{i['id'].lower()}-review"
+    name = f"{i['id'].lower()}-{'hunt' if role == 'hunter' else 'review'}"
     model = p.get("agents", "review_model")
     effort = p.get("agents", "review_effort")
-    review_file = p.home / "reviews" / f"{i['id']}-r{rnd}-{tip[:9]}.md"
-    review_file.parent.mkdir(parents=True, exist_ok=True)
+    hunter_file = review_file(p, i, tip, "hunter")
+    out = review_file(p, i, tip, role)
+    out.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
         "round": rnd,
         "plan": i.get("plan_file", ""),
         "tip": tip,
-        "review_file": str(review_file),
+        "hunter_file": str(hunter_file),
+        "review_file": str(out),
         "round2": ROUND2 if rnd > 1 else "",
         "previous": prev.get("file", ""),
         "previous_tip": prev.get("tip", ""),
     }
     cwd = Path(i["worktree"])
-    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, "reviewer", extra), cwd)
+    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, role, extra), cwd)
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
-        it["reviewer"] = launch = {
+        launch = {
             "name": name,
             "short": short,
             "session": sid,
@@ -217,12 +232,14 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str) -> None:
             "round": rnd,
             "tip": tip,
             "cwd": str(cwd),
-            "file": str(review_file),
+            "file": str(out),
         }
-        it["reviewers"] = [*it.get("reviewers", []), launch]
+        it[role] = launch
+        if role == "reviewer":
+            it["reviewers"] = [*it.get("reviewers", []), launch]
         if sid:
             record_session(it, sid, "review")
-    backlog.event(p, i["id"], f"launched {name} (review round {rnd} of {tip[:9]}, {model}, session {short})")
+    backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {short})")
 
 
 def send(p: Project, i: dict[str, Any], message: str) -> bool:

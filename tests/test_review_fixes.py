@@ -69,7 +69,10 @@ class Isolation(unittest.TestCase):
             git(wt, "add", "-A")
             git(wt, "commit", "-qm", "c")
             backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
-        loop.tick(e.p)  # both reviewers start (two slots)
+        loop.tick(e.p)  # both hunters start (two slots)
+        for iid in ids:
+            e.hunter_done(iid)
+        loop.tick(e.p)  # then both reviewers
         for iid in ids:
             os.environ["FM_ISSUE"] = iid
             fm(e.home, "verdict", "--open", "0", "--file", "r.md")

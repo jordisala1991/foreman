@@ -86,18 +86,37 @@ def run_pulls(p: Project) -> None:
 
 
 def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> bool:
-    """True while this tip has no independent verdict yet: launches the reviewer, or blocks if it ended without one."""
+    """True while this tip has no independent verdict yet: runs the hunter, then the reviewer, or blocks if one ended without its file."""
     v: dict[str, Any] = i.get("review") or {}
+    h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
     if v.get("tip") == head:
         return False
-    if r.get("tip") == head:
-        if r.get("session") and not sessions.busy(rows, r["session"]) and idle_s(r) > NUDGE_IDLE_S:
-            backlog.update(p, i["id"], blocked="its reviewer ended without a verdict (`fm verdict`)")
-            backlog.event(p, i["id"], "blocked: reviewer ended without a verdict")
-    elif running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists():
-        launch_reviewer(p, i, head)
+    role, last = ("reviewer", r) if h.get("tip") == head else ("hunter", h)
+    free = running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists()
+    if last.get("tip") != head:
+        if role == "hunter" and free:
+            launch_reviewer(p, i, head, "hunter")
+        elif role == "reviewer" and Path(h.get("file", "")).exists() and not working(h, rows) and free:
+            launch_reviewer(p, i, head, "reviewer")
+        elif role == "reviewer" and not Path(h.get("file", "")).exists() and ended(h, rows):
+            block_review(p, i["id"], "its hunter ended without its findings file")
+    elif ended(last, rows):
+        block_review(p, i["id"], "its reviewer ended without a verdict (`fm verdict`)")
     return True
+
+
+def working(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+    return bool(a.get("session")) and sessions.busy(rows, a["session"])
+
+
+def ended(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+    return bool(a.get("session")) and not sessions.busy(rows, a["session"]) and idle_s(a) > NUDGE_IDLE_S
+
+
+def block_review(p: Project, iid: str, why: str) -> None:
+    backlog.update(p, iid, blocked=why)
+    backlog.event(p, iid, f"blocked: {why}")
 
 
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:

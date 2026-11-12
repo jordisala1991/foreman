@@ -45,14 +45,14 @@ class Launch(unittest.TestCase):
         w = backlog.add(e.p, "clear one", status="ready", criterion="x")
         loop.tick(e.p)
         backlog.set_status(e.p, w, "in review", report={"summary": "s"})
-        loop.tick(e.p)
+        e.hunt_then_review(w)
         return self.flags(e)
 
     def test_every_kind_launches_with_an_explicit_model_and_effort(self):
         e = Env(test="true")
         self.assertEqual(
             self.run_all_kinds(e),
-            {"define": ("sonnet", "high"), "work": ("sonnet", "medium"), "reviewer": ("sonnet", "high")},
+            {"define": ("sonnet", "high"), "work": ("sonnet", "medium"), "hunter": ("sonnet", "high"), "reviewer": ("sonnet", "high")},
         )
         i = e.issue("TY-2")
         self.assertEqual(i["reviewer"]["effort"], "high")
@@ -64,7 +64,7 @@ class Launch(unittest.TestCase):
         cfg.update(define_model="opus", define_effort="max", model="haiku", effort="low", review_model="opus", review_effort="xhigh")
         self.assertEqual(
             self.run_all_kinds(e),
-            {"define": ("opus", "max"), "work": ("haiku", "low"), "reviewer": ("opus", "xhigh")},
+            {"define": ("opus", "max"), "work": ("haiku", "low"), "hunter": ("opus", "xhigh"), "reviewer": ("opus", "xhigh")},
         )
 
     def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self):
@@ -344,20 +344,48 @@ class Queue(unittest.TestCase):
         self.assertEqual((e.issue(iid)["status"], c["risk"]), ("in review", "high"))
         self.assertTrue(any("tests fail" in r for r in c["reasons"]))
 
-    def test_the_loop_launches_an_independent_reviewer_in_the_worktree(self):
+    def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y", detail="DETAIL-OF-THE-TASK")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        call = e.calls()[-1]
+        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{iid.lower()}-hunt")
+        hunter = call["argv"][-1]
+        self.assertIn("[fm hunter TY-1]", hunter)
+        self.assertEqual(call["cwd"], e.issue(iid)["worktree"])
+        hunter_file = e.issue(iid)["hunter"]["file"]
+        self.assertIn(hunter_file, hunter)
+        loop.tick(e.p)
+        self.assertEqual(len(e.calls()), 2)  # no reviewer while the hunter has no file
+        e.hunter_done(iid)
+        loop.tick(e.p)
+        call = e.calls()[-1]
+        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{iid.lower()}-review")
+        reviewer = call["argv"][-1]
+        self.assertIn("[fm reviewer TY-1]", reviewer)
+        self.assertIn("Round: 1", reviewer)
+        self.assertIn(hunter_file, reviewer)  # it reads the file, nothing else of the hunter
+        self.assertIn("DETAIL-OF-THE-TASK", hunter)
+        self.assertIn("DETAIL-OF-THE-TASK", reviewer)
+        self.assertIn("a finding leaves only with a cited refutation", reviewer)  # no cited refutation: it stays in To fix
+        self.assertEqual(call["cwd"], e.issue(iid)["worktree"])
+        self.assertNotIn("check", e.issue(iid))  # no check before the verdict
+        loop.tick(e.p)
+        self.assertEqual(len(e.calls()), 3)  # not launched twice
+
+    def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         loop.tick(e.p)
-        call = e.calls()[-1]
-        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{iid.lower()}-review")
-        self.assertIn("[fm reviewer TY-1]", call["argv"][-1])
-        self.assertIn("Round: 1", call["argv"][-1])
-        self.assertEqual(call["cwd"], e.issue(iid)["worktree"])
-        self.assertNotIn("check", e.issue(iid))  # no check before the verdict
+        e.set_state(e.issue(iid)["hunter"]["name"], "done")
+        backlog.update(e.p, iid, hunter={**e.issue(iid)["hunter"], "started": "2000-01-01 00:00:00"})
         loop.tick(e.p)
-        self.assertEqual(len(e.calls()), 2)  # not launched twice
+        self.assertIn("hunter ended without its findings file", e.issue(iid)["blocked"])
+        self.assertEqual(len(e.calls()), 2)
 
     def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self):
         e = Env(test="true", autonomy="medium")
