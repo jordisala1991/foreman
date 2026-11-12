@@ -96,6 +96,19 @@ def cmd_reject(a: argparse.Namespace) -> None:
     loop.send_back(p, a.id, "rejection", a.note)
 
 
+def cmd_review(a: argparse.Namespace) -> None:
+    p = home(a)
+    with backlog.edit(p) as d:
+        i = backlog.get(d, a.id)
+        if i["status"] != "in review":
+            sys.exit(f"fm: {a.id} is not in the integration queue")
+        for k in ("review", "hunter", "reviewer", "check"):
+            i.pop(k, None)
+        i["review_from"] = len(i.get("reviews", []))
+    backlog.event(p, a.id, "owner asked for a fresh review from round 1")
+    print(f"{a.id}: the loop reviews it again from scratch")
+
+
 def cmd_go(a: argparse.Namespace) -> None:
     p = home(a)
     i = backlog.get(backlog.load(p), a.id)
@@ -211,6 +224,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "deny": lambda a: cmd_allow(a, False),
     "accept": cmd_accept,
     "reject": cmd_reject,
+    "review": cmd_review,
     "go": cmd_go,
     "cancel": cmd_cancel,
     "unblock": cmd_unblock,

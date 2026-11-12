@@ -204,8 +204,9 @@ def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
 
 def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "reviewer") -> None:
     """One of the two review passes: the `hunter` lists what it suspects, then the `reviewer` checks each finding."""
-    rnd = len(i.get("reviews", [])) + 1
-    reviews: list[dict[str, Any]] = i.get("reviews") or []
+    rnd = backlog.review_round(i)
+    all_reviews: list[dict[str, Any]] = i.get("reviews") or []
+    reviews = all_reviews[int(i.get("review_from", 0)) :]
     prev = reviews[-1] if reviews else {}
     name = f"{i['id'].lower()}-{'hunt' if role == 'hunter' else 'review'}"
     model = p.get("agents", "review_model")
