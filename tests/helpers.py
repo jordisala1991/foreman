@@ -108,14 +108,34 @@ class Env:
                 r["state"] = state
         f.write_text(json.dumps(rows))
 
-    def review(self, iid: str, high: int = 0, medium: int = 0, low: int = 0) -> None:
-        """One tick launches the reviewer; then its verdict, as `fm verdict` gives it."""
+    def set_status(self, name: str, status: str) -> None:
+        f = self.bin / "agents.json"
+        rows = json.loads(f.read_text())
+        for r in rows:
+            if r["name"] == name:
+                r["status"] = status
+        f.write_text(json.dumps(rows))
+
+    def hunter_done(self, iid: str) -> None:
+        """The hunter wrote its findings file and ended."""
+        h = self.issue(iid)["hunter"]
+        Path(h["file"]).write_text("hunter findings\n")
+        self.set_state(h["name"], "done")
+
+    def hunt_then_review(self, iid: str) -> None:
+        """A tick launches the hunter; it writes its file and ends; the next tick launches the reviewer."""
         from fm import loop
 
         loop.tick(self.p)
+        self.hunter_done(iid)
+        loop.tick(self.p)
+
+    def review(self, iid: str, open_findings: int = 0) -> None:
+        """One tick launches the hunter, which writes its file; the next the reviewer; then its verdict, as `fm verdict` gives it."""
+        self.hunt_then_review(iid)
         os.environ["FM_ISSUE"] = iid
         try:
-            fm(self.home, "verdict", "--high", str(high), "--medium", str(medium), "--low", str(low), "--file", str(self.home / f"reviews/{iid}.md"))
+            fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{iid}.md"))
         finally:
             os.environ.pop("FM_ISSUE")
 

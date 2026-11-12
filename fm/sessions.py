@@ -115,9 +115,15 @@ def state(rows: dict[str, dict[str, Any]], sid: str | None) -> str:
 
 
 def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
-    """Not idle: working, or any other live state Claude Code reports (e.g. blocked). Resuming a session that is not
-    idle starts a copy of it, so messages wait for `done` / `stopped` / gone."""
-    return state(rows, sid) not in ("done", "stopped", "gone")
+    """Not idle: working, or any other live state Claude Code reports. Idle whatever the state says: status `idle` (an
+    agent that asked the owner and ended its turn shows `blocked`/`idle`, and a hunter `working`/`idle`), or a
+    `blocked` row with neither status nor process (a session whose process went away). Resuming a session that is not
+    idle starts a copy of it, so messages wait until it is idle."""
+    s = state(rows, sid)
+    if s in ("done", "stopped", "gone"):
+        return False
+    row = rows[sid or ""]
+    return row.get("status") != "idle" and not (s == "blocked" and not row.get("status") and not row.get("pid"))
 
 
 def copies(rows: dict[str, dict[str, Any]], sid: str, name: str, cwd: str) -> list[str]:
