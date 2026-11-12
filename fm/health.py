@@ -31,6 +31,20 @@ def loop_dead(p: Project) -> list[Finding]:
     return []
 
 
+KEYCHAIN_MINUTES = 5  # unreadable this long before it is a finding: a transient failure is not
+
+
+def keychain_unreadable(p: Project, reason: str) -> list[Finding]:
+    """Counted by time, so one `fm health` and the panel agree: the first failure is stamped, a later check shows it."""
+    state = util.read_json(p.state / "keychain.json", {})
+    since = state.get("since") or util.now()
+    util.write_json(p.state / "keychain.json", {"since": since})
+    if (util.age_s(since) or 0) < 60 * KEYCHAIN_MINUTES:
+        return []
+    detail = f"The Keychain has been unreadable since {since} ({reason}); agents launch without a token."
+    return [{"key": "keychain-unreadable", "title": f"Keychain unreadable: {reason}", "detail": detail}]
+
+
 def login_expiring(login: token.Login) -> list[Finding]:
     if not login.expiring() or login.expires is None:
         return []
@@ -47,12 +61,17 @@ def claude_token(
 ) -> list[Finding]:
     """The agents' authentication. While the normal login works the token is not used: only a warning when the login
     is about to expire. When it does not work the agents run on the long-lived token: no token, a token Claude rejects
-    (only with `probe`; the panel does not probe), or a line saying they run on it and do not show in the Claude app."""
+    (only with `probe`; the panel does not probe), or a line saying they run on it and do not show in the Claude app.
+    An unreadable Keychain is a finding after KEYCHAIN_MINUTES."""
     claude = p.get("agents", "claude")
     status = login(claude)
     if status.ok:
         return login_expiring(status)
-    tok = token.get(read)
+    try:
+        tok = token.get(read)
+    except token.Unreadable as e:
+        return keychain_unreadable(p, str(e))
+    util.write_json(p.state / "keychain.json", {})
     if not tok:
         return [
             {

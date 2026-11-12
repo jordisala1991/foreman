@@ -59,6 +59,24 @@ class Plan(unittest.TestCase):
         without = agents.brief(self.p, {"id": "TY-2", "title": "t"}, "work")
         self.assertNotIn("/plans/", without)
 
+    def test_plan_and_no_plan_together_fail(self):
+        self.plan.parent.mkdir(parents=True)
+        self.plan.write_text("x")
+        with self.assertRaises(SystemExit) as r:
+            self.ready("--plan", str(self.plan), "--no-plan", "why")
+        self.assertNotEqual(r.exception.code, 0)
+        self.assertEqual(self.e.issue(self.iid)["status"], "refining")
+
+    def test_no_plan_after_a_plan_clears_plan_file(self):
+        self.plan.parent.mkdir(parents=True)
+        self.plan.write_text("x")
+        self.ready("--plan", str(self.plan))
+        backlog.update(self.p, self.iid, status="refining")
+        self.ready("--no-plan", "trivial after all")
+        i = self.e.issue(self.iid)
+        self.assertNotIn("plan_file", i)
+        self.assertNotIn(str(self.plan), agents.brief(self.p, i, "work"))
+
     def assert_planless_ready(self, iid):
         i = self.e.issue(iid)
         self.assertEqual(i["status"], "ready")

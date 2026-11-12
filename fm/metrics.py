@@ -31,7 +31,8 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
         report: backlog.Report = i.get("report") or {}
         sids = [s for s in i.get("sessions", []) if s]
         kinds: dict[str, str] = i.get("session_kinds") or {}
-        per = {s: costs.of_sessions([s]) for s in dict.fromkeys(sids)}  # each transcript is read once
+        seen: set[str] = set()  # one set for the whole task: a message replayed in a resumed session counts once, in its first
+        per = {s: costs.of_sessions([s], seen) for s in dict.fromkeys(sids)}  # each transcript is read once
         by_kind = {k: round(sum(c["usd"] for s, c in per.items() if kinds.get(s) == k), 4) for k in ("define", "work")}
         c = {k: round(sum(x[k] for x in per.values()), 4) for k in ("usd", "tokens")}
         starts = [x["first"] for x in per.values() if x.get("first")]

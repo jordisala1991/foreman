@@ -63,6 +63,8 @@ def cmd_ready(a: argparse.Namespace) -> None:
         i = backlog.get(d, iid)
         if a.plan:
             i["plan_file"] = str(Path(a.plan).resolve())
+        else:
+            i.pop("plan_file", None)  # a relaunched definer that now says «trivial» leaves no stale plan
         acceptance: backlog.Acceptance = i.get("acceptance") or {}
         agent: backlog.Agent = i.get("agent") or {}
         i["acceptance"] = {**acceptance, "claim": a.claim, "criterion": a.criterion}

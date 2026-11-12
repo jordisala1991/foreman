@@ -161,6 +161,14 @@ class Provider(unittest.TestCase):
             with self.assertRaises(providers.ConfigError):
                 integrate.accept(e.p, iid)
 
+    def test_the_old_forge_key_is_a_clear_config_error(self):
+        from fm import providers
+
+        e = Env()
+        e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[integrate]", '[integrate]\nforge = "github"'))
+        with self.assertRaisesRegex(providers.ConfigError, "forge was renamed to provider"):
+            registry.get(type(e.p).load(e.home))
+
     def test_send_back_forgets_the_merge_of_the_old_tip(self):
         e = Env(test="true")
         iid = self.delivered(e)

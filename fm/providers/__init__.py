@@ -33,9 +33,14 @@ class Transient(Exception):
     """A platform call that failed in a way worth retrying (network, rate limit, timeout): the loop retries, never blocks."""
 
 
-class Conflict(Exception):
-    """The platform refused the merge because the branch conflicts with main: the agent can fix it. `merge` raises it
-    for that case."""
+class Permanent(Exception):
+    """A platform call that will fail the same way if repeated (the platform rejects it, the branch is not there): the
+    task is blocked with the reason instead of retried."""
+
+
+class Conflict(Permanent):
+    """The platform refused the merge because the branch conflicts with main: unlike other permanent failures, the
+    agent can fix it. `merge` raises it for that case."""
 
 
 class Provider:

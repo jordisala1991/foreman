@@ -7,7 +7,7 @@ from unittest import mock
 
 from helpers import Env, fm
 
-from fm import backlog, health, loop, token
+from fm import backlog, health, loop, token, util
 
 SECRET = "sk-ant-oat01-SECRET"
 
@@ -116,6 +116,41 @@ class Token(unittest.TestCase):
             out = fm(self.p.home, "health")
         self.assertIn("security add-generic-password -U", out)
         self.assertIn("claude setup-token", out)
+
+    def test_unreadable_keychain_is_not_no_token_and_files_nothing(self):
+        def locked() -> str:
+            raise token.Unreadable("locked")
+
+        self.assertEqual(health.claude_token(self.p, read=locked, login=LOGIN_OFF), [])  # a transient failure shows nothing
+        self.assertEqual(health.claude_token(self.p, read=locked, login=LOGIN_OFF), [])  # and a second check does not count
+        stamp = (datetime.now() - timedelta(minutes=health.KEYCHAIN_MINUTES + 1)).strftime("%Y-%m-%d %H:%M:%S")
+        util.write_json(self.p.state / "keychain.json", {"since": stamp})  # unreadable for longer than that
+        f = health.claude_token(self.p, read=locked, login=LOGIN_OFF)
+        self.assertEqual(f[0]["title"], "Keychain unreadable: locked")
+        health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: True, login=LOGIN_OFF)  # a good read resets
+        self.assertEqual(health.claude_token(self.p, read=locked, login=LOGIN_OFF), [])
+        with mock.patch("fm.proc.run", return_value=mock.Mock(code=36, out="", err="")), self.assertRaises(token.Unreadable):
+            token.keychain()
+        with mock.patch("fm.proc.run", return_value=mock.Mock(code=44, out="", err="")):
+            self.assertEqual(token.keychain(), "")
+
+    def test_the_panel_path_does_not_probe(self):
+        f = health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: False, probe=False, login=LOGIN_OFF)
+        self.assertEqual(f[0]["key"], "token-fallback")
+
+    def fake_claude(self, code: int, err: str) -> str:
+        path = self.e.tmp / f"claude{code}"
+        path.write_text(f"#!/bin/sh\necho '{err}' >&2\nexit {code}\n")
+        path.chmod(0o755)
+        return str(path)
+
+    def test_probe_only_blames_the_token_when_claude_says_so(self):
+        self.assertTrue(token.works(self.fake_claude(0, ""), SECRET))
+        self.assertTrue(token.works(self.fake_claude(1, "API Error: 529 overloaded, usage limit reached"), SECRET))
+        self.assertTrue(token.works(self.fake_claude(1, "getaddrinfo ENOTFOUND api.anthropic.com"), SECRET))
+        self.assertTrue(token.works(self.fake_claude(1, "API Error: 503 request_id req_401abc, session expired, oauth proxy down"), SECRET))
+        self.assertFalse(token.works(self.fake_claude(1, "Failed to authenticate. API Error: 401 Invalid bearer token"), SECRET))
+        self.assertFalse(token.works(self.fake_claude(1, "OAuth token has expired. Please run /login"), SECRET))
 
     def test_launchd_dir_writes_both_jobs_with_the_panel_args_and_escapes(self):
         d = self.e.tmp
