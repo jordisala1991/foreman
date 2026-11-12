@@ -213,7 +213,7 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). S
 3. **merged**: the issue closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
 
-Retry policy, one place (`loop.guarded`, every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both.
+Retry policy, one place (`loop.guarded`, every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both. A GitHub rate limit (`RateLimited`, a `Transient`) is the exception: it is not a failure of the task, nothing is counted, noted or blocked; `GitHub.run` pauses every gh call until the reset kept in `state/github_quota.json` (60 s if the reset cannot be read; never more than an hour).
 
 Config: `[integrate] provider = "auto"` (default: `github` if the repo's `origin` is on github.com, else `local`; or force
 `local` | `github`) and `merge = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An

@@ -22,6 +22,7 @@ CONFLICT = re.compile(r"merge conflict", re.I)
 RATE = re.compile(r"rate limit", re.I)
 QUOTA = "github_quota.json"  # in state/: until when gh is paused, and the figures GitHub gave
 FALLBACK_PAUSE = 60  # seconds, when the reset cannot be read
+MAX_PAUSE = 3600  # a wrong clock or a hand-edited file never pauses gh for longer than this
 
 
 def resources_of(raw: object) -> dict[str, dict[str, Any]]:
@@ -130,7 +131,7 @@ class GitHub(Provider):
 
     def paused_until(self) -> float:
         until = (util.json_object(util.read_json(self.p.state / QUOTA, None)) or {}).get("until")
-        return float(until) if isinstance(until, (int, float)) else 0.0
+        return min(float(until), time.time() + MAX_PAUSE) if isinstance(until, (int, float)) else 0.0
 
     def hold(self) -> None:
         """No gh call while GitHub's limit is used up."""

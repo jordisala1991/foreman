@@ -7,7 +7,7 @@ from unittest import mock
 from test_github import GH
 
 from fm import loop, util
-from fm.providers import github
+from fm.providers import github, registry
 
 
 class Quota(unittest.TestCase):
@@ -51,7 +51,9 @@ class Limited(unittest.TestCase):
         g.deliver(second)
         reset = int(time.time()) + 600
         g.set(reset=reset, limited=True)
+        before = len(g.calls("pr", "checks"))
         loop.tick(g.e.p)
+        self.assertEqual(len(g.calls("pr", "checks")), before + 1)
         n = len(g.calls())
         for _ in range(9):
             loop.tick(g.e.p)
@@ -107,3 +109,24 @@ class Limited(unittest.TestCase):
         self.assertNotEqual(g.e.issue(iid)["status"], "done")
         self.clean(g, iid)
         self.assertTrue((g.e.p.state / "github_quota.json").exists())
+
+    def test_a_rate_limit_on_the_pr_description_is_not_a_failure_of_the_task(self):
+        g = self.make(test="true")
+        iid = g.work()
+        g.set(limited_body=True)
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        self.assertTrue((g.e.p.state / "github_quota.json").exists())
+        self.assertFalse(g.e.issue(iid).get("pr_error"))
+        events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "PR description" in e["text"]]
+        self.assertEqual(events, [])
+        self.clean(g, iid)
+
+    def test_a_far_away_pause_is_capped(self):
+        g = self.make(test="true")
+        iid = g.work()
+        g.deliver(iid)
+        (g.e.p.state / "github_quota.json").write_text('{"until": 4102444800}')
+        provider = registry.get(g.e.p)
+        self.assertLessEqual(provider.paused_until(), time.time() + github.MAX_PAUSE)
