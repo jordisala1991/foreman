@@ -204,7 +204,6 @@ class Provider(unittest.TestCase):
         self.assertIn("uncommitted changes", i["blocked"])
         self.assertNotIn("merge", i)
 
-
     def test_a_main_checkout_on_another_branch_blocks_the_merge(self):
         e = Env(test="true")
         iid = self.delivered(e)
