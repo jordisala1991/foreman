@@ -54,6 +54,10 @@ class Health(unittest.TestCase):
         (f,) = health.answers_undelivered(self.p)
         self.assertIn(iid, f["title"])
         self.assertIn("«B»", f["detail"])
+        with backlog.edit(self.p) as d:  # an answer made before the stamp existed: its `by` still has the time
+            del d["decisions_resolved"][0]["answered_at"]
+            d["decisions_resolved"][0]["by"] = "owner (panel), 2020-01-01 00:00:00"
+        self.assertEqual(len(health.answers_undelivered(self.p)), 1)
 
     def test_live_worktree_is_not_an_orphan(self):
         backlog.add(self.p, "x", status="ready", criterion="y")

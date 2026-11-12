@@ -154,12 +154,13 @@ UNDELIVERED_MINUTES = 10
 def answers_undelivered(p: Project) -> list[Finding]:
     out: list[Finding] = []
     for q in backlog.undelivered(backlog.load(p)):
-        if (util.age_s(q.get("answered_at")) or 0) > 60 * UNDELIVERED_MINUTES:
+        since = q.get("answered_at") or q.get("at") or str(q.get("by", "")).rpartition(", ")[2]
+        if (util.age_s(since) or 0) > 60 * UNDELIVERED_MINUTES:
             out.append(
                 {
                     "key": f"undelivered:{q['id']}",
-                    "title": f"{q['issue']}'s agent has not received the owner's answer",
-                    "detail": f"{q['id']} was answered at {q['answered_at']} and is still not delivered: «{q.get('answer')}».",
+                    "title": f"{q['issue']}'s agent has not received a {q.get('kind') or 'question'} message",
+                    "detail": f"{q['id']} was answered at {since} and is still not delivered: «{q.get('answer')}».",
                 }
             )
     return out
