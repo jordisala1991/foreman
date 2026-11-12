@@ -6,7 +6,8 @@ only if it went away and came back.
 Checks: loop dead (heartbeat too old: seen from outside the loop, `fm health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
 · orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
-on main's head, every `ci_every_minutes`) · loop step errors."""
+on main's head, every `ci_every_minutes`) · loop step errors · prune due (PRUNE_EVERY integrations on main since the
+last prune task was filed: one triage task with the commit range to review)."""
 
 import hashlib
 import threading
@@ -204,9 +205,34 @@ def loop_errors(p: Project) -> list[Finding]:
     return out
 
 
+PRUNE_EVERY = 10
+
+
+def prune_due(p: Project) -> list[Finding]:
+    """The range starts where the last prune task was filed (or at the first commit). The task only looks at what was
+    integrated in it and removes what no criterion asks for, never what the owner asked for."""
+    main = p.get("project", "main")
+    last = [i["created"] for i in backlog.issues(backlog.load(p)) if i.get("source") == "health:prune"]
+    since = integrate.git(p.repo, "rev-list", "--max-parents=0", main, check=False).out.split()[:1]
+    if last:
+        since = integrate.git(p.repo, "rev-list", "-1", f"--before={max(last)}", main, check=False).out.split() or since
+    if not since:
+        return []
+    rng = f"{since[0][:12]}..{main}"
+    n = len(integrate.git(p.repo, "log", "--format=%H", "--grep=^Integrate ", rng, check=False).out.split())
+    if n < PRUNE_EVERY:
+        return []
+    detail = (
+        f"{n} integrations since the last prune: review `git log {rng}`. Remove what no criterion of those tasks asks for "
+        "(dead code, unused options, guards for cases that cannot happen). Never touch what the owner asked for (task "
+        "detail, owner notes). It is reviewed like any task."
+    )
+    return [{"key": "prune", "title": "Prune what the last integrations did not need", "detail": detail}]
+
+
 def findings(p: Project, rows: dict[str, Any], outside: bool = False, wait: bool = True) -> list[Finding]:
     out = [*loop_dead(p), *claude_token(p, wait=wait)] if outside else []
-    for check in (lambda: agents(p, rows), lambda: orphan_worktrees(p), lambda: main_tests(p, run=not outside), lambda: loop_errors(p)):
+    for check in (lambda: agents(p, rows), lambda: orphan_worktrees(p), lambda: main_tests(p, run=not outside), lambda: loop_errors(p), lambda: prune_due(p)):
         try:
             out += check()
         except Exception as e:

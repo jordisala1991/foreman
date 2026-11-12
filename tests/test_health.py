@@ -44,6 +44,24 @@ class Health(unittest.TestCase):
         health.run(self.p, {})
         self.assertEqual(len(self.triage()), 1)
 
+    def integrate_commits(self, n):
+        for _ in range(n):
+            git(self.e.repo, "commit", "-q", "--allow-empty", "-m", "Integrate TY-1: something")
+
+    def test_prune_task_after_ten_integrations_and_never_a_second_while_open(self):
+        self.integrate_commits(9)
+        health.run(self.p, {})
+        self.assertEqual(self.triage(), [])
+        self.integrate_commits(1)
+        health.run(self.p, {})
+        health.run(self.p, {})
+        t = self.triage()
+        self.assertEqual(len(t), 1)
+        self.assertIn("..", t[0]["detail"])
+        self.integrate_commits(10)
+        health.run(self.p, {})
+        self.assertEqual(len(self.triage()), 1)
+
     def test_live_worktree_is_not_an_orphan(self):
         backlog.add(self.p, "x", status="ready", criterion="y")
         loop.tick(self.p)
