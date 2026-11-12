@@ -41,7 +41,7 @@ def cmd_verdict(a: argparse.Namespace) -> None:
         tip = next((t for t in launched if t and t.startswith(a.tip)), "") if a.tip else newest
         if a.tip and not tip:
             sys.exit(f"fm: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
-        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
+        v = {"round": backlog.review_round(i), "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
         i["reviews"] = [*i.get("reviews", []), v]
         if tip == newest:  # a verdict for an older launch is history: it decides nothing
             i["review"] = v

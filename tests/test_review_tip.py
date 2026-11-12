@@ -154,3 +154,55 @@ class Passes(unittest.TestCase):
         self.assertIn("[fm hunter", text)
         self.assertIn("Round 2 looks at the fixes", text)
         self.assertIn(e.issue(iid)["reviews"][-1]["file"], text)
+
+
+class FreshReview(unittest.TestCase):
+    def test_fm_review_starts_both_passes_again_on_the_same_tip_as_round_one(self):
+        e = Env(test="true")
+        iid, a = start(e)
+        verdict(e, iid, a)
+        fm(e.home, "review", iid)
+        i = e.issue(iid)
+        self.assertEqual(len(i["reviews"]), 1)  # history stays
+        loop.tick(e.p)
+        text = e.calls()[-1]["argv"][-1]
+        self.assertIn("[fm hunter", text)
+        self.assertIn("before it is integrated, round 1", text)
+        self.assertNotIn("looks at the fixes", text)
+        e.hunt_then_review(iid)
+        self.assertNotIn("checks the fixes", e.calls()[-1]["argv"][-1])
+        verdict(e, iid, a)
+        self.assertEqual((e.issue(iid)["review"]["round"], len(e.issue(iid)["reviews"])), (1, 2))
+
+    def test_fm_review_refuses_a_task_not_in_review(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        with self.assertRaises(SystemExit):
+            fm(e.home, "review", iid)
+
+    def test_fm_review_clears_a_block_so_the_review_starts(self):
+        e = Env(test="true")
+        iid, a = start(e)
+        verdict(e, iid, a)
+        backlog.update(e.p, iid, blocked="its hunter ended without its findings file")
+        fm(e.home, "review", iid)
+        loop.tick(e.p)
+        self.assertIn("[fm hunter", e.calls()[-1]["argv"][-1])
+
+    def test_fm_review_refuses_an_accepted_task_and_one_with_a_review_running(self):
+        e = Env(test="true")
+        iid, a = start(e)  # its reviewer has launched, no verdict yet
+        with self.assertRaises(SystemExit):
+            fm(e.home, "review", iid)
+        verdict(e, iid, a)
+        backlog.update(e.p, iid, accepted={"by": "owner", "head": a, "at": ""})
+        with self.assertRaises(SystemExit):
+            fm(e.home, "review", iid)
+        self.assertIn("accepted", e.issue(iid))
+
+    def test_fm_review_refuses_a_running_review_even_when_the_task_is_blocked(self):
+        e = Env(test="true")
+        iid, _ = start(e)  # its reviewer has launched, no verdict yet
+        backlog.update(e.p, iid, blocked="something")
+        with self.assertRaises(SystemExit):
+            fm(e.home, "review", iid)

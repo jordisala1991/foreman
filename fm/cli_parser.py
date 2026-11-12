@@ -71,6 +71,8 @@ def _owner_side(c: Command) -> None:
     s = c("reject", "send a queued issue back to its agent")
     s.add_argument("id")
     s.add_argument("note")
+    s = c("review", "review a queued issue again from scratch, as round 1")
+    s.add_argument("id")
     s = c("go", "let a triage issue in")
     s.add_argument("id")
     s = c("cancel", "cancel an issue (stops its agent)")

@@ -84,6 +84,11 @@ def open_findings(v: Mapping[str, Any]) -> int:
     return int(v["open"]) if "open" in v else int(v.get("high", 0)) + int(v.get("medium", 0))
 
 
+def review_round(i: Mapping[str, Any]) -> int:
+    """The round the next review is: reviews since the owner last asked for a fresh one (`review_from`), plus one."""
+    return len(i.get("reviews") or []) - int(i.get("review_from", 0)) + 1
+
+
 class Check(TypedDict, total=False):
     head: str
     risk: str
