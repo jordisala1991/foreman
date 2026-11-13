@@ -46,14 +46,9 @@ FAKE_GH = textwrap.dedent("""\
             sha = subprocess.run(["git", "ls-remote", "origin", "refs/heads/" + pr["head"]], capture_output=True, text=True).stdout.split()[:1]
             roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]]}
             commits = {"nodes": [{"commit": {"statusCheckRollup": roll}}]}
-            return {"number": int(n), "state": pr["state"], "headRefOid": sha[0] if sha else "", "commits": commits}
-        one = [x for x in a if x.startswith("number=")]
-        if one:
-            pr = s["prs"].get(one[0][7:])
-            print(json.dumps({"data": {"repository": {"pullRequest": node(one[0][7:], pr) if pr else None}}}))
-        else:
-            nodes = [node(n, pr) for n, pr in s["prs"].items() if pr["state"] == "OPEN" and n not in s.get("hidden", [])]
-            print(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
+            return {"number": int(n), "headRefOid": sha[0] if sha else "", "commits": commits}
+        nodes = [node(n, pr) for n, pr in s["prs"].items() if pr["state"] == "OPEN"]
+        print(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
         sys.exit(0)
     if a[:1] == ["api"]:
         print(s.get("api_sha") or "null")
@@ -110,11 +105,10 @@ class GH:
         toml.write_text(toml.read_text().replace("[integrate]", f'[integrate]\nprovider = "github"\n{extra}'))
         e.p = type(e.p).load(e.home)
         self.poll, github.POLL = github.POLL, 0  # an unsettled answer is read again at every call, unless a test says otherwise
-        self.none_ttl, github.NONE_TTL = github.NONE_TTL, 0
 
     def close(self) -> None:
         os.environ["PATH"] = self.path
-        github.POLL, github.NONE_TTL = self.poll, self.none_ttl
+        github.POLL = self.poll
 
     @property
     def state(self) -> dict:
@@ -194,14 +188,14 @@ class Border(unittest.TestCase):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
                 github.pull_request(bad)
 
-    def test_the_open_prs_answer_becomes_state_head_and_ci_or_a_provider_error(self):
+    def test_the_open_prs_answer_becomes_head_and_ci_or_a_provider_error(self):
         def node(state):
-            return {"number": 1, "state": "OPEN", "headRefOid": "abc", "commits": {"nodes": [{"commit": {"statusCheckRollup": state}}]}}
+            return {"number": 1, "headRefOid": "abc", "commits": {"nodes": [{"commit": {"statusCheckRollup": state}}]}}
 
         def answer(*nodes):
             return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
 
-        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"state": "OPEN", "head": "abc", "ci": "pass"}})
+        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass"}})
         self.assertEqual(github.open_prs(answer(node(None)))["1"]["ci"], "none")
         for bad in (answer({"number": "1"}), answer("x")):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):

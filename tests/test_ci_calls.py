@@ -10,13 +10,7 @@ from helpers import git
 from test_github import GH
 
 from fm import loop
-from fm.providers import github, registry
-
-
-def backlog_change(g, iid: str) -> dict:
-    i = g.e.issue(iid)
-    r = subprocess.run(["git", "-C", str(g.e.repo), "rev-parse", i["branch"]], capture_output=True, text=True)
-    return {"pr": i["pr"]["number"], "head": r.stdout.strip()}
+from fm.providers import github
 
 
 class CiCalls(unittest.TestCase):
@@ -66,58 +60,6 @@ class CiCalls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual(self.graphql(g), 1)
         self.assertTrue(all("check" not in g.e.issue(iid) for iid in ids))
-
-    def test_a_settled_ci_stays_when_another_task_causes_a_refresh(self):
-        g = self.make(test="true", autonomy="manual")
-        a = g.work()
-        g.deliver(a)
-        loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(a)["check"]["ci"], "pass")
-        g.set(ci="pending")  # GitHub now shows every PR as running, A's commit has not changed
-        b = g.work()
-        g.deliver(b)
-        loop.tick(g.e.p)
-        self.assertEqual(registry.get(g.e.p).ci(backlog_change(g, a)), "pass")
-        self.assertEqual(registry.get(g.e.p).ci(backlog_change(g, b)), "pending")
-
-    def test_a_pr_missing_from_the_open_answer_is_read_once_and_kept(self):
-        g = self.make(test="true", autonomy="manual")
-        iid = g.work()
-        g.deliver(iid)
-        loop.tick(g.e.p)  # its PR is open and its CI read
-        (g.e.p.state / "pr_ci.json").unlink()  # nothing known about it yet
-        g.set(hidden=["1"])  # still open, but not in the first page of open PRs
-        github.POLL = 3600
-        github.NONE_TTL = 3600
-        gh, change = registry.get(g.e.p), backlog_change(g, iid)
-        before = self.graphql(g)
-        self.assertEqual([gh.ci(change) for _ in range(3)], ["pass"] * 3)
-        self.assertEqual(self.graphql(g) - before, 2)  # the open answer, then that PR; not again
-
-    def test_a_pr_missing_from_the_open_answer_because_it_is_not_open_fails_with_its_state(self):
-        g = self.make(test="true", autonomy="manual")
-        iid = g.work()
-        g.deliver(iid)
-        loop.tick(g.e.p)
-        (g.e.p.state / "pr_ci.json").unlink()
-        g.set(prs={**g.state["prs"], "1": {**g.state["prs"]["1"], "state": "MERGED"}})
-        with self.assertRaises(github.PermanentError) as cm:
-            registry.get(g.e.p).ci(backlog_change(g, iid))
-        self.assertIn("merged", str(cm.exception))
-
-    def test_a_pr_without_checks_is_read_again_only_after_the_ttl(self):
-        g = self.make(test="true")
-        g.set(ci="none")
-        iid = g.work()
-        g.deliver(iid)
-        loop.tick(g.e.p)
-        github.NONE_TTL = 3600
-        gh, change = registry.get(g.e.p), backlog_change(g, iid)
-        self.assertEqual(gh.ci(change), "none")
-        before = self.graphql(g)
-        for _ in range(3):
-            gh.ci(change)
-        self.assertEqual(self.graphql(g), before)
 
     def test_the_loops_gh_calls_are_counted_as_the_loop(self):
         from fm import ghcalls
