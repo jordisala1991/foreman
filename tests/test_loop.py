@@ -343,6 +343,42 @@ class Queue(unittest.TestCase):
         self.assertIn("Integrate TY-1", git(e.repo, "log", "--oneline", "-1"))
         self.assertNotIn("fm/ty-1", git(e.repo, "branch"))
 
+    def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self):
+        e = Env(test="true")
+        ids = [self.deliver(e) for _ in range(3)]
+        loop.tick(e.p)
+        integrate.accept(e.p, ids[0])
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")  # every branch is now stale
+        checks: list[str] = []
+        real = integrate.check
+        integrate.check = lambda p, iid, *a: checks.append(iid) or real(p, iid, *a)
+        try:
+            loop.tick(e.p)
+            self.assertEqual((e.issue(ids[0])["status"], checks), ("done", [ids[1]]))
+            loop.tick(e.p)
+            self.assertEqual(checks, [ids[1], ids[2]])
+        finally:
+            integrate.check = real
+
+    def test_a_task_canceled_while_the_queue_runs_is_not_checked(self):
+        e = Env(test="true")
+        a, b = self.deliver(e), self.deliver(e)
+        real = loop.queue_one
+
+        def cancel_b_first(p, i, main, rows):
+            if i["id"] == a:
+                integrate.close(p, b, "canceled", "x")
+            real(p, i, main, rows)
+
+        loop.queue_one = cancel_b_first
+        try:
+            loop.tick(e.p)
+        finally:
+            loop.queue_one = real
+        self.assertFalse(e.issue(b).get("check"))
+
     def test_autonomy_low_merges_low_risk_alone(self):
         e = Env(test="true", autonomy="low")
         iid = self.deliver(e)

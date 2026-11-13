@@ -30,14 +30,22 @@ MAX_ROUNDS = 2  # what is still open after round 2 goes to the owner
 
 
 def run_queue(p: Project, rows: dict[str, Any]) -> None:
+    """Merges first (quick); then at most one branch is checked (a check runs the tests, minutes), the rest on the
+    next ticks, so answers and launches are not held up. Each task is read again just before its turn."""
     main = p.get("project", "main")
-    for i in backlog.issues(backlog.load(p)):
-        if i["status"] != "in review" or i.get("blocked"):
+    waiting = [i["id"] for i in backlog.issues(backlog.load(p)) if i["status"] == "in review" and not i.get("blocked")]
+    for iid in waiting:
+        i = backlog.get(backlog.load(p), iid)
+        if i["status"] == "in review" and i.get("accepted") and not i.get("blocked"):
+            guarded(p, iid, "merge it", lambda i=i: merge_one(p, i, main))
+    for iid in waiting:
+        i = backlog.get(backlog.load(p), iid)
+        if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
             continue
-        if i.get("accepted"):
-            guarded(p, i["id"], "merge it", lambda i=i: merge_one(p, i, main))
-            continue
-        guarded(p, i["id"], "check it", lambda i=i: queue_one(p, i, main, rows))
+        done: list[bool] = []
+        guarded(p, iid, "check it", lambda i=i, done=done: done.append(queue_one(p, i, main, rows)))
+        if done == [True]:
+            return
 
 
 def conflict_note(main: str) -> str:
@@ -119,11 +127,12 @@ def block_review(p: Project, iid: str, why: str) -> None:
     backlog.event(p, iid, f"blocked: {why}")
 
 
-def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
+def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> bool:
+    """One step of a branch in review; True when it ran the (slow) check."""
     head = integrate.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
     main_head = integrate.git(p.repo, "rev-parse", main, check=False).out.strip()
     if review_pending(p, i, head, rows):  # no verdict on this tip yet: an independent review first
-        return
+        return False
     v: dict[str, Any] = i.get("review") or {}
     if risk.review_step(v, MAX_ROUNDS) == "back":
         send_back(
@@ -136,17 +145,18 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             "finding, and run `fm done` again.",
         )
         backlog.update(p, i["id"], review={**v, "sent_back": True})
-        return
+        return False
     step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
     if step == "wait":
-        return
+        return False
     c: dict[str, Any] = i.get("check") or {}
     stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
-    if c.get("head") != head or c.get("main") != main_head or stale:
+    checked = c.get("head") != head or c.get("main") != main_head or stale
+    if checked:
         c = integrate.check(p, i["id"], why if i.get("pr") else None)
     if c.get("conflict"):
         send_back(p, i["id"], "conflict", conflict_note(main))
-        return
+        return checked
     pulls.deliver(p, i, c)
     if integrate.merges_alone(p, c):
         try:
@@ -154,6 +164,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             integrate.merge_accepted(p, i["id"])
         except integrate.IntegrateError as e:
             backlog.event(p, i["id"], f"automatic integration failed: {e}")
+    return checked
 
 
 def sort_key(i: dict[str, Any]) -> tuple[int, int, int]:
