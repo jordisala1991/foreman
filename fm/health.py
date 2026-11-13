@@ -192,9 +192,15 @@ def main_tests(p: Project, run: bool = True) -> list[Finding]:
     head = integrate.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
     ci = util.read_json(p.state / "ci.json", {})
     due = ci.get("head") != head or (util.age_s(ci.get("at")) or 1e9) > 60 * int(p.get("health", "ci_every_minutes"))
-    if due and run:
-        ci = {"head": head, "at": util.now(), "result": integrate.tests_at(p, head, "main")}
-        util.write_json(p.state / "ci.json", ci)
+    if due and run:  # slow: in the background, the tick waits a little and goes on; the result lands in ci.json
+
+        def run_main_tests() -> None:
+            util.write_json(p.state / "ci.json", {"head": head, "at": util.now(), "result": integrate.tests_at(p, head, "main")})
+
+        t = util.start_background(f"{p.state}:main-tests", run_main_tests)
+        if t:
+            t.join(util.BACKGROUND_WAIT_S)
+            ci = util.read_json(p.state / "ci.json", {})
     result, head = ci.get("result"), ci.get("head") or head
     if result == "fail":
         return [

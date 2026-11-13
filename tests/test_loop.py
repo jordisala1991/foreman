@@ -3,7 +3,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, risk
+from fm import backlog, integrate, loop, risk, util
 from fm.providers import registry
 
 
@@ -354,6 +354,7 @@ class Queue(unittest.TestCase):
         checks: list[str] = []
         real = integrate.check
         integrate.check = lambda p, iid, *a: checks.append(iid) or real(p, iid, *a)
+        self.addCleanup(setattr, integrate, "check", real)
         try:
             loop.tick(e.p)
             self.assertEqual((e.issue(ids[0])["status"], checks), ("done", [ids[1]]))
@@ -361,6 +362,42 @@ class Queue(unittest.TestCase):
             self.assertEqual(checks, [ids[1], ids[2]])
         finally:
             integrate.check = real
+
+    def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self):
+        e = Env(test="true")
+        ids = [self.deliver(e) for _ in range(3)]
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")
+        checks: list[str] = []
+        real, deliver = integrate.check, loop.pulls.deliver
+        integrate.check = lambda p, iid, *a: checks.append(iid) or real(p, iid, *a)
+
+        def boom(*a):
+            raise RuntimeError("boom")
+
+        loop.pulls.deliver = boom
+        self.addCleanup(setattr, integrate, "check", real)
+        self.addCleanup(setattr, loop.pulls, "deliver", deliver)
+        loop.tick(e.p)
+        self.assertEqual(len(checks), 1)
+        self.assertEqual(len(ids), 3)
+
+    def test_a_slow_check_does_not_hold_up_a_launch(self):
+        e = Env(test="case $PWD in */trees/*) sleep 3;; esac")
+        a = self.deliver(e)
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")
+        ready = backlog.add(e.p, "later", status="ready", criterion="z")
+        util.BACKGROUND_WAIT_S = 0.2
+        self.addCleanup(setattr, util, "BACKGROUND_WAIT_S", 20)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(ready)["status"], "in progress")  # launched while the check still runs
+        self.assertNotEqual((e.issue(a).get("check") or {}).get("main"), git(e.repo, "rev-parse", "main").strip())
+        for t in list(util.BACKGROUND.values()):
+            t.join()
+        self.assertEqual(e.issue(a)["check"]["main"], git(e.repo, "rev-parse", "main").strip())
 
     def test_a_task_canceled_while_the_queue_runs_is_not_checked(self):
         e = Env(test="true")

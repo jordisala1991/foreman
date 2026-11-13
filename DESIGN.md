@@ -93,7 +93,9 @@ on). The heartbeat is written before every step, so a long test run does not loo
    filled in from its short id on a later tick.
 4. **agents**: an agent whose session ended its turn without `fm done`/`ready`/`ask`/`block`, and whose transcript
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
-5. **queue**: a branch in review whose head or main's head changed is checked: tests on exactly its committed head
+5. **queue**: accepted tasks are merged first. Then a branch in review whose head or main's head changed is checked,
+   one at a time, in the background (a tick waits for it only `CHECK_WAIT_S`, so answers, launches and merges keep
+   flowing; each task is read again just before its turn): tests on exactly its committed head
    (a fresh detached worktree, never uncommitted files), diff, deleted files,
    dependencies, the paths it touches, conflicts with main, the agent's review verdict → risk `low|medium|high` with
    reasons. A branch that conflicts with main goes back to its agent with a note to merge main. If the project's

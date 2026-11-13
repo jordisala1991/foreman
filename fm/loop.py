@@ -5,7 +5,9 @@
 3. answers: the owner's answers go back to the agent that asked (its own session, resumed)
 4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
 5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
-6. queue: a delivered branch is checked (tests, diff, risk); the autonomy level may merge it
+6. queue: accepted tasks are merged first; then a branch whose head or main's moved is checked (tests, diff, risk) in
+   the background, one at a time, and the autonomy level may merge it. A check slower than util.BACKGROUND_WAIT_S does not hold
+   the tick up: it finishes on its own and the next ticks go on.
 7. health: broken states become triage issues, deduplicated (health.py)
 8. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
    one. The loop never plans, never reviews, never talks to the owner.
@@ -29,22 +31,27 @@ PRIORITY = {p: n for n, p in enumerate(backlog.PRIORITIES)}
 MAX_ROUNDS = 2  # what is still open after round 2 goes to the owner
 
 
+def check_key(p: Project) -> str:
+    return f"{p.state}:check"
+
+
 def run_queue(p: Project, rows: dict[str, Any]) -> None:
-    """Merges first (quick); then at most one branch is checked (a check runs the tests, minutes), the rest on the
-    next ticks, so answers and launches are not held up. Each task is read again just before its turn."""
+    """Merges first (quick); then at most one branch check is started per tick, the rest on the next ticks. Each task is
+    read again just before its turn."""
     main = p.get("project", "main")
     waiting = [i["id"] for i in backlog.issues(backlog.load(p)) if i["status"] == "in review" and not i.get("blocked")]
     for iid in waiting:
         i = backlog.get(backlog.load(p), iid)
         if i["status"] == "in review" and i.get("accepted") and not i.get("blocked"):
             guarded(p, iid, "merge it", lambda i=i: merge_one(p, i, main))
+    key = check_key(p)
+    started = util.STARTED.get(key, 0)
     for iid in waiting:
         i = backlog.get(backlog.load(p), iid)
         if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
             continue
-        done: list[bool] = []
-        guarded(p, iid, "check it", lambda i=i, done=done: done.append(queue_one(p, i, main, rows)))
-        if done == [True]:
+        guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows))
+        if util.STARTED.get(key, 0) != started:
             return
 
 
@@ -127,12 +134,12 @@ def block_review(p: Project, iid: str, why: str) -> None:
     backlog.event(p, iid, f"blocked: {why}")
 
 
-def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> bool:
-    """One step of a branch in review; True when it ran the (slow) check."""
+def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
+    """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
     head = integrate.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
     main_head = integrate.git(p.repo, "rev-parse", main, check=False).out.strip()
     if review_pending(p, i, head, rows):  # no verdict on this tip yet: an independent review first
-        return False
+        return
     v: dict[str, Any] = i.get("review") or {}
     if risk.review_step(v, MAX_ROUNDS) == "back":
         send_back(
@@ -145,18 +152,23 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             "finding, and run `fm done` again.",
         )
         backlog.update(p, i["id"], review={**v, "sent_back": True})
-        return False
+        return
     step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
     if step == "wait":
-        return False
+        return
     c: dict[str, Any] = i.get("check") or {}
     stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
-    checked = c.get("head") != head or c.get("main") != main_head or stale
-    if checked:
-        c = integrate.check(p, i["id"], why if i.get("pr") else None)
+    if c.get("head") != head or c.get("main") != main_head or stale:
+        t = util.start_background(check_key(p), lambda: guarded(p, i["id"], "check it", lambda: integrate.check(p, i["id"], why if i.get("pr") else None)))
+        if t is None:
+            return
+        t.join(util.BACKGROUND_WAIT_S)
+        c = backlog.get(backlog.load(p), i["id"]).get("check") or {}
+        if t.is_alive() or c.get("head") != head:  # still running, or it failed (the task says why)
+            return
     if c.get("conflict"):
         send_back(p, i["id"], "conflict", conflict_note(main))
-        return checked
+        return
     pulls.deliver(p, i, c)
     if integrate.merges_alone(p, c):
         try:
@@ -164,7 +176,6 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             integrate.merge_accepted(p, i["id"])
         except integrate.IntegrateError as e:
             backlog.event(p, i["id"], f"automatic integration failed: {e}")
-    return checked
 
 
 def sort_key(i: dict[str, Any]) -> tuple[int, int, int]:
