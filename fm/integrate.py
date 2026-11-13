@@ -217,10 +217,13 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
     """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
     session it ever started (a replaced review pass keeps no record but its id in `sessions`)."""
     rows = sessions.listing(p)
-    for role in ("agent", "hunter", "reviewer"):
-        sessions.stop_live(p, i["id"], i.get(role), rows)
-    for sid in i.get("sessions", []):
-        sessions.stop_live(p, i["id"], {"short": rows.get(sid, {}).get("id"), "session": sid}, rows)
+    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer")]
+    every += [{"short": rows.get(sid, {}).get("id"), "session": sid} for sid in i.get("sessions", [])]
+    done: set[str] = set()
+    for a in every:
+        if a.get("short") not in done:
+            done.add(str(a.get("short")))
+            sessions.stop_live(p, i["id"], a, rows)
 
 
 def close(p: Project, iid: str, status: str, why: str) -> None:

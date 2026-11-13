@@ -47,10 +47,15 @@ def stop_review_sessions(p: Project, i: dict[str, Any], rows: dict[str, Any]) ->
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
-    if h.get("file") and Path(h["file"]).exists() and not working(h, rows):
+    if h.get("file") and Path(h["file"]).exists() and live(h, rows) and not working(h, rows):
         sessions.stop_live(p, i["id"], h, rows)
-    if v and v.get("tip") == r.get("tip"):
+    if v and v.get("tip") == r.get("tip") and live(r, rows):
         sessions.stop_live(p, i["id"], r, rows)
+
+
+def live(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+    """Listed and not stopped: never `gone`, which is also what an unreadable listing shows."""
+    return sessions.state(rows, a.get("session")) not in ("stopped", "gone")
 
 
 def conflict_note(main: str) -> str:

@@ -161,6 +161,10 @@ class Env:
     def review(self, iid: str, open_findings: int = 0) -> None:
         """One tick launches the hunter, which writes its file; the next the reviewer; then its verdict, as `fm verdict` gives it."""
         self.hunt_then_review(iid)
+        self.verdict(iid, open_findings)
+
+    def verdict(self, iid: str, open_findings: int = 0) -> None:
+        """The reviewer's verdict, as `fm verdict` gives it."""
         os.environ["FM_ISSUE"] = iid
         try:
             fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{iid}.md"))

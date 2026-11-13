@@ -413,11 +413,7 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(e.state_of(e.issue(iid)["hunter"]["name"]), "stopped")
         self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "working")
-        os.environ["FM_ISSUE"] = iid
-        try:
-            fm(e.home, "verdict", "--open", "0", "--file", str(e.home / f"reviews/{iid}.md"))
-        finally:
-            os.environ.pop("FM_ISSUE")
+        e.verdict(iid)
         loop.tick(e.p)
         self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "stopped")
 
@@ -443,14 +439,6 @@ class Queue(unittest.TestCase):
         self.assertEqual(e.issue(iid)["status"], "done")
         for role in ("agent", "hunter", "reviewer"):
             self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
-
-    def test_cancelling_a_task_in_progress_stops_its_agent(self):
-        e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
-        loop.tick(e.p)
-        name = e.issue(iid)["agent"]["name"]
-        integrate.close(e.p, iid, "canceled", "no")
-        self.assertEqual(e.state_of(name), "stopped")
 
     def test_a_blocked_task_still_has_its_finished_hunter_stopped(self):
         e = Env(test="true")
@@ -480,6 +468,27 @@ class Queue(unittest.TestCase):
         (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: the agent still runs
         integrate.close(e.p, iid, "canceled", "no")
         self.assertEqual(e.stops(), [e.issue(iid)["agent"]["short"]])
+
+    def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        e.hunter_done(iid)
+        (e.bin / "agents.json").write_text("[]")  # gone, or an unreadable listing
+        for _ in range(3):
+            loop.tick(e.p)
+        self.assertEqual(e.stops(), [])
+
+    def test_a_cancel_stops_each_session_once(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        name = e.issue(iid)["agent"]["name"]
+        integrate.close(e.p, iid, "canceled", "no")
+        self.assertEqual(e.stops(), [e.issue(iid)["agent"]["short"]])  # once, though its id is also in `sessions`
+        self.assertEqual(e.state_of(name), "stopped")
 
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")

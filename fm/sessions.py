@@ -138,4 +138,4 @@ def stop_live(p: Project, iid: str, agent: dict[str, Any] | None, rows: dict[str
         try:
             stop(p, a["short"])
         except proc.ProcError as e:
-            backlog.event(p, iid, f"could not stop session {a['short']}: {e}"[:300])
+            backlog.event(p, iid, f"could not stop session {a['short']}: {e}")
