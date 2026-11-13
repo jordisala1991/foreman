@@ -168,6 +168,9 @@ class GitHub(Provider):
     def comment(self, change: dict[str, Any], text: str) -> None:
         self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
 
+    def close(self, change: dict[str, Any], text: str) -> None:
+        self.run("gh", "pr", "close", str(change["pr"]), "--comment", text)
+
     def ci(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "checks", str(change["pr"]), "--json", "bucket", check=False)  # exit 8 = pending
         try:

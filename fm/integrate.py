@@ -214,7 +214,8 @@ def merge_accepted(p: Project, iid: str) -> str:
 
 def close(p: Project, iid: str, status: str, why: str) -> None:
     """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
-    removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
+    removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
+    `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
     agent: backlog.Agent = i.get("agent") or {}
     short = agent.get("short")
@@ -225,4 +226,6 @@ def close(p: Project, iid: str, status: str, why: str) -> None:
         backlog.mark_delivered(p, q["id"])
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
+    if status == "canceled" and i.get("pr"):
+        registry.get(p).close(pulls.change_of(i, ""), f"Task canceled: {why}")
     backlog.set_status(p, iid, status, why)

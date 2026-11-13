@@ -65,6 +65,9 @@ FAKE_GH = textwrap.dedent("""\
         print(json.dumps({"body": pr["body"]}))
     elif a[:2] == ["pr", "comment"]:
         pr["comments"].append(flag("--body"))
+    elif a[:2] == ["pr", "close"]:
+        pr["state"] = "CLOSED"
+        pr["comments"].append(flag("--comment"))
     elif a[:2] == ["pr", "merge"]:
         pr["strategy"] = a[3].lstrip("-")
         pr["subject"] = flag("--subject")
@@ -267,6 +270,20 @@ class Pulls(unittest.TestCase):
         self.assertEqual(len(pr["comments"]), 1)
         self.assertIn("merge risk low", pr["comments"][0])
         self.assertIn("round 1: 0 open", pr["comments"][0])
+
+    def test_cancel_closes_the_pr_with_the_reason_and_a_task_without_one_is_canceled_as_before(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        fm(g.e.home, "cancel", iid, "not needed")
+        pr = g.state["prs"]["1"]
+        self.assertEqual(pr["state"], "CLOSED")
+        self.assertIn("not needed", pr["comments"][-1])
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        bare = g.work(push=False)
+        fm(g.e.home, "cancel", bare)
+        self.assertEqual(g.e.issue(bare)["status"], "canceled")
+        self.assertEqual(len(g.calls("pr", "close")), 1)
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
