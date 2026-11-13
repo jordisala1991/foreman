@@ -6,13 +6,14 @@ only if it went away and came back.
 Checks: loop dead (heartbeat too old: seen from outside the loop, `fm health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
 · orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
-on main's head, every `ci_every_minutes`) · loop step errors."""
+on main's head, every `ci_every_minutes`) · answer not delivered for 10 minutes · loop step errors."""
 
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, costs, integrate, util
+from . import backlog, costs, integrate, token, util
 from .config import Project
 
 Finding = dict[str, str]
@@ -28,6 +29,72 @@ def loop_dead(p: Project) -> list[Finding]:
             {"key": "loop-dead", "title": "The loop is not running", "detail": f"Its last tick was {when}. Start it with `fm loop` or load its launchd job."}
         ]
     return []
+
+
+KEYCHAIN_MINUTES = 5  # unreadable this long before it is a finding: a transient failure is not
+
+
+def keychain_unreadable(p: Project, reason: str) -> list[Finding]:
+    """Counted by time, so one `fm health` and the panel agree: the first failure is stamped, a later check shows it."""
+    state = util.read_json(p.state / "keychain.json", {})
+    since = state.get("since") or util.now()
+    util.write_json(p.state / "keychain.json", {"since": since})
+    if (util.age_s(since) or 0) < 60 * KEYCHAIN_MINUTES:
+        return []
+    detail = f"The Keychain has been unreadable since {since} ({reason}); agents launch without a token."
+    return [{"key": "keychain-unreadable", "title": f"Keychain unreadable: {reason}", "detail": detail}]
+
+
+def login_expiring(login: token.Login) -> list[Finding]:
+    if not login.expiring() or login.expires is None:
+        return []
+    when = login.expires.astimezone().strftime("%Y-%m-%d %H:%M")
+    return [{"key": "login-expiring", "title": "The Claude login expires soon", "detail": f"It expires on {when}. Run /login to renew it."}]
+
+
+def claude_token(
+    p: Project,
+    read: Callable[[], str] | None = None,
+    works: Callable[[str, str], bool] = token.works,
+    probe: bool = True,
+    login: Callable[[str], token.Login] = token.login_status,
+) -> list[Finding]:
+    """The agents' authentication. While the normal login works the token is not used: only a warning when the login
+    is about to expire. When it does not work the agents run on the long-lived token: no token, a token Claude rejects
+    (only with `probe`; the panel does not probe), or a line saying they run on it and do not show in the Claude app.
+    An unreadable Keychain is a finding after KEYCHAIN_MINUTES."""
+    claude = p.get("agents", "claude")
+    status = login(claude)
+    if status.ok:
+        return login_expiring(status)
+    try:
+        tok = token.get(read)
+    except token.Unreadable as e:
+        return keychain_unreadable(p, str(e))
+    util.write_json(p.state / "keychain.json", {})
+    if not tok:
+        return [
+            {
+                "key": "token-missing",
+                "title": "No token",
+                "detail": f"The Claude login does not work (run /login) and there is no fallback token. Create it: {token.RENEW_CMD}.",
+            }
+        ]
+    if probe and not works(claude, tok):
+        return [
+            {
+                "key": "token-bad",
+                "title": "Token does not work",
+                "detail": f"The login does not work (run /login) and Claude rejects the fallback token. Renew it: {token.RENEW_CMD}.",
+            }
+        ]
+    return [
+        {
+            "key": "token-fallback",
+            "title": "Agents run on the long-lived token",
+            "detail": "Agents run on the long-lived token: they do not show in the Claude app; run /login to renew.",
+        }
+    ]
 
 
 def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
@@ -50,6 +117,24 @@ def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
         blocked = i.get("blocked") or ""
         if i["status"] not in backlog.CLOSED and blocked.startswith(("its agent stopped", "could not launch")):
             out.append({"key": f"blocked:{i['id']}:{blocked[:40]}", "title": f"{i['id']} is blocked", "detail": f"{i['title']}: {blocked}"})
+    return out
+
+
+UNDELIVERED_MINUTES = 10
+
+
+def answers_undelivered(p: Project) -> list[Finding]:
+    out: list[Finding] = []
+    for q in backlog.undelivered(backlog.load(p)):
+        since = q.get("answered_at") or q.get("at") or str(q.get("by", "")).rpartition(", ")[2]
+        if (util.age_s(since) or 0) > 60 * UNDELIVERED_MINUTES:
+            out.append(
+                {
+                    "key": f"undelivered:{q['id']}",
+                    "title": f"{q['issue']}'s agent has not received a {q.get('kind') or 'question'} message",
+                    "detail": f"{q['id']} was answered at {since} and is still not delivered: «{q.get('answer')}».",
+                }
+            )
     return out
 
 
@@ -109,9 +194,16 @@ def loop_errors(p: Project) -> list[Finding]:
     return out
 
 
-def findings(p: Project, rows: dict[str, Any], outside: bool = False) -> list[Finding]:
-    out = loop_dead(p) if outside else []
-    for check in (lambda: agents(p, rows), lambda: orphan_worktrees(p), lambda: main_tests(p, run=not outside), lambda: loop_errors(p)):
+def findings(p: Project, rows: dict[str, Any], outside: bool = False, probe: bool = True) -> list[Finding]:
+    out = [*loop_dead(p), *claude_token(p, probe=probe)] if outside else []
+    checks = (
+        lambda: agents(p, rows),
+        lambda: answers_undelivered(p),
+        lambda: orphan_worktrees(p),
+        lambda: main_tests(p, run=not outside),
+        lambda: loop_errors(p),
+    )
+    for check in checks:
         try:
             out += check()
         except Exception as e:

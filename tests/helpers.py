@@ -1,10 +1,13 @@
 """A temporary project: a git repo with one commit, a home with fm.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
+import atexit
 import contextlib
 import io
 import json
 import os
+import pwd
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,6 +19,17 @@ from fm.config import Project
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# A test run must not write the owner's real ~/.config/fm (registry, panel token, locks): HOME and FM_REGISTRY point
+# at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
+REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
+REAL_REGISTRY = REAL_HOME / ".config/fm/projects.json"
+SANDBOX = Path(tempfile.mkdtemp(prefix="fmhome-")).resolve()
+(SANDBOX / "tmp").mkdir()
+tempfile.tempdir = str(SANDBOX / "tmp")  # every temp dir of this run lives in the sandbox: a leak into the real registry is recognisable
+os.environ["HOME"] = str(SANDBOX)
+os.environ["FM_REGISTRY"] = str(SANDBOX / "projects.json")
+atexit.register(shutil.rmtree, SANDBOX, ignore_errors=True)
+
 FAKE = textwrap.dedent("""\
     #!/usr/bin/env python3
     import json, sys, os, hashlib
@@ -24,10 +38,13 @@ FAKE = textwrap.dedent("""\
     if a[:1] == ["agents"]:
         print(open(os.path.join(d, "agents.json")).read() if os.path.exists(os.path.join(d, "agents.json")) else "[]")
         sys.exit(0)
+    if a[:2] == ["auth", "status"]:
+        print(open(os.path.join(d, "login.json")).read() if os.path.exists(os.path.join(d, "login.json")) else '{"loggedIn": true}')
+        sys.exit(0)
     if a[:1] == ["stop"]:
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:
-        f.write(json.dumps({"argv": a, "cwd": os.getcwd()}) + "\\n")
+        f.write(json.dumps({"argv": a, "cwd": os.getcwd(), "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")}) + "\\n")
     name = a[a.index("-n") + 1]
     short = hashlib.sha1(name.encode()).hexdigest()[:8]
     if "--resume" not in a:
@@ -105,14 +122,34 @@ class Env:
                 r["state"] = state
         f.write_text(json.dumps(rows))
 
-    def review(self, iid: str, high: int = 0, medium: int = 0, low: int = 0) -> None:
-        """One tick launches the reviewer; then its verdict, as `fm verdict` gives it."""
+    def set_status(self, name: str, status: str) -> None:
+        f = self.bin / "agents.json"
+        rows = json.loads(f.read_text())
+        for r in rows:
+            if r["name"] == name:
+                r["status"] = status
+        f.write_text(json.dumps(rows))
+
+    def hunter_done(self, iid: str) -> None:
+        """The hunter wrote its findings file and ended."""
+        h = self.issue(iid)["hunter"]
+        Path(h["file"]).write_text("hunter findings\n")
+        self.set_state(h["name"], "done")
+
+    def hunt_then_review(self, iid: str) -> None:
+        """A tick launches the hunter; it writes its file and ends; the next tick launches the reviewer."""
         from fm import loop
 
         loop.tick(self.p)
+        self.hunter_done(iid)
+        loop.tick(self.p)
+
+    def review(self, iid: str, open_findings: int = 0) -> None:
+        """One tick launches the hunter, which writes its file; the next the reviewer; then its verdict, as `fm verdict` gives it."""
+        self.hunt_then_review(iid)
         os.environ["FM_ISSUE"] = iid
         try:
-            fm(self.home, "verdict", "--high", str(high), "--medium", str(medium), "--low", str(low), "--file", str(self.home / f"reviews/{iid}.md"))
+            fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{iid}.md"))
         finally:
             os.environ.pop("FM_ISSUE")
 

@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from . import backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, util
+from . import agents, backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
 from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_note, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -31,6 +31,7 @@ def cmd_init(a: argparse.Namespace) -> None:
         util.write_json(p.backlog_file, backlog.empty())
     register(h)
     print(f"project {p.name} at {h} (registered)")
+    print(token.SETUP)
 
 
 def cmd_add(a: argparse.Namespace) -> None:
@@ -93,6 +94,24 @@ def cmd_reject(a: argparse.Namespace) -> None:
     if backlog.get(backlog.load(p), a.id)["status"] != "in review":
         sys.exit(f"fm: {a.id} is not in the integration queue")
     loop.send_back(p, a.id, "rejection", a.note)
+
+
+def cmd_review(a: argparse.Namespace) -> None:
+    p = home(a)
+    with backlog.edit(p) as d:
+        i = backlog.get(d, a.id)
+        if i["status"] != "in review":
+            sys.exit(f"fm: {a.id} is not in the integration queue")
+        if i.get("accepted"):
+            sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
+        if agents.review_running(i):
+            sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
+        for k in ("review", "hunter", "reviewer", "check"):
+            i.pop(k, None)
+        i["blocked"] = ""
+        i["review_from"] = len(i.get("reviews", []))
+    backlog.event(p, a.id, "owner asked for a fresh review from round 1")
+    print(f"{a.id}: the loop reviews it again from scratch")
 
 
 def cmd_go(a: argparse.Namespace) -> None:
@@ -181,7 +200,16 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
-    print(loop.launchd_plist(str(Path(__file__).resolve().parent.parent / "bin/fm")))
+    fm_bin = str(Path(__file__).resolve().parent.parent / "bin/fm")
+    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
+    for job, args in jobs.items():
+        text = loop.launchd_plist(fm_bin, job, args)
+        if a.dir:
+            out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
+            out.write_text(text, encoding="utf-8")
+            print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
+        else:
+            print(f"<!-- dev.fm.{job}.plist -->\n{text}")
 
 
 HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
@@ -200,6 +228,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "deny": lambda a: cmd_allow(a, False),
     "accept": cmd_accept,
     "reject": cmd_reject,
+    "review": cmd_review,
     "go": cmd_go,
     "cancel": cmd_cancel,
     "unblock": cmd_unblock,

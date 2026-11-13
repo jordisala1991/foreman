@@ -4,6 +4,7 @@ import json
 import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from helpers import Env
 
@@ -42,7 +43,8 @@ class Bash(unittest.TestCase):
         self.assertIsNone(self.check("rm -rf /w/ty-1/build"))
         self.assertIsNone(self.check("rm -f /tmp/x.txt"))
         self.assertEqual(self.check("rm -rf ../other"), "delete")
-        self.assertEqual(self.check("rm -rf ~/Projects"), "delete")
+        with mock.patch.dict(os.environ, HOME="/Users/owner"):  # the suite's HOME is a temp dir, which counts as yours
+            self.assertEqual(self.check("rm -rf ~/Projects"), "delete")
         self.assertEqual(self.check("git branch -D fm/ty-2"), "delete")
         self.assertIsNone(self.check("git branch -D fm/ty-1"))
         self.assertEqual(self.check("git worktree remove /w/ty-2"), "delete")

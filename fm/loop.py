@@ -18,6 +18,7 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
 from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
@@ -85,18 +86,37 @@ def run_pulls(p: Project) -> None:
 
 
 def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> bool:
-    """True while this tip has no independent verdict yet: launches the reviewer, or blocks if it ended without one."""
+    """True while this tip has no independent verdict yet: runs the hunter, then the reviewer, or blocks if one ended without its file."""
     v: dict[str, Any] = i.get("review") or {}
+    h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
     if v.get("tip") == head:
         return False
-    if r.get("tip") == head:
-        if r.get("session") and not sessions.busy(rows, r["session"]) and idle_s(r) > NUDGE_IDLE_S:
-            backlog.update(p, i["id"], blocked="its reviewer ended without a verdict (`fm verdict`)")
-            backlog.event(p, i["id"], "blocked: reviewer ended without a verdict")
-    elif running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists():
-        launch_reviewer(p, i, head)
+    role, last = ("reviewer", r) if h.get("tip") == head else ("hunter", h)
+    free = running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists()
+    if last.get("tip") != head:
+        if role == "hunter" and free:
+            launch_reviewer(p, i, head, "hunter")
+        elif role == "reviewer" and Path(h.get("file", "")).exists() and not working(h, rows) and free:
+            launch_reviewer(p, i, head, "reviewer")
+        elif role == "reviewer" and not Path(h.get("file", "")).exists() and ended(h, rows):
+            block_review(p, i["id"], "its hunter ended without its findings file")
+    elif ended(last, rows):
+        block_review(p, i["id"], "its reviewer ended without a verdict (`fm verdict`)")
     return True
+
+
+def working(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+    return bool(a.get("session")) and sessions.busy(rows, a["session"])
+
+
+def ended(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+    return bool(a.get("session")) and not sessions.busy(rows, a["session"]) and idle_s(a) > NUDGE_IDLE_S
+
+
+def block_review(p: Project, iid: str, why: str) -> None:
+    backlog.update(p, iid, blocked=why)
+    backlog.event(p, iid, f"blocked: {why}")
 
 
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
@@ -110,10 +130,10 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             p,
             i["id"],
             "review",
-            f"The independent review of your branch (round {v['round']}) leaves H {v['high']}, M {v['medium']}, "
-            f"L {v.get('low', 0)} open: read {v['file']}. Every finding in it is yours: for each H and M, fix it or "
-            "refute it with proof; for each L, fix it or say why not. Add one `### Round N` to the «Review rounds» "
-            "section of your report, one line per finding (fixed, refuted, or «not, because …» for an L), and run `fm done` again.",
+            f"The independent review of your branch (round {v['round']}) leaves {backlog.open_findings(v)} open: read {v['file']}. "
+            "For each one, make the smallest change that settles it, or answer it in one line if you think it is wrong; add "
+            "nothing it does not ask for. Add one `### Round N` to the «Review rounds» section of your report, one line per "
+            "finding, and run `fm done` again.",
         )
         backlog.update(p, i["id"], review={**v, "sent_back": True})
         return
@@ -195,17 +215,21 @@ def forever(homes: list[str] | None = None, once: bool = False) -> None:
             time.sleep(min((int(p.get("health", "loop_seconds")) for p in projects), default=30))
 
 
-def launchd_plist(fm_bin: str, label: str = "dev.fm.loop") -> str:
-    """The launchd job that keeps the loop alive (KeepAlive restarts it if it dies)."""
+def launchd_plist(fm_bin: str, job: str = "loop", args: tuple[str, ...] = ()) -> str:
+    """A launchd job (`loop` or `panel`) that starts at login and is restarted if it dies. Only PATH goes in the
+    environment: the Claude token is never written here; the loop reads it from the Keychain (token.py)."""
     py = proc.run(["/usr/bin/which", "python3"]).out.strip() or "python3"
+    argv = "".join(f"<string>{escape(a)}</string>" for a in (py, fm_bin, job, *args))
+    log = f"{escape(str(Path.home()))}/Library/Logs/fm-{job}.log"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>{label}</string>
-  <key>ProgramArguments</key><array><string>{py}</string><string>{fm_bin}</string><string>loop</string></array>
+  <key>Label</key><string>dev.fm.{job}</string>
+  <key>ProgramArguments</key><array>{argv}</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{os.environ.get("PATH", "")}</string></dict>
-  <key>StandardErrorPath</key><string>{Path.home()}/Library/Logs/fm-loop.log</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{escape(os.environ.get("PATH", ""))}</string></dict>
+  <key>StandardOutPath</key><string>{log}</string>
+  <key>StandardErrorPath</key><string>{log}</string>
 </dict></plist>
 """

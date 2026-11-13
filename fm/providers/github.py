@@ -12,7 +12,6 @@ from typing import Any, Literal
 from .. import evidence, proc, util
 from . import Conflict, Permanent, Provider, ProviderError, Transient
 
-TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
 
 
@@ -109,7 +108,7 @@ class GitHub(Provider):
     def run(self, prog: str, *args: str, check: bool = True, input: str | None = None) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT, input=input)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, input=input)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if check and r.code != 0:
