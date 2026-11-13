@@ -170,6 +170,7 @@ class Panel(unittest.TestCase):
 
         self.t = PanelTest()
         self.t.setUp()
+        self.addCleanup(self.t.doCleanups)  # the keychain patch of its setUp
         self.addCleanup(self.t.tearDown)
         t = self.t
         self.folder = t.p.home / "reports" / t.work
