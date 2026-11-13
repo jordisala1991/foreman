@@ -105,10 +105,13 @@ def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | 
 
 def resume(p: Project, sid: str, message: str, cwd: Path) -> tuple[str, str | None]:
     """(short id, full session id or None) of the session that got the message: `sid`'s own, or a copy's."""
-    # an idle session whose process is still alive makes claude start a copy: it wakes in place only stopped
-    with contextlib.suppress(proc.ProcError):  # best effort: the resume says if the session cannot be reached
-        stop(p, sid[:8])
-    time.sleep(STOP_SETTLE_S)
+    row_state = state(listing(p), sid)  # fresh: the tick's listing may be old, and the owner may be in the session now
+    if busy({sid: {"state": row_state}}, sid):
+        raise SessionError(f"session {sid[:8]} is {row_state}: not resuming it")
+    if row_state == "done":  # idle but its process is alive: claude would start a copy; it wakes in place only stopped
+        with contextlib.suppress(proc.ProcError):  # best effort: the resume says if the session cannot be reached
+            stop(p, sid[:8])
+        time.sleep(STOP_SETTLE_S)
     short = _run(resume_command(p, sid, message), cwd)
     return short, sid if sid.startswith(short) else _find(p, short)
 

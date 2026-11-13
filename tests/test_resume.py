@@ -5,7 +5,7 @@ import unittest
 
 from helpers import Env
 
-from fm import backlog, loop
+from fm import backlog, loop, sessions, talk
 
 
 def launched(e: Env) -> str:
@@ -131,3 +131,39 @@ class Resume(unittest.TestCase):
         loop.tick(e.p)
         i = e.issue(iid)
         self.assertIn(i["agent"]["session"], i["sessions"])
+
+    def test_a_session_that_became_busy_since_the_listing_is_not_resumed(self):
+        e = Env()
+        iid = launched(e)
+        e.set_state(iid.lower(), "done")
+        answer(e, iid)
+        stale = sessions.listing(e.p)  # the tick's listing: done
+        e.set_state(iid.lower(), "working")  # the owner opened it meanwhile
+        talk.deliver_answers(e.p, stale)
+        self.assertEqual(len(e.calls()), 1)
+        self.assertEqual(e.issue(iid)["undelivered"], 1)
+
+    def test_a_failed_send_also_ends_the_task_for_the_tick(self):
+        e = Env()
+        iid = launched(e)
+        e.set_state(iid.lower(), "done")
+        (e.bin / "fail_resume").write_text("")
+        answer(e, iid, "B")
+        answer(e, iid, "C")
+        loop.tick(e.p)
+        self.assertEqual(len(e.calls()), 2)
+        self.assertEqual(e.issue(iid)["undelivered"], 1)
+
+    def test_a_copy_never_listed_blocks_the_task(self):
+        e = Env()
+        iid = launched(e)
+        (e.bin / "copy_next").write_text("")
+        (e.bin / "copy_unlisted").write_text("")
+        e.set_state(iid.lower(), "done")
+        answer(e, iid)
+        loop.tick(e.p)
+        loop.tick(e.p)
+        self.assertFalse(e.issue(iid).get("blocked"))
+        backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "started": "2000-01-01 00:00:00"})
+        loop.tick(e.p)
+        self.assertIn("never listed", e.issue(iid)["blocked"])

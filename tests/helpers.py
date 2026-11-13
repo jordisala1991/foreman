@@ -44,6 +44,9 @@ FAKE = textwrap.dedent("""\
     def save(fn, rows):
         json.dump(rows, open(os.path.join(d, fn), "w"))
     if "--resume" in a:  # alive (not stopped) rows are copied, as claude does
+        if os.path.exists(os.path.join(d, "fail_resume")):
+            print("boom", file=sys.stderr)
+            sys.exit(1)
         sid = a[a.index("--resume") + 1]
         rows = rows_of("agents.json")
         row = next(r for r in rows if r["sessionId"] == sid)
