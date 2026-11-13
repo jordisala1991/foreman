@@ -15,7 +15,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
       sources → answers → agents → queue → health → launch
               │
    claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
-      defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block / fm add
+      defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
       responsible agent (cwd: its worktree, branch)  → subagents, fm ask, fm done / fm block
       hunter, then reviewer (launched by the loop, read only) → hunter file, review file, fm verdict
 ```
