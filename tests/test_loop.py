@@ -116,8 +116,7 @@ class Answers(unittest.TestCase):
         qid = backlog.ask(e.p, iid, iid.lower(), "A or B?")
         backlog.answer(e.p, qid, "B")
         e.set_state(iid.lower(), state)
-        if status:
-            e.set_status(iid.lower(), status)
+        e.set_status(iid.lower(), status) if status else e.drop_pid(iid.lower())  # no status: its process is gone too
         loop.tick(e.p)
         self.assertIn("--resume", e.calls()[-1]["argv"])
         self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
@@ -323,6 +322,7 @@ class Stopped(unittest.TestCase):
         self.assertIn("not finished", e.calls()[-1]["argv"][-1])
         self.assertEqual(e.issue(iid)["nudges"], 1)
         backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "nudged": "2000-01-01 00:00:00"})
+        e.set_state(iid.lower(), "done")  # the nudge woke it; it ended its turn again
         loop.tick(e.p)
         self.assertIn("stopped without finishing", e.issue(iid)["blocked"])
         self.assertEqual(len(e.calls()), 2)
