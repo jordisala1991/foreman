@@ -233,29 +233,14 @@ def update_agent(p: Project, iid: str, **fields: Any) -> None:
         it["agent"] = {**(it.get("agent") or {}), **fields}
 
 
-def follow_copy(p: Project, iid: str, short: str, sid: str | None) -> None:
-    """claude started a copy of the agent's session: the work goes on there, so that is the session fm records."""
-    name = ""
-    with backlog.edit(p) as d:
-        it = backlog.get(d, iid)
-        a: dict[str, Any] = it.get("agent") or {}
-        name = a.get("name") or ""
-        it["agent"] = {**a, "short": short, "session": sid}
-        if sid:
-            record_session(it, sid, a.get("kind") or "work")
-    backlog.event(p, iid, f"{name} went on in a copy (session {short}); fm follows it")
-
-
 def send(p: Project, i: dict[str, Any], message: str) -> bool:
     """Resumes the issue's agent with a message; False when it has no session to resume."""
     a: dict[str, Any] = i.get("agent") or {}
     if not a.get("session"):
         return False
     try:
-        short, sid = sessions.resume(p, a["session"], message, Path(a.get("cwd") or p.repo))
+        sessions.resume(p, a["session"], message, Path(a.get("cwd") or p.repo))
     except sessions.SessionError as e:
         backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
         return False
-    if not a["session"].startswith(short):
-        follow_copy(p, i["id"], short, sid)
     return True

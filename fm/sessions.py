@@ -5,9 +5,8 @@ measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the gua
 
 `resume` continues a session that ended its turn (an owner's answer, a rejected integration, a nudge) under the same
 id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
-id instead, so a resume carries none; if it starts a copy anyway, `resume` returns the copy's ids."""
+id instead, so a resume carries none."""
 
-import contextlib
 import json
 import os
 import re
@@ -23,7 +22,8 @@ from .config import Project
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "bin"
-STOP_SETTLE_S = 3.0  # `claude stop` returns before the process is gone; a resume right after it still copies (0 s: copy, 2 s: ok)
+STOP_SETTLE_S = 3.0  # after the process is gone, a resume right away still copies (0 s: copy, 2 s: ok)
+STOP_WAIT_TRIES = 15
 
 
 class SessionError(Exception):
@@ -93,27 +93,29 @@ def resume_command(p: Project, sid: str, message: str) -> list[str]:
     return [p.get("agents", "claude"), "--bg", "--resume", sid, message]
 
 
-def _find(p: Project, short: str) -> str | None:
-    return next((sid for sid, row in listing(p).items() if row.get("id") == short or sid.startswith(short)), None)
-
-
 def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | None]:
     """(short id, full session id or None)."""
     short = _run(command(p, agent, prompt), cwd)
-    return short, _find(p, short)
+    sid = next((sid for sid, row in listing(p).items() if row.get("id") == short or sid.startswith(short)), None)
+    return short, sid
 
 
-def resume(p: Project, sid: str, message: str, cwd: Path) -> tuple[str, str | None]:
-    """(short id, full session id or None) of the session that got the message: `sid`'s own, or a copy's."""
-    row_state = state(listing(p), sid)  # fresh: the tick's listing may be old, and the owner may be in the session now
-    if busy({sid: {"state": row_state}}, sid):
-        raise SessionError(f"session {sid[:8]} is {row_state}: not resuming it")
-    if row_state == "done":  # idle but its process is alive: claude would start a copy; it wakes in place only stopped
-        with contextlib.suppress(proc.ProcError):  # best effort: the resume says if the session cannot be reached
-            stop(p, sid[:8])
-        time.sleep(STOP_SETTLE_S)
-    short = _run(resume_command(p, sid, message), cwd)
-    return short, sid if sid.startswith(short) else _find(p, short)
+def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
+    """Wakes `sid` with a message. claude continues a session under its id only if it is stopped (process gone) and no
+    flag is given; otherwise it starts a copy. So: stop it, wait until it is gone, resume bare; a copy is an error."""
+    if not listing(p):
+        raise SessionError("claude agents is unreadable: not resuming")
+    if busy(listing(p), sid):  # fresh: the tick's listing may be old, and the owner may be in the session now
+        raise SessionError(f"session {sid[:8]} is {state(listing(p), sid)}: not resuming it")
+    stop(p, sid[:8])
+    for _ in range(STOP_WAIT_TRIES):
+        if state(listing(p), sid) in ("stopped", "gone"):
+            break
+        time.sleep(1)
+    time.sleep(STOP_SETTLE_S)
+    short = _run([p.get("agents", "claude"), "--bg", "--resume", sid, message], cwd)
+    if not sid.startswith(short):
+        raise SessionError(f"claude started a copy ({short}) instead of resuming {sid[:8]}")
 
 
 def listing(p: Project) -> dict[str, dict[str, Any]]:

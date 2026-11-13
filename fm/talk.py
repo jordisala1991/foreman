@@ -8,7 +8,6 @@ from .config import Project
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
 MAX_SEND_FAILS = 3
-COPY_LISTED_S = 600  # a copy fm follows must show in `claude agents` within this long, or the task is blocked
 
 
 def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
@@ -29,13 +28,6 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
         return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
 
 
-def lose_copy(p: Project, i: dict[str, Any], a: dict[str, Any]) -> None:
-    """A copy that never shows in `claude agents` must not leave the task silent: block it past a limit."""
-    if (util.age_s(a.get("started")) or 0) > COPY_LISTED_S and not i.get("blocked"):
-        backlog.update(p, i["id"], blocked=f"its agent went on in a copy (session {a['short']}) that claude never listed. Open it, or relaunch.")
-        backlog.event(p, i["id"], f"blocked: copy {a['short']} of {a.get('name')} never listed")
-
-
 def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
     d = backlog.load(p)
     sent: set[str] = set()  # one answer per task per tick: the session is working after the first
@@ -47,9 +39,6 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
         agent: dict[str, Any] = i.get("agent") or {}
         if i["id"] in sent:
             continue  # one answer per task per tick, sent or failed: the rest waits
-        if agent.get("short") and not agent.get("session"):
-            lose_copy(p, i, agent)  # its copy is not listed yet (fill_sessions): next tick, within a limit
-            continue
         if sessions.busy(rows, agent.get("session")):
             continue  # it is busy (maybe talking with the owner): next tick
         msg = message_for(i, q)
@@ -73,9 +62,6 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
     for i in backlog.issues(d):
         a: dict[str, Any] = i.get("agent") or {}
         if i["status"] not in backlog.RUNNING or i.get("blocked") or i["id"] in waiting:
-            continue
-        if a.get("short") and not a.get("session"):
-            lose_copy(p, i, a)
             continue
         if not a.get("session") or sessions.busy(rows, a.get("session")):
             continue  # unknown yet (fill_sessions), or busy

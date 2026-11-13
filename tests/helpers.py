@@ -50,14 +50,9 @@ FAKE = textwrap.dedent("""\
         sid = a[a.index("--resume") + 1]
         rows = rows_of("agents.json")
         row = next(r for r in rows if r["sessionId"] == sid)
-        extra = [x for x in a[:-1] if x not in ("--bg", "--resume", sid)]
-        if extra or os.path.exists(os.path.join(d, "copy_next")) or row["state"] in ("working", "done", "blocked"):
+        if row["state"] != "stopped" or len(a) != 4 or os.path.exists(os.path.join(d, "copy_next")):  # alive, or with flags: a copy, as claude does
             new = hashlib.sha1((sid + "copy" + str(len(rows))).encode()).hexdigest()[:8]
-            copy = {"id": new, "sessionId": new + "-0000-0000", "name": row["name"], "state": "working"}
-            if os.path.exists(os.path.join(d, "copy_unlisted")):
-                save("pending.json", rows_of("pending.json") + [copy])
-            else:
-                save("agents.json", rows + [copy])
+            save("agents.json", rows + [{"id": new, "sessionId": new + "-0000-0000", "name": row["name"], "state": "working"}])
             print(f"note: started a copy as {new}")
             print(f"backgrounded · {new} · {row['name']}")
         else:
