@@ -1,4 +1,4 @@
-"""`fm`: the one command. Agents use `ask`, `note`, `done`, `ready`, `block`, `add` (their issue comes from FM_ISSUE);
+"""`fm`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their issue comes from FM_ISSUE);
 the owner and the panel use the rest; launchd runs `fm loop`; Claude Code runs `fm guard` as the agents' hook."""
 
 import argparse
@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from . import agents, backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
-from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_note, cmd_ready, cmd_verdict
+from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
 from .config import Project, register
@@ -156,17 +156,11 @@ def cmd_health(a: argparse.Namespace) -> None:
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
         print(f"! {f['title']}: {f['detail'].splitlines()[0] if f['detail'] else ''}")
-    if a.file:
-        print("filed:", " ".join(health.run(p, rows, outside=True)) or "nothing new")
 
 
 def cmd_metrics(a: argparse.Namespace) -> None:
     rows = metrics.per_issue(home(a))
-    print(json.dumps(rows, indent=2, ensure_ascii=False) if a.json else metrics.text(rows))
-
-
-def cmd_check(a: argparse.Namespace) -> None:
-    print(json.dumps(integrate.check(home(a), a.id), indent=2))
+    print(metrics.text(rows))
 
 
 def cmd_guard(a: argparse.Namespace) -> None:
@@ -221,7 +215,6 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "list": cmd_list,
     "show": cmd_show,
     "ask": cmd_ask,
-    "note": cmd_note,
     "done": cmd_done,
     "verdict": cmd_verdict,
     "ready": cmd_ready,
@@ -239,7 +232,6 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "loop": cmd_loop,
     "health": cmd_health,
     "metrics": cmd_metrics,
-    "check": cmd_check,
     "lock": cmd_lock,
     "guard": cmd_guard,
     "panel": cmd_panel,

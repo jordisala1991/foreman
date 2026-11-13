@@ -34,21 +34,16 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
         seen: set[str] = set()  # one set for the whole task: a message replayed in a resumed session counts once, in its first
         per = {s: costs.of_sessions([s], seen) for s in dict.fromkeys(sids)}  # each transcript is read once
         by_kind = {k: round(sum(c["usd"] for s, c in per.items() if kinds.get(s) == k), 4) for k in ("define", "work")}
-        c = {k: round(sum(x[k] for x in per.values()), 4) for k in ("usd", "tokens")}
-        starts = [x["first"] for x in per.values() if x.get("first")]
-        ends = [x["last"] for x in per.values() if x.get("last")]
-        c["minutes"] = round((max(ends) - min(starts)).total_seconds() / 60, 1) if starts and ends else 0
+        usd = round(sum(x["usd"] for x in per.values()), 4)
         out.append(
             {
                 "id": i["id"],
                 "title": i["title"],
                 "status": i["status"],
-                "usd": c["usd"],
+                "usd": usd,
                 "plan_usd": by_kind["define"],
                 "work_usd": by_kind["work"],
                 "rounds": len(i.get("reviews") or []),
-                "tokens": c["tokens"],
-                "agent_minutes": c["minutes"],
                 "to_review_min": _minutes(i.get("created"), to_review),
                 "to_done_min": _minutes(i.get("created"), closed),
                 "rework": i.get("rework", 0),

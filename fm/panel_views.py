@@ -119,7 +119,7 @@ def issue(p: Project, iid: str) -> Obj:
         "issue": shown,
         "events": [e for e in util.read_jsonl(p.state / "events.jsonl") if e.get("issue") == iid][::-1],
         "questions": [q for q in d["decisions"] + d["decisions_resolved"] if q.get("issue") == iid],
-        "cost": {"usd": c["usd"], "tokens": c["tokens"], "minutes": c["minutes"]},
+        "cost": {"usd": c["usd"], "minutes": c["minutes"]},
     }
 
 

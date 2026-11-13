@@ -37,12 +37,11 @@ def family(model: str) -> str | None:
 
 
 def usage(files: list[Path], seen: set[str] | None = None) -> dict[str, Any]:
-    """{usd, tokens, calls, first, last, models: {model: usd}} over the files. A message id already in `seen` is not
+    """{usd, tokens, minutes} over the files. A message id already in `seen` is not
     counted again; pass one set across several calls to count each message once over all of them."""
     seen = set() if seen is None else seen
     usd = 0.0
-    tokens = calls = 0
-    models: dict[str, float] = {}
+    tokens = 0
     first = last = None
     for f in files:
         try:
@@ -70,8 +69,6 @@ def usage(files: list[Path], seen: set[str] | None = None) -> dict[str, Any]:
             cost = (inp * p[0] + (cw - cw1h) * p[1] + cw1h * p[2] + cr * p[3] + out * p[4]) / 1e6 if p else 0.0
             usd += cost
             tokens += inp + cw + cr + out
-            calls += 1
-            models[m.get("model", "?")] = round(models.get(m.get("model", "?"), 0) + cost, 4)
             ts = r.get("timestamp")
             if ts:
                 t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -80,10 +77,6 @@ def usage(files: list[Path], seen: set[str] | None = None) -> dict[str, Any]:
     return {
         "usd": round(usd, 4),
         "tokens": tokens,
-        "calls": calls,
-        "models": models,
-        "first": first,
-        "last": last,
         "minutes": round((last - first).total_seconds() / 60, 1) if first and last else 0,
     }
 
