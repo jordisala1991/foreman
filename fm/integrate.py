@@ -217,7 +217,7 @@ def close_pull(p: Project, i: dict[str, Any], why: str) -> None:
     """Closes the task's PR with the reason, unless it is already closed or merged."""
     provider, change = registry.get(p), pulls.change_of(i, "")
     try:
-        if not provider.state(change)["closed"]:
+        if provider.is_open(change):
             provider.close(change, f"Task canceled: {why}")
     except (providers.Transient, providers.Permanent, providers.ProviderError) as e:
         raise IntegrateError(f"could not close its pull request: {e}") from e

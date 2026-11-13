@@ -302,6 +302,18 @@ class Pulls(unittest.TestCase):
         self.assertEqual(g.e.issue(iid)["status"], "canceled")
         self.assertEqual(len(g.calls("pr", "close")), tried)
 
+    def test_cancel_of_a_pr_merged_by_hand_with_no_merge_commit_just_cancels(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        pr = g.state["prs"]["1"]
+        pr["state"] = "MERGED"
+        g.set(prs={"1": pr}, no_oid=True)
+        fm(g.e.home, "cancel", iid)
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        self.assertEqual(g.calls("pr", "close"), [])
+        self.assertEqual(g.calls("api"), [])
+
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
         iid = g.work()
