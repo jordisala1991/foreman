@@ -94,18 +94,24 @@ def _at(o: dict[str, Any] | None, *keys: str) -> dict[str, Any]:
     return o or {}
 
 
+def _pull(o: object) -> tuple[str, dict[str, str]]:
+    """One GraphQL pull request node as (number, {state, head, ci}); ProviderError if it does not fit."""
+    n = util.json_object(o)
+    if not n or not isinstance(n.get("number"), int) or not isinstance(n.get("headRefOid"), str) or not isinstance(n.get("state"), str):
+        raise ProviderError(f"gh api graphql: unexpected pull request {o!r}"[:300])
+    last = util.json_object(next(iter(util.json_list(_at(n, "commits").get("nodes"))), None))
+    ci = ROLLUP.get(str(_at(last, "commit", "statusCheckRollup").get("state")), "none")
+    return str(n["number"]), {"state": n["state"], "head": n["headRefOid"], "ci": ci}
+
+
 def open_prs(raw: object) -> dict[str, dict[str, str]]:
-    """The answer of the open-PRs query as {number: {head, ci}}; ProviderError if it does not fit."""
-    nodes = util.json_list(_at(util.json_object(raw), "data", "repository", "pullRequests").get("nodes"))
-    out: dict[str, dict[str, str]] = {}
-    for n in nodes:
-        o = util.json_object(n)
-        if not o or not isinstance(o.get("number"), int) or not isinstance(o.get("headRefOid"), str):
-            raise ProviderError(f"gh api graphql: unexpected pull request {n!r}"[:300])
-        last = util.json_object(next(iter(util.json_list(_at(o, "commits").get("nodes"))), None))
-        state = _at(last, "commit", "statusCheckRollup").get("state")
-        out[str(o["number"])] = {"head": o["headRefOid"], "ci": ROLLUP.get(str(state), "none")}
-    return out
+    """The answer of the open-PRs query as {number: {state, head, ci}}; ProviderError if it does not fit."""
+    return dict(_pull(n) for n in util.json_list(_at(util.json_object(raw), "data", "repository", "pullRequests").get("nodes")))
+
+
+def one_pr(raw: object) -> tuple[str, dict[str, str]]:
+    """The answer of the one-PR query; ProviderError if it does not fit."""
+    return _pull(_at(util.json_object(raw), "data", "repository").get("pullRequest"))
 
 
 class GitHub(Provider):
@@ -182,27 +188,45 @@ class GitHub(Provider):
     def ci(self, change: dict[str, Any]) -> str:
         """The PR's CI. A pass or fail is kept for its commit and not read again. No checks is reused for NONE_TTL; pending
         (or a commit GitHub has not shown yet) for POLL seconds after the last read. A read asks GitHub once for every
-        open PR (`refresh`), so all tasks of a poll share one call."""
+        open PR (`refresh`), so all tasks of a poll share one call. A PR missing from that answer is read on its own."""
         pr, head = str(change["pr"]), change["head"]
         c = util.read_json(self.p.state / "pr_ci.json", {})
         e = c.get("prs", {}).get(pr)
         if e and e["head"] == head:
-            age = util.age_s(e["at"]) or 1e9
-            fresh = e["ci"] in ("pass", "fail") or age < (NONE_TTL if e["ci"] == "none" else POLL)
+            fresh = e["ci"] in ("pass", "fail") or (util.age_s(e["at"]) or 1e9) < (NONE_TTL if e["ci"] == "none" else POLL)
         else:
-            e, fresh = None, (util.age_s(c.get("at")) or 1e9) < POLL
+            fresh = (util.age_s(c.get("at")) or 1e9) < POLL
         if not fresh:
             self.refresh()
             e = util.read_json(self.p.state / "pr_ci.json", {})["prs"].get(pr)
-            e = e if e and e["head"] == head else None
-        return e["ci"] if e else "pending"  # GitHub has not shown this commit yet
+        e = e or self.read_one(pr)
+        return e["ci"] if e["head"] == head else "pending"  # GitHub has not shown this commit yet
+
+    def read_one(self, pr: str) -> dict[str, str]:
+        """A PR the open-PR answer did not have: read on its own. Not open (merged or closed outside fm) is a permanent
+        failure with its state; open (past the first 100) is kept like the others."""
+        query = (
+            "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) "
+            "{ number state headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } }"
+        )
+        r = self.run("gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}", "-F", f"number={pr}", "-f", f"query={query}")
+        try:
+            _, e = one_pr(json.loads(r.out))
+        except ValueError:
+            raise ProviderError(f"gh api graphql: not JSON: {r.out.strip()[:200]!r}") from None
+        if e["state"] != "OPEN":
+            raise PermanentError(f"PR #{pr} is {e['state'].lower()}, not open: reopen it, or reject the task")
+        c = util.read_json(self.p.state / "pr_ci.json", {})
+        e = {**e, "at": util.now()}
+        util.write_json(self.p.state / "pr_ci.json", {**c, "prs": {**c.get("prs", {}), pr: e}})
+        return e
 
     def refresh(self) -> None:
         """One GraphQL call: head commit and check state of every open PR, into state/pr_ci.json. A pass or fail already
         kept for the same commit stays."""
         query = (
             "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: 100) "
-            "{ nodes { number headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } } }"
+            "{ nodes { number state headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } } } }"
         )
         r = self.run("gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}", "-f", f"query={query}")
         try:

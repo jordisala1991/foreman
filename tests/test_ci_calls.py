@@ -1,10 +1,10 @@
 """How the loop reads PR CI (one batched call, settled results kept per commit) and who spends GitHub's quota. Uses the
 fake `gh` of test_github."""
 
-import json
 import os
 import subprocess
 import unittest
+from pathlib import Path
 
 from helpers import git
 from test_github import GH
@@ -80,15 +80,30 @@ class CiCalls(unittest.TestCase):
         self.assertEqual(registry.get(g.e.p).ci(backlog_change(g, a)), "pass")
         self.assertEqual(registry.get(g.e.p).ci(backlog_change(g, b)), "pending")
 
-    def test_a_pr_github_does_not_show_is_asked_once_per_poll_not_once_per_task(self):
-        g = self.make(test="true")
-        g.work()
+    def test_a_pr_missing_from_the_open_answer_is_read_once_and_kept(self):
+        g = self.make(test="true", autonomy="manual")
+        iid = g.work()
+        g.deliver(iid)
+        loop.tick(g.e.p)  # its PR is open and its CI read
+        (g.e.p.state / "pr_ci.json").unlink()  # nothing known about it yet
+        g.set(hidden=["1"])  # still open, but not in the first page of open PRs
         github.POLL = 3600
-        gh = registry.get(g.e.p)
+        github.NONE_TTL = 3600
+        gh, change = registry.get(g.e.p), backlog_change(g, iid)
         before = self.graphql(g)
-        for pr in ("98", "99"):
-            self.assertEqual(gh.ci({"pr": pr, "head": "x"}), "pending")
-        self.assertEqual(self.graphql(g) - before, 1)
+        self.assertEqual([gh.ci(change) for _ in range(3)], ["pass"] * 3)
+        self.assertEqual(self.graphql(g) - before, 2)  # the open answer, then that PR; not again
+
+    def test_a_pr_missing_from_the_open_answer_because_it_is_not_open_fails_with_its_state(self):
+        g = self.make(test="true", autonomy="manual")
+        iid = g.work()
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        (g.e.p.state / "pr_ci.json").unlink()
+        g.set(prs={**g.state["prs"], "1": {**g.state["prs"]["1"], "state": "MERGED"}})
+        with self.assertRaises(github.PermanentError) as cm:
+            registry.get(g.e.p).ci(backlog_change(g, iid))
+        self.assertIn("merged", str(cm.exception))
 
     def test_a_pr_without_checks_is_read_again_only_after_the_ttl(self):
         g = self.make(test="true")
@@ -104,34 +119,21 @@ class CiCalls(unittest.TestCase):
             gh.ci(change)
         self.assertEqual(self.graphql(g), before)
 
-    def test_gh_calls_are_counted_by_origin(self):
-        from fm import ghcalls, guard
-
-        g = self.make(test="true")
-        g.work()
-        loop.tick(g.e.p)
-        self.assertGreater(ghcalls.by_origin(g.e.p)["loop"]["last_hour"], 0)
-        os.environ.update(FM_HOME=str(g.e.home), FM_ISSUE="FN-9")
-        self.addCleanup(lambda: [os.environ.pop(k) for k in ("FM_HOME", "FM_ISSUE")])
-
-        def run(cmd):
-            guard.hook(json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": str(g.e.repo)}))
-            return ghcalls.by_origin(g.e.p).get("FN-9", {"last_hour": 0})["last_hour"]
-
-        self.assertEqual(run("gh issue view 3 | head && gh api x"), 2)
-        self.assertEqual(run("for i in 1 2; do gh api x; done"), 3)
-        self.assertEqual(run("bash -c 'gh api y' ; gh --version"), 4)
-        self.assertEqual(run("gh pr merge 3"), 4)  # the guard denies it: it never ran
-
-    def test_gh_run_outside_the_loop_is_not_counted_as_the_loop(self):
+    def test_the_loops_gh_calls_are_counted_as_the_loop(self):
         from fm import ghcalls
 
         g = self.make(test="true")
         g.work()
         loop.tick(g.e.p)
-        before = ghcalls.by_origin(g.e.p)["loop"]["last_hour"]
-        os.environ["FM_ISSUE"] = "FN-7"
-        self.addCleanup(lambda: os.environ.pop("FM_ISSUE", None))
-        registry.get(g.e.p).refresh()
-        after = ghcalls.by_origin(g.e.p)
-        self.assertEqual((after["loop"]["last_hour"], after["FN-7"]["last_hour"]), (before, 1))
+        self.assertGreater(ghcalls.by_origin(g.e.p)["loop"]["last_hour"], 0)
+
+    def test_an_agents_gh_goes_through_the_shim_which_counts_it_and_runs_the_real_gh(self):
+        from fm import ghcalls
+
+        g = self.make(test="true")
+        shim = Path(__file__).resolve().parent.parent / "bin"
+        env = {**os.environ, "FM_HOME": str(g.e.home), "FM_ISSUE": "FN-9", "PATH": f"{shim}{os.pathsep}{os.environ['PATH']}"}
+        for _ in range(2):
+            r = subprocess.run(["gh", "api", "x"], env=env, capture_output=True, text=True)
+        self.assertEqual((r.stdout.strip(), ghcalls.by_origin(g.e.p)["FN-9"]["last_hour"]), ("null", 2))
+        self.assertEqual(len(g.calls("api", "x")), 2)

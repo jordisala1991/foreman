@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import backlog, ghcalls, util
+from . import backlog, util
 from .config import Project
 
 PUBLISH = {
@@ -175,27 +175,6 @@ def check_bash(cmd: str, sc: Scope) -> str | None:
     return None
 
 
-SHELL_WORDS = {"do", "then", "else", "elif", "if", "while", "until", "!", "{", "("}
-SHELLS = {"bash", "sh", "zsh"}
-
-
-def gh_calls(cmd: str) -> int:
-    """How many times `cmd` runs `gh` (not `gh --version`/`--help`): as a program, after `do`/`then`, in `$(…)`, through
-    `xargs`, or inside `bash -c '…'`. Counting only; it never stops anything."""
-    n = 0
-    for w in segments(cmd):
-        while w and w[0] in SHELL_WORDS:
-            w = w[1:]
-        if w[:1] and w[0] in SHELLS and "-c" in w[1:] and w.index("-c") + 1 < len(w):
-            n += gh_calls(w[w.index("-c") + 1])
-            continue
-        starts = [j for j, x in enumerate(w) if x == "gh" and (j == 0 or w[j - 1] == "xargs")]
-        starts += [j + 1 for j, x in enumerate(w) if x in ("$(", "(", "`") and j + 1 < len(w) and w[j + 1] == "gh"]
-        starts += [j for j, x in enumerate(w) if x.lstrip("$(`") == "gh" and x != "gh"]
-        n += sum(1 for j in set(starts) if w[j + 1 : j + 2] not in (["--version"], ["--help"]))
-    return n
-
-
 def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, issue: dict[str, Any] | None) -> str | None:
     own = [Path(issue["worktree"]).resolve()] if issue and issue.get("worktree") else []
     branch = (issue or {}).get("branch", "")
@@ -240,9 +219,6 @@ def hook(stdin: str) -> str:
         tool_input: dict[str, Any] = d.get("tool_input") or {}
         action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), issue)
         if not action or granted(p, iid, action):
-            if d.get("tool_name") == "Bash":  # who spends GitHub's quota: every `gh` an agent runs is counted (fm/ghcalls.py)
-                for _ in range(gh_calls(str(tool_input.get("command", "")))):
-                    ghcalls.record(p, iid or "agent")
             return ""
         util.append_jsonl(
             p.state / "guard.jsonl", {"time": util.now(), "issue": iid, "action": action, "tool": d.get("tool_name"), "input": d.get("tool_input")}
