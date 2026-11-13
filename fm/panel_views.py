@@ -123,12 +123,12 @@ def issue(p: Project, iid: str) -> Obj:
         "issue": shown,
         "events": [e for e in util.read_jsonl(p.state / "events.jsonl") if e.get("issue") == iid][::-1],
         "questions": [q for q in d["decisions"] + d["decisions_resolved"] if q.get("issue") == iid],
-        "cost": {"usd": c["usd"], "tokens": c["tokens"], "minutes": c["minutes"]},
+        "cost": {"usd": c["usd"], "minutes": c["minutes"]},
     }
 
 
 def system(p: Project) -> Obj:
-    found = memo(("health", str(p.home)), 60, lambda: health.findings(p, session_rows(p), outside=True, wait=False))
+    found = memo(("health", str(p.home)), 60, lambda: health.findings(p, session_rows(p), outside=True, probe=False))
     rows = memo(("metrics", str(p.home)), 30, lambda: metrics.per_issue(p))
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     return {

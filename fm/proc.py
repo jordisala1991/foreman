@@ -1,5 +1,5 @@
 """The one place fm runs other programs (git, gh, claude, a test command). Generic: it knows nothing about any of them.
-`run` waits and returns a `Result`; `spawn` hands back a live process. A program that is missing or too slow is a `ProcError`
+`run` waits and returns a `Result`. A program that is missing or too slow is a `ProcError`
 with a clear message, never a bare OSError; a non-zero exit is not an error here: callers read `Result.code`.
 `env`, when given, is the whole environment of the child (callers add to `os.environ` themselves)."""
 
@@ -48,11 +48,3 @@ def run_json(args: Sequence[str], *, cwd: Path | None = None, timeout: float = 6
         return json.loads(r.out)
     except ValueError:
         raise ProcError(f"{_name(args)}: output is not JSON: {(r.out or r.err).strip()[:200]!r}") from None
-
-
-def spawn(args: Sequence[str], *, cwd: Path | None = None, env: Mapping[str, str] | None = None) -> subprocess.Popen[str]:
-    """A live process, for what must be waited on or stopped by the caller."""
-    try:
-        return subprocess.Popen(list(args), cwd=cwd, env=None if env is None else dict(env), text=True)
-    except OSError as e:
-        raise ProcError(f"{_name(args)}: could not start: {e.strerror or e}") from e

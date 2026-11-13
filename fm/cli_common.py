@@ -19,7 +19,7 @@ def home(args: argparse.Namespace) -> Project:
 
 
 def mine(args: argparse.Namespace) -> str:
-    iid = getattr(args, "issue", None) or os.environ.get("FM_ISSUE")
+    iid = os.environ.get("FM_ISSUE")
     if not iid:
-        sys.exit("fm: which issue? (--issue, or FM_ISSUE in an agent's session)")
+        sys.exit("fm: which issue? (FM_ISSUE, set in an agent's session)")
     return iid

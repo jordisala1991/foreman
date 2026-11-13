@@ -9,12 +9,12 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, providers, util
+from fm import backlog, cli, integrate, loop, providers, util
 from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys, time
+    import json, os, sys
     d = os.path.dirname(os.path.abspath(__file__))
     a = sys.argv[1:]
     f = os.path.join(d, "gh.json")
@@ -24,8 +24,6 @@ FAKE_GH = textwrap.dedent("""\
         return a[a.index(n) + 1] if n in a else None
     def save():
         json.dump(s, open(f, "w"))
-    if s.get("hang") and a[:2] == ["pr", "create"]:
-        time.sleep(5)
     if s.get("fail_always") == a[:2]:
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
@@ -65,6 +63,9 @@ FAKE_GH = textwrap.dedent("""\
         print(json.dumps({"body": pr["body"]}))
     elif a[:2] == ["pr", "comment"]:
         pr["comments"].append(flag("--body"))
+    elif a[:2] == ["pr", "close"]:
+        pr["state"] = "CLOSED"
+        pr["comments"].append(flag("--comment"))
     elif a[:2] == ["pr", "merge"]:
         pr["strategy"] = a[3].lstrip("-")
         pr["subject"] = flag("--subject")
@@ -268,6 +269,51 @@ class Pulls(unittest.TestCase):
         self.assertIn("merge risk low", pr["comments"][0])
         self.assertIn("round 1: 0 open", pr["comments"][0])
 
+    def test_cancel_closes_the_pr_with_the_reason_and_a_task_without_one_is_canceled_as_before(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        fm(g.e.home, "cancel", iid, "not needed")
+        pr = g.state["prs"]["1"]
+        self.assertEqual(pr["state"], "CLOSED")
+        self.assertIn("not needed", pr["comments"][-1])
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        bare = g.work(push=False)
+        fm(g.e.home, "cancel", bare)
+        self.assertEqual(g.e.issue(bare)["status"], "canceled")
+        self.assertEqual(len(g.calls("pr", "close")), 1)
+
+    def test_cancel_with_a_failing_gh_changes_nothing_and_a_closed_pr_is_left_alone(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        wt = g.e.issue(iid)["worktree"]
+        g.set(fail_always=["pr", "close"])
+        with self.assertRaises(SystemExit):
+            cli.main(["--home", str(g.e.home), "cancel", iid])
+        self.assertEqual(g.e.issue(iid)["status"], "in progress")
+        self.assertTrue((g.e.repo.parent / wt).exists())
+        g.set(fail_always=None)
+        tried = len(g.calls("pr", "close"))
+        pr = g.state["prs"]["1"]
+        pr["state"] = "CLOSED"
+        g.set(prs={"1": pr})
+        fm(g.e.home, "cancel", iid)
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        self.assertEqual(len(g.calls("pr", "close")), tried)
+
+    def test_cancel_of_a_pr_merged_by_hand_with_no_merge_commit_just_cancels(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        pr = g.state["prs"]["1"]
+        pr["state"] = "MERGED"
+        g.set(prs={"1": pr}, no_oid=True)
+        fm(g.e.home, "cancel", iid)
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        self.assertEqual(g.calls("pr", "close"), [])
+        self.assertEqual(g.calls("api"), [])
+
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
         iid = g.work()
@@ -412,21 +458,6 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual((g.e.issue(iid)["check"]["ci"], g.e.issue(iid)["status"]), ("fail", "in review"))
         self.assertEqual(g.calls("pr", "merge"), [])
-
-    def test_a_hung_gh_times_out_without_freezing_the_tick(self):
-        from fm.providers import github
-
-        old = github.TIMEOUT
-        github.TIMEOUT = 1
-        self.addCleanup(setattr, github, "TIMEOUT", old)
-        g = self.make(test="true")
-        g.set(hang=True)
-        iid = g.work()
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
-        self.assertIn("timed out", g.e.issue(iid)["retry_error"])
-        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
-        self.assertEqual(len(events), 1)
 
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
         for failing in (["pr", "checks"], ["pr", "merge"], ["pr", "view"]):

@@ -95,7 +95,7 @@ class Check(TypedDict, total=False):
 
 
 def empty() -> Data:
-    return {"schema_version": 5, "updated": "", "projects": [], "issues": [], "archive": [], "decisions": [], "decisions_resolved": []}
+    return {"schema_version": 5, "updated": "", "issues": [], "decisions": [], "decisions_resolved": []}
 
 
 def load(p: Project) -> Data:
@@ -117,8 +117,8 @@ def edit(p: Project) -> Generator[Data, None, None]:
 
 
 def issues(d: Data) -> list[Issue]:
-    """Every issue: the product's own and those inside its projects (the format allows both)."""
-    return list(d["issues"]) + [i for pr in d["projects"] for i in pr.get("issues", [])]
+    """Every issue."""
+    return list(d["issues"])
 
 
 def get(d: Data, iid: str) -> Issue:
@@ -170,8 +170,6 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue
             "title": title,
             "status": status,
             "blocked": "",
-            "plan": [],
-            "subs": [],
             "detail": detail,
             "priority": priority,
             "created": util.now(),
@@ -239,8 +237,6 @@ def ask(p: Project, iid: str, agent: str, text: str, **f: Unpack[Question]) -> s
             "agent": agent,
             "title": i["title"],
             "text": text,
-            "options": [],
-            "date": date.today().isoformat(),
             "asked": util.now(),
             "kind": kind,
         }
@@ -257,7 +253,8 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
         if q is None:
             raise BacklogError(f"no open question {qid}")
         d["decisions"].remove(q)
-        q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}", "free": True, "delivered": False})
+        q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}", "delivered": False})
+        q["answered_at"] = util.now()
         d["decisions_resolved"].append(q)
     event(p, q["issue"], f"owner answered {qid}: {text}")
     return q
@@ -280,7 +277,7 @@ def note(p: Project, iid: str, text: str, source: str) -> None:
                 "source": source,
                 "resolved": util.now()[:10],
                 "delivered": False,
-                "options": [],
+                "answered_at": util.now(),
                 "title": i["title"],
             }
         )
