@@ -88,18 +88,23 @@ on). The heartbeat is written before every step, so a long test run does not loo
    logged and the same key is tried again next tick.
    Cursors in `state/cursors/`. None shipped (the owner's call for now).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
-   (`claude --bg --resume SID … MESSAGE`), when that session is not busy; dropped if the task closed meanwhile;
+   (`claude --bg --resume SID MESSAGE`, no other flag: a flag or a live process makes claude start a copy), when that
+   session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
+   one answer per task per tick; a copy (different short id) or an unreadable `claude agents` fails the send; dropped if the task closed meanwhile;
    after 3 failed tries the task is blocked with the answer in the reason. A session id not listed yet at launch is
    filled in from its short id on a later tick.
 4. **agents**: an agent whose session ended its turn without `fm done`/`ready`/`ask`/`block`, and whose transcript
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
-5. **queue**: a branch in review whose head or main's head changed is checked: tests on exactly its committed head
+5. **queue**: accepted tasks are merged first. Then a branch in review whose head or main's head changed is checked,
+   one at a time, in the background (a tick waits for it only `BACKGROUND_WAIT_S`, so answers, launches and merges keep
+   flowing; each task is read again just before its turn): tests on exactly its committed head
    (a fresh detached worktree, never uncommitted files), diff, deleted files,
    dependencies, the paths it touches, conflicts with main, the agent's review verdict → risk `low|medium|high` with
    reasons. A branch that conflicts with main goes back to its agent with a note to merge main. If the project's
    autonomy level allows the risk, it merges (`git merge --no-ff` into the main checkout),
    removes the worktree and branch and closes the issue.
-6. **health**: the checks below.
+6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
+   only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
 7. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
    agent) or `backlog` issue (its defining agent), by priority then id. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
@@ -261,12 +266,12 @@ the config, the clock. A new port needs a second real implementation or a system
 task.
 
 Rules (enforced by `make check`):
-- The core imports nothing above it. **One module runs programs**: `fm/proc.py` (`run`, `run_json`, `spawn`; it knows
+- The core imports nothing above it. **One module runs programs**: `fm/proc.py` (`run`, `run_json`; it knows
   nothing of git, gh or claude; a missing program or a timeout is a `ProcError`). Everything else calls it; ruff bans
   `import subprocess` elsewhere (not `os.system`/`os.popen`). `proc` sits just above the core in the layers: the loop,
   the services and the adapters use it, the core does not. The only other exceptions in `per-file-ignores`
   (`pyproject.toml`) are the tests and `fm/lock.py`, which needs a process group and signals to stop a whole job at its
-  time limit (`start_new_session`, `killpg`), which `spawn` deliberately does not offer.
+  time limit (`start_new_session`, `killpg`).
 - Data from outside is typed at the border: `providers/github.py` turns `gh`'s JSON into its own types
   (`PullRequest`, the check buckets) with a small converter per shape, and a shape that does not fit is a
   `ProviderError`; only those types go inward, never `gh`'s dicts.

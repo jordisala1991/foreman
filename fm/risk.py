@@ -11,7 +11,6 @@ from typing import Any
 from . import backlog
 from .config import Project
 
-RISKS = ("low", "medium", "high")
 AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
 
 

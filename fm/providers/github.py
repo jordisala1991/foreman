@@ -178,6 +178,12 @@ class GitHub(Provider):
     def comment(self, change: dict[str, Any], text: str) -> None:
         self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
 
+    def is_open(self, change: dict[str, Any]) -> bool:
+        return self.view(change).state == "OPEN"
+
+    def close(self, change: dict[str, Any], text: str) -> None:
+        self.run("gh", "pr", "close", str(change["pr"]), "--comment", text)
+
     def ci(self, change: dict[str, Any]) -> str:
         """The PR's CI. A pass or fail is kept for its commit and not read again; pending or no checks is reused for POLL
         seconds. A read asks GitHub once for every open PR (`refresh`), so all tasks of a poll share one call."""

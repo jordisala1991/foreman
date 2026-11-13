@@ -5,7 +5,9 @@
 3. answers: the owner's answers go back to the agent that asked (its own session, resumed)
 4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
 5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
-6. queue: a delivered branch is checked (tests, diff, risk); the autonomy level may merge it
+6. queue: accepted tasks are merged first; then a branch whose head or main's moved is checked (tests, diff, risk) in
+   the background, one at a time, and the autonomy level may merge it. A check slower than util.BACKGROUND_WAIT_S does not hold
+   the tick up: it finishes on its own and the next ticks go on.
 7. health: broken states become triage issues, deduplicated (health.py)
 8. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
    one. The loop never plans, never reviews, never talks to the owner.
@@ -29,15 +31,47 @@ PRIORITY = {p: n for n, p in enumerate(backlog.PRIORITIES)}
 MAX_ROUNDS = 2  # what is still open after round 2 goes to the owner
 
 
+def check_key(p: Project) -> str:
+    return f"{p.state}:check"
+
+
 def run_queue(p: Project, rows: dict[str, Any]) -> None:
+    """Merges first (quick); then at most one branch check is started per tick, the rest on the next ticks. Each task is
+    read again just before its turn."""
     main = p.get("project", "main")
-    for i in backlog.issues(backlog.load(p)):
-        if i["status"] != "in review" or i.get("blocked"):
+    in_review = [i for i in backlog.issues(backlog.load(p)) if i["status"] == "in review"]
+    for i in in_review:
+        stop_review_sessions(p, i, rows)
+    waiting = [i["id"] for i in in_review if not i.get("blocked")]
+    for iid in waiting:
+        i = backlog.get(backlog.load(p), iid)
+        if i["status"] == "in review" and i.get("accepted") and not i.get("blocked"):
+            guarded(p, iid, "merge it", lambda i=i: merge_one(p, i, main))
+    key = check_key(p)
+    started = util.STARTED.get(key, 0)
+    for iid in waiting:
+        i = backlog.get(backlog.load(p), iid)
+        if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
             continue
-        if i.get("accepted"):
-            guarded(p, i["id"], "merge it", lambda i=i: merge_one(p, i, main))
-            continue
-        guarded(p, i["id"], "check it", lambda i=i: queue_one(p, i, main, rows))
+        guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows))
+        if util.STARTED.get(key, 0) != started:
+            return
+
+
+def stop_review_sessions(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:
+    """A hunter whose findings file is written, and a reviewer whose verdict is recorded, have nothing more to do."""
+    v: dict[str, Any] = i.get("review") or {}
+    h: dict[str, Any] = i.get("hunter") or {}
+    r: dict[str, Any] = i.get("reviewer") or {}
+    if h.get("file") and Path(h["file"]).exists() and live(h, rows) and not working(h, rows):
+        sessions.stop_live(p, i["id"], h, rows)
+    if v and v.get("tip") == r.get("tip") and live(r, rows):
+        sessions.stop_live(p, i["id"], r, rows)
+
+
+def live(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+    """Listed and not stopped: never `gone`, which is also what an unreadable listing shows."""
+    return sessions.state(rows, a.get("session")) not in ("stopped", "gone")
 
 
 def conflict_note(main: str) -> str:
@@ -57,23 +91,25 @@ def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
 
 
-def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
+def guarded(p: Project, iid: str, what: str, fn: Callable[[], object], field: str = "retry") -> None:
     """One issue's step: a Transient failure is retried next tick (noted once per error); the 3rd in a row blocks the
-    issue with the last error; a success resets the count. Any other failure blocks it at once. The others go on."""
+    issue with the last error; a success resets the count. Any other failure blocks it at once. The others go on.
+    The count lives in `{field}_count` and `{field}_error`: the background check has its own, apart from the tick's."""
+    err, cnt = f"{field}_error", f"{field}_count"
     try:
         fn()
         i = backlog.get(backlog.load(p), iid)
-        if i.get("retry_error") or i.get("retry_count"):
-            backlog.update(p, iid, retry_error="", retry_count=0)
+        if i.get(err) or i.get(cnt):
+            backlog.update(p, iid, **{err: "", cnt: 0})
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), iid)
-        count = int(i.get("retry_count") or 0) + 1
+        count = int(i.get(cnt) or 0) + 1
         if count >= TRANSIENT_ATTEMPTS:
-            backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300], retry_error="", retry_count=0)
+            backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300], **{err: "", cnt: 0})
             backlog.event(p, iid, f"blocked: could not {what} {TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])
             return
-        backlog.update(p, iid, retry_count=count, retry_error=str(e))
-        if i.get("retry_error") != str(e):  # the platform hiccuped: stay as is, try again next tick, say it once
+        backlog.update(p, iid, **{cnt: count, err: str(e)})
+        if i.get(err) != str(e):  # the platform hiccuped: stay as is, try again next tick, say it once
             backlog.event(p, iid, f"could not {what}, will retry: {e}"[:300])
     except Exception as e:
         backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300])
@@ -120,6 +156,7 @@ def block_review(p: Project, iid: str, why: str) -> None:
 
 
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
+    """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
     head = integrate.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
     main_head = integrate.git(p.repo, "rev-parse", main, check=False).out.strip()
     if review_pending(p, i, head, rows):  # no verdict on this tip yet: an independent review first
@@ -143,7 +180,14 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     c: dict[str, Any] = i.get("check") or {}
     stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
     if c.get("head") != head or c.get("main") != main_head or stale:
-        c = integrate.check(p, i["id"], why if i.get("pr") else None)
+        ci = why if i.get("pr") else None
+        t = util.start_background(check_key(p), p.state / "errors.jsonl", lambda: check_guarded(p, i["id"], ci))
+        if t is None:
+            return
+        t.join(util.BACKGROUND_WAIT_S)
+        c = backlog.get(backlog.load(p), i["id"]).get("check") or {}
+        if t.is_alive() or c.get("head") != head:  # still running, or it failed (the task says why)
+            return
     if c.get("conflict"):
         send_back(p, i["id"], "conflict", conflict_note(main))
         return
@@ -154,6 +198,11 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             integrate.merge_accepted(p, i["id"])
         except integrate.IntegrateError as e:
             backlog.event(p, i["id"], f"automatic integration failed: {e}")
+
+
+def check_guarded(p: Project, iid: str, ci: str | None) -> None:
+    """The check, in its thread: its own retry count (the tick's belongs to the queue step), 3 Transient in a row block."""
+    guarded(p, iid, "check it", lambda: integrate.check(p, iid, ci), "check_retry")
 
 
 def sort_key(i: dict[str, Any]) -> tuple[int, int, int]:
