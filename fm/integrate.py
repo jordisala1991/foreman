@@ -194,6 +194,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         raise IntegrateError("its pull request was closed without merging: reopen it, or reject the task")
     if not seen["merged"]:
         return "merging"
+    stop_all(p, i)
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
     git(p.repo, "branch", "-D", i["branch"], check=False)
@@ -212,14 +213,18 @@ def merge_accepted(p: Project, iid: str) -> str:
     return "done"
 
 
+def stop_all(p: Project, i: dict[str, Any]) -> None:
+    """None of the task's sessions stays running: its agent, hunter and reviewer, whatever its status was."""
+    rows = sessions.listing(p)
+    for role in ("agent", "hunter", "reviewer"):
+        sessions.stop_live(p, i.get(role), rows)
+
+
 def close(p: Project, iid: str, status: str, why: str) -> None:
     """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
     removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
-    agent: backlog.Agent = i.get("agent") or {}
-    short = agent.get("short")
-    if short and i["status"] in backlog.RUNNING:
-        sessions.stop(p, short)
+    stop_all(p, i)
     for q in backlog.open_questions(backlog.load(p), iid):
         backlog.answer(p, q["id"], f"(the task was {status})")
         backlog.mark_delivered(p, q["id"])

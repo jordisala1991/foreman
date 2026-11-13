@@ -90,6 +90,10 @@ def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
+    if h.get("file") and Path(h["file"]).exists() and not working(h, rows):
+        sessions.stop_live(p, h, rows)  # its findings are written: nothing more to do
+    if v and v.get("tip") == r.get("tip"):
+        sessions.stop_live(p, r, rows)  # its verdict is recorded
     if v.get("tip") == head:
         return False
     role, last = ("reviewer", r) if h.get("tip") == head else ("hunter", h)

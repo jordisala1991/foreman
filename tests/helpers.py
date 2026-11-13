@@ -42,6 +42,12 @@ FAKE = textwrap.dedent("""\
         print(open(os.path.join(d, "login.json")).read() if os.path.exists(os.path.join(d, "login.json")) else '{"loggedIn": true}')
         sys.exit(0)
     if a[:1] == ["stop"]:
+        if os.path.exists(os.path.join(d, "agents.json")):
+            rows = json.load(open(os.path.join(d, "agents.json")))
+            for r in rows:
+                if r["id"] == a[1]:
+                    r["state"] = "stopped"
+            json.dump(rows, open(os.path.join(d, "agents.json"), "w"))
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:
         f.write(json.dumps({"argv": a, "cwd": os.getcwd(), "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")}) + "\\n")
@@ -113,6 +119,9 @@ class Env:
 
     def calls(self) -> list[dict]:
         return util.read_jsonl(self.bin / "calls.jsonl")
+
+    def state_of(self, name: str) -> str:
+        return next(r["state"] for r in json.loads((self.bin / "agents.json").read_text()) if r["name"] == name)
 
     def set_state(self, name: str, state: str) -> None:
         f = self.bin / "agents.json"

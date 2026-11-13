@@ -128,3 +128,10 @@ def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
 
 def stop(p: Project, short: str) -> None:
     proc.run([p.get("agents", "claude"), "stop", short], timeout=30)
+
+
+def stop_live(p: Project, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
+    """Stops a recorded agent's session unless Claude Code already shows it stopped (or does not know it)."""
+    a = agent or {}
+    if a.get("short") and state(rows, a.get("session")) not in ("stopped", "gone"):
+        stop(p, a["short"])

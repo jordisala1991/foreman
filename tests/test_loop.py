@@ -404,6 +404,34 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(len(e.calls()), 3)  # not launched twice
 
+    def test_a_finished_hunter_and_a_reviewer_with_a_verdict_are_stopped(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        e.hunt_then_review(iid)
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["hunter"]["name"]), "stopped")
+        self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "working")
+        os.environ["FM_ISSUE"] = iid
+        try:
+            fm(e.home, "verdict", "--open", "0", "--file", str(e.home / f"reviews/{iid}.md"))
+        finally:
+            os.environ.pop("FM_ISSUE")
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "stopped")
+
+    def test_cancelling_a_task_in_review_stops_every_session_of_it(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        e.hunt_then_review(iid)
+        i = e.issue(iid)
+        integrate.close(e.p, iid, "canceled", "no")
+        for role in ("agent", "hunter", "reviewer"):
+            self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
+
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
