@@ -10,7 +10,6 @@ from typing import Any, Literal
 from .. import proc, util
 from . import Conflict, Permanent, Provider, ProviderError, RateLimited, Transient
 
-TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
 
 
@@ -156,7 +155,7 @@ class GitHub(Provider):
             self.hold()
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if prog == "gh" and r.code != 0 and RATE.search(r.err + r.out):
@@ -219,6 +218,12 @@ class GitHub(Provider):
 
     def comment(self, change: dict[str, Any], text: str) -> None:
         self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
+
+    def is_open(self, change: dict[str, Any]) -> bool:
+        return self.view(change).state == "OPEN"
+
+    def close(self, change: dict[str, Any], text: str) -> None:
+        self.run("gh", "pr", "close", str(change["pr"]), "--comment", text)
 
     def ci(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "checks", str(change["pr"]), "--json", "bucket", check=False)  # exit 8 = pending

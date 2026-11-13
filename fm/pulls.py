@@ -95,7 +95,7 @@ def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
 
 def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
     v: dict[str, Any] = i.get("review") or {}
-    review = "no review" if not v else f"round {v['round']}: H {v['high']}, M {v['medium']}" + (f" ({v['file']})" if v.get("file") else "")
+    review = "no review" if not v else f"round {v['round']}: {backlog.open_findings(v)} open" + (f" ({v['file']})" if v.get("file") else "")
     reasons = "\n".join(f"- {r}" for r in c.get("reasons", []))
     return f"**fm: merge risk {c['risk']}**\n\n{reasons}\n\nTests: {c['tests']} · CI: {c.get('ci') or 'none'}\nIndependent review, {review}\n"
 

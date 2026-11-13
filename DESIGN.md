@@ -15,9 +15,9 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
       sources → answers → agents → queue → health → launch
               │
    claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
-      defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block / fm add
+      defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
       responsible agent (cwd: its worktree, branch)  → subagents, fm ask, fm done / fm block
-      reviewer (launched by the loop, read only)     → review file, fm verdict
+      hunter, then reviewer (launched by the loop, read only) → hunter file, review file, fm verdict
 ```
 
 | File | Lines | What |
@@ -88,18 +88,23 @@ on). The heartbeat is written before every step, so a long test run does not loo
    logged and the same key is tried again next tick.
    Cursors in `state/cursors/`. None shipped (the owner's call for now).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
-   (`claude --bg --resume SID … MESSAGE`), when that session is not busy; dropped if the task closed meanwhile;
+   (`claude --bg --resume SID MESSAGE`, no other flag: a flag or a live process makes claude start a copy), when that
+   session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
+   one answer per task per tick; a copy (different short id) or an unreadable `claude agents` fails the send; dropped if the task closed meanwhile;
    after 3 failed tries the task is blocked with the answer in the reason. A session id not listed yet at launch is
    filled in from its short id on a later tick.
 4. **agents**: an agent whose session ended its turn without `fm done`/`ready`/`ask`/`block`, and whose transcript
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
-5. **queue**: a branch in review whose head or main's head changed is checked: tests on exactly its committed head
+5. **queue**: accepted tasks are merged first. Then a branch in review whose head or main's head changed is checked,
+   one at a time, in the background (a tick waits for it only `BACKGROUND_WAIT_S`, so answers, launches and merges keep
+   flowing; each task is read again just before its turn): tests on exactly its committed head
    (a fresh detached worktree, never uncommitted files), diff, deleted files,
    dependencies, the paths it touches, conflicts with main, the agent's review verdict → risk `low|medium|high` with
    reasons. A branch that conflicts with main goes back to its agent with a note to merge main. If the project's
    autonomy level allows the risk, it merges (`git merge --no-ff` into the main checkout),
    removes the worktree and branch and closes the issue.
-6. **health**: the checks below.
+6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
+   only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
 7. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
    agent) or `backlog` issue (its defining agent), by priority then id. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
@@ -117,7 +122,7 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-de
   the agent that owns the task.
 
 **Defining agent** (`fm/briefs/define.md`): reads the repo (read only), settles what the task means, asks the owner
-only what only he can decide (`fm ask`, then ends its turn), may split into more issues (`fm add`), and ends with
+only what only he can decide (`fm ask`, then ends its turn), asks the owner (`fm ask`) when a task is too big, proposing the split, files nothing, and ends with
 `fm ready --claim --criterion --detail --plan PATH` (or `--no-plan "why trivial"`). It also reads the code and writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
 risk); the issue gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
@@ -136,16 +141,20 @@ inside `<!-- fm:description -->` markers, adds a footer with the commit and revi
 section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
 `fm done --summary --report --misled`. If the review or the owner sends it back, the note arrives in the same
-conversation: every finding goes back: fix or refute each H and M with proof, fix each L or say «not, because …», add a `### Round N` to the report's «Review rounds» section, `fm done` again.
+conversation: each finding gets the smallest change that settles it, or a one-line answer if the agent thinks it is wrong; add a `### Round N` to the report's «Review rounds» section, `fm done` again.
 
-**Reviewer** (`fm/briefs/reviewer.md`, foreman's branch-review protocol): launched by the loop, not by the agent, as
-its own session in the branch's worktree, once per delivered tip; it counts against the slots. Stance «not ready until
-shown»; reads the criterion, then the diff, then the agent's report last; a table criterion line → met / not met /
-not shown with evidence; findings F1… with H/M/L, confirmed or plausible, file:line, a scenario and the test that
-would prove it. It writes `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`) and runs
-`fm verdict --tip --high --medium --low --file`; a verdict for a tip other than the newest launch is stored in the review history but decides nothing. Open H or M in round 1 → back to the responsible agent with every finding, L included; an L-only verdict in round 1 gets one pass, never a second round only for L, and an L never blocks by itself (`risk.review_step`); round 2 checks
-the fixes only; what is still open after round 2 goes to the owner as high risk. A reviewer that ends without a
-verdict blocks the task.
+**Review in two passes** (`fm/briefs/hunter.md`, `fm/briefs/reviewer.md`): launched by the loop, not by the agent, each as
+its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail
+and the owner's notes. The **hunter** lists everything it suspects (with a confidence each, plus the criterion table and an
+inventory of what the diff adds) in `<home>/reviews/ID-rN-<tip>-hunter.md`. When that file exists and the hunter has ended,
+the **reviewer** starts; it sees only the file, never the hunter's reasoning. It checks each Wrong or Missing finding
+(confirmed, refuted, or neither) and each Too much item; a finding leaves only with a cited line or output that refutes it,
+so what it could not refute stays in To fix. What was dropped goes under Noted and is not sent to the worker. It writes
+`<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`, N = items under To fix) and runs
+`fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but
+decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`risk.review_step`);
+round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
+round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
 
 What was dropped because it only served a coordinator: memory renewal, session marking, interface mods and band,
 catch-up summaries, the pass as a message, plans written by someone else, sub-issues assigned from outside, the
@@ -195,8 +204,7 @@ Every delivered branch gets a risk score:
 - Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
   `[ci]`, `[git]`, `[review]`). Size is only the large-change reason; file counts are not a reason.
 - Open review findings are a gate, not a level: they go back to the agent and add a `[review]` reason, but never change the risk.
-  After the last round, an open H or M never merges alone, at any autonomy or risk (`integrate.merges_alone`); L-only
-  findings do not block.
+  After the last round, an open finding never merges alone, at any autonomy or risk (`integrate.merges_alone`).
 
 The project's `[integrate] autonomy` decides what merges without the owner: `manual` (nothing; the default),
 `low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or sends it back with a note

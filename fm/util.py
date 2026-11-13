@@ -5,8 +5,10 @@ import fcntl
 import json
 import os
 import tempfile
+import threading
 import time
-from collections.abc import Generator
+import traceback
+from collections.abc import Callable, Generator
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -51,7 +53,7 @@ def write_text_atomic(path: Path, text: str) -> None:
 def read_json(path: Path, default: Any) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return default
 
 
@@ -69,15 +71,11 @@ def locked_json(path: Path, default: Any) -> Generator[Any, None, None]:
 
 
 def read_jsonl(path: Path) -> list[Any]:
-    out: list[Any] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return out
-    for ln in lines:
-        with contextlib.suppress(ValueError):
-            out.append(json.loads(ln))
-    return out
+        return []
+    return [json.loads(ln) for ln in lines]
 
 
 def append_jsonl(path: Path, obj: Any) -> None:
@@ -94,3 +92,28 @@ def json_object(v: object) -> dict[str, Any] | None:
 def json_list(v: object) -> list[Any]:
     """The JSON value as a list; [] when it is anything else."""
     return cast(list[Any], v) if isinstance(v, list) else []
+
+
+BACKGROUND_WAIT_S = 20  # how long a tick waits for slow work (minutes of tests) before going on without it
+BACKGROUND: dict[str, threading.Thread] = {}
+STARTED: dict[str, int] = {}  # how many times each key was started
+
+
+def start_background(key: str, errors: Path, fn: Callable[[], object]) -> threading.Thread | None:
+    """Runs `fn` in a thread, one at a time per key; None while the previous one is still running. An exception goes to
+    `errors` (errors.jsonl), as the tick's own do."""
+    old = BACKGROUND.get(key)
+    if old and old.is_alive():
+        return None
+
+    def run() -> None:
+        try:
+            fn()
+        except Exception as e:
+            append_jsonl(errors, {"time": now(), "step": key, "error": repr(e), "trace": traceback.format_exc()[-2000:]})
+
+    t = threading.Thread(target=run, daemon=True)
+    BACKGROUND[key] = t
+    STARTED[key] = STARTED.get(key, 0) + 1
+    t.start()
+    return t

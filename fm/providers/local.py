@@ -45,9 +45,5 @@ class Local(Provider):
     def state(self, change: dict[str, Any]) -> dict[str, Any]:
         main = self.p.get("project", "main")
         ref = change.get("merge") or ""
-        merged = False
-        if ref:  # the merge commit we made: is it in main?
-            merged = self.git("merge-base", "--is-ancestor", ref, main, check=False).code == 0
-        elif change.get("head"):  # merged some other way (by hand): the branch tip is in main
-            merged = self.git("merge-base", "--is-ancestor", change["head"], main, check=False).code == 0
+        merged = bool(ref) and self.git("merge-base", "--is-ancestor", ref, main, check=False).code == 0
         return {"merged": merged, "closed": merged}

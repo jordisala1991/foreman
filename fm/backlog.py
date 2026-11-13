@@ -22,7 +22,7 @@ kind: question|permission, action?}; its answer goes back to that agent, never t
 
 import contextlib
 import re
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from datetime import date
 from typing import Any, NotRequired, TypedDict, Unpack
 
@@ -75,10 +75,18 @@ class Review(TypedDict):
 
     round: int
     tip: str
-    high: int
-    medium: int
-    low: int
+    open: NotRequired[int]  # verdicts from before it carry high/medium/low instead: see open_findings
     sent_back: NotRequired[bool]
+
+
+def open_findings(v: Mapping[str, Any]) -> int:
+    """Findings to fix. Verdicts from before the single count carried H/M/L: their H and M were the ones to fix."""
+    return int(v["open"]) if "open" in v else int(v.get("high", 0)) + int(v.get("medium", 0))
+
+
+def review_round(i: Mapping[str, Any]) -> int:
+    """The round the next review is: reviews since the owner last asked for a fresh one (`review_from`), plus one."""
+    return len(i.get("reviews") or []) - int(i.get("review_from", 0)) + 1
 
 
 class Check(TypedDict, total=False):
@@ -250,6 +258,7 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
             raise BacklogError(f"no open question {qid}")
         d["decisions"].remove(q)
         q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}", "free": True, "delivered": False})
+        q["answered_at"] = util.now()
         d["decisions_resolved"].append(q)
     event(p, q["issue"], f"owner answered {qid}: {text}")
     return q
@@ -272,6 +281,7 @@ def note(p: Project, iid: str, text: str, source: str) -> None:
                 "source": source,
                 "resolved": util.now()[:10],
                 "delivered": False,
+                "answered_at": util.now(),
                 "options": [],
                 "title": i["title"],
             }
