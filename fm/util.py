@@ -7,6 +7,7 @@ import os
 import tempfile
 import threading
 import time
+import traceback
 from collections.abc import Callable, Generator
 from datetime import datetime
 from pathlib import Path
@@ -98,12 +99,20 @@ BACKGROUND: dict[str, threading.Thread] = {}
 STARTED: dict[str, int] = {}  # how many times each key was started
 
 
-def start_background(key: str, fn: Callable[[], object]) -> threading.Thread | None:
-    """Runs `fn` in a thread, one at a time per key; None while the previous one is still running."""
+def start_background(key: str, errors: Path, fn: Callable[[], object]) -> threading.Thread | None:
+    """Runs `fn` in a thread, one at a time per key; None while the previous one is still running. An exception goes to
+    `errors` (errors.jsonl), as the tick's own do."""
     old = BACKGROUND.get(key)
     if old and old.is_alive():
         return None
-    t = threading.Thread(target=fn, daemon=True)
+
+    def run() -> None:
+        try:
+            fn()
+        except Exception as e:
+            append_jsonl(errors, {"time": now(), "step": key, "error": repr(e), "trace": traceback.format_exc()[-2000:]})
+
+    t = threading.Thread(target=run, daemon=True)
     BACKGROUND[key] = t
     STARTED[key] = STARTED.get(key, 0) + 1
     t.start()

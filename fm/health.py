@@ -169,7 +169,7 @@ def main_tests(p: Project, run: bool = True) -> list[Finding]:
         def run_main_tests() -> None:
             util.write_json(p.state / "ci.json", {"head": head, "at": util.now(), "result": integrate.tests_at(p, head, "main")})
 
-        t = util.start_background(f"{p.state}:main-tests", run_main_tests)
+        t = util.start_background(f"{p.state}:main-tests", p.state / "errors.jsonl", run_main_tests)
         if t:
             t.join(util.BACKGROUND_WAIT_S)
             ci = util.read_json(p.state / "ci.json", {})

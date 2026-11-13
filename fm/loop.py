@@ -93,11 +93,13 @@ TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it i
 
 def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
     """One issue's step: a Transient failure is retried next tick (noted once per error); the 3rd in a row blocks the
-    issue with the last error; a success resets the count. Any other failure blocks it at once. The others go on."""
+    issue with the last error; a success resets the count (unless a failure was counted meanwhile, as by a check in the
+    background). Any other failure blocks it at once. The others go on."""
+    before = backlog.get(backlog.load(p), iid).get("retry_count")
     try:
         fn()
         i = backlog.get(backlog.load(p), iid)
-        if i.get("retry_error") or i.get("retry_count"):
+        if (i.get("retry_error") or i.get("retry_count")) and i.get("retry_count") == before:
             backlog.update(p, iid, retry_error="", retry_count=0)
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), iid)
@@ -178,7 +180,8 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     c: dict[str, Any] = i.get("check") or {}
     stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
     if c.get("head") != head or c.get("main") != main_head or stale:
-        t = util.start_background(check_key(p), lambda: guarded(p, i["id"], "check it", lambda: integrate.check(p, i["id"], why if i.get("pr") else None)))
+        ci = why if i.get("pr") else None
+        t = util.start_background(check_key(p), p.state / "errors.jsonl", lambda: guarded(p, i["id"], "check it", lambda: integrate.check(p, i["id"], ci)))
         if t is None:
             return
         t.join(util.BACKGROUND_WAIT_S)

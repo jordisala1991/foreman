@@ -3,7 +3,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, proc, risk, util
+from fm import backlog, integrate, loop, proc, providers, risk, util
 
 
 class Launch(unittest.TestCase):
@@ -218,6 +218,39 @@ class Queue(unittest.TestCase):
         for t in list(util.BACKGROUND.values()):
             t.join()
         self.assertEqual(e.issue(a)["check"]["main"], git(e.repo, "rev-parse", "main").strip())
+
+    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self):
+        e = Env(test="true")
+        a = self.deliver(e)
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")
+
+        def down(*args):
+            raise providers.Transient("net down")
+
+        real = integrate.check
+        integrate.check = down
+        self.addCleanup(setattr, integrate, "check", real)
+        for _ in range(3):
+            loop.tick(e.p)
+            for t in list(util.BACKGROUND.values()):
+                t.join()
+        self.assertIn("net down", e.issue(a)["blocked"])
+
+    def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self):
+        e = Env(test="true")
+
+        def boom(*args):
+            raise integrate.IntegrateError("git timed out")
+
+        real = integrate.tests_at
+        integrate.tests_at = boom
+        self.addCleanup(setattr, integrate, "tests_at", real)
+        loop.tick(e.p)
+        for t in list(util.BACKGROUND.values()):
+            t.join()
+        self.assertIn("git timed out", util.read_jsonl(e.p.state / "errors.jsonl")[-1]["error"])
 
     def test_a_task_canceled_while_the_queue_runs_is_not_checked(self):
         e = Env(test="true")
