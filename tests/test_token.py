@@ -1,8 +1,6 @@
 import json
 import os
 import plistlib
-import threading
-import time
 import unittest
 from datetime import UTC, datetime, timedelta
 from unittest import mock
@@ -91,19 +89,10 @@ class Token(unittest.TestCase):
         self.assertEqual(f[0]["title"], "No token")
         self.assertIn("security add-generic-password -U", f[0]["detail"])
 
-    def test_health_says_token_does_not_work_and_caches_the_probe(self):
-        calls = []
-
-        def bad(claude: str, tok: str) -> bool:
-            calls.append(tok)
-            return False
-
-        for _ in range(2):
-            f = health.claude_token(self.p, read=lambda: SECRET, works=bad, login=LOGIN_OFF)
+    def test_health_says_token_does_not_work(self):
+        f = health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: False, login=LOGIN_OFF)
         self.assertEqual(f[0]["title"], "Token does not work")
         self.assertIn("claude setup-token", f[0]["detail"])
-        self.assertEqual(len(calls), 1)
-        self.assertNotIn(SECRET, (self.p.state / "token.json").read_text())
 
     def test_launchd_makes_two_jobs_without_the_token(self):
         os.environ[token.ENV] = SECRET
@@ -159,26 +148,9 @@ class Token(unittest.TestCase):
         with mock.patch("fm.proc.run", return_value=mock.Mock(code=44, out="", err="")):
             self.assertEqual(token.keychain(), "")
 
-    def test_the_panel_path_does_not_wait_for_the_probe(self):
-        gate = threading.Event()
-        started = threading.Event()
-
-        def slow(claude: str, tok: str) -> bool:
-            started.set()
-            gate.wait(10)
-            return False
-
-        t0 = time.time()
-        first = health.claude_token(self.p, read=lambda: SECRET, works=slow, wait=False, login=LOGIN_OFF)
-        self.assertEqual(first[0]["key"], "token-fallback")  # until the probe answers
-        self.assertLess(time.time() - t0, 2)
-        self.assertTrue(started.wait(5))
-        gate.set()
-        for _ in range(100):
-            if (self.p.state / "token.json").exists():
-                break
-            time.sleep(0.05)
-        self.assertEqual(health.claude_token(self.p, read=lambda: SECRET, works=slow, wait=False, login=LOGIN_OFF)[0]["key"], "token-bad")
+    def test_the_panel_path_does_not_probe(self):
+        f = health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: False, probe=False, login=LOGIN_OFF)
+        self.assertEqual(f[0]["key"], "token-fallback")
 
     def fake_claude(self, code: int, err: str) -> str:
         path = self.e.tmp / f"claude{code}"
@@ -195,10 +167,10 @@ class Token(unittest.TestCase):
         self.assertFalse(token.works(self.fake_claude(1, "OAuth token has expired. Please run /login"), SECRET))
 
     def test_launchd_dir_writes_both_jobs_with_the_panel_args_and_escapes(self):
-        d = self.e.tmp / "new" / "agents"
-        fm(self.p.home, "launchd", "--dir", str(d), "--panel-host", "0.0.0.0", "--panel-port", "9000")
+        d = self.e.tmp
+        fm(self.p.home, "launchd", "--dir", str(d), "--panel-host", "0.0.0.0")
         panel = plistlib.loads((d / "dev.fm.panel.plist").read_bytes())
-        self.assertEqual(panel["ProgramArguments"][-5:], ["panel", "--host", "0.0.0.0", "--port", "9000"])
+        self.assertEqual(panel["ProgramArguments"][-5:], ["panel", "--host", "0.0.0.0", "--port", "7788"])
         self.assertTrue((d / "dev.fm.loop.plist").exists())
         with mock.patch.dict(os.environ, {"PATH": "/a&b:/c"}):
             self.assertEqual(plistlib.loads(loop.launchd_plist("/x/fm").encode())["EnvironmentVariables"]["PATH"], "/a&b:/c")

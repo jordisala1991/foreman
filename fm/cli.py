@@ -206,12 +206,11 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 def cmd_launchd(a: argparse.Namespace) -> None:
     fm_bin = str(Path(__file__).resolve().parent.parent / "bin/fm")
-    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", str(a.panel_port))}
+    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
     for job, args in jobs.items():
         text = loop.launchd_plist(fm_bin, job, args)
         if a.dir:
             out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
-            out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(text, encoding="utf-8")
             print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
         else:

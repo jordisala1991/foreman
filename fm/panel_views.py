@@ -133,7 +133,7 @@ def issue(p: Project, iid: str) -> Obj:
 
 
 def system(p: Project) -> Obj:
-    found = memo(("health", str(p.home)), 60, lambda: health.findings(p, session_rows(p), outside=True, wait=False))
+    found = memo(("health", str(p.home)), 60, lambda: health.findings(p, session_rows(p), outside=True, probe=False))
     rows = memo(("metrics", str(p.home)), 30, lambda: metrics.per_issue(p))
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     return {
