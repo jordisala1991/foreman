@@ -1,5 +1,5 @@
-"""Who spends GitHub's API quota: each `gh` call is logged with its origin (`loop`, or the task whose agent ran it, as the
-guard sees it), and `by_origin` counts them per hour. One call of `gh` is one line; `gh pr view` may cost a little more than
+"""Who spends GitHub's API quota: each `gh` call is logged with its origin (`loop`, or the task whose agent ran it, through
+`bin/gh`), and `by_origin` counts them per hour. One call of `gh` is one line; `gh pr view` may cost a little more than
 one request on GitHub's side, so these are calls, not exact quota."""
 
 import os
@@ -12,8 +12,8 @@ WINDOW_H = 24
 ORIGIN = "owner"  # who runs this process: the loop sets "loop"; inside an agent's session FM_ISSUE names the task
 
 
-def record(p: Project, origin: str | None = None) -> None:
-    who = origin or os.environ.get("FM_ISSUE") or ORIGIN
+def record(p: Project) -> None:
+    who = os.environ.get("FM_ISSUE") or ORIGIN
     util.append_jsonl(p.state / "gh_calls.jsonl", {"time": util.now(), "epoch": time.time(), "origin": who})
 
 
