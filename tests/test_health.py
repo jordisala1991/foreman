@@ -185,6 +185,13 @@ class Copies(unittest.TestCase):
         self.assertEqual(len(health.agent_copies(self.p, self.rows("stopped", {}))), 1)
         self.assertEqual(len(health.agent_copies(self.p, self.rows("done", {}, drop=True))), 1)
 
+    def test_a_working_row_with_status_idle_is_idle_and_the_detail_says_so(self):
+        rows = self.rows("done", {})
+        rows[self.sid] = {**rows.get(self.sid, {}), "state": "working", "status": "idle"}
+        found = health.agent_copies(self.p, rows)
+        self.assertEqual(len(found), 1)
+        self.assertIn("which is idle (state working)", found[0]["detail"])
+
     def test_two_copies_are_one_finding(self):
         found = health.agent_copies(self.p, self.rows("done", {}, {}))
         self.assertEqual(len(found), 1)

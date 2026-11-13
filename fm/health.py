@@ -162,7 +162,7 @@ def agent_copies(p: Project, rows: dict[str, Any]) -> list[Finding]:
                 {
                     "key": f"copy:{i['id']}:{sid[:8]}",
                     "title": f"{i['id']}'s work is in a session fm does not track",
-                    "detail": f"{name} is recorded in session {sid[:8]} ({sessions.state(rows, sid)}), but "
+                    "detail": f"{name} is recorded in session {sid[:8]}, which is idle (state {sessions.state(rows, sid)}), but "
                     f"{', '.join(c[:8] for c in found)} (same name and folder) is working: the work is there. "
                     f"Open it with `claude attach {found[0][:8]}`, or stop it so the task goes on in the recorded one.",
                 }
@@ -246,7 +246,7 @@ def loop_errors(p: Project) -> list[Finding]:
 
 def findings(p: Project, rows: dict[str, Any], outside: bool = False, wait: bool = True) -> list[Finding]:
     out = [*loop_dead(p), *claude_token(p, wait=wait)] if outside else []
-    checks: tuple[Callable[[], list[Finding]], ...] = (
+    checks = (
         lambda: agents(p, rows),
         lambda: agent_copies(p, rows),
         lambda: answers_undelivered(p),
