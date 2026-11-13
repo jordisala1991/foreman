@@ -47,7 +47,8 @@ FAKE_GH = textwrap.dedent("""\
         def node(n, pr):
             sha = subprocess.run(["git", "ls-remote", "origin", "refs/heads/" + pr["head"]], capture_output=True, text=True).stdout.split()[:1]
             roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]]}
-            return {"number": int(n), "state": pr["state"], "headRefOid": sha[0] if sha else "", "commits": {"nodes": [{"commit": {"statusCheckRollup": roll}}]}}
+            commits = {"nodes": [{"commit": {"statusCheckRollup": roll}}]}
+            return {"number": int(n), "state": pr["state"], "headRefOid": sha[0] if sha else "", "commits": commits}
         one = [x for x in a if x.startswith("number=")]
         if one:
             pr = s["prs"].get(one[0][7:])
