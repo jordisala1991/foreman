@@ -53,7 +53,7 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
         i = backlog.get(backlog.load(p), iid)
         if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
             continue
-        guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows), reset=False)
+        guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows))
         if util.STARTED.get(key, 0) != started:
             return
 
@@ -91,24 +91,25 @@ def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
 
 
-def guarded(p: Project, iid: str, what: str, fn: Callable[[], object], reset: bool = True) -> None:
+def guarded(p: Project, iid: str, what: str, fn: Callable[[], object], field: str = "retry") -> None:
     """One issue's step: a Transient failure is retried next tick (noted once per error); the 3rd in a row blocks the
-    issue with the last error; a success resets the count (not with `reset` False: the queue step only starts the check,
-    whose own thread owns the count). Any other failure blocks it at once. The others go on."""
+    issue with the last error; a success resets the count. Any other failure blocks it at once. The others go on.
+    The count lives in `{field}_count` and `{field}_error`: the background check has its own, apart from the tick's."""
+    err, cnt = f"{field}_error", f"{field}_count"
     try:
         fn()
         i = backlog.get(backlog.load(p), iid)
-        if (i.get("retry_error") or i.get("retry_count")) and reset:
-            backlog.update(p, iid, retry_error="", retry_count=0)
+        if i.get(err) or i.get(cnt):
+            backlog.update(p, iid, **{err: "", cnt: 0})
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), iid)
-        count = int(i.get("retry_count") or 0) + 1
+        count = int(i.get(cnt) or 0) + 1
         if count >= TRANSIENT_ATTEMPTS:
-            backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300], retry_error="", retry_count=0)
+            backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300], **{err: "", cnt: 0})
             backlog.event(p, iid, f"blocked: could not {what} {TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])
             return
-        backlog.update(p, iid, retry_count=count, retry_error=str(e))
-        if i.get("retry_error") != str(e):  # the platform hiccuped: stay as is, try again next tick, say it once
+        backlog.update(p, iid, **{cnt: count, err: str(e)})
+        if i.get(err) != str(e):  # the platform hiccuped: stay as is, try again next tick, say it once
             backlog.event(p, iid, f"could not {what}, will retry: {e}"[:300])
     except Exception as e:
         backlog.update(p, iid, blocked=f"the loop could not {what}: {e}"[:300])
@@ -180,7 +181,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
     if c.get("head") != head or c.get("main") != main_head or stale:
         ci = why if i.get("pr") else None
-        t = util.start_background(check_key(p), p.state / "errors.jsonl", lambda: guarded(p, i["id"], "check it", lambda: integrate.check(p, i["id"], ci)))
+        t = util.start_background(check_key(p), p.state / "errors.jsonl", lambda: check_guarded(p, i["id"], ci))
         if t is None:
             return
         t.join(util.BACKGROUND_WAIT_S)
@@ -197,6 +198,11 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             integrate.merge_accepted(p, i["id"])
         except integrate.IntegrateError as e:
             backlog.event(p, i["id"], f"automatic integration failed: {e}")
+
+
+def check_guarded(p: Project, iid: str, ci: str | None) -> None:
+    """The check, in its thread: its own retry count (the tick's belongs to the queue step), 3 Transient in a row block."""
+    guarded(p, iid, "check it", lambda: integrate.check(p, iid, ci), "check_retry")
 
 
 def sort_key(i: dict[str, Any]) -> tuple[int, int, int]:

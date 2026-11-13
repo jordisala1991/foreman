@@ -242,6 +242,25 @@ class Queue(unittest.TestCase):
                 t.join()
         self.assertIn("net down", e.issue(a)["blocked"])
 
+    def test_transient_failures_of_the_queue_step_that_are_not_in_a_row_do_not_block(self):
+        e = Env(test="true")
+        a = self.deliver(e)
+        loop.tick(e.p)  # checked: up to date, no check runs from now on
+        real = loop.pulls.prepare
+        calls: list[int] = []
+
+        def flaky(*args):
+            calls.append(1)
+            if len(calls) != 3:
+                raise providers.Transient("gh 502")
+            return real(*args)
+
+        loop.pulls.prepare = flaky
+        self.addCleanup(setattr, loop.pulls, "prepare", real)
+        for _ in range(4):
+            loop.tick(e.p)
+        self.assertEqual((len(calls), e.issue(a).get("blocked", "")), (4, ""))
+
     def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self):
         e = Env(test="true")
 
