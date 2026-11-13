@@ -39,7 +39,10 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
     """Merges first (quick); then at most one branch check is started per tick, the rest on the next ticks. Each task is
     read again just before its turn."""
     main = p.get("project", "main")
-    waiting = [i["id"] for i in backlog.issues(backlog.load(p)) if i["status"] == "in review" and not i.get("blocked")]
+    in_review = [i for i in backlog.issues(backlog.load(p)) if i["status"] == "in review"]
+    for i in in_review:
+        stop_review_sessions(p, i, rows)
+    waiting = [i["id"] for i in in_review if not i.get("blocked")]
     for iid in waiting:
         i = backlog.get(backlog.load(p), iid)
         if i["status"] == "in review" and i.get("accepted") and not i.get("blocked"):
@@ -48,8 +51,6 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
     started = util.STARTED.get(key, 0)
     for iid in waiting:
         i = backlog.get(backlog.load(p), iid)
-        if i["status"] == "in review":
-            stop_review_sessions(p, i, rows)
         if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
             continue
         guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows))
