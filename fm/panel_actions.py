@@ -33,12 +33,6 @@ def run_cli(fn: Callable[[argparse.Namespace], Any], p: Project, **kw: Any) -> N
         raise Refused(str(e.code)) from None
 
 
-def open_permission(p: Project, qid: str) -> None:
-    q = next((q for q in backlog.load(p)["decisions"] if q["id"] == qid), None)
-    if not q or q.get("kind") != "permission":
-        raise Refused(f"{qid} is not an open permission request")
-
-
 def add(p: Project, body: str) -> Obj:
     f = json.loads(body or "{}")
     if not str(f.get("title", "")).strip():
@@ -67,7 +61,6 @@ def answer(p: Project, iid: str, text: str, q: Query) -> Obj:
 
 def permission(allowed: bool) -> Callable[[Project, str, str, Query], Obj]:
     def handle(p: Project, iid: str, text: str, q: Query) -> Obj:
-        open_permission(p, iid)
         run_cli(lambda a: cli.cmd_allow(a, allowed), p, qid=iid, text=text or None)
         return OK
 

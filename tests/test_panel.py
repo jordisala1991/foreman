@@ -37,7 +37,6 @@ class PanelTest(unittest.TestCase):
         backlog.set_status(self.p, self.work, "in progress", agent={"name": "de-2", "short": "abc123"})
         self.qid = backlog.ask(self.p, self.work, "de-2", "Which colour?")
         self.perm = backlog.ask(self.p, self.work, "de-2", "push the tag", kind="permission", action="publish")
-        panel.forget()
         self.srv, self.key = panel.make_server(0, token="test-key")
         self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
