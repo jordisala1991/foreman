@@ -1,10 +1,13 @@
 """A temporary project: a git repo with one commit, a home with fm.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
+import atexit
 import contextlib
 import io
 import json
 import os
+import pwd
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +18,17 @@ from fm import backlog, util
 from fm.config import Project
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# A test run must not write the owner's real ~/.config/fm (registry, panel token, locks): HOME and FM_REGISTRY point
+# at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
+REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
+REAL_REGISTRY = REAL_HOME / ".config/fm/projects.json"
+SANDBOX = Path(tempfile.mkdtemp(prefix="fmhome-")).resolve()
+(SANDBOX / "tmp").mkdir()
+tempfile.tempdir = str(SANDBOX / "tmp")  # every temp dir of this run lives in the sandbox: a leak into the real registry is recognisable
+os.environ["HOME"] = str(SANDBOX)
+os.environ["FM_REGISTRY"] = str(SANDBOX / "projects.json")
+atexit.register(shutil.rmtree, SANDBOX, ignore_errors=True)
 
 FAKE = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -106,6 +120,14 @@ class Env:
         for r in rows:
             if r["name"] == name:
                 r["state"] = state
+        f.write_text(json.dumps(rows))
+
+    def set_status(self, name: str, status: str) -> None:
+        f = self.bin / "agents.json"
+        rows = json.loads(f.read_text())
+        for r in rows:
+            if r["name"] == name:
+                r["status"] = status
         f.write_text(json.dumps(rows))
 
     def hunter_done(self, iid: str) -> None:

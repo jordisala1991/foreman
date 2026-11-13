@@ -12,7 +12,7 @@ Read the project's lessons, `$lessons`.
 - Settle what the task means: what changes, what does not, how to tell it is done.
 - The done criterion is checkable by an agent alone: a command, a test, an observable behaviour; with today's figure when it is about a figure. When the behaviour has cases, write it as a short table, input → expected result.
 - A claim of scope («only X uses it», «nothing else reads this») cites the search that shows it, or says it was not checked.
-- Small and checkable beats complete. If it is really several tasks, each integrable on its own, file the others with `fm add "title" --claim "goal" --criterion "done when" --ready` (or without --ready if they need defining too) and keep this one for the first part.
+- Small and checkable beats complete. If the task looks too big, do not file other tasks (fm has no tasks and subtasks yet): ask the owner with `fm ask`, proposing the split, and file nothing.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
 
 # The plan

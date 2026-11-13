@@ -41,7 +41,7 @@ def cmd_verdict(a: argparse.Namespace) -> None:
         tip = next((t for t in launched if t and t.startswith(a.tip)), "") if a.tip else newest
         if a.tip and not tip:
             sys.exit(f"fm: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
-        v = {"round": len(i.get("reviews", [])) + 1, "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
+        v = {"round": backlog.review_round(i), "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
         i["reviews"] = [*i.get("reviews", []), v]
         if tip == newest:  # a verdict for an older launch is history: it decides nothing
             i["review"] = v
@@ -55,10 +55,6 @@ def cmd_verdict(a: argparse.Namespace) -> None:
 def cmd_ready(a: argparse.Namespace) -> None:
     p = home(a)
     iid = mine(a)
-    if not (a.plan or a.no_plan):
-        sys.exit('fm: say how the task is planned: --plan PATH (the written plan) or --no-plan "why it is trivial"')
-    if a.plan and a.no_plan:
-        sys.exit("fm: --plan and --no-plan exclude each other: either the task has a plan or it is trivial")
     if a.plan:
         f = Path(a.plan)
         if not f.is_file() or not f.read_text(encoding="utf-8").strip():
