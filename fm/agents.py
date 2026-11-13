@@ -181,11 +181,14 @@ def idle_s(a: dict[str, Any]) -> float:
 
 def reviewer_active(i: dict[str, Any]) -> bool:
     """A review pass works on the current tip: the reviewer without a verdict, or the hunter before its file exists."""
+    return i["status"] == "in review" and not i.get("blocked") and review_running(i)
+
+
+def review_running(i: dict[str, Any]) -> bool:
+    """A review pass has no result yet on its tip, blocked task or not."""
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
-    if i["status"] != "in review" or i.get("blocked"):
-        return False
     if r and r["tip"] != v.get("tip"):
         return True
     return bool(h) and h["tip"] not in (v.get("tip"), r.get("tip")) and not Path(h["file"]).exists()
@@ -204,8 +207,9 @@ def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
 
 def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "reviewer") -> None:
     """One of the two review passes: the `hunter` lists what it suspects, then the `reviewer` checks each finding."""
-    rnd = len(i.get("reviews", [])) + 1
-    reviews: list[dict[str, Any]] = i.get("reviews") or []
+    rnd = backlog.review_round(i)
+    all_reviews: list[dict[str, Any]] = i.get("reviews") or []
+    reviews = all_reviews[int(i.get("review_from", 0)) :]
     prev = reviews[-1] if reviews else {}
     name = f"{i['id'].lower()}-{'hunt' if role == 'hunter' else 'review'}"
     model = p.get("agents", "review_model")

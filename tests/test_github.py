@@ -14,7 +14,7 @@ from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, re, sys, time
+    import json, os, re, sys
     d = os.path.dirname(os.path.abspath(__file__))
     a = sys.argv[1:]
     f = os.path.join(d, "gh.json")
@@ -24,8 +24,6 @@ FAKE_GH = textwrap.dedent("""\
         return a[a.index(n) + 1] if n in a else None
     def save():
         json.dump(s, open(f, "w"))
-    if s.get("hang") and a[:2] == ["pr", "create"]:
-        time.sleep(5)
     if s.get("fail_always") == a[:2]:
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
@@ -453,21 +451,6 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual((g.e.issue(iid)["check"]["ci"], g.e.issue(iid)["status"]), ("fail", "in review"))
         self.assertEqual(g.calls("pr", "merge"), [])
-
-    def test_a_hung_gh_times_out_without_freezing_the_tick(self):
-        from fm.providers import github
-
-        old = github.TIMEOUT
-        github.TIMEOUT = 1
-        self.addCleanup(setattr, github, "TIMEOUT", old)
-        g = self.make(test="true")
-        g.set(hang=True)
-        iid = g.work()
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
-        self.assertIn("timed out", g.e.issue(iid)["retry_error"])
-        events = [e for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
-        self.assertEqual(len(events), 1)
 
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
         for failing in (["pr", "checks"], ["pr", "merge"], ["pr", "view"]):

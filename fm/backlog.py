@@ -84,6 +84,11 @@ def open_findings(v: Mapping[str, Any]) -> int:
     return int(v["open"]) if "open" in v else int(v.get("high", 0)) + int(v.get("medium", 0))
 
 
+def review_round(i: Mapping[str, Any]) -> int:
+    """The round the next review is: reviews since the owner last asked for a fresh one (`review_from`), plus one."""
+    return len(i.get("reviews") or []) - int(i.get("review_from", 0)) + 1
+
+
 class Check(TypedDict, total=False):
     head: str
     risk: str
@@ -253,6 +258,7 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
             raise BacklogError(f"no open question {qid}")
         d["decisions"].remove(q)
         q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}", "free": True, "delivered": False})
+        q["answered_at"] = util.now()
         d["decisions_resolved"].append(q)
     event(p, q["issue"], f"owner answered {qid}: {text}")
     return q
@@ -275,6 +281,7 @@ def note(p: Project, iid: str, text: str, source: str) -> None:
                 "source": source,
                 "resolved": util.now()[:10],
                 "delivered": False,
+                "answered_at": util.now(),
                 "options": [],
                 "title": i["title"],
             }

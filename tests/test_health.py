@@ -44,6 +44,21 @@ class Health(unittest.TestCase):
         health.run(self.p, {})
         self.assertEqual(len(self.triage()), 1)
 
+    def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
+        iid = backlog.add(self.p, "x", status="ready", criterion="y")
+        qid = backlog.ask(self.p, iid, "a", "A or B?")
+        backlog.answer(self.p, qid, "B")
+        self.assertEqual(health.answers_undelivered(self.p), [])
+        with backlog.edit(self.p) as d:
+            d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
+        (f,) = health.answers_undelivered(self.p)
+        self.assertIn(iid, f["title"])
+        self.assertIn("«B»", f["detail"])
+        with backlog.edit(self.p) as d:  # an answer made before the stamp existed: its `by` still has the time
+            del d["decisions_resolved"][0]["answered_at"]
+            d["decisions_resolved"][0]["by"] = "owner (panel), 2020-01-01 00:00:00"
+        self.assertEqual(len(health.answers_undelivered(self.p)), 1)
+
     def test_live_worktree_is_not_an_orphan(self):
         backlog.add(self.p, "x", status="ready", criterion="y")
         loop.tick(self.p)
