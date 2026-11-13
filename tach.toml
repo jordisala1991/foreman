@@ -108,9 +108,6 @@ layer = "core"
 path = "fm.backlog"
 layer = "core"
 [[modules]]
-path = "fm.ghcalls"
-layer = "core"
-[[modules]]
 path = "fm.costs"
 layer = "core"
 [[modules]]
