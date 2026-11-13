@@ -11,7 +11,6 @@ from . import Conflict, Permanent, Provider, ProviderError, Transient
 
 NONE_TTL = 600  # seconds a no-checks answer is reused: CI that registers late is seen within 10 minutes
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
-TIMEOUT = 30  # seconds for each gh / git call: a hung network must not freeze the loop
 PUSH_TIMEOUT = 20  # seconds for a push
 
 
@@ -123,7 +122,7 @@ class GitHub(Provider):
         if prog == "gh":
             ghcalls.record(self.p)
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, timeout=TIMEOUT)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if check and r.code != 0:

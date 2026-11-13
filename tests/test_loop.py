@@ -223,6 +223,16 @@ class Provider(unittest.TestCase):
         self.assertIn("uncommitted changes", i["blocked"])
         self.assertNotIn("merge", i)
 
+    def test_a_main_checkout_on_another_branch_blocks_the_merge(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        git(e.repo, "checkout", "-q", "-b", "elsewhere")
+        loop.tick(e.p)
+        self.assertIn("is not on main", e.issue(iid)["blocked"])
+        self.assertNotIn("merge", e.issue(iid))
+
     def accepted_then_main_moves(self, e):
         iid = self.delivered(e)
         loop.tick(e.p)
