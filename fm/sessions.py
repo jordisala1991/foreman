@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import proc, token, util
+from . import backlog, proc, token, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
@@ -148,10 +148,27 @@ def alive(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
 
 
 def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
-    """Not idle: working, or any other live state Claude Code reports (e.g. blocked). Resuming a session that is not
-    idle starts a copy of it, so messages wait for `done` / `stopped` / gone."""
-    return state(rows, sid) not in ("done", "stopped", "gone")
+    """Not idle: working, or any other live state Claude Code reports. Idle whatever the state says: status `idle` (an
+    agent that asked the owner and ended its turn shows `blocked`/`idle`, and a hunter `working`/`idle`), or a
+    `blocked` row with neither status nor process (a session whose process went away). Resuming a session that is not
+    idle starts a copy of it, so messages wait until it is idle."""
+    s = state(rows, sid)
+    if s in ("done", "stopped", "gone"):
+        return False
+    row = rows[sid or ""]
+    return row.get("status") != "idle" and not (s == "blocked" and not row.get("status") and not row.get("pid"))
 
 
 def stop(p: Project, short: str) -> None:
     proc.run([p.get("agents", "claude"), "stop", short], timeout=30)
+
+
+def stop_live(p: Project, iid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
+    """Best-effort: stops a recorded agent's session unless Claude Code shows it stopped. A failure is noted on the
+    task, never raised: cleanup must not block a merge, a cancel or a review."""
+    a = agent or {}
+    if a.get("short") and state(rows, a.get("session")) != "stopped":
+        try:
+            stop(p, a["short"])
+        except proc.ProcError as e:
+            backlog.event(p, iid, f"could not stop session {a['short']}: {e}")

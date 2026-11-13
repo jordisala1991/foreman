@@ -97,7 +97,7 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     files = diff_stat(p, branch)
     deleted = deleted_files(p, branch)
     v: backlog.Review | None = i.get("review")
-    review = "" if not v else "clean" if v["high"] + v["medium"] == 0 else f"open after round {v['round']}: H {v['high']}, M {v['medium']}"
+    review = "" if not v else "clean" if backlog.open_findings(v) == 0 else f"open after round {v['round']}: {backlog.open_findings(v)}"
     risk, reasons = score(p, Facts(tests, review, files, deleted, conflicts(p, branch), commits, ci))
     c = {
         "tests": tests,
@@ -120,7 +120,7 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
 
 
 def merges_alone(p: Project, c: dict[str, Any]) -> bool:
-    """Autonomy lets this risk in alone; when the provider has CI that must be green, only on a pass; open H/M findings
+    """Autonomy lets this risk in alone; when the provider has CI that must be green, only on a pass; open findings
     never merge alone (quality is not risk, but unresolved quality waits for the owner)."""
     if str(c.get("review", "")).startswith("open"):
         return False
@@ -194,6 +194,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         raise IntegrateError("its pull request was closed without merging: reopen it, or reject the task")
     if not seen["merged"]:
         return "merging"
+    stop_all(p, i)
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
     git(p.repo, "branch", "-D", i["branch"], check=False)
@@ -212,14 +213,24 @@ def merge_accepted(p: Project, iid: str) -> str:
     return "done"
 
 
+def stop_all(p: Project, i: dict[str, Any]) -> None:
+    """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
+    session it ever started (a replaced review pass keeps no record but its id in `sessions`)."""
+    rows = sessions.listing(p)
+    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer")]
+    every += [{"short": rows.get(sid, {}).get("id"), "session": sid} for sid in i.get("sessions", [])]
+    done: set[str] = set()
+    for a in every:
+        if a.get("short") not in done:
+            done.add(str(a.get("short")))
+            sessions.stop_live(p, i["id"], a, rows)
+
+
 def close(p: Project, iid: str, status: str, why: str) -> None:
-    """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
+    """Closes an open issue as canceled or done (merged outside fm): stops its sessions, answers its open questions,
     removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
-    agent: backlog.Agent = i.get("agent") or {}
-    short = agent.get("short")
-    if short and i["status"] in backlog.RUNNING:
-        sessions.stop(p, short)
+    stop_all(p, i)
     for q in backlog.open_questions(backlog.load(p), iid):
         backlog.answer(p, q["id"], f"(the task was {status})")
         backlog.mark_delivered(p, q["id"])

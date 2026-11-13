@@ -97,8 +97,9 @@ class ReviewerPlan(unittest.TestCase):
         e = Env()
         iid = backlog.add(e.p, "x", status="ready", criterion="y")
         backlog.update(e.p, iid, status="in review", worktree=str(e.repo), **keys)
+        agents.launch_reviewer(e.p, e.issue(iid), "abc123", "hunter")
         agents.launch_reviewer(e.p, e.issue(iid), "abc123")
-        return e, e.calls()[0]["argv"][-1]
+        return e, e.calls()[-1]["argv"][-1]
 
     def test_reviewer_gets_the_registered_plan_file(self):
         e, text = self.brief_of_reviewer(plan_file="/elsewhere/custom-plan.md")
