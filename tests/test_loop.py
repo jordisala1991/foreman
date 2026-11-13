@@ -93,6 +93,7 @@ class Answers(unittest.TestCase):
         loop.tick(e.p)  # its session is still working: wait
         self.assertEqual(len(e.calls()), 1)
         e.set_state(iid.lower(), "blocked")
+        e.set_status(iid.lower(), "active")
         loop.tick(e.p)  # nor while blocked: resuming it would start a copy
         self.assertEqual(len(e.calls()), 1)
         e.set_state(iid.lower(), "done")
@@ -101,6 +102,24 @@ class Answers(unittest.TestCase):
         self.assertIn("--resume", resume)
         self.assertEqual(resume[resume.index("--resume") + 1], e.issue(iid)["agent"]["session"])
         self.assertIn("«B»", resume[-1])
+        self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
+
+    def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self):
+        for state, status in (("blocked", "idle"), ("working", "idle"), ("blocked", None)):
+            with self.subTest(state=state, status=status):
+                self.delivered_to_idle(state, status)
+
+    def delivered_to_idle(self, state, status):
+        e = Env()
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        qid = backlog.ask(e.p, iid, iid.lower(), "A or B?")
+        backlog.answer(e.p, qid, "B")
+        e.set_state(iid.lower(), state)
+        if status:
+            e.set_status(iid.lower(), status)
+        loop.tick(e.p)
+        self.assertIn("--resume", e.calls()[-1]["argv"])
         self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
 
 
