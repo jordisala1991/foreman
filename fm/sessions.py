@@ -88,11 +88,6 @@ def _run(cmd: list[str], cwd: Path) -> str:
     return m.group(1)
 
 
-def resume_command(p: Project, sid: str, message: str) -> list[str]:
-    """No flag besides the message: the session keeps its saved options and its id."""
-    return [p.get("agents", "claude"), "--bg", "--resume", sid, message]
-
-
 def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | None]:
     """(short id, full session id or None)."""
     short = _run(command(p, agent, prompt), cwd)
@@ -107,11 +102,19 @@ def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
         raise SessionError("claude agents is unreadable: not resuming")
     if busy(listing(p), sid):  # fresh: the tick's listing may be old, and the owner may be in the session now
         raise SessionError(f"session {sid[:8]} is {state(listing(p), sid)}: not resuming it")
-    stop(p, sid[:8])
+    try:
+        stop(p, sid[:8])
+    except proc.ProcError as e:
+        raise SessionError(f"claude stop failed: {e}") from e
     for _ in range(STOP_WAIT_TRIES):
-        if state(listing(p), sid) in ("stopped", "gone"):
+        rows = listing(p)
+        if not rows:
+            raise SessionError("claude agents is unreadable: not resuming")
+        if not alive(rows, sid):
             break
         time.sleep(1)
+    else:
+        raise SessionError(f"session {sid[:8]} did not stop: not resuming it")
     time.sleep(STOP_SETTLE_S)
     short = _run([p.get("agents", "claude"), "--bg", "--resume", sid, message], cwd)
     if not sid.startswith(short):
@@ -136,6 +139,12 @@ def state(rows: dict[str, dict[str, Any]], sid: str | None) -> str:
     """working | done (ended its turn, waiting) | stopped | gone."""
     row = rows.get(sid or "")
     return str(row.get("state") or "gone") if row else "gone"
+
+
+def alive(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
+    """Its process still runs. claude keeps the state of a stopped session (`done`) and drops its `pid`."""
+    row = rows.get(sid or "")
+    return bool(row and row.get("pid") and row.get("state") != "stopped")
 
 
 def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:

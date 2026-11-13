@@ -81,6 +81,7 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
                 backlog.update(p, i["id"], nudges=i.get("nudges", 0) + 1)
                 backlog.event(p, i["id"], f"{a.get('name')} ended its turn without finishing: nudged")
                 continue
+            update_agent(p, i["id"], nudged=util.now())  # a failed nudge counts too: the block below then fires
         if (util.age_s(a.get("nudged")) or 0) > NUDGE_IDLE_S and idle_s(a) > NUDGE_IDLE_S:
             backlog.update(p, i["id"], blocked="its agent stopped without finishing, even after a nudge")
             backlog.event(p, i["id"], "blocked: agent stopped without finishing")

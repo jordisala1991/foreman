@@ -29,11 +29,16 @@ FAKE = textwrap.dedent("""\
         print(open(os.path.join(d, "login.json")).read() if os.path.exists(os.path.join(d, "login.json")) else '{"loggedIn": true}')
         sys.exit(0)
     if a[:1] == ["stop"]:
+        if os.path.exists(os.path.join(d, "stop_noop")):
+            sys.exit(0)
+        if os.path.exists(os.path.join(d, "stop_breaks_listing")):
+            os.remove(os.path.join(d, "agents.json"))
+            sys.exit(0)
         path = os.path.join(d, "agents.json")
         rows = json.load(open(path)) if os.path.exists(path) else []
         for r in rows:
             if r["id"] == a[1] or r["sessionId"].startswith(a[1]):
-                r["state"] = "stopped"
+                r.pop("pid", None)  # as real claude: the state stays, the live process (pid) is gone
         json.dump(rows, open(path, "w"))
         sys.exit(0)
     with open(os.path.join(d, "calls.jsonl"), "a") as f:
@@ -43,27 +48,28 @@ FAKE = textwrap.dedent("""\
         return json.load(open(path)) if os.path.exists(path) else []
     def save(fn, rows):
         json.dump(rows, open(os.path.join(d, fn), "w"))
-    if "--resume" in a:  # alive (not stopped) rows are copied, as claude does
+    if "--resume" in a:  # alive (with a pid) rows are copied, as claude does
         if os.path.exists(os.path.join(d, "fail_resume")):
             print("boom", file=sys.stderr)
             sys.exit(1)
         sid = a[a.index("--resume") + 1]
         rows = rows_of("agents.json")
         row = next(r for r in rows if r["sessionId"] == sid)
-        if row["state"] != "stopped" or len(a) != 4 or os.path.exists(os.path.join(d, "copy_next")):  # alive, or with flags: a copy, as claude does
+        if row.get("pid") or len(a) != 4 or os.path.exists(os.path.join(d, "copy_next")):  # alive, or with flags: a copy, as claude does
             new = hashlib.sha1((sid + "copy" + str(len(rows))).encode()).hexdigest()[:8]
-            save("agents.json", rows + [{"id": new, "sessionId": new + "-0000-0000", "name": row["name"], "state": "working"}])
+            save("agents.json", rows + [{"id": new, "sessionId": new + "-0000-0000", "name": row["name"], "state": "working", "pid": 1}])
             print(f"note: started a copy as {new}")
             print(f"backgrounded · {new} · {row['name']}")
         else:
             row["state"] = "working"
+            row["pid"] = 1
             save("agents.json", rows)
             print(f"backgrounded · {sid[:8]} · {row['name']}")
         sys.exit(0)
     name = a[a.index("-n") + 1]
     short = hashlib.sha1(name.encode()).hexdigest()[:8]
     rows = rows_of("agents.json")
-    rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "state": "working"})
+    rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "state": "working", "pid": 1})
     save("agents.json", rows)
     print(f"backgrounded · {short} · {name}")
 """)

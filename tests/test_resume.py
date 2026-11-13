@@ -5,7 +5,7 @@ import unittest
 
 from helpers import Env
 
-from fm import backlog, loop, sessions, talk, util
+from fm import backlog, loop, proc, sessions, talk, util
 
 
 def launched(e: Env) -> str:
@@ -56,6 +56,50 @@ class Resume(unittest.TestCase):
         with self.assertRaises(sessions.SessionError):
             sessions.resume(e.p, e.issue(iid)["agent"]["session"], "hi", e.repo)
         self.assertEqual(len(e.calls()), 1)
+
+    def failed_send(self, flag: str, tries: int = 15):
+        e = Env()
+        iid = launched(e)
+        e.set_state(iid.lower(), "done")
+        (e.bin / flag).write_text("")
+        answer(e, iid)
+        old, sessions.STOP_WAIT_TRIES = sessions.STOP_WAIT_TRIES, tries
+        try:
+            loop.tick(e.p)
+        finally:
+            sessions.STOP_WAIT_TRIES = old
+        self.assertEqual(e.issue(iid)["undelivered"], 1)
+        self.assertFalse([c for c in e.calls() if "--resume" in c["argv"]])
+        self.assertTrue(any("could not reach" in ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl")))
+
+    def test_a_failed_stop_fails_the_send(self):
+        def boom(p, short):
+            raise proc.ProcError("claude stop: timed out after 30s")
+
+        old, sessions.stop = sessions.stop, boom
+        try:
+            self.failed_send("stop_ok")
+        finally:
+            sessions.stop = old
+
+    def test_a_session_that_does_not_stop_is_not_resumed(self):
+        self.failed_send("stop_noop", tries=1)
+
+    def test_an_unreadable_listing_while_waiting_does_not_resume(self):
+        self.failed_send("stop_breaks_listing")
+
+    def test_a_failed_nudge_still_counts_so_the_block_fires(self):
+        e = Env()
+        iid = launched(e)
+        backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "started": "2000-01-01 00:00:00"})
+        (e.bin / "copy_next").write_text("")
+        e.set_state(iid.lower(), "done")
+        loop.tick(e.p)
+        self.assertTrue(e.issue(iid)["agent"]["nudged"])
+        backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "nudged": "2000-01-01 00:00:00"})
+        loop.tick(e.p)
+        self.assertIn("even after a nudge", e.issue(iid)["blocked"])
+        self.assertEqual(len(rows(e)), 2)
 
     def test_two_answers_go_one_per_tick(self):
         e = Env()
