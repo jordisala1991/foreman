@@ -42,6 +42,7 @@ FAKE = textwrap.dedent("""\
         print(open(os.path.join(d, "login.json")).read() if os.path.exists(os.path.join(d, "login.json")) else '{"loggedIn": true}')
         sys.exit(0)
     if a[:1] == ["stop"]:
+        open(os.path.join(d, "stops.txt"), "a").write(a[1] + "\\n")
         if os.path.exists(os.path.join(d, "agents.json")):
             rows = json.load(open(os.path.join(d, "agents.json")))
             for r in rows:
@@ -119,6 +120,10 @@ class Env:
 
     def calls(self) -> list[dict]:
         return util.read_jsonl(self.bin / "calls.jsonl")
+
+    def stops(self) -> list[str]:
+        f = self.bin / "stops.txt"
+        return f.read_text().split() if f.exists() else []
 
     def state_of(self, name: str) -> str:
         return next(r["state"] for r in json.loads((self.bin / "agents.json").read_text()) if r["name"] == name)

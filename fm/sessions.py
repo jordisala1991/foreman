@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import proc, token, util
+from . import backlog, proc, token, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
@@ -130,8 +130,12 @@ def stop(p: Project, short: str) -> None:
     proc.run([p.get("agents", "claude"), "stop", short], timeout=30)
 
 
-def stop_live(p: Project, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
-    """Stops a recorded agent's session unless Claude Code already shows it stopped (or does not know it)."""
+def stop_live(p: Project, iid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
+    """Best-effort: stops a recorded agent's session unless Claude Code shows it stopped. A failure is noted on the
+    task, never raised: cleanup must not block a merge, a cancel or a review."""
     a = agent or {}
-    if a.get("short") and state(rows, a.get("session")) not in ("stopped", "gone"):
-        stop(p, a["short"])
+    if a.get("short") and state(rows, a.get("session")) != "stopped":
+        try:
+            stop(p, a["short"])
+        except proc.ProcError as e:
+            backlog.event(p, iid, f"could not stop session {a['short']}: {e}"[:300])

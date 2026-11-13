@@ -32,12 +32,25 @@ MAX_ROUNDS = 2  # what is still open after round 2 goes to the owner
 def run_queue(p: Project, rows: dict[str, Any]) -> None:
     main = p.get("project", "main")
     for i in backlog.issues(backlog.load(p)):
+        if i["status"] == "in review":
+            stop_review_sessions(p, i, rows)
         if i["status"] != "in review" or i.get("blocked"):
             continue
         if i.get("accepted"):
             guarded(p, i["id"], "merge it", lambda i=i: merge_one(p, i, main))
             continue
         guarded(p, i["id"], "check it", lambda i=i: queue_one(p, i, main, rows))
+
+
+def stop_review_sessions(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:
+    """A hunter whose findings file is written, and a reviewer whose verdict is recorded, have nothing more to do."""
+    v: dict[str, Any] = i.get("review") or {}
+    h: dict[str, Any] = i.get("hunter") or {}
+    r: dict[str, Any] = i.get("reviewer") or {}
+    if h.get("file") and Path(h["file"]).exists() and not working(h, rows):
+        sessions.stop_live(p, i["id"], h, rows)
+    if v and v.get("tip") == r.get("tip"):
+        sessions.stop_live(p, i["id"], r, rows)
 
 
 def conflict_note(main: str) -> str:
@@ -90,10 +103,6 @@ def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
-    if h.get("file") and Path(h["file"]).exists() and not working(h, rows):
-        sessions.stop_live(p, h, rows)  # its findings are written: nothing more to do
-    if v and v.get("tip") == r.get("tip"):
-        sessions.stop_live(p, r, rows)  # its verdict is recorded
     if v.get("tip") == head:
         return False
     role, last = ("reviewer", r) if h.get("tip") == head else ("hunter", h)

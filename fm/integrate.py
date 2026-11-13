@@ -214,14 +214,17 @@ def merge_accepted(p: Project, iid: str) -> str:
 
 
 def stop_all(p: Project, i: dict[str, Any]) -> None:
-    """None of the task's sessions stays running: its agent, hunter and reviewer, whatever its status was."""
+    """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
+    session it ever started (a replaced review pass keeps no record but its id in `sessions`)."""
     rows = sessions.listing(p)
     for role in ("agent", "hunter", "reviewer"):
-        sessions.stop_live(p, i.get(role), rows)
+        sessions.stop_live(p, i["id"], i.get(role), rows)
+    for sid in i.get("sessions", []):
+        sessions.stop_live(p, i["id"], {"short": rows.get(sid, {}).get("id"), "session": sid}, rows)
 
 
 def close(p: Project, iid: str, status: str, why: str) -> None:
-    """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
+    """Closes an open issue as canceled or done (merged outside fm): stops its sessions, answers its open questions,
     removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
     stop_all(p, i)
