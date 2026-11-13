@@ -117,7 +117,7 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-de
   the agent that owns the task.
 
 **Defining agent** (`fm/briefs/define.md`): reads the repo (read only), settles what the task means, asks the owner
-only what only he can decide (`fm ask`, then ends its turn), may split into more issues (`fm add`), and ends with
+only what only he can decide (`fm ask`, then ends its turn), asks the owner (`fm ask`) when a task is too big, proposing the split, files nothing, and ends with
 `fm ready --claim --criterion --detail --plan PATH` (or `--no-plan "why trivial"`). It also reads the code and writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
 risk); the issue gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
