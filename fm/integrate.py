@@ -213,6 +213,16 @@ def merge_accepted(p: Project, iid: str) -> str:
     return "done"
 
 
+def close_pull(p: Project, i: dict[str, Any], why: str) -> None:
+    """Closes the task's PR with the reason, unless it is already closed or merged."""
+    provider, change = registry.get(p), pulls.change_of(i, "")
+    try:
+        if provider.is_open(change):
+            provider.close(change, f"Task canceled: {why}")
+    except (providers.Transient, providers.Permanent, providers.ProviderError) as e:
+        raise IntegrateError(f"could not close its pull request: {e}") from e
+
+
 def stop_all(p: Project, i: dict[str, Any]) -> None:
     """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
     session it ever started (a replaced review pass keeps no record but its id in `sessions`)."""
@@ -228,8 +238,11 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
 
 def close(p: Project, iid: str, status: str, why: str) -> None:
     """Closes an open issue as canceled or done (merged outside fm): stops its sessions, answers its open questions,
-    removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
+    removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
+    `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
+    if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
+        close_pull(p, i, why)
     stop_all(p, i)
     for q in backlog.open_questions(backlog.load(p), iid):
         backlog.answer(p, q["id"], f"(the task was {status})")

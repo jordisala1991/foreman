@@ -123,7 +123,10 @@ def cmd_go(a: argparse.Namespace) -> None:
 
 
 def cmd_cancel(a: argparse.Namespace) -> None:
-    integrate.close(home(a), a.id, "canceled", a.why or "by the owner")
+    try:
+        integrate.close(home(a), a.id, "canceled", a.why or "by the owner")
+    except integrate.IntegrateError as e:
+        sys.exit(f"fm: {e}")
 
 
 def cmd_unblock(a: argparse.Namespace) -> None:
