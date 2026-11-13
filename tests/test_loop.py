@@ -3,7 +3,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, risk, util
+from fm import backlog, integrate, loop, proc, risk, util
 from fm.providers import registry
 
 
@@ -222,6 +222,16 @@ class Provider(unittest.TestCase):
         self.assertEqual(i["status"], "in review")
         self.assertIn("uncommitted changes", i["blocked"])
         self.assertNotIn("merge", i)
+
+    def test_a_main_checkout_on_another_branch_blocks_the_merge(self):
+        e = Env(test="true")
+        iid = self.delivered(e)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        git(e.repo, "checkout", "-q", "-b", "elsewhere")
+        loop.tick(e.p)
+        self.assertIn("is not on main", e.issue(iid)["blocked"])
+        self.assertNotIn("merge", e.issue(iid))
 
     def accepted_then_main_moves(self, e):
         iid = self.delivered(e)
@@ -466,6 +476,92 @@ class Queue(unittest.TestCase):
         self.assertNotIn("check", e.issue(iid))  # no check before the verdict
         loop.tick(e.p)
         self.assertEqual(len(e.calls()), 3)  # not launched twice
+
+    def test_a_finished_hunter_and_a_reviewer_with_a_verdict_are_stopped(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        e.hunt_then_review(iid)
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["hunter"]["name"]), "stopped")
+        self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "working")
+        e.verdict(iid)
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "stopped")
+
+    def test_cancelling_a_task_in_review_stops_every_session_of_it(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        e.hunt_then_review(iid)
+        i = e.issue(iid)
+        integrate.close(e.p, iid, "canceled", "no")
+        for role in ("agent", "hunter", "reviewer"):
+            self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
+
+    def test_merging_stops_every_session_of_the_task(self):
+        e = Env(test="true")
+        iid = self.deliver(e)
+        e.review(iid)
+        i = e.issue(iid)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "done")
+        for role in ("agent", "hunter", "reviewer"):
+            self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
+
+    def test_a_blocked_task_still_has_its_finished_hunter_stopped(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        e.hunter_done(iid)
+        backlog.update(e.p, iid, blocked="why")
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["hunter"]["name"]), "stopped")
+
+    def test_a_failing_stop_does_not_stop_the_cancel(self):
+        from unittest import mock
+
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        with mock.patch("fm.sessions.stop", side_effect=proc.ProcError("timed out")):
+            integrate.close(e.p, iid, "canceled", "no")
+        self.assertEqual(e.issue(iid)["status"], "canceled")
+
+    def test_cancel_stops_a_session_the_listing_does_not_show(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: the agent still runs
+        integrate.close(e.p, iid, "canceled", "no")
+        self.assertEqual(e.stops(), [e.issue(iid)["agent"]["short"]])
+
+    def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        e.hunter_done(iid)
+        (e.bin / "agents.json").write_text("[]")  # gone, or an unreadable listing
+        for _ in range(3):
+            loop.tick(e.p)
+        self.assertEqual(e.stops(), [])
+
+    def test_a_cancel_stops_each_session_once(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        name = e.issue(iid)["agent"]["name"]
+        integrate.close(e.p, iid, "canceled", "no")
+        self.assertEqual(e.stops(), [e.issue(iid)["agent"]["short"]])  # once, though its id is also in `sessions`
+        self.assertEqual(e.state_of(name), "stopped")
 
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")

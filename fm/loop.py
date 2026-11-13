@@ -48,11 +48,29 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
     started = util.STARTED.get(key, 0)
     for iid in waiting:
         i = backlog.get(backlog.load(p), iid)
+        if i["status"] == "in review":
+            stop_review_sessions(p, i, rows)
         if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
             continue
         guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows))
         if util.STARTED.get(key, 0) != started:
             return
+
+
+def stop_review_sessions(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:
+    """A hunter whose findings file is written, and a reviewer whose verdict is recorded, have nothing more to do."""
+    v: dict[str, Any] = i.get("review") or {}
+    h: dict[str, Any] = i.get("hunter") or {}
+    r: dict[str, Any] = i.get("reviewer") or {}
+    if h.get("file") and Path(h["file"]).exists() and live(h, rows) and not working(h, rows):
+        sessions.stop_live(p, i["id"], h, rows)
+    if v and v.get("tip") == r.get("tip") and live(r, rows):
+        sessions.stop_live(p, i["id"], r, rows)
+
+
+def live(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+    """Listed and not stopped: never `gone`, which is also what an unreadable listing shows."""
+    return sessions.state(rows, a.get("session")) not in ("stopped", "gone")
 
 
 def conflict_note(main: str) -> str:
