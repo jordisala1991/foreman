@@ -32,8 +32,8 @@ class PanelTest(unittest.TestCase):
         util.write_json(home / "backlog.json", backlog.empty())
         register(home)
         self.p = Project.load(home)
-        self.triage = backlog.add(self.p, "A health finding", status="triage", criterion="it is gone")
-        self.work = backlog.add(self.p, "Some work", status="ready", criterion="it works")
+        self.triage = backlog.add(self.p, "A health finding", status="triage", criteria="it is gone")
+        self.work = backlog.add(self.p, "Some work", status="ready", criteria="it works")
         backlog.set_status(self.p, self.work, "in progress", agent={"name": "de-2", "short": "abc123"})
         self.qid = backlog.ask(self.p, self.work, "de-2", "Which colour?")
         self.perm = backlog.ask(self.p, self.work, "de-2", "push the tag", kind="permission", action="publish")
@@ -110,16 +110,16 @@ class PanelTest(unittest.TestCase):
         self.assertEqual(self.call(f"/api/answer?p=demo&id={quote(self.perm)}", "yes")[0], 409)  # a permission: allow/deny
         code, _ = self.call(f"/api/go?p=demo&id={self.triage}", "")
         self.assertEqual(code, 200)
-        self.assertEqual(backlog.get(backlog.load(self.p), self.triage)["status"], "ready")  # it had a criterion
+        self.assertEqual(backlog.get(backlog.load(self.p), self.triage)["status"], "backlog")  # it had criteria: planned first
         self.assertEqual(self.call(f"/api/go?p=demo&id={self.triage}", "")[0], 409)  # no longer in triage
 
     def test_allow_add_pause(self) -> None:
         self.assertEqual(self.call(f"/api/allow?p=demo&id={quote(self.perm)}", "")[0], 200)
         grants = util.read_json(self.p.state / "grants.json", [])
         self.assertEqual([(g["issue"], g["action"]) for g in grants], [(self.work, "publish")])
-        code, d = self.call("/api/add?p=demo", json.dumps({"title": "New", "criterion": "done"}))
+        code, d = self.call("/api/add?p=demo", json.dumps({"title": "New", "criteria": "done"}))
         self.assertEqual(code, 200)
-        self.assertEqual(backlog.get(backlog.load(self.p), d["id"])["status"], "ready")
+        self.assertEqual(backlog.get(backlog.load(self.p), d["id"])["status"], "backlog")
         self.assertEqual(self.call("/api/pause?p=demo&on=1", "")[0], 200)
         self.assertTrue((self.p.state / "paused").exists())
         evil = {"Origin": "http://127.0.0.1:1"}

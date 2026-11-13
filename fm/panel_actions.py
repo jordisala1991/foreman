@@ -43,13 +43,13 @@ def add(p: Project, body: str) -> Obj:
     f = json.loads(body or "{}")
     if not str(f.get("title", "")).strip():
         raise Refused("a task needs a title")
-    crit = str(f.get("criterion", "")).strip()
+    crit = str(f.get("criteria", "")).strip()
     new = backlog.add(
         p,
         f["title"].strip(),
         detail=str(f.get("detail", "")).strip(),
-        status="ready" if crit else "backlog",
-        criterion=crit,
+        status="backlog",
+        criteria=crit,
         claim=str(f.get("claim", "")).strip(),
     )
     return {"id": new}

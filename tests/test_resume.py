@@ -9,7 +9,7 @@ from fm import backlog, loop, proc, sessions, talk, util
 
 
 def launched(e: Env) -> str:
-    iid = backlog.add(e.p, "x", status="ready", criterion="y")
+    iid = backlog.add(e.p, "x", status="ready", criteria="y")
     loop.tick(e.p)
     return iid
 

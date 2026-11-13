@@ -106,7 +106,7 @@ class Pushes(unittest.TestCase):
     def test_the_local_provider_pushes_nothing(self):
         e = Env(test="true")
         git(e.repo, "remote", "add", "origin", str(e.tmp / "never.git"))
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         wt = e.repo.parent / e.issue(iid)["worktree"]
         with open(wt / "app.py", "a") as f:

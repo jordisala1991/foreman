@@ -60,9 +60,11 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
  any open state ── fm cancel ──▶ canceled          `blocked` (a reason) on any state: the loop leaves it alone
 ```
 
-- `triage`: filed by a health check or a source. Never launched until the owner says «go».
-- `backlog`: to define. `refining`: its defining agent works. It ends with `fm ready --claim --criterion`.
-- `ready`: has a goal and a done criterion. `in progress`: its responsible agent works, in its own worktree and branch.
+- `triage`: filed by a health check, a source, or without acceptance criteria (the only state such a task can be in).
+  Never launched until the owner says «go»; `fm go` refuses a task without acceptance criteria.
+- `backlog`: to plan (it has acceptance criteria, set with the owner). `refining`: its planning agent works. It ends
+  with `fm ready --plan|--no-plan`.
+- `ready`: has acceptance criteria and a plan (or none, if trivial). `in progress`: its responsible agent works, in its own worktree and branch.
 - `in review`: the integration queue. The loop checks the branch; the owner accepts it or sends it back with a note.
 - `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
   nudge). The owner clears it (`fm unblock [--relaunch]`).
@@ -121,22 +123,22 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-de
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
   the agent that owns the task.
 
-**Defining agent** (`fm/briefs/define.md`): reads the repo (read only), settles what the task means, asks the owner
-only what only he can decide (`fm ask`, then ends its turn), asks the owner (`fm ask`) when a task is too big, proposing the split, files nothing, and ends with
-`fm ready --claim --criterion --detail --plan PATH` (or `--no-plan "why trivial"`). It also reads the code and writes a
+**Planning agent** (`fm/briefs/define.md`): the acceptance criteria are product (observable behaviour, never how) and
+are settled with the owner when the task is filed; the planning agent never writes, rewrites or splits them, and `fm ask`s
+the owner if one cannot be met as written. It reads the repo (read only), asks the owner only what only he can decide
+(`fm ask`, then ends its turn), and ends with `fm ready --detail --plan PATH` (or `--no-plan "why trivial"`). It writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
 risk); the issue gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
 
 Every brief starts by pointing the agent at the project's `LESSONS.md`: what misled earlier agents, in their words
 (each `--misled` text that is not «none» is appended; the owner prunes it).
 
-**Defining agent** also: a criterion checkable by an agent alone (a table input → expected when there are cases),
-scope claims cite their search, questions stand alone (context, options, recommendation and why).
+**Planning agent** also: scope claims cite their search, questions stand alone (context, options, recommendation and why).
 
 **Responsible agent** (`fm/briefs/work.md`, from foreman's dev agent and agent procedure): owns the whole task in its
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
-(`<home>/reports/ID.md`: the task's description, each criterion line with its evidence; fm sets it as the PR body
+(`<home>/reports/ID.md`: the task's description, each acceptance criterion with its evidence; fm sets it as the PR body
 inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
 section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
@@ -145,7 +147,7 @@ conversation: each finding gets the smallest change that settles it, or a one-li
 
 **Review in two passes** (`fm/briefs/hunter.md`, `fm/briefs/reviewer.md`): launched by the loop, not by the agent, each as
 its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail
-and the owner's notes. The **hunter** lists everything it suspects (with a confidence each, plus the criterion table and an
+and the owner's notes. The **hunter** lists everything it suspects (with a confidence each, plus the acceptance criteria table and an
 inventory of what the diff adds) in `<home>/reviews/ID-rN-<tip>-hunter.md`. When that file exists and the hunter has ended,
 the **reviewer** starts; it sees only the file, never the hunter's reasoning. It checks each Wrong or Missing finding
 (confirmed, refuted, or neither) and each Too much item; a finding leaves only with a cited line or output that refutes it,
