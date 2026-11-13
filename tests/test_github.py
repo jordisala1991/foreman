@@ -42,13 +42,16 @@ FAKE_GH = textwrap.dedent("""\
         sys.exit(1)
     if a[:2] == ["api", "graphql"]:
         import subprocess
-        nodes = []
-        for n, pr in s["prs"].items():
-            if pr["state"] == "OPEN":
-                sha = subprocess.run(["git", "ls-remote", "origin", "refs/heads/" + pr["head"]], capture_output=True, text=True).stdout.split()[:1]
-                roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]]}
-                nodes.append({"number": int(n), "headRefOid": sha[0] if sha else "", "commits": {"nodes": [{"commit": {"statusCheckRollup": roll}}]}})
-        print(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
+        def node(n, pr):
+            sha = subprocess.run(["git", "ls-remote", "origin", "refs/heads/" + pr["head"]], capture_output=True, text=True).stdout.split()[:1]
+            roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]]}
+            return {"number": int(n), "headRefOid": sha[0] if sha else "", "commits": {"nodes": [{"commit": {"statusCheckRollup": roll}}]}}
+        one = [x for x in a if x.startswith("number=")]
+        if one:  # a PR on its own, open or not
+            print(json.dumps({"data": {"repository": {"pullRequest": node(one[0][7:], s["prs"][one[0][7:]])}}}))
+        else:
+            nodes = [node(n, pr) for n, pr in s["prs"].items() if pr["state"] == "OPEN" and n not in s.get("hidden", [])]
+            print(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
         sys.exit(0)
     if a[:1] == ["api"]:
         print(s.get("api_sha") or "null")
@@ -480,6 +483,17 @@ class Pulls(unittest.TestCase):
         g.e.review(iid)  # the new tip is reviewed first
         loop.tick(g.e.p)
         self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("fail", 2))
+
+    def test_a_pr_missing_from_the_open_list_is_read_on_its_own_and_kept(self):
+        g = self.make(test="true", autonomy="manual")
+        g.set(hidden=["1"])  # still there, but not in the open list (closed outside fm, or past the first 100)
+        iid = g.work()
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")
+        before = self.graphql(g)
+        loop.tick(g.e.p)
+        self.assertEqual(self.graphql(g), before)
 
     def test_pending_ci_of_several_tasks_is_one_call_per_poll(self):
         g = self.make(test="true", autonomy="manual")
