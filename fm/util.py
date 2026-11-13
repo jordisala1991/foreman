@@ -51,7 +51,7 @@ def write_text_atomic(path: Path, text: str) -> None:
 def read_json(path: Path, default: Any) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return default
 
 
@@ -69,15 +69,11 @@ def locked_json(path: Path, default: Any) -> Generator[Any, None, None]:
 
 
 def read_jsonl(path: Path) -> list[Any]:
-    out: list[Any] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return out
-    for ln in lines:
-        with contextlib.suppress(ValueError):
-            out.append(json.loads(ln))
-    return out
+        return []
+    return [json.loads(ln) for ln in lines]
 
 
 def append_jsonl(path: Path, obj: Any) -> None:
