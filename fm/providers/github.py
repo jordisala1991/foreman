@@ -129,7 +129,11 @@ class GitHub(Provider):
     name = "github"
 
     def paused_until(self) -> float:
-        until = (util.json_object(util.read_json(self.p.state / QUOTA, None)) or {}).get("until")
+        try:
+            kept = util.read_json(self.p.state / QUOTA, None)
+        except ValueError:  # util.read_json no longer forgives a broken file; a broken pause file is no pause
+            return 0.0
+        until = (util.json_object(kept) or {}).get("until")
         return min(float(until), time.time() + MAX_PAUSE) if isinstance(until, (int, float)) else 0.0
 
     def hold(self) -> None:
@@ -141,7 +145,7 @@ class GitHub(Provider):
     def limited(self, text: str) -> RateLimited:
         """gh said the limit is exceeded: read when it resets (free call), keep it in state/, and pause."""
         try:
-            raw: object = json.loads(proc.run(["gh", "api", "rate_limit"], cwd=self.p.repo, timeout=TIMEOUT).out)
+            raw: object = json.loads(proc.run(["gh", "api", "rate_limit"], cwd=self.p.repo).out)
         except (proc.ProcError, ValueError):
             raw = None
         until = reset_at(raw, time.time())

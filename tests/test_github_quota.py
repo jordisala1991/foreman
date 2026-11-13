@@ -6,7 +6,7 @@ from unittest import mock
 
 from test_github import GH
 
-from fm import loop, util
+from fm import backlog, loop, util
 from fm.providers import github, registry
 
 
@@ -47,8 +47,15 @@ class Limited(unittest.TestCase):
         offset = self.clock()
         g = self.make(test="true")
         first, second = g.work(), g.work()
-        g.deliver(first)
-        g.deliver(second)
+        for iid in (first, second):
+            backlog.set_status(g.e.p, iid, "in review", report={"summary": "s", "confused": ""})
+        for _ in range(4):  # a tick launches at most one hunter or reviewer
+            loop.tick(g.e.p)
+            for iid in (first, second):
+                if g.e.issue(iid).get("hunter") and not g.e.issue(iid).get("review"):
+                    g.e.hunter_done(iid)
+        for iid in (first, second):
+            g.e.verdict(iid)
         reset = int(time.time()) + 600
         g.set(reset=reset, limited=True)
         before = len(g.calls("pr", "checks"))
