@@ -9,6 +9,7 @@ session working but its transcript silent for `stuck_minutes`) · agent stopped 
 on main's head, every `ci_every_minutes`) · answer not delivered for 10 minutes · loop step errors.
 The GitHub pause is shown, not filed (`github_pause`)."""
 
+import math
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -22,7 +23,10 @@ Finding = dict[str, str]
 
 def github_pause(p: Project, now: float) -> dict[str, Any] | None:
     """The loop's gh calls wait for a GitHub rate limit (state/github_quota.json): until when, and the quota read then."""
-    d = util.json_object(util.read_json(p.state / "github_quota.json", {})) or {}
+    try:
+        d = util.json_object(util.read_json(p.state / "github_quota.json", {})) or {}
+    except (OSError, ValueError):  # a half-written or broken file is no pause: this is a view and must not fail
+        return None
     until = d.get("until")
     if not isinstance(until, int | float) or isinstance(until, bool) or not math.isfinite(until) or until <= now:
         return None
