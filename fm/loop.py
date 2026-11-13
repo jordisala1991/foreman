@@ -53,7 +53,7 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
         i = backlog.get(backlog.load(p), iid)
         if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
             continue
-        guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows))
+        guarded(p, iid, "check it", lambda i=i: queue_one(p, i, main, rows), reset=False)
         if util.STARTED.get(key, 0) != started:
             return
 
@@ -91,15 +91,14 @@ def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
 
 
-def guarded(p: Project, iid: str, what: str, fn: Callable[[], object]) -> None:
+def guarded(p: Project, iid: str, what: str, fn: Callable[[], object], reset: bool = True) -> None:
     """One issue's step: a Transient failure is retried next tick (noted once per error); the 3rd in a row blocks the
-    issue with the last error; a success resets the count (unless a failure was counted meanwhile, as by a check in the
-    background). Any other failure blocks it at once. The others go on."""
-    before = backlog.get(backlog.load(p), iid).get("retry_count")
+    issue with the last error; a success resets the count (not with `reset` False: the queue step only starts the check,
+    whose own thread owns the count). Any other failure blocks it at once. The others go on."""
     try:
         fn()
         i = backlog.get(backlog.load(p), iid)
-        if (i.get("retry_error") or i.get("retry_count")) and i.get("retry_count") == before:
+        if (i.get("retry_error") or i.get("retry_count")) and reset:
             backlog.update(p, iid, retry_error="", retry_count=0)
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), iid)

@@ -1,4 +1,5 @@
 import os
+import time
 import unittest
 
 from helpers import Env, fm, git
@@ -227,11 +228,14 @@ class Queue(unittest.TestCase):
         git(e.repo, "commit", "-qm", "main moves")
 
         def down(*args):
+            time.sleep(0.3)  # longer than the wait: the tick has gone on when it fails
             raise providers.Transient("net down")
 
         real = integrate.check
         integrate.check = down
         self.addCleanup(setattr, integrate, "check", real)
+        util.BACKGROUND_WAIT_S = 0.05
+        self.addCleanup(setattr, util, "BACKGROUND_WAIT_S", 20)
         for _ in range(3):
             loop.tick(e.p)
             for t in list(util.BACKGROUND.values()):
