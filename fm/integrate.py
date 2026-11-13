@@ -212,11 +212,23 @@ def merge_accepted(p: Project, iid: str) -> str:
     return "done"
 
 
+def close_pull(p: Project, i: dict[str, Any], why: str) -> None:
+    """Closes the task's PR with the reason, unless it is already closed or merged."""
+    provider, change = registry.get(p), pulls.change_of(i, "")
+    try:
+        if not provider.state(change)["closed"]:
+            provider.close(change, f"Task canceled: {why}")
+    except (providers.Transient, providers.Permanent, providers.ProviderError) as e:
+        raise IntegrateError(f"could not close its pull request: {e}") from e
+
+
 def close(p: Project, iid: str, status: str, why: str) -> None:
     """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
     removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
     `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
+    if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
+        close_pull(p, i, why)
     agent: backlog.Agent = i.get("agent") or {}
     short = agent.get("short")
     if short and i["status"] in backlog.RUNNING:
@@ -226,6 +238,4 @@ def close(p: Project, iid: str, status: str, why: str) -> None:
         backlog.mark_delivered(p, q["id"])
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
-    if status == "canceled" and i.get("pr"):
-        registry.get(p).close(pulls.change_of(i, ""), f"Task canceled: {why}")
     backlog.set_status(p, iid, status, why)

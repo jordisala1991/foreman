@@ -9,7 +9,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, providers, util
+from fm import backlog, cli, integrate, loop, providers, util
 from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
@@ -284,6 +284,25 @@ class Pulls(unittest.TestCase):
         fm(g.e.home, "cancel", bare)
         self.assertEqual(g.e.issue(bare)["status"], "canceled")
         self.assertEqual(len(g.calls("pr", "close")), 1)
+
+    def test_cancel_with_a_failing_gh_changes_nothing_and_a_closed_pr_is_left_alone(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        wt = g.e.issue(iid)["worktree"]
+        g.set(fail_always=["pr", "close"])
+        with self.assertRaises(SystemExit):
+            cli.main(["--home", str(g.e.home), "cancel", iid])
+        self.assertEqual(g.e.issue(iid)["status"], "in progress")
+        self.assertTrue((g.e.repo.parent / wt).exists())
+        g.set(fail_always=None)
+        tried = len(g.calls("pr", "close"))
+        pr = g.state["prs"]["1"]
+        pr["state"] = "CLOSED"
+        g.set(prs={"1": pr})
+        fm(g.e.home, "cancel", iid)
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        self.assertEqual(len(g.calls("pr", "close")), tried)
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
