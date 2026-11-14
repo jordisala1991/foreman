@@ -205,6 +205,22 @@ class Rules(unittest.TestCase):
         self.assertEqual(e.task(tid)["hunter"]["tip"], head(e, tid))
         self.assertTrue(launched(e, tid)[-1].endswith("rule: rounds 1-2"), launched(e, tid))
 
+    def test_after_two_clean_rounds_a_new_tip_launches_nothing(self):
+        e = Env(test="true")
+        tid = deliver(e)
+        loop.tick(e.p)
+        commit(e.task(tid)["worktree"], "app.py", "# more\n")
+        e.review(tid, 0)
+        self.assertIn("Round: 2", e.calls()[-1]["argv"][-1])
+        loop.tick(e.p)
+        self.assertEqual(e.task(tid)["review_for"], "none")
+        before = len(e.calls())
+        commit(e.task(tid)["worktree"], "app.py", "# again\n")
+        loop.tick(e.p)
+        loop.tick(e.p)
+        self.assertEqual(len(e.calls()), before)
+        self.assertEqual(e.task(tid)["review"]["holds"], head(e, tid))
+
     def test_reject_gets_a_review_of_the_fix_and_open_findings_go_back(self):
         e = Env(test="true")
         tid = deliver(e)

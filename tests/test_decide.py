@@ -61,9 +61,10 @@ class Review(unittest.TestCase):
         self.assertEqual(review_step(seen(verdict_tip="t1", review_for="none", merge="resolved", auto="T"), v, 2), Step("hold"))
         self.assertEqual(step(merge="clean"), Step("hunt", "round"))
 
-    def test_a_review_closes_only_with_findings_open_after_the_last_round(self):
-        self.assertTrue(closes_review({"open": 1, "round": 2}, 2))
-        for v in ({"open": 0, "round": 2}, {"open": 0, "round": 1}, {"open": 1, "round": 1}):
+    def test_a_review_closes_after_the_last_round(self):
+        for v in ({"open": 1, "round": 2}, {"open": 0, "round": 2}):
+            self.assertTrue(closes_review(v, 2), v)
+        for v in ({"open": 0, "round": 1}, {"open": 1, "round": 1}):
             self.assertFalse(closes_review(v, 2), v)
 
     def test_reject_and_conflict_launch_with_their_base(self):

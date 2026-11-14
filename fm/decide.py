@@ -81,9 +81,9 @@ def review_step(seen: Seen, v: Mapping[str, Any], max_rounds: int) -> Step:
 
 
 def closes_review(v: Mapping[str, Any], max_rounds: int) -> bool:
-    """A verdict the loop acts on closes the review when its findings are open after the last round: they went to the
-    owner, and a later tip gets a review only for an owner reject or a conflict."""
-    return v.get("open", 0) > 0 and v.get("round", 0) >= max_rounds
+    """A verdict of the last round closes the review once the loop acts on it, whatever is open (what is open goes to the
+    owner): no round past the last runs by itself; a later tip gets a review only for an owner reject or a conflict."""
+    return v.get("round", 0) >= max_rounds
 
 
 def back_note(v: Mapping[str, Any]) -> str:
