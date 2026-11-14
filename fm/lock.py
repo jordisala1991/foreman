@@ -16,7 +16,6 @@ the machine (`~/.local/state/fm/locks/NAME/`, or $FM_LOCKS), so two projects dec
 
 import contextlib
 import fcntl
-import json
 import os
 import signal
 import subprocess
@@ -28,10 +27,6 @@ from typing import Any
 from . import util
 
 POLL_S = 1.0
-
-
-class LockError(Exception):
-    pass
 
 
 def root() -> Path:
@@ -167,7 +162,3 @@ def describe(cfg: dict[str, Any]) -> str:
         "FM_SLOT). A run is stopped after its time limit: split long work into shorter runs. Never hold a "
         "resource while you wait for something else."
     )
-
-
-def as_json(r: Resource) -> str:
-    return json.dumps(r.status(), ensure_ascii=False)

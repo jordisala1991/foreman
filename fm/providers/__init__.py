@@ -70,6 +70,13 @@ class Provider:
     def comment(self, change: dict[str, Any], text: str) -> None:
         """Leaves a note on the change."""
 
+    def is_open(self, change: dict[str, Any]) -> bool:
+        """Is the change still open on the platform? (just that: nothing is fetched or merged locally)"""
+        return False
+
+    def close(self, change: dict[str, Any], text: str) -> None:
+        """Closes the change without merging it, with `text` as its last comment."""
+
     def body(self, change: dict[str, Any]) -> str:
         """The change's description as the platform has it now (nothing locally)."""
         return ""
