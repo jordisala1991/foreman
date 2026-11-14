@@ -9,7 +9,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, providers, util
+from fm import backlog, cli, integrate, loop, providers, util
 from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
@@ -42,6 +42,19 @@ FAKE_GH = textwrap.dedent("""\
         sys.exit(1)
     if a[:2] == ["repo", "view"]:
         print("https://github.com/o/r")
+        sys.exit(0)
+    if a[:2] == ["api", "graphql"] and "eviewThread" not in " ".join(a):
+        import subprocess
+        def node(n, pr):
+            sha = subprocess.run(["git", "ls-remote", "origin", "refs/heads/" + pr["head"]], capture_output=True, text=True).stdout.split()[:1]
+            roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]]}
+            return {"number": int(n), "headRefOid": sha[0] if sha else "", "commits": {"nodes": [{"commit": {"statusCheckRollup": roll}}]}}
+        one = [x for x in a if x.startswith("number=")]
+        if one:  # a PR on its own, open or not
+            print(json.dumps({"data": {"repository": {"pullRequest": node(one[0][7:], s["prs"][one[0][7:]])}}}))
+        else:
+            nodes = [node(n, pr) for n, pr in s["prs"].items() if pr["state"] == "OPEN" and n not in s.get("hidden", [])]
+            print(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
         sys.exit(0)
     if a[:2] == ["api", "graphql"]:
         kv = dict(x.split("=", 1) for x in a if "=" in x and not x.startswith("-"))
@@ -124,17 +137,14 @@ FAKE_GH = textwrap.dedent("""\
         print(s.get("diff", ""))
     elif a[:2] == ["pr", "comment"]:
         pr["comments"].append(flag("--body"))
+    elif a[:2] == ["pr", "close"]:
+        pr["state"] = "CLOSED"
+        pr["comments"].append(flag("--comment"))
     elif a[:2] == ["pr", "merge"]:
         pr["strategy"] = a[3].lstrip("-")
         pr["subject"] = flag("--subject")
         if not s["lag"]:
             pr["state"] = "MERGED"
-    elif a[:2] == ["pr", "checks"]:
-        if s["ci"] == "none":
-            print("no checks reported", file=sys.stderr)
-            sys.exit(1)
-        print(json.dumps([{"bucket": s["ci"]}]))
-        sys.exit(8 if s["ci"] == "pending" else 0)
     elif a[:2] == ["pr", "view"] and s.get("bad_view"):
         print(json.dumps({"state": "SIDEWAYS", "number": "one"}))
     elif a[:2] == ["pr", "view"]:
@@ -161,9 +171,11 @@ class GH:
         toml = e.home / "fm.toml"
         toml.write_text(toml.read_text().replace("[integrate]", f'[integrate]\nprovider = "github"\n{extra}'))
         e.p = type(e.p).load(e.home)
+        self.poll, github.POLL = github.POLL, 0  # a pending answer is read again at every call, unless a test says otherwise
 
     def close(self) -> None:
         os.environ["PATH"] = self.path
+        github.POLL = self.poll
 
     @property
     def state(self) -> dict:
@@ -243,11 +255,18 @@ class Border(unittest.TestCase):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
                 github.pull_request(bad)
 
-    def test_checks_become_buckets_or_a_provider_error(self):
-        self.assertEqual(github.buckets([{"bucket": "pass"}, {"bucket": "pending"}]), {"pass", "pending"})
-        for bad in ({}, [{"bucket": "weird"}], [{"state": "x"}], ["pass"]):
+    def test_the_open_prs_answer_becomes_head_and_ci_or_a_provider_error(self):
+        def node(state):
+            return {"number": 1, "headRefOid": "abc", "commits": {"nodes": [{"commit": {"statusCheckRollup": state}}]}}
+
+        def answer(*nodes):
+            return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
+
+        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass"}})
+        self.assertEqual(github.open_prs(answer(node(None)))["1"]["ci"], "none")
+        for bad in (answer({"number": "1"}), answer("x")):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.buckets(bad)
+                github.open_prs(bad)
 
     def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self):
         g = GH()
@@ -327,6 +346,51 @@ class Pulls(unittest.TestCase):
         self.assertEqual(len(pr["reviews"]), 1)
         self.assertEqual(pr["reviews"][0]["event"], "COMMENT")
         self.assertIn("Why low", pr["reviews"][0]["body"])
+
+    def test_cancel_closes_the_pr_with_the_reason_and_a_task_without_one_is_canceled_as_before(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        fm(g.e.home, "cancel", iid, "not needed")
+        pr = g.state["prs"]["1"]
+        self.assertEqual(pr["state"], "CLOSED")
+        self.assertIn("not needed", pr["comments"][-1])
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        bare = g.work(push=False)
+        fm(g.e.home, "cancel", bare)
+        self.assertEqual(g.e.issue(bare)["status"], "canceled")
+        self.assertEqual(len(g.calls("pr", "close")), 1)
+
+    def test_cancel_with_a_failing_gh_changes_nothing_and_a_closed_pr_is_left_alone(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        wt = g.e.issue(iid)["worktree"]
+        g.set(fail_always=["pr", "close"])
+        with self.assertRaises(SystemExit):
+            cli.main(["--home", str(g.e.home), "cancel", iid])
+        self.assertEqual(g.e.issue(iid)["status"], "in progress")
+        self.assertTrue((g.e.repo.parent / wt).exists())
+        g.set(fail_always=None)
+        tried = len(g.calls("pr", "close"))
+        pr = g.state["prs"]["1"]
+        pr["state"] = "CLOSED"
+        g.set(prs={"1": pr})
+        fm(g.e.home, "cancel", iid)
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        self.assertEqual(len(g.calls("pr", "close")), tried)
+
+    def test_cancel_of_a_pr_merged_by_hand_with_no_merge_commit_just_cancels(self):
+        g = self.make(test="true")
+        iid = g.work()
+        loop.tick(g.e.p)
+        pr = g.state["prs"]["1"]
+        pr["state"] = "MERGED"
+        g.set(prs={"1": pr}, no_oid=True)
+        fm(g.e.home, "cancel", iid)
+        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        self.assertEqual(g.calls("pr", "close"), [])
+        self.assertEqual(g.calls("api"), [])
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
@@ -461,24 +525,57 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual(g.e.issue(iid)["status"], "done")
 
-    def test_ci_turning_red_on_the_same_head_stops_autonomy(self):
+    def graphql(self, g: GH) -> int:
+        return len(g.calls("api", "graphql"))
+
+    def test_a_settled_ci_is_not_read_again_until_the_branch_gets_a_commit(self):
         g = self.make(test="true", autonomy="manual")
         iid = g.work()
         g.deliver(iid)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")  # cached, head and main unchanged
-        g.set(ci="fail")  # a CI re-run failed on the same head
-        g.e.p.cfg["integrate"]["autonomy"] = "medium"
+        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("pass", 1))
+        for _ in range(3):
+            loop.tick(g.e.p)
+        self.assertEqual(self.graphql(g), 1)
+        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+        with open(wt / "app.py", "a") as f:
+            f.write("# fix\n")
+        git(wt, "commit", "-qam", "fix")
+        g.set(ci="fail")
+        g.e.review(iid)  # the new tip is reviewed first
         loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["check"]["ci"], g.e.issue(iid)["status"]), ("fail", "in review"))
-        self.assertEqual(g.calls("pr", "merge"), [])
+        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("fail", 2))
+
+    def test_a_pr_missing_from_the_open_list_is_read_on_its_own_and_kept(self):
+        g = self.make(test="true", autonomy="manual")
+        g.set(hidden=["1"])  # still there, but not in the open list (closed outside fm, or past the first 100)
+        iid = g.work()
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")
+        before = self.graphql(g)
+        loop.tick(g.e.p)
+        self.assertEqual(self.graphql(g), before)
+
+    def test_pending_ci_of_several_tasks_is_one_call_per_poll(self):
+        g = self.make(test="true", autonomy="manual")
+        g.set(ci="pending")
+        github.POLL = 3600
+        ids = [g.work(), g.work()]
+        for iid in ids:
+            g.deliver(iid)
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        self.assertEqual(self.graphql(g), 1)
+        self.assertTrue(all("check" not in g.e.issue(iid) for iid in ids))
 
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
-        for failing in (["pr", "checks"], ["pr", "merge"], ["pr", "view"]):
+        for failing in (["api", "graphql"], ["pr", "merge"], ["pr", "view"]):
             g = self.make(test="true", autonomy="medium")
+            g.set(ci="pending")
             iid = g.work()
             g.deliver(iid)
-            g.set(fail_once=failing)
+            g.set(ci="pass", fail_once=failing)
             loop.tick(g.e.p)
             loop.tick(g.e.p)
             loop.tick(g.e.p)

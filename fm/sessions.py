@@ -4,22 +4,26 @@ measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the gua
 `--settings`.
 
 `resume` continues a session that ended its turn (an owner's answer, a rejected integration, a nudge) under the same
-id: `claude --bg --resume SID … MESSAGE`."""
+id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
+id instead, so a resume carries none."""
 
 import json
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import proc, token, util
+from . import backlog, proc, token, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "bin"
+STOP_SETTLE_S = 3.0  # after the process is gone, a resume right away still copies (0 s: copy, 2 s: ok)
+STOP_WAIT_TRIES = 15
 
 
 class SessionError(Exception):
@@ -55,11 +59,12 @@ class Agent:
     effort: str
 
 
-def command(p: Project, agent: Agent, prompt: str, resume: str | None = None) -> list[str]:
-    cmd = [p.get("agents", "claude"), "--bg", "-n", agent.name]
-    if resume:
-        cmd += ["--resume", resume]
-    return cmd + [
+def command(p: Project, agent: Agent, prompt: str) -> list[str]:
+    return [
+        p.get("agents", "claude"),
+        "--bg",
+        "-n",
+        agent.name,
         "--model",
         agent.model,
         "--effort",
@@ -90,8 +95,30 @@ def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | 
     return short, sid
 
 
-def resume(p: Project, agent: Agent, sid: str, message: str, cwd: Path) -> str:
-    return _run(command(p, agent, message, resume=sid), cwd)
+def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
+    """Wakes `sid` with a message. claude continues a session under its id only if it is stopped (process gone) and no
+    flag is given; otherwise it starts a copy. So: stop it, wait until it is gone, resume bare; a copy is an error."""
+    if not listing(p):
+        raise SessionError("claude agents is unreadable: not resuming")
+    if busy(listing(p), sid):  # fresh: the tick's listing may be old, and the owner may be in the session now
+        raise SessionError(f"session {sid[:8]} is {state(listing(p), sid)}: not resuming it")
+    try:
+        stop(p, sid[:8])
+    except proc.ProcError as e:
+        raise SessionError(f"claude stop failed: {e}") from e
+    for _ in range(STOP_WAIT_TRIES):
+        rows = listing(p)
+        if not rows:
+            raise SessionError("claude agents is unreadable: not resuming")
+        if not alive(rows, sid):
+            break
+        time.sleep(1)
+    else:
+        raise SessionError(f"session {sid[:8]} did not stop: not resuming it")
+    time.sleep(STOP_SETTLE_S)
+    short = _run([p.get("agents", "claude"), "--bg", "--resume", sid, message], cwd)
+    if not sid.startswith(short):
+        raise SessionError(f"claude started a copy ({short}) instead of resuming {sid[:8]}")
 
 
 def listing(p: Project) -> dict[str, dict[str, Any]]:
@@ -114,6 +141,12 @@ def state(rows: dict[str, dict[str, Any]], sid: str | None) -> str:
     return str(row.get("state") or "gone") if row else "gone"
 
 
+def alive(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
+    """Its process still runs. claude keeps the state of a stopped session (`done`) and drops its `pid`."""
+    row = rows.get(sid or "")
+    return bool(row and row.get("pid") and row.get("state") != "stopped")
+
+
 def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
     """Not idle: working, or any other live state Claude Code reports. Idle whatever the state says: status `idle` (an
     agent that asked the owner and ended its turn shows `blocked`/`idle`, and a hunter `working`/`idle`), or a
@@ -128,3 +161,14 @@ def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
 
 def stop(p: Project, short: str) -> None:
     proc.run([p.get("agents", "claude"), "stop", short], timeout=30)
+
+
+def stop_live(p: Project, iid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
+    """Best-effort: stops a recorded agent's session unless Claude Code shows it stopped. A failure is noted on the
+    task, never raised: cleanup must not block a merge, a cancel or a review."""
+    a = agent or {}
+    if a.get("short") and state(rows, a.get("session")) != "stopped":
+        try:
+            stop(p, a["short"])
+        except proc.ProcError as e:
+            backlog.event(p, iid, f"could not stop session {a['short']}: {e}")

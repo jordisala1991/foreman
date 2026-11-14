@@ -3,43 +3,52 @@
 from typing import Any
 
 from . import backlog, sessions, util
-from .agents import idle_s, send
+from .agents import idle_s, send, update_agent
 from .config import Project
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
 MAX_SEND_FAILS = 3
 
 
+def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
+    """What the agent is told about a delivered answer, by its kind."""
+    if q.get("kind") in ("conflict", "review"):
+        return q["answer"]
+    elif q.get("kind") == "rejection":
+        return (
+            f"The owner sent task {i['id']} back from the integration queue: «{q['answer']}». Fix it, review again if you change much, and run `fm done` again."
+        )
+    elif q.get("kind") == "note":
+        return f"A note from outside fm for task {i['id']} ({q.get('source')}): «{q['answer']}»."
+    elif q.get("kind") == "permission":
+        return f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». " + (
+            "It is allowed once: run it again." if q.get("allowed") else "It is not allowed."
+        )
+    else:
+        return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
+
+
 def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
     d = backlog.load(p)
+    sent: set[str] = set()  # one answer per task per tick: the session is working after the first
     for q in backlog.undelivered(d):
         i = backlog.get(d, q["issue"])
         if i["status"] in backlog.CLOSED:
             backlog.mark_delivered(p, q["id"])
             continue
         agent: dict[str, Any] = i.get("agent") or {}
+        if i["id"] in sent:
+            continue  # one answer per task per tick, sent or failed: the rest waits
         if sessions.busy(rows, agent.get("session")):
             continue  # it is busy (maybe talking with the owner): next tick
-        if q.get("kind") in ("conflict", "review"):
-            msg = q["answer"]
-        elif q.get("kind") == "rejection":
-            msg = (
-                f"The owner sent task {i['id']} back from the integration queue: «{q['answer']}». Fix it, review "
-                "again if you change much, and run `fm done` again."
-            )
-        elif q.get("kind") == "note":
-            msg = f"A note from outside fm for task {i['id']} ({q.get('source')}): «{q['answer']}»."
-        elif q.get("kind") == "permission":
-            msg = f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». " + (
-                "It is allowed once: run it again." if q.get("allowed") else "It is not allowed."
-            )
-        else:
-            msg = f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
+        msg = message_for(i, q)
         if send(p, i, msg):
             backlog.mark_delivered(p, q["id"])
-            backlog.update(p, i["id"], agent={**i["agent"], "nudged": None, "started": util.now()})
+            sent.add(i["id"])
+            update_agent(p, i["id"], nudged=None, started=util.now())
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
         else:
+            sent.add(i["id"])
             fails = i.get("undelivered", 0) + 1
             backlog.update(p, i["id"], undelivered=fails)
             if fails >= MAX_SEND_FAILS:
@@ -68,9 +77,11 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
                 f"`{how}`; if you need the owner, `fm ask`; if it cannot be done, `fm block`. "
                 "Otherwise carry on.",
             ):
-                backlog.update(p, i["id"], agent={**a, "nudged": util.now()}, nudges=i.get("nudges", 0) + 1)
+                update_agent(p, i["id"], nudged=util.now())
+                backlog.update(p, i["id"], nudges=i.get("nudges", 0) + 1)
                 backlog.event(p, i["id"], f"{a.get('name')} ended its turn without finishing: nudged")
                 continue
+            update_agent(p, i["id"], nudged=util.now())  # a failed nudge counts too: the block below then fires
         if (util.age_s(a.get("nudged")) or 0) > NUDGE_IDLE_S and idle_s(a) > NUDGE_IDLE_S:
             backlog.update(p, i["id"], blocked="its agent stopped without finishing, even after a nudge")
             backlog.event(p, i["id"], "blocked: agent stopped without finishing")
@@ -103,7 +114,6 @@ def send_back(p: Project, iid: str, kind: str, note: str) -> None:
                 "at": util.now(),
                 "delivered": False,
                 "answered_at": util.now(),
-                "options": [],
                 "title": i["title"],
             }
         )

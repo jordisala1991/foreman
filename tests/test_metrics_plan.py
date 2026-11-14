@@ -9,7 +9,7 @@ USD = {"A": 1.0, "B": 2.0, "B1": 2.0, "B2": 3.0, "C": 0.5, "L": 4.0}
 
 
 def stub(sids, seen=None):
-    return {"usd": sum(USD[s] for s in sids), "tokens": 0, "minutes": 0}
+    return {"usd": sum(USD[s] for s in sids), "minutes": 0}
 
 
 class PlanVsWork(unittest.TestCase):
