@@ -11,7 +11,7 @@ from helpers import Env, git
 from test_github import GH
 
 from fm import backlog, evidence, guard, loop, pulls
-from fm.providers import github, registry
+from fm.providers import Change, github, registry
 
 PNG = b"\x89PNG\r\n\x1a\n-evidence"
 BODY = "Did X\n\n![the home](x.png)\n"
@@ -121,7 +121,7 @@ class OnGitHub(unittest.TestCase):
         reg = registry.get(g.e.p)
         other = g.e.tmp / "y.png"
         other.write_bytes(b"other")
-        reg.evidence({"id": "TY-99"}, {"y.png": other})
+        reg.evidence(Change(id="TY-99"), {"y.png": other})
         self.assertEqual(self.remote("show", f"fm-evidence:{first}/x.png"), PNG)
         self.assertEqual(self.remote("show", "fm-evidence:TY-99/y.png"), b"other")
 
@@ -151,7 +151,7 @@ class OnGitHub(unittest.TestCase):
         tid = self.deliver()
         reg = registry.get(g.e.p)
         with self.assertRaises(github.TransientError):
-            reg.evidence({"id": tid}, {"x.png": g.e.home / "reports" / tid / "x.png"})
+            reg.evidence(Change(id=tid), {"x.png": g.e.home / "reports" / tid / "x.png"})
         self.ticks(2)
         self.assertIn("![the home](x.png)", self.body())  # written, unlinked
         self.assertFalse(g.e.task(tid)["pr"].get("described"))
@@ -162,7 +162,7 @@ class OnGitHub(unittest.TestCase):
 
     def test_local_has_no_evidence_push(self):
         e = Env()
-        self.assertEqual(registry.get(e.p).evidence({"id": "TY-1"}, {"x.png": Path("x.png")}), {})
+        self.assertEqual(registry.get(e.p).evidence(Change(id="TY-1"), {"x.png": Path("x.png")}), {})
         self.assertEqual(pulls.evidence_files(e.p, "TY-1", BODY), {})
 
 

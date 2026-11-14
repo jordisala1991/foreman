@@ -5,7 +5,7 @@ from helpers import Env, git
 from test_loop import Queue
 
 from fm import backlog, delivery, loop
-from fm.providers import registry
+from fm.providers import ChangeState, registry
 
 
 class Provider(unittest.TestCase):
@@ -26,7 +26,7 @@ class Provider(unittest.TestCase):
         wt = i["worktree"]
         # the provider merges but main does not show it yet: the task stays open, worktree and branch stay
         orig = local.Local.state
-        local.Local.state = lambda self, change: {"merged": False, "closed": False}
+        local.Local.state = lambda self, change: ChangeState(False, False)
         try:
             loop.tick(e.p)
         finally:

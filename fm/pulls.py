@@ -5,30 +5,21 @@ Every function calls the provider's operations whatever the platform; the local 
 a task with no PR (`publish` returned nothing) has nothing to deliver to."""
 
 import re
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
 from . import backlog, decide, describe, evidence, inline, proc, providers, util, verdict
 from .config import Project
 from .inline import Review
-from .providers import Permanent, Provider, ProviderError, Transient, registry
+from .providers import Change, Permanent, Provider, ProviderError, Transient, registry
 from .verdict import Case, Finding
 
 
-def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
+def change_of(i: dict[str, Any], head: str) -> Change:
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
     pr: dict[str, Any] = i.get("pr") or {}
-    return {
-        "id": i["id"],
-        "title": i["title"],
-        "branch": i["branch"],
-        "head": head,
-        "goal": acceptance.get("goal", ""),
-        "body": "",
-        "pr": pr.get("number"),
-        "merge": i.get("merge", ""),
-    }
+    return Change(i["id"], i["title"], i["branch"], head, acceptance.get("goal", ""), "", pr.get("number"), i.get("merge", ""))
 
 
 def head_of(p: Project, branch: str) -> str:
@@ -42,12 +33,11 @@ def commits_of(p: Project, branch: str) -> int:
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
     change = change_of(i, head)
-    change["body"] = describe.wrap(change["goal"] or change["title"])
-    ref = provider.publish(change, draft)
-    if not ref:  # a provider with no pull requests
+    ref = provider.publish(replace(change, body=describe.wrap(change.goal or change.title)), draft)
+    if ref is None:  # a provider with no pull requests
         return
-    backlog.update(p, i["id"], pr=ref)
-    backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref['number']}: {ref['url']}")
+    backlog.update(p, i["id"], pr=asdict(ref))
+    backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref.number}: {ref.url}")
 
 
 def running(p: Project) -> list[dict[str, Any]]:
@@ -115,7 +105,7 @@ def case_of(i: dict[str, Any], c: dict[str, Any]) -> Case:
     return Case(c["risk"], c.get("reasons", []), c["tests"], c.get("ci", ""), c["head"], report.get("summary") or i["title"], c["files"], c["lines"], counted)
 
 
-def _visible(p: Project, provider: Provider, i: dict[str, Any], change: dict[str, Any], found: list[Finding]) -> dict[str, set[int]]:
+def _visible(p: Project, provider: Provider, i: dict[str, Any], change: Change, found: list[Finding]) -> dict[str, set[int]]:
     if not any(":" in f.place for f in found):
         return {}
     try:

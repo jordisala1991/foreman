@@ -11,17 +11,51 @@ closed?), `ci` (the platform's checks),
 `has_ci` (attribute: is there CI that must be green? github yes, local no; autonomy merges only on a pass when so),
 `pushed` (is the branch on the platform at its tip?), `push` (put it there:
 never forced, never main; a failure is `Transient`, with the platform's own error).
+Operations take a `Change` and return `Published` / `ChangeState`: no dict crosses the port.
 Config: `[merge] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
 `merge` (`squash` default | `merge` | `rebase`; local has no rebase) and `pr` (`draft` default | `done`)."""
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from ..config import Project
 from ..inline import Review
 
 MERGES = ("squash", "merge", "rebase")
 PRS = ("draft", "done")
+
+
+@dataclass(frozen=True)
+class Change:
+    """What the port is asked about: a task's branch at a tip, and its pull request once it has one. Only `id` is
+    required; `merge` is the merge ref once there is one."""
+
+    id: str
+    title: str = ""
+    branch: str = ""
+    head: str = ""
+    goal: str = ""
+    body: str = ""
+    pr: int | None = None
+    merge: str = ""
+
+
+@dataclass(frozen=True)
+class Published:
+    """The reference of a change `publish` made visible (what the task stores as its `pr`)."""
+
+    number: int
+    url: str
+    draft: bool
+
+
+@dataclass(frozen=True)
+class ChangeState:
+    """A change as the platform shows it now; `commit` is the merge commit when it has one."""
+
+    merged: bool
+    closed: bool
+    commit: str = ""
 
 
 class ConfigError(Exception):
@@ -54,60 +88,61 @@ class Provider:
     def __init__(self, p: Project) -> None:
         self.p = p
 
-    def pushed(self, change: dict[str, Any]) -> bool:
-        """Is the branch on the platform at the tip of `change['head']`? (nothing to push locally)"""
+    def pushed(self, change: Change) -> bool:
+        """Is the branch on the platform at the tip of `change.head`? (nothing to push locally)"""
         return True
 
-    def push(self, change: dict[str, Any]) -> None:
+    def push(self, change: Change) -> None:
         """Puts the branch on the platform (nothing to do locally). Never forced, never the main branch; any failure is
         a `Transient` carrying the platform's own error."""
 
-    def publish(self, change: dict[str, Any], draft: bool) -> dict[str, Any]:
-        """Makes the branch visible as a change (a pull request on a platform); returns its reference."""
-        return {}
+    def publish(self, change: Change, draft: bool) -> Published | None:
+        """Makes the branch visible as a change (a pull request on a platform); returns its reference, or None when the
+        provider has no pull requests."""
+        return None
 
-    def ready(self, change: dict[str, Any]) -> None:
+    def ready(self, change: Change) -> None:
         """Marks the change ready for review."""
 
-    def diff(self, change: dict[str, Any]) -> str:
+    def diff(self, change: Change) -> str:
         """The change's unified diff as the platform has it (empty locally)."""
         return ""
 
-    def review(self, change: dict[str, Any], review: Review) -> int:
-        """Posts one review on the change's commit `change['head']`, with its inline comments; returns how many inline
+    def review(self, change: Change, review: Review) -> int:
+        """Posts one review on the change's commit `change.head`, with its inline comments; returns how many inline
         comments it posted. The same review key already posted: posts nothing, returns 0. An inline comment whose key
         the change already carries is skipped. Nothing locally."""
         return 0
 
-    def is_open(self, change: dict[str, Any]) -> bool:
+    def is_open(self, change: Change) -> bool:
         """Is the change still open on the platform? (just that: nothing is fetched or merged locally)"""
         return False
 
-    def close(self, change: dict[str, Any], text: str) -> None:
+    def close(self, change: Change, text: str) -> None:
         """Closes the change without merging it, with `text` as its last comment."""
 
-    def body(self, change: dict[str, Any]) -> str:
+    def body(self, change: Change) -> str:
         """The change's description as the platform has it now (nothing locally)."""
         return ""
 
-    def describe(self, change: dict[str, Any], body: str) -> None:
+    def describe(self, change: Change, body: str) -> None:
         """Sets the change's body and its title."""
 
-    def evidence(self, change: dict[str, Any], files: dict[str, Path]) -> dict[str, str]:
+    def evidence(self, change: Change, files: dict[str, Path]) -> dict[str, str]:
         """Publishes the report's images (name -> local file); returns name -> URL for those it published. Nothing
         locally: the panel serves local files itself."""
         return {}
 
-    def merge(self, change: dict[str, Any], strategy: str) -> str:
+    def merge(self, change: Change, strategy: str) -> str:
         """Merges the change into main with `strategy`; returns a reference to the merge. Never publishes."""
         raise NotImplementedError
 
-    def ci(self, change: dict[str, Any]) -> str:
+    def ci(self, change: Change) -> str:
         """pass | fail | pending | none (no checks, or no platform)."""
         return ""
 
-    def state(self, change: dict[str, Any]) -> dict[str, Any]:
-        """{'merged': bool, 'closed': bool, 'commit'?: str}, as seen on the platform now."""
+    def state(self, change: Change) -> ChangeState:
+        """Is the change merged? closed? As seen on the platform now."""
         raise NotImplementedError
 
 

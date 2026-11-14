@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from .. import evidence, proc, util
 from ..inline import Review
-from . import Conflict, Permanent, Provider, ProviderError, Transient, ghreview
+from . import Change, ChangeState, Conflict, Permanent, Provider, ProviderError, Published, Transient, ghreview
 from .checks import down, open_prs, pull
 
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
@@ -101,21 +101,21 @@ class GitHub(Provider):
             raise failure(f"{prog} {' '.join(args[:3])}", r.err or r.out)
         return r
 
-    def view(self, change: dict[str, Any]) -> PullRequest:
-        r = self.run("gh", "pr", "view", str(change["pr"]), "--json", "number,url,isDraft,state,mergeCommit")
+    def view(self, change: Change) -> PullRequest:
+        r = self.run("gh", "pr", "view", str(change.pr), "--json", "number,url,isDraft,state,mergeCommit")
         try:
             return pull_request(json.loads(r.out))
         except ValueError:
             raise ProviderError(f"gh pr view: not JSON: {r.out.strip()[:200]!r}") from None
 
-    def pushed(self, change: dict[str, Any]) -> bool:
-        r = self.run("git", "ls-remote", "origin", f"refs/heads/{change['branch']}", check=False)
-        return r.code == 0 and r.out.split()[:1] == [change["head"]]
+    def pushed(self, change: Change) -> bool:
+        r = self.run("git", "ls-remote", "origin", f"refs/heads/{change.branch}", check=False)
+        return r.code == 0 and r.out.split()[:1] == [change.head]
 
-    def push(self, change: dict[str, Any]) -> None:
+    def push(self, change: Change) -> None:
         """`git push origin refs/heads/<branch>:refs/heads/<branch>` from the main repo (worktree branches live there):
         never forced, never the main branch. Any failure is Transient with git's error; the text is not classified."""
-        branch = change["branch"]
+        branch = change.branch
         if branch == self.p.get("project", "main"):
             raise ProviderError(f"refusing to push {branch}: it is the main branch")
         ref = f"refs/heads/{branch}"
@@ -126,18 +126,18 @@ class GitHub(Provider):
         if r.code != 0:
             raise TransientError(f"git push {branch}: {(r.err or r.out).strip()[:300]}")
 
-    def publish(self, change: dict[str, Any], draft: bool) -> dict[str, Any]:
-        args = ["pr", "create", "--head", change["branch"], "--base", self.p.get("project", "main")]
-        args += ["--title", self.title(change), "--body", change["body"]]
+    def publish(self, change: Change, draft: bool) -> Published:
+        args = ["pr", "create", "--head", change.branch, "--base", self.p.get("project", "main")]
+        args += ["--title", self.title(change), "--body", change.body]
         url = self.run("gh", *args, *(["--draft"] if draft else [])).out.strip().splitlines()[-1]
-        return {"number": int(url.rstrip("/").rsplit("/", 1)[-1]), "url": url, "draft": draft}
+        return Published(int(url.rstrip("/").rsplit("/", 1)[-1]), url, draft)
 
     @staticmethod
-    def title(change: dict[str, Any]) -> str:
-        return f"{change['id']}: {change['title']}"
+    def title(change: Change) -> str:
+        return f"{change.id}: {change.title}"
 
-    def body(self, change: dict[str, Any]) -> str:
-        r = self.run("gh", "pr", "view", str(change["pr"]), "--json", "body")
+    def body(self, change: Change) -> str:
+        r = self.run("gh", "pr", "view", str(change.pr), "--json", "body")
         try:
             raw = json.loads(r.out)
         except ValueError:
@@ -147,8 +147,8 @@ class GitHub(Provider):
             raise ProviderError(f"gh pr view: expected a JSON object, gh gave {raw!r}"[:300])
         return _field(o, "body", str, "gh pr view")
 
-    def describe(self, change: dict[str, Any], body: str) -> None:
-        self.run("gh", "pr", "edit", str(change["pr"]), "--title", self.title(change), "--body", body)
+    def describe(self, change: Change, body: str) -> None:
+        self.run("gh", "pr", "edit", str(change.pr), "--title", self.title(change), "--body", body)
 
     def entries(self, tree: str) -> dict[str, str]:
         """`git ls-tree` lines of a tree, by entry name."""
@@ -158,13 +158,13 @@ class GitHub(Provider):
     def mktree(self, rows: dict[str, str]) -> str:
         return self.run("git", "mktree", input="".join(f"{r}\n" for r in rows.values())).out.strip()
 
-    def evidence(self, change: dict[str, Any], files: dict[str, Path]) -> dict[str, str]:
+    def evidence(self, change: Change, files: dict[str, Path]) -> dict[str, str]:
         """Puts the images in `ID/` of the orphan branch `fm-evidence` (added to what is there, one commit, a plain push
         that origin refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
         files = {n: f for n, f in files.items() if evidence.bare(n) and f.stat().st_size <= evidence.MAX_BYTES}
         if not files:
             return {}
-        tid = change["id"]
+        tid = change.id
         ref = f"refs/heads/{evidence.BRANCH}"
         parent = (self.run("git", "ls-remote", "origin", ref).out.split() or [""])[0]
         top: dict[str, str] = {}
@@ -186,26 +186,26 @@ class GitHub(Provider):
         slug = self.run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").out.strip()
         return {n: f"https://github.com/{slug}/blob/{evidence.BRANCH}/{tid}/{n}?raw=true" for n in files}
 
-    def ready(self, change: dict[str, Any]) -> None:
-        self.run("gh", "pr", "ready", str(change["pr"]))
+    def ready(self, change: Change) -> None:
+        self.run("gh", "pr", "ready", str(change.pr))
 
-    def diff(self, change: dict[str, Any]) -> str:
-        return self.run("gh", "pr", "diff", str(change["pr"]), "--color=never").out
+    def diff(self, change: Change) -> str:
+        return self.run("gh", "pr", "diff", str(change.pr), "--color=never").out
 
-    def review(self, change: dict[str, Any], review: Review) -> int:
+    def review(self, change: Change, review: Review) -> int:
         return ghreview.post(self.run, change, review)
 
-    def is_open(self, change: dict[str, Any]) -> bool:
+    def is_open(self, change: Change) -> bool:
         return self.view(change).state == "OPEN"
 
-    def close(self, change: dict[str, Any], text: str) -> None:
-        self.run("gh", "pr", "close", str(change["pr"]), "--comment", text)
+    def close(self, change: Change, text: str) -> None:
+        self.run("gh", "pr", "close", str(change.pr), "--comment", text)
 
-    def ci(self, change: dict[str, Any]) -> str:
+    def ci(self, change: Change) -> str:
         """The PR's CI. A pass or fail is kept for its commit and not read again; pending or no checks is reused for POLL
         seconds. A read asks GitHub once for every open PR, so all tasks of a poll share one call; a PR that is not in that
         answer (past the first 100, or no longer open) is read on its own."""
-        pr, head = str(change["pr"]), change["head"]
+        pr, head = str(change.pr), change.head
         e = util.read_json(self.p.state / "pr_ci.json", {}).get(pr)
         if not (e and e["head"] == head and (e["ci"] in ("pass", "fail") or (util.age_s(e["at"]) or 1e9) < POLL)):
             self.refresh(pr)
@@ -241,32 +241,32 @@ class GitHub(Provider):
         kept = util.read_json(self.p.state / "pr_ci.json", {})
         util.write_json(self.p.state / "pr_ci.json", {**kept, **{n: {**e, "at": at} for n, e in found.items()}})
 
-    def merge(self, change: dict[str, Any], strategy: str) -> str:
+    def merge(self, change: Change, strategy: str) -> str:
         """Merges the PR once (a retry after a crash finds it merged). Returns the merge commit; if GitHub has not
         merged it yet, a marker that the merge was requested, so it is not requested twice."""
         v = self.view(change)
         if v.state != "MERGED":
-            msg = ["--subject", f"Merge {change['id']}: {change['title']}"] if strategy != "rebase" else []
-            self.run("gh", "pr", "merge", str(change["pr"]), f"--{strategy}", *msg)
+            msg = ["--subject", f"Merge {change.id}: {change.title}"] if strategy != "rebase" else []
+            self.run("gh", "pr", "merge", str(change.pr), f"--{strategy}", *msg)
             v = self.view(change)
-        return self.merge_commit(change, v) if v.state == "MERGED" else f"pr-{change['pr']}-merge-requested"
+        return self.merge_commit(change, v) if v.state == "MERGED" else f"pr-{change.pr}-merge-requested"
 
-    def merge_commit(self, change: dict[str, Any], v: PullRequest) -> str:
+    def merge_commit(self, change: Change, v: PullRequest) -> str:
         """The merge commit of a merged PR: from `gh pr view`, else the API. Still none: fail (retried) rather than
         invent a reference."""
         sha = v.merge_commit
         if not sha:
-            sha = self.run("gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}", "--jq", ".merge_commit_sha").out.strip()
+            sha = self.run("gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{change.pr}", "--jq", ".merge_commit_sha").out.strip()
         if not sha or sha == "null":
-            raise TransientError(f"PR #{change['pr']} is merged but GitHub shows no merge commit yet")
+            raise TransientError(f"PR #{change.pr} is merged but GitHub shows no merge commit yet")
         return sha
 
-    def state(self, change: dict[str, Any]) -> dict[str, Any]:
+    def state(self, change: Change) -> ChangeState:
         v = self.view(change)
         if v.state != "MERGED":
-            return {"merged": False, "closed": v.state != "OPEN"}
+            return ChangeState(False, v.state != "OPEN")
         self.catch_up()
-        return {"merged": True, "closed": True, "commit": self.merge_commit(change, v)}
+        return ChangeState(True, True, self.merge_commit(change, v))
 
     def catch_up(self) -> None:
         """Best effort: bring the main checkout up to the merged main so the next checks see it (fetch + fast-forward

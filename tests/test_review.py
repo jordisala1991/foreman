@@ -7,7 +7,7 @@ from test_github import GH
 
 from fm import backlog, loop, pulls
 from fm.inline import Review
-from fm.providers import registry
+from fm.providers import Change, registry
 
 DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @@\n a\n+b\n+c\n d\n"
 
@@ -150,7 +150,7 @@ class Review_(unittest.TestCase):
         e = Env()
         provider = registry.get(e.p)
         self.assertEqual(provider.name, "local")
-        c = {"id": "FN-1", "head": "abc", "pr": None}
+        c = Change(id="FN-1", head="abc")
         self.assertEqual(provider.diff(c), "")
         self.assertEqual(provider.review(c, Review("k", "b", [])), 0)
 
