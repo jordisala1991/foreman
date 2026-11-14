@@ -252,14 +252,20 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
     backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {short})")
 
 
+def update_agent(p: Project, iid: str, **fields: Any) -> None:
+    """Merges fields into the issue's agent, from the current backlog (not from a read made earlier)."""
+    with backlog.edit(p) as d:
+        it = backlog.get(d, iid)
+        it["agent"] = {**(it.get("agent") or {}), **fields}
+
+
 def send(p: Project, i: dict[str, Any], message: str) -> bool:
     """Resumes the issue's agent with a message; False when it has no session to resume."""
     a: dict[str, Any] = i.get("agent") or {}
     if not a.get("session"):
         return False
     try:
-        who = sessions.Agent(i["id"], a["name"], a.get("model") or p.get("agents", "model"), a.get("effort") or p.get("agents", "effort"))
-        sessions.resume(p, who, a["session"], message, Path(a.get("cwd") or p.repo))
+        sessions.resume(p, a["session"], message, Path(a.get("cwd") or p.repo))
     except sessions.SessionError as e:
         backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
         return False

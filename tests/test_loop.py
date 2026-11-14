@@ -1,10 +1,10 @@
 import os
+import time
 import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, integrate, loop, risk
-from fm.providers import registry
+from fm import backlog, integrate, loop, proc, providers, risk, util
 
 
 class Launch(unittest.TestCase):
@@ -116,200 +116,10 @@ class Answers(unittest.TestCase):
         qid = backlog.ask(e.p, iid, iid.lower(), "A or B?")
         backlog.answer(e.p, qid, "B")
         e.set_state(iid.lower(), state)
-        if status:
-            e.set_status(iid.lower(), status)
+        e.set_status(iid.lower(), status) if status else e.drop_pid(iid.lower())  # no status: its process is gone too
         loop.tick(e.p)
         self.assertIn("--resume", e.calls()[-1]["argv"])
         self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
-
-
-class Provider(unittest.TestCase):
-    def delivered(self, e):
-        return Queue().deliver(e)
-
-    def test_accept_only_marks_and_the_issue_closes_when_the_merge_is_seen_in_main(self):
-        from fm.providers import local
-
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        before = git(e.repo, "rev-parse", "main").strip()
-        integrate.accept(e.p, iid)
-        i = e.issue(iid)
-        self.assertEqual((i["status"], i["accepted"]["by"]), ("in review", "owner"))
-        self.assertEqual(git(e.repo, "rev-parse", "main").strip(), before)
-        wt = i["worktree"]
-        # the provider merges but main does not show it yet: the issue stays open, worktree and branch stay
-        orig = local.Local.state
-        local.Local.state = lambda self, change: {"merged": False, "closed": False}
-        try:
-            loop.tick(e.p)
-        finally:
-            local.Local.state = orig
-        self.assertEqual(e.issue(iid)["status"], "in review")
-        self.assertTrue(e.issue(iid)["merge"])
-        self.assertIn("fm/ty-1", git(e.repo, "branch"))
-        self.assertTrue(os.path.isdir(e.repo.parent / wt))
-        loop.tick(e.p)  # seen done in main: closes and cleans, without merging twice
-        self.assertEqual(e.issue(iid)["status"], "done")
-        self.assertNotIn("fm/ty-1", git(e.repo, "branch"))
-        self.assertFalse(os.path.isdir(e.repo.parent / wt))
-        self.assertEqual(git(e.repo, "rev-list", "--count", f"{before}..main").strip(), "1")
-
-    def test_squash_by_default_merge_is_no_ff(self):
-        for strategy, parents in (("", 1), ("merge", 2)):
-            e = Env(test="true", autonomy="low")
-            if strategy:
-                e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[integrate]", f'[integrate]\nmerge = "{strategy}"'))
-                e.p = type(e.p).load(e.home)
-            iid = self.delivered(e)
-            loop.tick(e.p)
-            self.assertEqual(e.issue(iid)["status"], "done")
-            self.assertEqual(len(git(e.repo, "log", "-1", "--format=%P", "main").split()), parents)
-
-    def test_unknown_merge_or_provider_is_a_clear_config_error(self):
-        from fm import providers
-
-        for key, val in (("merge", "rebase"), ("provider", "gitlab"), ("pr", "never")):
-            e = Env(test="true")
-            e.p.cfg["integrate"][key] = val
-            with self.assertRaisesRegex(providers.ConfigError, f"{key} = '{val}'"):
-                registry.get(e.p)
-            iid = self.delivered(e)
-            loop.tick(e.p)
-            with self.assertRaises(providers.ConfigError):
-                integrate.accept(e.p, iid)
-
-    def test_the_old_forge_key_is_a_clear_config_error(self):
-        from fm import providers
-
-        e = Env()
-        e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[integrate]", '[integrate]\nforge = "github"'))
-        with self.assertRaisesRegex(providers.ConfigError, "forge was renamed to provider"):
-            registry.get(type(e.p).load(e.home))
-
-    def test_send_back_forgets_the_merge_of_the_old_tip(self):
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        backlog.update(e.p, iid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
-        loop.send_back(e.p, iid, "rejection", "again")
-        i = e.issue(iid)
-        self.assertFalse({"accepted", "merge", "merging"} & set(i))
-
-    def test_a_crash_after_the_merge_adopts_it_instead_of_merging_twice(self):
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        base = git(e.repo, "rev-parse", "main").strip()
-        git(e.repo, "merge", "--squash", "fm/ty-1")
-        git(e.repo, "commit", "-qm", f"Integrate {iid}: x")  # the merge happened; its ref was never stored
-        backlog.update(e.p, iid, merging=base)
-        merged = git(e.repo, "rev-parse", "main").strip()
-        loop.tick(e.p)
-        self.assertEqual(e.issue(iid)["status"], "done")
-        self.assertEqual(git(e.repo, "rev-parse", "main").strip(), merged)
-
-    def test_a_failing_merge_blocks_the_issue_with_the_reason(self):
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        (e.repo / "app.py").write_text("dirty\n")  # the main checkout has uncommitted changes
-        loop.tick(e.p)
-        i = e.issue(iid)
-        self.assertEqual(i["status"], "in review")
-        self.assertIn("uncommitted changes", i["blocked"])
-        self.assertNotIn("merge", i)
-
-    def test_a_main_checkout_on_another_branch_blocks_the_merge(self):
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        git(e.repo, "checkout", "-q", "-b", "elsewhere")
-        loop.tick(e.p)
-        self.assertIn("is not on main", e.issue(iid)["blocked"])
-        self.assertNotIn("merge", e.issue(iid))
-
-    def accepted_then_main_moves(self, e):
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        (e.repo / "app.py").write_text("changed on main\n")
-        git(e.repo, "commit", "-qam", "main moved")
-        return iid
-
-    def test_an_accepted_branch_that_conflicts_at_merge_goes_back_as_a_conflict(self):
-        for strategy in ("squash", "merge"):
-            e = Env(test="true")
-            e.p.cfg["integrate"]["merge"] = strategy
-            iid = self.accepted_then_main_moves(e)
-            main = git(e.repo, "rev-parse", "main").strip()
-            loop.tick(e.p)
-            loop.tick(e.p)
-            i = e.issue(iid)
-            self.assertEqual(i["status"], "in progress")
-            self.assertEqual(i["conflicts"], 1)
-            self.assertEqual(backlog.load(e.p)["decisions_resolved"][-1]["kind"], "conflict")
-            self.assertFalse(i.get("blocked"))
-            self.assertNotIn("accepted", i)
-            self.assertEqual(git(e.repo, "rev-parse", "main").strip(), main)
-            self.assertEqual(git(e.repo, "status", "--porcelain").strip(), "")
-
-    def test_an_accepted_branch_whose_merge_fails_otherwise_is_still_blocked(self):
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        (e.repo / "app.py").write_text("dirty\n")
-        loop.tick(e.p)
-        i = e.issue(iid)
-        self.assertTrue(i["blocked"])
-        self.assertEqual(i["status"], "in review")
-        self.assertIn("accepted", i)
-        self.assertNotIn("conflicts", i)
-
-    def test_after_the_fix_the_task_is_accepted_again_and_merges(self):
-        e = Env(test="true")
-        iid = self.accepted_then_main_moves(e)
-        loop.tick(e.p)
-        wt = e.repo.parent / e.issue(iid)["worktree"]
-        git(wt, "merge", "-X", "ours", "main", "-m", "fix")
-        backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
-        e.review(iid)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        loop.tick(e.p)
-        self.assertEqual(e.issue(iid)["status"], "done")
-
-    def test_a_bad_provider_blocks_at_the_merge_step(self):
-        e = Env(test="true")
-        iid = self.delivered(e)
-        loop.tick(e.p)
-        integrate.accept(e.p, iid)
-        e.p.cfg["integrate"]["merge"] = "rebase"
-        loop.run_queue(e.p, {})
-        self.assertIn("merge = 'rebase'", e.issue(iid)["blocked"])
-
-    def test_defaults_and_nothing_is_published(self):
-
-        e = Env()
-        self.assertEqual((e.p.get("integrate", "provider"), e.p.get("integrate", "merge")), ("auto", "squash"))
-        self.assertEqual(registry.get(e.p).name, "local")  # no GitHub remote: local
-        import inspect
-
-        from fm.providers import local
-
-        src = inspect.getsource(local)
-        for word in ('"push"', '"tag"', "release"):
-            self.assertNotIn(word, src)
-        e = Env(test="true", autonomy="low")
-        self.delivered(e)
-        loop.tick(e.p)
-        self.assertEqual(git(e.repo, "tag").strip(), "")
-        self.assertEqual(git(e.repo, "remote").strip(), "")
 
 
 class Stopped(unittest.TestCase):
@@ -323,6 +133,7 @@ class Stopped(unittest.TestCase):
         self.assertIn("not finished", e.calls()[-1]["argv"][-1])
         self.assertEqual(e.issue(iid)["nudges"], 1)
         backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "nudged": "2000-01-01 00:00:00"})
+        e.set_state(iid.lower(), "done")  # the nudge woke it; it ended its turn again
         loop.tick(e.p)
         self.assertIn("stopped without finishing", e.issue(iid)["blocked"])
         self.assertEqual(len(e.calls()), 2)
@@ -352,6 +163,134 @@ class Queue(unittest.TestCase):
         self.assertEqual(e.issue(iid)["status"], "done")
         self.assertIn("Integrate TY-1", git(e.repo, "log", "--oneline", "-1"))
         self.assertNotIn("fm/ty-1", git(e.repo, "branch"))
+
+    def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self):
+        e = Env(test="true")
+        ids = [self.deliver(e) for _ in range(3)]
+        loop.tick(e.p)
+        integrate.accept(e.p, ids[0])
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")  # every branch is now stale
+        checks: list[str] = []
+        real = integrate.check
+        integrate.check = lambda p, iid, *a: checks.append(iid) or real(p, iid, *a)
+        self.addCleanup(setattr, integrate, "check", real)
+        try:
+            loop.tick(e.p)
+            self.assertEqual((e.issue(ids[0])["status"], checks), ("done", [ids[1]]))
+            loop.tick(e.p)
+            self.assertEqual(checks, [ids[1], ids[2]])
+        finally:
+            integrate.check = real
+
+    def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self):
+        e = Env(test="true")
+        ids = [self.deliver(e) for _ in range(3)]
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")
+        checks: list[str] = []
+        real, deliver = integrate.check, loop.pulls.deliver
+        integrate.check = lambda p, iid, *a: checks.append(iid) or real(p, iid, *a)
+
+        def boom(*a):
+            raise RuntimeError("boom")
+
+        loop.pulls.deliver = boom
+        self.addCleanup(setattr, integrate, "check", real)
+        self.addCleanup(setattr, loop.pulls, "deliver", deliver)
+        loop.tick(e.p)
+        self.assertEqual(len(checks), 1)
+        self.assertEqual(len(ids), 3)
+
+    def test_a_slow_check_does_not_hold_up_a_launch(self):
+        e = Env(test="case $PWD in */trees/*) sleep 3;; esac")
+        a = self.deliver(e)
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")
+        ready = backlog.add(e.p, "later", status="ready", criterion="z")
+        util.BACKGROUND_WAIT_S = 0.2
+        self.addCleanup(setattr, util, "BACKGROUND_WAIT_S", 20)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(ready)["status"], "in progress")  # launched while the check still runs
+        self.assertNotEqual((e.issue(a).get("check") or {}).get("main"), git(e.repo, "rev-parse", "main").strip())
+        for t in list(util.BACKGROUND.values()):
+            t.join()
+        self.assertEqual(e.issue(a)["check"]["main"], git(e.repo, "rev-parse", "main").strip())
+
+    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self):
+        e = Env(test="true")
+        a = self.deliver(e)
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")
+
+        def down(*args):
+            time.sleep(0.3)  # longer than the wait: the tick has gone on when it fails
+            raise providers.Transient("net down")
+
+        real = integrate.check
+        integrate.check = down
+        self.addCleanup(setattr, integrate, "check", real)
+        util.BACKGROUND_WAIT_S = 0.05
+        self.addCleanup(setattr, util, "BACKGROUND_WAIT_S", 20)
+        for _ in range(3):
+            loop.tick(e.p)
+            for t in list(util.BACKGROUND.values()):
+                t.join()
+        self.assertIn("net down", e.issue(a)["blocked"])
+
+    def test_transient_failures_of_the_queue_step_that_are_not_in_a_row_do_not_block(self):
+        e = Env(test="true")
+        a = self.deliver(e)
+        loop.tick(e.p)  # checked: up to date, no check runs from now on
+        real = loop.pulls.prepare
+        calls: list[int] = []
+
+        def flaky(*args):
+            calls.append(1)
+            if len(calls) != 3:
+                raise providers.Transient("gh 502")
+            return real(*args)
+
+        loop.pulls.prepare = flaky
+        self.addCleanup(setattr, loop.pulls, "prepare", real)
+        for _ in range(4):
+            loop.tick(e.p)
+        self.assertEqual((len(calls), e.issue(a).get("blocked", "")), (4, ""))
+
+    def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self):
+        e = Env(test="true")
+
+        def boom(*args):
+            raise integrate.IntegrateError("git timed out")
+
+        real = integrate.tests_at
+        integrate.tests_at = boom
+        self.addCleanup(setattr, integrate, "tests_at", real)
+        loop.tick(e.p)
+        for t in list(util.BACKGROUND.values()):
+            t.join()
+        self.assertIn("git timed out", util.read_jsonl(e.p.state / "errors.jsonl")[-1]["error"])
+
+    def test_a_task_canceled_while_the_queue_runs_is_not_checked(self):
+        e = Env(test="true")
+        a, b = self.deliver(e), self.deliver(e)
+        real = loop.queue_one
+
+        def cancel_b_first(p, i, main, rows):
+            if i["id"] == a:
+                integrate.close(p, b, "canceled", "x")
+            real(p, i, main, rows)
+
+        loop.queue_one = cancel_b_first
+        try:
+            loop.tick(e.p)
+        finally:
+            loop.queue_one = real
+        self.assertFalse(e.issue(b).get("check"))
 
     def test_autonomy_low_merges_low_risk_alone(self):
         e = Env(test="true", autonomy="low")
@@ -403,6 +342,92 @@ class Queue(unittest.TestCase):
         self.assertNotIn("check", e.issue(iid))  # no check before the verdict
         loop.tick(e.p)
         self.assertEqual(len(e.calls()), 3)  # not launched twice
+
+    def test_a_finished_hunter_and_a_reviewer_with_a_verdict_are_stopped(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        e.hunt_then_review(iid)
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["hunter"]["name"]), "stopped")
+        self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "working")
+        e.verdict(iid)
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["reviewer"]["name"]), "stopped")
+
+    def test_cancelling_a_task_in_review_stops_every_session_of_it(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        e.hunt_then_review(iid)
+        i = e.issue(iid)
+        integrate.close(e.p, iid, "canceled", "no")
+        for role in ("agent", "hunter", "reviewer"):
+            self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
+
+    def test_merging_stops_every_session_of_the_task(self):
+        e = Env(test="true")
+        iid = self.deliver(e)
+        e.review(iid)
+        i = e.issue(iid)
+        loop.tick(e.p)
+        integrate.accept(e.p, iid)
+        loop.tick(e.p)
+        self.assertEqual(e.issue(iid)["status"], "done")
+        for role in ("agent", "hunter", "reviewer"):
+            self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
+
+    def test_a_blocked_task_still_has_its_finished_hunter_stopped(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        e.hunter_done(iid)
+        backlog.update(e.p, iid, blocked="why")
+        loop.tick(e.p)
+        self.assertEqual(e.state_of(e.issue(iid)["hunter"]["name"]), "stopped")
+
+    def test_a_failing_stop_does_not_stop_the_cancel(self):
+        from unittest import mock
+
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        with mock.patch("fm.sessions.stop", side_effect=proc.ProcError("timed out")):
+            integrate.close(e.p, iid, "canceled", "no")
+        self.assertEqual(e.issue(iid)["status"], "canceled")
+
+    def test_cancel_stops_a_session_the_listing_does_not_show(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: the agent still runs
+        integrate.close(e.p, iid, "canceled", "no")
+        self.assertEqual(e.stops(), [e.issue(iid)["agent"]["short"]])
+
+    def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
+        loop.tick(e.p)
+        e.hunter_done(iid)
+        (e.bin / "agents.json").write_text("[]")  # gone, or an unreadable listing
+        for _ in range(3):
+            loop.tick(e.p)
+        self.assertEqual(e.stops(), [])
+
+    def test_a_cancel_stops_each_session_once(self):
+        e = Env(test="true")
+        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        loop.tick(e.p)
+        name = e.issue(iid)["agent"]["name"]
+        integrate.close(e.p, iid, "canceled", "no")
+        self.assertEqual(e.stops(), [e.issue(iid)["agent"]["short"]])  # once, though its id is also in `sessions`
+        self.assertEqual(e.state_of(name), "stopped")
 
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")

@@ -194,6 +194,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         raise IntegrateError("its pull request was closed without merging: reopen it, or reject the task")
     if not seen["merged"]:
         return "merging"
+    stop_all(p, i)
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
     git(p.repo, "branch", "-D", i["branch"], check=False)
@@ -212,14 +213,37 @@ def merge_accepted(p: Project, iid: str) -> str:
     return "done"
 
 
+def close_pull(p: Project, i: dict[str, Any], why: str) -> None:
+    """Closes the task's PR with the reason, unless it is already closed or merged."""
+    provider, change = registry.get(p), pulls.change_of(i, "")
+    try:
+        if provider.is_open(change):
+            provider.close(change, f"Task canceled: {why}")
+    except (providers.Transient, providers.Permanent, providers.ProviderError) as e:
+        raise IntegrateError(f"could not close its pull request: {e}") from e
+
+
+def stop_all(p: Project, i: dict[str, Any]) -> None:
+    """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
+    session it ever started (a replaced review pass keeps no record but its id in `sessions`)."""
+    rows = sessions.listing(p)
+    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer")]
+    every += [{"short": rows.get(sid, {}).get("id"), "session": sid} for sid in i.get("sessions", [])]
+    done: set[str] = set()
+    for a in every:
+        if a.get("short") not in done:
+            done.add(str(a.get("short")))
+            sessions.stop_live(p, i["id"], a, rows)
+
+
 def close(p: Project, iid: str, status: str, why: str) -> None:
-    """Closes an open issue as canceled or done (merged outside fm): stops its agent, answers its open questions,
-    removes its worktree (the branch stays: the work is not lost). `fm cancel` and the sources' signals use it."""
+    """Closes an open issue as canceled or done (merged outside fm): stops its sessions, answers its open questions,
+    removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
+    `fm cancel` and the sources' signals use it."""
     i = backlog.get(backlog.load(p), iid)
-    agent: backlog.Agent = i.get("agent") or {}
-    short = agent.get("short")
-    if short and i["status"] in backlog.RUNNING:
-        sessions.stop(p, short)
+    if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
+        close_pull(p, i, why)
+    stop_all(p, i)
     for q in backlog.open_questions(backlog.load(p), iid):
         backlog.answer(p, q["id"], f"(the task was {status})")
         backlog.mark_delivered(p, q["id"])

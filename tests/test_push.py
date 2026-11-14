@@ -119,22 +119,24 @@ class Pushes(unittest.TestCase):
 
     def test_any_provider_call_failing_transient_three_times_blocks_with_the_error(self):
         g = self.make(test="true")
+        g.set(ci="pending")  # not settled: it is asked for at every tick
         iid = g.work()
         g.deliver(iid)
-        g.set(fail_always=["pr", "checks"])
+        g.set(fail_always=["api", "graphql"])
         self.ticks(g, 2)
         i = g.e.issue(iid)
         self.assertEqual((i["retry_count"], bool(i.get("blocked"))), (2, False))
         self.ticks(g, 1)
         i = g.e.issue(iid)
-        self.assertIn("pr checks", i["blocked"])
+        self.assertIn("api graphql", i["blocked"])
         self.assertEqual(i["retry_count"], 0)
 
     def test_a_provider_call_failing_once_then_working_resets_the_count(self):
         g = self.make(test="true")
+        g.set(ci="pending")
         iid = g.work()
         g.deliver(iid)
-        g.set(fail_once=["pr", "checks"])
+        g.set(fail_once=["api", "graphql"])
         self.ticks(g, 1)
         self.assertEqual(g.e.issue(iid)["retry_count"], 1)
         self.ticks(g, 1)

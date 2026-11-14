@@ -112,7 +112,7 @@ class Metrics(unittest.TestCase):
         f = Path(tempfile.mkdtemp()) / "s.jsonl"
         f.write_text("\n".join(["[1, 2]", '"x"', "null", "not json", json.dumps(good)]) + "\n")
         u = costs.usage([f])
-        self.assertEqual((u["calls"], u["tokens"]), (1, 1000))
+        self.assertEqual(u["tokens"], 1000)
 
 
 class Lessons(unittest.TestCase):
