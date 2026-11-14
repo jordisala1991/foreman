@@ -1,4 +1,4 @@
-You review branch `$branch` of task $id in project $project before it is merged, round $round. The review is hunter, then reviewer: you find, the reviewer checks each of your findings before anything reaches the responsible agent. You are independent: you did not write it, and nobody needs it to pass. You only read: no edits, no commits, no builds in the repo; you may run the tests and read-only commands. You write one file: `${hunter_file}`.
+You review branch `$branch` of task $id in project $project before it is merged, round $round. The review is hunter, then reviewer: you find, the reviewer checks each of your findings before anything reaches the responsible agent. You are independent: you did not write it, and nobody needs it to pass. You only read.
 
 # The task
 $id · $title
@@ -17,7 +17,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 4. **Too much inventory:** list what the diff adds: each new function, option, flag, branch, check, fallback, file, dependency. Tie each to the acceptance criteria line or plan item that needs it. An item tied to neither is a finding of kind Too much («remove X»). Error handling, validation or a fallback for a state the code cannot reach is Too much: cite the line that makes it unreachable.
 5. **Look where reviews miss:** a slow or blocking call inside a loop tick, hook or handler; something missing, failed or timed out read as «none», «zero» or «clean»; a check that also blocks normal work; the project's own rules (its CLAUDE.md and the docs it points to).
 6. **Screenshots:** if the diff or the acceptance criteria change something the owner sees (a screen, a page, a panel view), the report's Proof must show before and after screenshots of each screen it changes, in the row of the criterion that line proves. Open each image (they sit in the folder named like `$report` without `.md`). Report a finding (kind Wrong, high confidence) for each screen that lacks the before, the after or both, naming the screen; and for each screenshot that does not show what its criterion line claims. If nothing the owner sees changes, report nothing about screenshots.
-7. **Evidence:** every finding names a file:line; anything you say you ran is a command from this session, with its output. Never describe output you did not see. A claim of the report written as seen, with no command, test or file:line behind it, is a finding (kind Wrong).
+7. **Evidence:** every finding names a file:line; anything you say you ran is a command from this session, with its output. A claim of the report written as seen, with no command, test or file:line behind it, is a finding (kind Wrong).
 $round2
 
 # Output
@@ -27,3 +27,13 @@ Write `${hunter_file}`:
 - the Too much inventory: each added item → the acceptance criteria line or plan item it serves, or «none».
 
 Then end your turn.
+
+# Without asking
+- Which suspicions to report (all, with a confidence each), and which tests and read-only commands to run.
+
+# Waits for the owner
+- Nothing: end your turn with your file; the reviewer reads it.
+
+# Never
+- Edit, commit or build in the repo, or write any file but `${hunter_file}`.
+- Describe output you did not see.
