@@ -6,9 +6,6 @@ Goal: $goal
 Acceptance criteria: $criteria
 $detail
 
-# Before you start
-Read the project's lessons, `$lessons`: what misled earlier agents in this project.
-
 $plan_section
 
 # Where
@@ -32,7 +29,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
    - every line of the acceptance criteria has evidence that exists at this tip (a test that passes, a command you ran, a `file:line`);
    - every claim in the report is true at this tip (a Proof row, a count, a «done»): rerun it or correct it;
    - every function, option, flag or fallback you added serves a line of the criteria or an item of the plan; otherwise remove it.
-3. Run `fm done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task, the repo or the lessons was wrong, stale or unclear and cost you time; or none"` and end your turn.
+3. Run `fm done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task or the repo was wrong, stale or unclear and cost you time; or none"` and end your turn.
 
 The loop then has your branch reviewed: the hunter, then the reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Run `$test` again and update the Proof rows the fixes touched. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), reread as in step 2, and run `fm done` again. The owner may also reject it with a note: same thing.
 

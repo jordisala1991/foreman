@@ -7,9 +7,6 @@ $detail
 Acceptance criteria (settled with the owner):
 $criteria
 
-# Before you start
-Read the project's lessons, `$lessons`.
-
 # Vocabulary
 Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
 

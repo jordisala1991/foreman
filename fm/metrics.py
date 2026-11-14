@@ -1,6 +1,6 @@
 """What the system knows about how it works, per task: cost (its agents' transcripts, list prices), time (filed →
 in review → done), rework (rejected by the owner), nudges (ended a turn without finishing), questions to the owner,
-guard stops, and what misled its agents (their own words, from `fm done --confused`)."""
+guard stops, and what misled its agents (their own words, from `--misled`, per agent)."""
 
 import re
 import statistics
@@ -72,7 +72,7 @@ def per_task(p: Project) -> list[dict[str, Any]]:
         to_review = next((e["time"] for e in mine if e["text"].startswith("→ in review")), None)
         closed = next((e["time"] for e in mine if e["text"].startswith("→ done")), None)
         check: backlog.Check = i.get("check") or {}
-        report: backlog.Report = i.get("report") or {}
+        misled: dict[str, list[str]] = i.get("misled") or {}
         sids = [s for s in i.get("sessions", []) if s]
         kinds: dict[str, str] = i.get("session_kinds") or {}
         seen: set[str] = set()  # one set for the whole task: a message replayed in a resumed session counts once, in its first
@@ -103,7 +103,8 @@ def per_task(p: Project) -> list[dict[str, Any]]:
                 "guard_stops": sum(1 for s in stops if s.get("task") == i["id"]),
                 "lock_wait_min": round(sum(u.get("waited_s", 0) for u in lock_uses if u.get("task") == i["id"]) / 60, 1),
                 "risk": check.get("risk"),
-                "confused": report.get("confused", ""),
+                "misled": misled,
+                "confused": "\n".join(f"{role}: {x}" for role, xs in misled.items() for x in xs),  # the panel's System view
                 "cycle": cycle(mine),
             }
         )
@@ -125,8 +126,7 @@ def text(rows: list[dict[str, Any]]) -> str:
         )
     lines.append(f"total ${sum(r['usd'] for r in rows):.2f}")
     for r in rows:
-        if r["confused"] and r["confused"].strip().lower() not in ("none", "nothing", "-"):
-            lines.append(f"{r['id']} misled by: {r['confused']}")
+        lines += [f"{r['id']} misled ({role}): {x}" for role, xs in r["misled"].items() for x in xs]
     return "\n".join(lines + _cycle_lines(rows))
 
 

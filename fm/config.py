@@ -104,9 +104,5 @@ class Project:
         return self.home / "fm.toml"
 
     @property
-    def lessons_file(self) -> Path:
-        return self.home / "LESSONS.md"
-
-    @property
     def backlog_file(self) -> Path:
         return self.home / "backlog.json"
