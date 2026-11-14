@@ -11,7 +11,7 @@ default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 from pathlib import Path
 from typing import Any
 
-from . import backlog, proc, providers, pulls, sessions, util
+from . import backlog, proc, providers, pulls, sessions, subtasks, util
 from .config import Project
 from .providers import registry
 from .risk import Facts, allows, score
@@ -214,6 +214,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         commit=seen.get("commit") or change["merge"],
         acceptance={**acceptance, "verdict": f"accepted by {by}"},
     )
+    settle_parent(p, iid)
     return "done"
 
 
@@ -240,11 +241,26 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
             sessions.stop_live(p, i["id"], a, rows)
 
 
-def close(p: Project, iid: str, status: str, why: str) -> None:
+def settle_parent(p: Project, iid: str) -> None:
+    """A parent closes by itself once its subtasks have: done if any is done, else canceled."""
+    d = backlog.load(p)
+    parent = backlog.get(d, iid).get("parent")
+    if not parent or backlog.get(d, parent)["status"] in backlog.CLOSED:
+        return
+    if status := subtasks.outcome(subtasks.of(backlog.issues(d), parent)):
+        backlog.set_status(p, parent, status, "its subtasks are closed")
+
+
+def close(p: Project, iid: str, status: str, why: str, *, settle: bool = True) -> None:
     """Closes an open issue as canceled or done (merged outside fm): stops its sessions, answers its open questions,
     removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
-    `fm cancel` and the sources' signals use it."""
-    i = backlog.get(backlog.load(p), iid)
+    `fm cancel` and the sources' signals use it. Canceling a parent first cancels its open subtasks."""
+    d = backlog.load(p)
+    i = backlog.get(d, iid)
+    if status == "canceled":
+        for s in subtasks.of(backlog.issues(d), iid):
+            if backlog.get(backlog.load(p), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it
+                close(p, s["id"], "canceled", f"its parent {iid} was canceled: {why}", settle=False)
     if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
         close_pull(p, i, why)
     stop_all(p, i)
@@ -254,3 +270,5 @@ def close(p: Project, iid: str, status: str, why: str) -> None:
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
     backlog.set_status(p, iid, status, why)
+    if settle:
+        settle_parent(p, iid)

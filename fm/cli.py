@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from . import agents, backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
+from . import agents, backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, subtasks, token, util
 from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -37,26 +37,40 @@ def cmd_init(a: argparse.Namespace) -> None:
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
     status = "triage" if a.triage else "backlog"
-    iid = backlog.add(p, a.title, detail=a.detail or "", status=status, criteria=a.criteria or "", claim=a.claim or "", priority=a.priority)
+    if a.parent:
+        if os.environ.get("FM_ISSUE"):
+            sys.exit("fm: subtasks are filed by the owner, not from an agent's session")
+        if why := subtasks.refusal(backlog.issues(backlog.load(p)), a.parent):
+            sys.exit(f"fm: {why}")
+    iid = backlog.add(
+        p, a.title, detail=a.detail or "", status=status, criteria=a.criteria or "", claim=a.claim or "", priority=a.priority, parent=a.parent or ""
+    )
     print(iid)
 
 
 def cmd_list(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
-    for i in backlog.issues(d):
+    status = {i["id"]: i["status"] for i in backlog.issues(d)}
+    for i in subtasks.ordered(backlog.issues(d)):
         if i["status"] in backlog.CLOSED and not a.all:
             continue
         agent: backlog.Agent = i.get("agent") or {}
         ag = agent.get("name", "")
-        print(f"{i['id']:8} {i['status']:12} {ag:14} {i['title']}" + (f"  [blocked: {i['blocked']}]" if i.get("blocked") else ""))
+        shown = i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED)
+        title = ("  " if shown else "") + i["title"]
+        print(f"{i['id']:8} {i['status']:12} {ag:14} {title}" + (f"  [blocked: {i['blocked']}]" if i.get("blocked") else ""))
     for q in backlog.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
 
 
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
-    print(json.dumps(backlog.get(backlog.load(p), a.id), indent=2, ensure_ascii=False))
+    d = backlog.load(p)
+    i = backlog.get(d, a.id)
+    if subs := subtasks.of(backlog.issues(d), a.id):
+        i = {**i, "subtasks": [{"id": s["id"], "status": s["status"], "title": s["title"]} for s in subs]}
+    print(json.dumps(i, indent=2, ensure_ascii=False))
 
 
 # --- the owner's side ---------------------------------------------------------------------------------------------
