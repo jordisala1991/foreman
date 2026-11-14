@@ -135,7 +135,7 @@ class OnGitHub(unittest.TestCase):
         self.deliver(text="Did X\n")
         self.ticks()
         self.assertEqual(self.remote("branch", "--list", "fm-evidence"), b"")
-        self.assertEqual(self.g.calls("repo"), [])
+        self.assertEqual(self.g.calls("repo", "view", "--json", "nameWithOwner"), [])  # the review reads the repo url for its links
 
     def test_big_image_skipped(self):
         self.deliver(image=b"0" * (evidence.MAX_BYTES + 1))
