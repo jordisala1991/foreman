@@ -116,8 +116,8 @@ class Handler(BaseHTTPRequestHandler):
             p = project(q)
         except KeyError:
             return self.json({"error": "not found"}, 404)
-        iid, name = q.get("id", [""])[0], q.get("name", [""])[0]
-        f = pulls.evidence_file(p, iid, name)
+        tid, name = q.get("id", [""])[0], q.get("name", [""])[0]
+        f = pulls.evidence_file(p, tid, name)
         if f is None or f.stat().st_size > evidence.MAX_BYTES:
             return self.json({"error": "not found"}, 404)
         self.send(200, f.read_bytes(), evidence.kind(name), headers={"Cache-Control": "private, max-age=60"})

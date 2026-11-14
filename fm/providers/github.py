@@ -184,10 +184,10 @@ class GitHub(Provider):
     def evidence(self, change: dict[str, Any], files: dict[str, Path]) -> dict[str, str]:
         """Puts the images in `ID/` of the orphan branch `fm-evidence` (added to what is there, one commit, a plain push
         that origin refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
-        files = {n: f for n, f in files.items() if evidence.bare(n) and not f.is_symlink() and f.stat().st_size <= evidence.MAX_BYTES}
+        files = {n: f for n, f in files.items() if evidence.bare(n) and f.stat().st_size <= evidence.MAX_BYTES}
         if not files:
             return {}
-        iid = change["id"]
+        tid = change["id"]
         ref = f"refs/heads/{evidence.BRANCH}"
         parent = (self.run("git", "ls-remote", "origin", ref).out.split() or [""])[0]
         top: dict[str, str] = {}
@@ -195,19 +195,19 @@ class GitHub(Provider):
         if parent:
             self.run("git", "fetch", "-q", "origin", ref)
             top = self.entries(parent)
-            mine = self.entries(f"{parent}:{iid}") if iid in top else {}
+            mine = self.entries(f"{parent}:{tid}") if tid in top else {}
         before = dict(mine)
         for name, f in files.items():
             blob = self.run("git", "hash-object", "-w", "--no-filters", str(f)).out.strip()
             mine[name] = f"100644 blob {blob}\t{name}"
         if mine != before:
-            top[iid] = f"040000 tree {self.mktree(mine)}\t{iid}"
+            top[tid] = f"040000 tree {self.mktree(mine)}\t{tid}"
             who = ["-c", "user.name=fm", "-c", "user.email=fm@localhost"]
             parents = ["-p", parent] if parent else []
-            commit = self.run("git", *who, "commit-tree", self.mktree(top), *parents, "-m", f"evidence {iid}").out.strip()
+            commit = self.run("git", *who, "commit-tree", self.mktree(top), *parents, "-m", f"evidence {tid}").out.strip()
             self.run("git", "push", "-q", "origin", f"{commit}:{ref}")
         slug = self.run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").out.strip()
-        return {n: f"https://github.com/{slug}/blob/{evidence.BRANCH}/{iid}/{n}?raw=true" for n in files}
+        return {n: f"https://github.com/{slug}/blob/{evidence.BRANCH}/{tid}/{n}?raw=true" for n in files}
 
     def ready(self, change: dict[str, Any]) -> None:
         self.run("gh", "pr", "ready", str(change["pr"]))

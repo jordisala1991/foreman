@@ -101,16 +101,18 @@ def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
     return f"**fm: merge risk {c['risk']}**\n\n{reasons}\n\nTests: {c['tests']} · CI: {c.get('ci') or 'none'}\nIndependent review, {review}\n"
 
 
-def evidence_files(p: Project, iid: str, text: str) -> dict[str, Path]:
+def evidence_files(p: Project, tid: str, text: str) -> dict[str, Path]:
     """The images `text` names that exist in `reports/ID/` (a missing one is left as written)."""
-    found = {n: evidence_file(p, iid, n) for n in evidence.names(text)}
+    found = {n: evidence_file(p, tid, n) for n in evidence.names(text)}
     return {n: f for n, f in found.items() if f}
 
 
-def evidence_file(p: Project, iid: str, name: str) -> Path | None:
-    """`reports/ID/name` when it is a regular file inside that folder (a symlink, which could point anywhere, is not)."""
-    f = p.home / "reports" / iid / name
-    return f if evidence.bare(name) and re.fullmatch(r"[A-Za-z0-9_-]+", iid) and f.is_file() and not f.is_symlink() else None
+def evidence_file(p: Project, tid: str, name: str) -> Path | None:
+    """`reports/ID/name` when it is a regular file in that real folder (a symlink, file or folder, could point anywhere)."""
+    d = p.home / "reports" / tid
+    f = d / name
+    real = d.is_dir() and not d.is_symlink() and f.is_file() and not f.is_symlink()
+    return f if evidence.bare(name) and re.fullmatch(r"[A-Za-z0-9_-]+", tid) and real else None
 
 
 def _failed(p: Project, i: dict[str, Any], what: str, e: Exception) -> None:

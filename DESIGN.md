@@ -27,6 +27,7 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 || `fm/delivery.py` | ~200 | check a delivered branch, risk score, autonomy, accept (records), merge step ||
 | `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
+| `fm/evidence.py` | ~35 | the images a report names: bare names, relink, size and kinds (pure text) |
 | `fm/subtasks.py` | ~35 | subtasks: which belong to a parent, listing order, when a subtask may be filed, how the parent closes (pure) |
 | `fm/blockers.py` | ~50 | which tasks a task waits for (`blocked_by`): pending, dead, refusals incl. cycles (pure) |
 | `fm/release.py` | ~25 | the loop's blockers step: marks a task unblocked once, or blocks it when a blocker closed undone |
