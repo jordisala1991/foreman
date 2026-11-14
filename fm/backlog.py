@@ -7,8 +7,7 @@ Statuses, and who moves an issue between them (DESIGN.md has the picture):
   refining     a planning agent works on it; it ends with `fm ready` (the plan, or «trivial»)
   ready        the loop launches the task's responsible agent
   in progress  the responsible agent works on it; it ends with `fm done`
-  in review    in the integration queue: checked (tests, diff, risk); the owner accepts, or the autonomy level does
-  done | canceled | duplicate
+  in review    in the integration queue: checked (tests, diff, risk); the owner accepts, or the autonomy level does; then done | canceled | duplicate
 
 Keys added to an issue: `agent` {name, session, short, kind: define|work, started, nudged}, `branch`, `worktree`,
 `sessions` (every session id), `session_kinds` (sid → define|work|review), `report` {summary, review, confused, at},
