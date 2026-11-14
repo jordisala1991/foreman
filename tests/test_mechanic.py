@@ -135,10 +135,13 @@ class Mechanic(unittest.TestCase):
         self.assertIn(self.e.issue(self.iid)["mechanic"]["short"], self.e.stops())
 
     def test_unlaunchable_is_not_retried(self):
+        fake = self.e.p.cfg["agents"]["claude"]
         self.e.p.cfg["agents"]["claude"] = "/nonexistent"
         self.tick()
+        self.e.p.cfg["agents"]["claude"] = fake  # claude recovers: the task still gets no mechanic
         self.tick()
-        self.assertEqual(self.e.issue(self.iid)["detail"].count("Diagnosis missing"), 1)
+        self.assertEqual(self.e.calls(), [])
+        self.assertNotIn("mechanic", self.e.issue(self.iid))
 
     def test_gone_session_is_not_stopped_again(self):
         self.tick()
