@@ -10,10 +10,6 @@ RECENT_DAYS = 7  # closed issues the tasks screen still shows
 Obj = dict[str, Any]
 
 
-def session_rows(p: Project) -> dict[str, Any]:
-    return sessions.listing(p)
-
-
 # ---------- the projects ----------
 
 
@@ -74,7 +70,7 @@ def with_session(p: Project, i: Obj, rows: dict[str, Any]) -> Obj:
 def state(p: Project) -> Obj:
     d = backlog.load(p)
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
-    rows = session_rows(p)
+    rows = sessions.listing(p)
     shown = [with_session(p, i, rows) for i in backlog.issues(d) if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
     return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "issues": shown, "questions": d["decisions"], "events": events}
@@ -85,7 +81,7 @@ def issue(p: Project, iid: str) -> Obj:
     i = backlog.get(d, iid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
-    shown = with_session(p, i, session_rows(p))
+    shown = with_session(p, i, sessions.listing(p))
     if i.get("report"):
         check: Obj = i.get("check") or {}
         shown["description"] = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
@@ -98,7 +94,7 @@ def issue(p: Project, iid: str) -> Obj:
 
 
 def system(p: Project) -> Obj:
-    found = health.findings(p, session_rows(p), outside=True, probe=False)
+    found = health.findings(p, sessions.listing(p), outside=True, probe=False)
     rows = metrics.per_issue(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     return {
