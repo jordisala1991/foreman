@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, util
+from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, subtasks, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -215,7 +215,9 @@ def launch_free(p: Project) -> None:
         return
     d = backlog.load(p)
     free = int(p.get("agents", "slots")) - running(d)
-    todo = sorted((i for i in backlog.issues(d) if i["status"] in ("backlog", "ready") and not i.get("blocked")), key=sort_key)
+    issues = backlog.issues(d)
+    waiting = (i for i in issues if i["status"] in ("backlog", "ready") and not i.get("blocked"))
+    todo = sorted((i for i in waiting if not subtasks.of(issues, i["id"])), key=sort_key)
     for i in todo[: max(0, free)]:
         guarded(p, i["id"], "launch it", lambda i=i: launch(p, i))
 

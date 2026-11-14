@@ -1,6 +1,5 @@
 """The backlog: one `backlog.json` in today's foreman format (schema 5: issues with id XX-n, title, status, detail,
-acceptance {claim, criteria, verdict}, result, priority, relations; decisions for the owner), with the keys the new
-model needs. This module is its only writer; every write is under the file lock and atomic.
+acceptance {claim, criteria, verdict}, result, priority; decisions), plus new keys. Its only writer, under the file lock.
 
 Statuses, and who moves an issue between them (DESIGN.md has the picture):
   triage       filed by a health check or a source; waits for the owner's «go» (→ backlog or ready)
@@ -12,12 +11,11 @@ Statuses, and who moves an issue between them (DESIGN.md has the picture):
   done | canceled | duplicate
 
 Keys added to an issue: `agent` {name, session, short, kind: define|work, started, nudged}, `branch`, `worktree`,
-`sessions` (every session id), `session_kinds` (sid → define|work|review),
-`report` {summary, review, confused, at}, `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went
-back to its agent), `plan_file` (path of the written plan,
-set by `fm ready --plan`; absent when the task had none), `source` (the dedup key of a finding or signal), `blocked` (why the loop leaves it alone).
-A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text,
-kind: question|permission, action?}; its answer goes back to that agent, never to a coordinator.
+`sessions` (every session id), `session_kinds` (sid → define|work|review), `report` {summary, review, confused, at},
+`check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `source`
+(dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask).
+A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text, kind:
+question|permission, action?}; its answer goes back to that agent.
 """
 
 import contextlib
@@ -151,6 +149,7 @@ class NewIssue(TypedDict, total=False):
     claim: str
     source: str | None
     priority: str
+    parent: str
 
 
 class Question(TypedDict, total=False):
@@ -182,6 +181,8 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue
             issue["acceptance"] = {"claim": claim, "criteria": criteria}
         if source:
             issue["source"] = source
+        if parent := f.get("parent"):
+            issue["parent"] = parent
         d["issues"].append(issue)
     event(p, iid, f"filed ({status}): {title}")
     return iid
