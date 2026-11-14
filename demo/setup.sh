@@ -87,11 +87,11 @@ stuck_minutes = 30
 TOML
 "$fm" --home "$run/home" add --ready "word_count counts wrong on empty text and repeated spaces" \
   --claim "word_count gives the number of words for any text" \
-  --criterion "word_count('') == 0 and word_count('  a   b ') == 2, with tests for both; all tests pass" \
+  --criteria "word_count('') == 0 and word_count('  a   b ') == 2, with tests for both; all tests pass" \
   --detail "textkit.word_count splits on a single space."
 "$fm" --home "$run/home" add --ready "Add slugify(text)" \
   --claim "textkit has slugify: lowercase words joined by hyphens, punctuation dropped" \
-  --criterion "slugify('Hello, World!') == 'hello-world' and slugify('  Many   spaces ') == 'many-spaces', tested; all tests pass"
+  --criteria "slugify('Hello, World!') == 'hello-world' and slugify('  Many   spaces ') == 'many-spaces', tested; all tests pass"
 "$fm" --home "$run/home" add "The CLI should be friendlier" \
   --detail "Running cli.py with no arguments or with an unknown function crashes with a traceback."
 echo "demo ready in $run"

@@ -6,7 +6,7 @@ from helpers import Env, fm
 
 from fm import agents, backlog, panel_actions
 
-READY = ("ready", "--claim", "g", "--criterion", "c")
+READY = ("ready",)
 
 
 class Plan(unittest.TestCase):
@@ -77,25 +77,45 @@ class Plan(unittest.TestCase):
         self.assertNotIn("plan_file", i)
         self.assertNotIn(str(self.plan), agents.brief(self.p, i, "work"))
 
-    def assert_planless_ready(self, iid):
-        i = self.e.issue(iid)
-        self.assertEqual(i["status"], "ready")
-        self.assertNotIn("plan_file", i)
-        self.assertNotIn("/plans/", agents.brief(self.p, i, "work"))
+    def test_fm_add_with_criteria_goes_to_planning(self):
+        fm(self.e.home, "add", "t", "--criteria", "c", "--ready")
+        i = next(x for x in backlog.load(self.p)["issues"] if x["title"] == "t")
+        self.assertEqual(i["status"], "backlog")
 
-    def test_fm_add_ready_needs_no_plan(self):
-        fm(self.e.home, "add", "t", "--claim", "g", "--criterion", "c", "--ready")
-        self.assert_planless_ready(max(x["id"] for x in backlog.load(self.p)["issues"] if x["title"] == "t"))
+    def test_fm_add_without_criteria_stays_in_triage_even_ready(self):
+        fm(self.e.home, "add", "t", "--ready")
+        i = next(x for x in backlog.load(self.p)["issues"] if x["title"] == "t")
+        self.assertEqual(i["status"], "triage")
 
-    def test_panel_filed_ready_needs_no_plan(self):
-        new = panel_actions.add(self.p, '{"title": "p", "criterion": "c"}')["id"]
-        self.assert_planless_ready(new)
+    def test_panel_filed_without_criteria_stays_in_triage(self):
+        new = panel_actions.add(self.p, '{"title": "p"}')["id"]
+        self.assertEqual(self.e.issue(new)["status"], "triage")
+
+    def test_go_refuses_without_criteria(self):
+        iid = backlog.add(self.p, "no criteria")
+        with self.assertRaises(SystemExit) as r:
+            fm(self.e.home, "go", iid)
+        self.assertIn("define its acceptance criteria with the owner first", str(r.exception.code))
+        self.assertEqual(self.e.issue(iid)["status"], "triage")
+
+    def test_go_with_criteria_sends_it_to_planning(self):
+        iid = backlog.add(self.p, "t", status="triage", criteria="c")
+        fm(self.e.home, "go", iid)
+        self.assertEqual(self.e.issue(iid)["status"], "backlog")
+
+    def test_task_stored_with_the_old_key_still_reads(self):
+        iid = backlog.add(self.p, "old", status="triage", criteria="c")
+        with backlog.edit(self.p) as d:
+            acc = backlog.get(d, iid)["acceptance"]
+            acc["criterion"] = acc.pop("criteria")
+        self.assertEqual(self.e.issue(iid)["acceptance"]["criteria"], "c")
+        self.assertIn("c", agents.brief(self.p, self.e.issue(iid), "work"))
 
 
 class ReviewerPlan(unittest.TestCase):
     def brief_of_reviewer(self, **keys):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, iid, status="in review", worktree=str(e.repo), **keys)
         agents.launch_reviewer(e.p, e.issue(iid), "abc123", "hunter")
         agents.launch_reviewer(e.p, e.issue(iid), "abc123")

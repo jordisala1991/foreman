@@ -62,7 +62,7 @@ class Bash(unittest.TestCase):
 class Hook(unittest.TestCase):
     def setUp(self):
         self.e = Env()
-        self.iid = backlog.add(self.e.p, "t", status="ready", criterion="c")
+        self.iid = backlog.add(self.e.p, "t", status="ready", criteria="c")
         backlog.update(self.e.p, self.iid, worktree=str(self.e.tmp / "wt"), branch="fm/ty-1")
         os.environ.update(FM_HOME=str(self.e.home), FM_ISSUE=self.iid)
 

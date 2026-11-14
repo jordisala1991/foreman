@@ -101,10 +101,10 @@ export function Issue({ product, id }: { product: Product; id: string }) {
           {i.status === "in review" ? <QueueCard i={i} p={p} reload={reload} /> : null}
           {i.status !== "triage" && i.status !== "in review" ? <BlockedCard i={i} p={p} reload={reload} /> : null}
           <Section title={t("isu_purpose")}>
-            {i.acceptance?.claim || i.acceptance?.criterion ? (
+            {i.acceptance?.claim || i.acceptance?.criteria ? (
               <div className="card purpose">
                 {i.acceptance.claim ? (<><div className="lbl">{t("isu_goal")}</div><p>{i.acceptance.claim}</p></>) : null}
-                {i.acceptance.criterion ? (<><div className="lbl">{t("isu_criterion")}</div><p>{i.acceptance.criterion}</p></>) : null}
+                {i.acceptance.criteria ? (<><div className="lbl">{t("isu_criteria")}</div><p>{i.acceptance.criteria}</p></>) : null}
                 {i.acceptance.verdict ? (<><div className="lbl">{t("isu_verdict")}</div><p>{i.acceptance.verdict}</p></>) : null}
               </div>
             ) : (

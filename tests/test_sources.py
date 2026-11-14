@@ -25,7 +25,7 @@ class Signals(unittest.TestCase):
 
     def running(self):
         """A task with a launched agent."""
-        iid = backlog.add(self.p, "work", status="ready", criterion="x")
+        iid = backlog.add(self.p, "work", status="ready", criteria="x")
         loop.tick(self.p)
         self.assertEqual(self.e.issue(iid)["status"], "in progress")
         return iid
