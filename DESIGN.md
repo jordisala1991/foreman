@@ -125,7 +125,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
    agent) or `backlog` issue (its planning agent), by priority then id, skipping any with a blocker not `done`. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
-8. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
+9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
    that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.
 
