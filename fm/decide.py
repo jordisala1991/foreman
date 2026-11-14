@@ -115,8 +115,8 @@ def failing_note(c: Mapping[str, Any], pr_url: str) -> str:
     note = "Your branch fails its checks. "
     if c.get("tests_output"):
         note += f"The test command fails; last lines of its output:\n```\n{c['tests_output']}\n```\n"
-    elif c.get("tests") == "fail" and c.get("ci") != "fail":  # without a test command, a failing CI stands in for it
-        note += "The test command fails and prints nothing.\n"
+    elif c.get("tests") == "fail":
+        note += "The tests fail and print nothing (the test command, or the PR's CI when there is no test command).\n"
     failed: list[Mapping[str, str]] = c.get("failed_checks") or []
     if failed:
         note += "The PR's CI fails:\n" + "".join(f"- {f['name']}: {f['url']}\n" for f in failed)
