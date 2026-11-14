@@ -3,7 +3,7 @@
 import unittest
 
 from fm import inline
-from fm.verdict import Finding
+from fm.verdict import Finding, link_target
 
 
 class Inline(unittest.TestCase):
@@ -24,6 +24,16 @@ class Inline(unittest.TestCase):
         (c,) = inline.line_comments([Finding("F1", "H", "a.py:1", "bad", "because")], {"a.py": {1}})
         self.assertIn("bad", c.body)
         self.assertLess(c.body.index("<details"), c.body.index("because"))
+
+    def test_a_finding_link_works_for_any_place_the_reviewer_writes(self):
+        def link(place: str) -> str:
+            return inline.resolve_links(f"[`{place}`](fm-link:{link_target(place)}) x", "https://github.com/o/r", "SHA", {})
+
+        base = "https://github.com/o/r/blob/SHA"
+        self.assertEqual(link("a.py:3-5"), f"[`a.py:3-5`]({base}/a.py#L3) x")
+        self.assertEqual(link("a.py:12:5"), f"[`a.py:12:5`]({base}/a.py#L12) x")
+        self.assertEqual(link("src/my file.py:7"), f"[`src/my file.py:7`]({base}/src/my%20file.py#L7) x")
+        self.assertEqual(link("the whole module"), "`the whole module` x")
 
 
 if __name__ == "__main__":

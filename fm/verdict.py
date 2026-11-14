@@ -4,6 +4,7 @@ checks, the blocking findings, the rest folded. Pure; the provider posts it."""
 import hashlib
 import re
 from dataclasses import dataclass
+from urllib.parse import quote
 
 WORDS = {"H": "Blocking", "M": "Should fix", "L": "Nit"}
 FIX = "⛔ Fix first — {n} blocking"
@@ -82,9 +83,14 @@ def headline(case: Case, found: list[Finding]) -> str:
     return READY
 
 
+def link_target(place: str) -> str:
+    """What `fm-link:` carries for a place: percent-encoded, so any place fits in a Markdown link."""
+    return quote(place, safe="")
+
+
 def _item(f: Finding) -> str:
     """One line; its place links to the inline comment or the file (`fm-link:` is resolved by the provider)."""
-    place = "" if f.place == "-" else f"[`{f.place}`](fm-link:{f.place}) "
+    place = "" if f.place == "-" else f"[`{f.place}`](fm-link:{link_target(f.place)}) "
     return f"- {place}{safe(f.what)}"
 
 

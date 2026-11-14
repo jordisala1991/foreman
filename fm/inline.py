@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from urllib.parse import quote, unquote
 
 from .verdict import WORDS, Finding, key, safe
 
@@ -82,20 +83,22 @@ def line_comments(found: list[Finding], visible: dict[str, set[int]]) -> list[Li
     return list(out.values())
 
 
-LINK = re.compile(r"fm-link:([^)\s]*)")
+LINK = re.compile(r"\[([^\]]*)\]\(fm-link:([^)\s]*)\)")
+_AT = re.compile(r"^(.+?):(\d+)(?:[-:]\d+)?$")  # path:line, path:first-last, path:line:column
 
 
 def resolve_links(body: str, base: str, head: str, comments: dict[str, str]) -> str:
-    """Replaces each `fm-link:PLACE` of a review body: with the URL of its inline comment (`comments`: place -> URL),
-    else with the file at the reviewed commit, on its line (`base` is the repository's URL)."""
+    """Replaces each `[text](fm-link:PLACE)` of a review body: with the URL of its inline comment (`comments`: place ->
+    URL), else with the file at the reviewed commit on its first line (`base` is the repository's URL); a place that is
+    not `path:line` (a range and a column are fine) is left as its text, without a link."""
 
     def url(m: re.Match[str]) -> str:
-        place = m.group(1)
+        place = unquote(m.group(2))
         if place in comments:
-            return comments[place]
-        path, _, line = place.rpartition(":")
-        if not line.isdigit():
-            path, line = place, ""
-        return f"{base}/blob/{head}/{path}" + (f"#L{line}" if line else "")
+            return f"[{m.group(1)}]({comments[place]})"
+        at = _AT.match(place)
+        if not at:
+            return m.group(1)
+        return f"[{m.group(1)}]({base}/blob/{head}/{quote(at.group(1), safe='/')}#L{at.group(2)})"
 
     return LINK.sub(url, body)
