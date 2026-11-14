@@ -17,7 +17,7 @@ def tip(g: GH, iid: str, text: str, open: int = 0) -> None:
     backlog.set_status(g.e.p, iid, "in review", report={"summary": "does x", "confused": ""})
     g.e.review(iid, open)
     (g.e.home / "reviews" / f"{iid}.md").write_text(text)
-    backlog.update(g.e.p, iid, review={**g.e.task(iid)["review"], "sent_back": True})
+    backlog.update(g.e.p, iid, review={**g.e.task(iid)["review"], "returned": True})
     loop.tick(g.e.p)
     loop.tick(g.e.p)
 

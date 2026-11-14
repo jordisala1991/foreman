@@ -109,7 +109,7 @@ def findings_of(i: dict[str, Any], head: str) -> list[Finding]:
 
 def case_of(i: dict[str, Any], c: dict[str, Any]) -> Case:
     v: dict[str, Any] = i.get("review") or {}
-    counted = backlog.open_findings(v) if v.get("tip") == c["head"] else None
+    counted = int(v["open"]) if v.get("tip") == c["head"] else None
     report: dict[str, Any] = i.get("report") or {}
     return Case(c["risk"], c.get("reasons", []), c["tests"], c.get("ci", ""), c["head"], report.get("summary") or i["title"], c["files"], c["lines"], counted)
 
