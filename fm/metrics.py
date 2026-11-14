@@ -10,7 +10,7 @@ from .config import Project
 
 def _minutes(a: str | None, b: str | None) -> float | None:
     since_a, since_b = util.age_s(a), util.age_s(b)
-    return None if since_a is None or since_b is None else round((since_a - since_b) / 60, 1)
+    return None if since_a is None or since_b is None else round((since_a - since_b) / 60, 1) + 0.0  # + 0.0: no "-0.0" for equal stamps
 
 
 def per_issue(p: Project) -> list[dict[str, Any]]:
