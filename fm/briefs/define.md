@@ -10,6 +10,9 @@ $criteria
 # Before you start
 Read the project's lessons, `$lessons`.
 
+# Vocabulary
+Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
+
 # How
 - Read the repo at `$repo` (read only: do not edit, commit or create branches) and whatever else you need, with subagents if it helps.
 - Settle how the task is done: what changes, what does not. The acceptance criteria above are product (observable behaviour, never how); the plan holds the execution.

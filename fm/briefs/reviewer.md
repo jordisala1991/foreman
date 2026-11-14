@@ -6,6 +6,10 @@ Goal: $claim
 Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
+
+# Vocabulary
+Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
+
 # How
 1. **Read** the acceptance criteria, `${hunter_file}`, then the diff (`git diff $main...$branch`) and the plan (`$plan`) as you need them. The agent's report (`$report`) is a claim, never evidence.
 2. **Each Wrong or Missing finding:** try to confirm it: run it (the tests, a command, a one-off call) or follow the exact code path, line by line, from the input to the wrong result. Then:

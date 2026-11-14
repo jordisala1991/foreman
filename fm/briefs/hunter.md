@@ -6,6 +6,10 @@ Goal: $claim
 Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
+
+# Vocabulary
+Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
+
 # How
 1. **Coverage is your job.** Report every problem you suspect, including ones you are unsure of or think minor. Do not filter for importance or confidence: the next pass does that. Give each finding a confidence: high, medium or low.
 2. **Read in this order:** the acceptance criteria; the diff (`git diff $main...$branch`, then the touched files whole where the diff is not enough); the plan (`$plan`, if any): its decisions and out of scope are settled, its edge cases are cases to check; the agent's report (`$report`) **last**: check each of its claims against the code, never take one as evidence.
