@@ -88,6 +88,20 @@ def conflicts(p: Project, branch: str) -> bool:
     return r.code != 0
 
 
+def merge_of(p: Project, tip: str, head: str) -> tuple[str, str]:
+    """How `head` follows the reviewed `tip`: ("clean", "") when it is a merge of `tip` and a main commit whose tree is
+    git's automatic merge of the two; ("resolved", that automatic tree) when the agent resolved it otherwise; ("", "")
+    when it is no such merge (plain commits, a rebase, a merge of another branch)."""
+    parents = git(p.repo, "rev-list", "--parents", "-n", "1", head).out.split()[1:]
+    if len(parents) != 2 or tip not in parents:
+        return "", ""
+    m = parents[1 - parents.index(tip)]
+    if git(p.repo, "merge-base", "--is-ancestor", m, p.get("project", "main"), check=False).code != 0:
+        return "", ""
+    auto = git(p.repo, "merge-tree", "--write-tree", "--no-messages", tip, m, check=False).out.split("\n")[0].strip()
+    return ("clean", "") if git(p.repo, "rev-parse", f"{head}^{{tree}}").out.strip() == auto else ("resolved", auto)
+
+
 def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     """Checks a task's branch and stores the result in its `check`. `ci`: the PR's CI as just read, if the caller has it."""
     d = backlog.load(p)

@@ -8,13 +8,18 @@ from typing import Any, NamedTuple
 
 from .risk import allows
 
+RULES = {"round": "rounds 1-2", "reject": "owner reject", "conflict": "conflict resolution"}  # why a review is launched
+
 
 class Step(NamedTuple):
-    """`go` (this tip has its verdict: carry on), `wait`, `hunt`, `review` (launch that role), `block` (text: the reason),
-    `back` (text: the note for its agent)."""
+    """`go` (this tip has its verdict: carry on), `hold` (no review: the verdict holds for this tip), `wait`, `hunt`,
+    `review` (launch that role), `block` (text: the reason), `back` (text: the note for its agent). For `hunt`, `review`
+    and `wait`, `text` is the rule that launches the review (a key of RULES) and `base` what it compares with (`""`: the
+    whole branch)."""
 
     do: str
     text: str = ""
+    base: str = ""
 
 
 @dataclass(frozen=True)
@@ -30,26 +35,49 @@ class Seen:
     hunter_working: bool
     hunter_ended: bool
     reviewer_ended: bool
+    review_for: str = ""  # `reject`, `conflict`, `none` (the review is closed); "" the rounds
+    merge: str = ""  # how the head follows the verdict's tip: `clean` (a merge of main git does alone), `resolved`, ""
+    auto: str = ""  # git's automatic merge tree of the verdict's tip and main, when `resolved`
+
+
+def launch_rule(s: Seen) -> str:
+    """Why a new tip gets a review (a key of RULES), or "" when nothing would act on it: a clean merge of main keeps the
+    verdict; after an owner reject or a conflict, a review of that fix; a closed review launches nothing."""
+    if s.verdict_tip and s.merge == "clean":
+        return ""
+    if s.review_for in ("reject", "conflict"):
+        return s.review_for
+    return "" if s.review_for == "none" else "round"
+
+
+def review_base(rule: str, s: Seen) -> str:
+    """What the review compares with: git's automatic merge for a conflict resolution, the reviewed tip for a reject's
+    fix, the whole branch otherwise."""
+    return s.auto if rule == "conflict" else s.verdict_tip if rule == "reject" else ""
 
 
 def review_step(seen: Seen, v: Mapping[str, Any], max_rounds: int) -> Step:
-    """The hunter, then the reviewer, for each tip; with the verdict, open findings go back to its agent once before the
-    last round (what is still open then goes to the owner)."""
+    """The hunter, then the reviewer, for a tip whose review result goes somewhere (launch_rule); with the verdict, open
+    findings go back to its agent once before the last round (what is still open then goes to the owner)."""
     if seen.verdict_tip == seen.head:
         if not v.get("returned") and v["open"] > 0 and v["round"] < max_rounds:
             return Step("back", back_note(v))
         return Step("go")
+    rule = launch_rule(seen)
+    if not rule:
+        return Step("hold")
+    base = review_base(rule, seen)
     if seen.hunter_tip != seen.head:
-        return Step("hunt" if seen.free else "wait")
+        return Step("hunt" if seen.free else "wait", rule, base)
     if seen.reviewer_tip != seen.head:
         if seen.hunter_file and not seen.hunter_working and seen.free:
-            return Step("review")
+            return Step("review", rule, base)
         if not seen.hunter_file and seen.hunter_ended:
             return Step("block", "its hunter ended without its findings file")
-        return Step("wait")
+        return Step("wait", rule, base)
     if seen.reviewer_ended:
         return Step("block", "its reviewer ended without a verdict (`fm verdict`)")
-    return Step("wait")
+    return Step("wait", rule, base)
 
 
 def back_note(v: Mapping[str, Any]) -> str:
@@ -63,7 +91,8 @@ def back_note(v: Mapping[str, Any]) -> str:
 
 def conflict_note(main: str) -> str:
     return (
-        f"{main} moved and your branch conflicts with it. Merge {main} into your branch, resolve keeping both changes, run the tests, and run `fm done` again."
+        f"{main} moved and your branch conflicts with it. Merge {main} into your branch with a merge commit, not a rebase, "
+        "resolve keeping both changes, run the tests, and run `fm done` again."
     )
 
 
@@ -77,13 +106,18 @@ def checks_again(c: Mapping[str, Any], head: str, main_head: str, ci: str | None
     return c.get("head") != head or c.get("main") != main_head or (ci is not None and c.get("ci") != ci)
 
 
-def after_check(c: Mapping[str, Any], autonomy: str, has_ci: bool) -> str:
-    """`conflict` back to its agent; `merge` alone when the autonomy lets this risk in, no findings are open and, when the
-    provider has CI, it passed (quality is not risk, but unresolved quality waits for the owner); else `owner`."""
-    if c.get("conflict"):
-        return "conflict"
-    if str(c.get("review", "")).startswith("open"):
+def after_check(c: Mapping[str, Any], autonomy: str, has_ci: bool, resolving: str = "") -> str:
+    """It wants to merge when no finding is open, tests do not fail, the CI passed (when the provider has CI), and either
+    the owner's accept carried over a conflict (`resolving`) or the autonomy lets this risk in (quality is not risk, but
+    unresolved quality waits for the owner; an accept the autonomy made is decided again, so high never merges alone).
+    Wanted and conflicting: `conflict`, back to its agent; wanted: `merge`; else `owner`: a conflict nobody said should
+    merge waits, shown in its check."""
+    wants = (
+        not str(c.get("review", "")).startswith("open")
+        and c.get("tests") != "fail"
+        and (not has_ci or c.get("ci") == "pass")
+        and (resolving == "owner" or allows(autonomy, c["risk"]))
+    )
+    if not wants:
         return "owner"
-    if has_ci and c.get("ci") != "pass":
-        return "owner"
-    return "merge" if allows(autonomy, c["risk"]) else "owner"
+    return "conflict" if c.get("conflict") else "merge"

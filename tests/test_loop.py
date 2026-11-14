@@ -461,12 +461,15 @@ class Queue(unittest.TestCase):
         self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
         self.assertTrue(any("open after round 2" in r for r in i["check"]["reasons"]))
 
-    def test_a_branch_that_conflicts_after_main_moved_goes_back_to_its_agent(self):
+    def test_a_branch_that_conflicts_after_main_moved_goes_back_to_its_agent_once_accepted(self):
         e = Env(test="true")
         tid = self.deliver(e)
         loop.tick(e.p)
         (e.repo / "app.py").write_text("changed on main\n")
         git(e.repo, "commit", "-qam", "main moves")
+        loop.tick(e.p)
+        self.assertEqual(e.task(tid)["status"], "in review")  # nobody wants it merged yet: it waits
+        delivery.accept(e.p, tid)
         loop.tick(e.p)
         i = e.task(tid)
         self.assertEqual((i["status"], i["conflicts"]), ("in progress", 1))

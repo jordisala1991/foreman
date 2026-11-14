@@ -54,16 +54,16 @@ def _path_reasons(rules: Mapping[str, list[str]], paths: list[str]) -> list[str]
 
 
 def score(p: Project, f: Facts) -> tuple[str, list[str]]:
-    """(risk, reasons): the higher of impact (paths, deletions) and doubt (tests, CI, conflict); a review never lowers it.
-    Open findings add a [review] reason but not a level: they are a gate in decide.after_check. Up to 3 reasons,
-    high ones first, each ending with its source in brackets."""
+    """(risk, reasons): the higher of impact (paths, deletions) and doubt (tests, CI); a review never lowers it. Open
+    findings and a conflict with main add a reason but not a level: they are gates in decide.after_check (a conflict goes
+    back to its agent only once someone wants the merge). Up to 3 reasons, a conflict first, then high ones, each ending
+    with its source in brackets."""
     paths = [x["path"] for x in f.files]
     high = _path_reasons(p.get("risk", "high"), paths)
     evidence = [
         (f.commits == 0 or not f.files, "the branch has no changes [diff]"),
         (f.tests == "fail", "tests fail [tests]"),
         (f.ci == "fail", "CI fails [ci]"),
-        (f.conflict, "conflicts with main [git]"),
     ]
     high += [why for hit, why in evidence if hit]
     medium = _path_reasons(p.get("risk", "medium"), paths)
@@ -75,7 +75,8 @@ def score(p: Project, f: Facts) -> tuple[str, list[str]]:
     ]
     medium += [why for hit, why in doubt if hit]
     risk = "high" if high else "medium" if medium else "low"
-    shown = high + medium + ([] if f.review.strip().lower().startswith("clean") else [_review_reason(f.review)])
+    conflict = ["conflicts with main: it goes back to its agent when accepted [git]"] if f.conflict else []
+    shown = conflict + high + medium + ([] if f.review.strip().lower().startswith("clean") else [_review_reason(f.review)])
     return risk, shown[:3] or ["nothing sensitive touched, tests green, no open findings [diff]"]
 
 

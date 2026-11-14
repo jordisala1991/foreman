@@ -24,10 +24,11 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 from . import backlog, blockers, decide, delivery, health, mechanic, proc, providers, pulls, release, sessions, sources, subtasks, util
-from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
+from .agents import fill_sessions, launch, running
 from .config import Project, registered
 from .providers import registry
-from .talk import NUDGE_IDLE_S, deliver_answers, return_to_agent, watch_agents
+from .reviewing import apply_review, seen_of, working
+from .talk import deliver_answers, return_to_agent, watch_agents
 
 PRIORITY = {p: n for n, p in enumerate(backlog.PRIORITIES)}
 MAX_ROUNDS = 2  # what is still open after round 2 goes to the owner
@@ -77,11 +78,12 @@ def live(a: dict[str, Any], rows: dict[str, Any]) -> bool:
 
 
 def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
-    """The merge step of an accepted task; a conflict with main returns it to its agent."""
+    """The merge step of an accepted task; a conflict with main returns it to its agent, keeping who accepted it."""
+    acc: dict[str, Any] = i.get("accepted") or {}
     try:
         delivery.merge_accepted(p, i["id"])
     except delivery.MergeConflict:
-        return_to_agent(p, i["id"], "conflict", decide.conflict_note(main))
+        return_to_agent(p, i["id"], "conflict", decide.conflict_note(main), by=acc.get("by", ""))
 
 
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
@@ -117,56 +119,16 @@ def run_pulls(p: Project) -> None:
         guarded(p, i["id"], "push it or open its PR", lambda i=i: pulls.sync(p, i))
 
 
-def seen_of(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> decide.Seen:
-    """What the loop sees of this branch's review: tips, a free slot, the hunter's file and the sessions."""
-    v: dict[str, Any] = i.get("review") or {}
-    h: dict[str, Any] = i.get("hunter") or {}
-    r: dict[str, Any] = i.get("reviewer") or {}
-    return decide.Seen(
-        head=head,
-        verdict_tip=v.get("tip", ""),
-        hunter_tip=h.get("tip", ""),
-        reviewer_tip=r.get("tip", ""),
-        free=running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists(),
-        hunter_file=Path(h.get("file", "")).exists(),
-        hunter_working=working(h, rows),
-        hunter_ended=ended(h, rows),
-        reviewer_ended=ended(r, rows),
-    )
-
-
-def apply_review(p: Project, i: dict[str, Any], head: str, step: decide.Step) -> None:
-    """Does what `decide.review_step` said: launch the hunter or the reviewer, block, or send the findings back once."""
-    if step.do in ("hunt", "review"):
-        launch_reviewer(p, i, head, "hunter" if step.do == "hunt" else "reviewer")
-    elif step.do == "block":
-        block_review(p, i["id"], step.text)
-    elif step.do == "back":
-        return_to_agent(p, i["id"], "review", step.text)
-        backlog.update(p, i["id"], review={**(i.get("review") or {}), "returned": True})
-
-
-def working(a: dict[str, Any], rows: dict[str, Any]) -> bool:
-    return bool(a.get("session")) and sessions.busy(rows, a["session"])
-
-
-def ended(a: dict[str, Any], rows: dict[str, Any]) -> bool:
-    return bool(a.get("session")) and not sessions.busy(rows, a["session"]) and idle_s(a) > NUDGE_IDLE_S
-
-
-def block_review(p: Project, tid: str, why: str) -> None:
-    backlog.update(p, tid, blocked=why)
-    backlog.event(p, tid, f"blocked: {why}")
-
-
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
     """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
     head = delivery.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
     main_head = delivery.git(p.repo, "rev-parse", main, check=False).out.strip()
     step = decide.review_step(seen_of(p, i, head, rows), i.get("review") or {}, MAX_ROUNDS)
-    if step.do != "go":  # no verdict on this tip yet (a review first), or its findings go back
+    if step.do != "go":  # no verdict on this tip yet (a review first, or the last one holds), or its findings go back
         apply_review(p, i, head, step)
         return
+    if i.get("review_for") != "none":  # acted on: a later tip gets a review only for an owner reject or a conflict
+        backlog.update(p, i["id"], review_for="none")
     pull, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
     if pull == "wait":
         return
@@ -180,17 +142,27 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
         c = backlog.get(backlog.load(p), i["id"]).get("check") or {}
         if t.is_alive() or c.get("head") != head:  # still running, or it failed (the task says why)
             return
-    action = decide.after_check(c, p.get("merge", "autonomy"), registry.get(p).has_ci)
+    act_on(p, i, c, decide.after_check(c, p.get("merge", "autonomy"), registry.get(p).has_ci, i.get("resolving", "")))
+
+
+def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> None:
+    """After the check: back to its agent for a conflict someone wants merged, or deliver it, merging it when wanted (by
+    the accept a conflict carried over, or the autonomy). An accept carried over lapses when the owner must decide."""
+    by = i.get("resolving") or "autonomy " + p.get("merge", "autonomy")
     if action == "conflict":
-        return_to_agent(p, i["id"], "conflict", decide.conflict_note(main))
+        return_to_agent(p, i["id"], "conflict", decide.conflict_note(p.get("project", "main")), by=by)
         return
     pulls.deliver(p, i, c)
     if action == "merge":
         try:
-            delivery.accept(p, i["id"], by="autonomy " + p.get("merge", "autonomy"))
+            delivery.accept(p, i["id"], by=by)
+            backlog.update(p, i["id"], resolving="")
             delivery.merge_accepted(p, i["id"])
         except delivery.DeliveryError as e:
             backlog.event(p, i["id"], f"automatic merge failed: {e}")
+    elif i.get("resolving"):
+        backlog.update(p, i["id"], resolving="")
+        backlog.event(p, i["id"], "its accept is not carried over (findings open or checks failing): the owner decides")
 
 
 def check_guarded(p: Project, tid: str, ci: str | None) -> None:

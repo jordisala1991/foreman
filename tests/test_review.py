@@ -2,7 +2,7 @@
 
 import unittest
 
-from helpers import Env, git
+from helpers import Env, fm, git
 from test_github import GH
 
 from fm import backlog, loop, pulls
@@ -72,6 +72,7 @@ class Review_(unittest.TestCase):
         tip(g, iid, "Findings:\nF2 | M | app.py:4 | the what\n", 1)
         self.assertEqual(len(self.pr(g)["reviews"]), 2)
         self.assertEqual(len(self.pr(g)["review_comments"]), 1)
+        fm(g.e.home, "reject", iid, "fix F2")  # after round 2 only an owner reject (or a conflict) gets a review
         commit(g, iid)
         tip(g, iid, "Findings:\nF2 | M | app.py:4 | another what\n", 1)
         self.assertEqual(len(self.pr(g)["review_comments"]), 2)

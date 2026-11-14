@@ -80,8 +80,10 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
             backlog.event(p, i["id"], "blocked: agent stopped without finishing")
 
 
-def return_to_agent(p: Project, tid: str, kind: str, note: str) -> None:
-    """Returns the task to its agent (status in progress), with a note the loop delivers to its session."""
+def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") -> None:
+    """Returns the task to its agent (status in progress), with a note the loop delivers to its session. A reject or a
+    conflict starts a review of only that fix, from round 1 (`review_for`, `review_from`); a conflict keeps who accepted
+    it (`resolving`, from `by`), so it merges once resolved without a new accept."""
     with backlog.edit(p) as d:
         i = backlog.get(d, tid)
         i["status"] = "in progress"
@@ -90,8 +92,16 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str) -> None:
             i.pop(k, None)
         if kind == "rejection":
             i["rework"] = i.get("rework", 0) + 1
+            i.pop("resolving", None)
         elif kind == "conflict":
             i["conflicts"] = i.get("conflicts", 0) + 1
+            if by:
+                i["resolving"] = by
+        if kind in ("rejection", "conflict"):
+            i["review_for"] = "reject" if kind == "rejection" else "conflict"
+            i["review_from"] = len(i.get("reviews") or [])
+        else:
+            i.pop("review_for", None)
         agent: dict[str, Any] = {**(i.get("agent") or {}), "started": util.now(), "nudged": None}
         i["agent"] = agent
         backlog.message(d, i, "R", ("rejection", "conflict", "review"), kind=kind, text="review", answer=note, at=util.now())
