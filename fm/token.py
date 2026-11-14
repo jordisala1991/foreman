@@ -90,7 +90,7 @@ def child_env(claude: str, read: Callable[[], str] | None = None, login: Callabl
     try:
         tok = get(read)
     except Unreadable:
-        tok = ""  # launch anyway: the agent then fails with Claude's own message, and `fm health` says why
+        tok = ""  # launch anyway: its agent then fails with Claude's own message, and `fm health` says why
     return {**env, ENV: tok} if tok else env
 
 

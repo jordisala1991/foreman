@@ -8,14 +8,14 @@ from . import util
 from .config import Project
 
 
-def lesson(p: Project, iid: str, who: str, text: str) -> None:
+def lesson(p: Project, tid: str, who: str, text: str) -> None:
     """What misled an agent, kept in the project's LESSONS.md for the next agents (the owner prunes it)."""
     t = " ".join((text or "").split())
     if not t or re.match(r"(?i)(none|nothing|n/a|-)\b", t):
         return
     f = ensure_lessons(p)
     with util.file_lock(f):
-        util.write_text_atomic(f, f.read_text(encoding="utf-8") + f"- {date.today().isoformat()} {iid} ({who}): {t}\n")
+        util.write_text_atomic(f, f.read_text(encoding="utf-8") + f"- {date.today().isoformat()} {tid} ({who}): {t}\n")
 
 
 def ensure_lessons(p: Project) -> Path:

@@ -1,9 +1,7 @@
-"""The description of a delivered task: its report, with a footer fm writes, shown as the PR body and in the panel.
-Pure text: no I/O here. fm owns only the block between the markers; text a human wrote around it is kept."""
+"""The description of a delivered task: its report, with a footer fm writes, shown on the PR and in the panel.
+Pure text: no I/O here. fm owns only the block between the markers; text someone wrote around it is kept."""
 
 from typing import Any
-
-from . import backlog
 
 OPEN = "<!-- fm:description -->"
 CLOSE = "<!-- /fm:description -->"
@@ -28,7 +26,7 @@ def merge_body(body: str, block: str) -> str:
 def review_line(v: dict[str, Any] | None) -> str:
     if not v:
         return "no review"
-    return f"review round {v['round']}, {backlog.open_findings(v)} open"
+    return f"review round {v['round']}, {v['open']} open"
 
 
 def footer(commit: str, review: str, at: str) -> str:

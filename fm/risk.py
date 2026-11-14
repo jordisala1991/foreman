@@ -1,6 +1,6 @@
 """Risk and autonomy: pure functions, no I/O. Given the facts the checks found about a branch (`Facts`), `score` says how risky
-the merge is (low, medium, high, with the reasons) and `allows` says whether the project's autonomy level lets that risk
-merge without the owner. High never merges alone. The checks that find the facts, and the merge itself, are in fm/integrate.py."""
+the merge is (low, medium, high, with the reasons) and `allows` says whether the project's autonomy lets that risk
+merge without the owner. High never merges alone. The checks that find the facts, and the merge itself, are in fm/delivery.py."""
 
 import fnmatch
 from collections.abc import Mapping
@@ -8,16 +8,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import backlog
 from .config import Project
 
 AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
 
 
 def review_step(v: Mapping[str, Any], max_rounds: int) -> str:
-    """What the loop does with a verdict: `back` to the agent while findings are open before the last round, else `queue`
-    (what is still open then goes to the owner); a verdict already sent back never goes twice."""
-    if not v.get("sent_back") and backlog.open_findings(v) > 0 and v["round"] < max_rounds:
+    """What the loop does with a verdict: `back` to its agent while findings are open before the last round, else `queue`
+    (what is still open then goes to the owner); a verdict already returned never goes twice."""
+    if not v.get("returned") and v["open"] > 0 and v["round"] < max_rounds:
         return "back"
     return "queue"
 
@@ -64,7 +63,7 @@ def _path_reasons(rules: Mapping[str, list[str]], paths: list[str]) -> list[str]
 
 def score(p: Project, f: Facts) -> tuple[str, list[str]]:
     """(risk, reasons): the higher of impact (paths, deletions) and doubt (tests, CI, conflict); a review never lowers it.
-    Open findings add a [review] reason but not a level: they are a gate in integrate.merges_alone. Up to 3 reasons,
+    Open findings add a [review] reason but not a level: they are a gate in delivery.merges_alone. Up to 3 reasons,
     high ones first, each ending with its source in brackets."""
     paths = [x["path"] for x in f.files]
     high = _path_reasons(p.get("risk", "high"), paths)
@@ -93,5 +92,5 @@ def _review_reason(review: str) -> str:
 
 
 def allows(autonomy: str, risk: str) -> bool:
-    """The autonomy level lets this risk merge alone."""
+    """The autonomy lets this risk merge alone."""
     return risk in AUTONOMY.get(autonomy, ())

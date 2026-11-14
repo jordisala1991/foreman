@@ -62,7 +62,7 @@ layer = "steps"
 path = "fm.agents"
 layer = "services"
 [[modules]]
-path = "fm.integrate"
+path = "fm.delivery"
 layer = "services"
 [[modules]]
 path = "fm.pulls"

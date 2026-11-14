@@ -17,16 +17,14 @@ def detect(p: Project) -> str:
 
 def get(p: Project) -> Provider:
     """The project's provider; a clear ConfigError on an unknown provider, merge or pr value."""
-    if "forge" in p.cfg["integrate"]:
-        raise ConfigError('[integrate] forge was renamed to provider: use `provider = "local"`')
-    name = p.get("integrate", "provider")
+    name = p.get("merge", "provider")
     providers: dict[str, type[Provider]] = {"local": Local, "github": GitHub}
     if name == "auto":
         name = detect(p)
     if name not in providers:
-        raise ConfigError(f"[integrate] provider = {name!r} is not valid: use one of auto, {', '.join(providers)}")
+        raise ConfigError(f"[merge] provider = {name!r} is not valid: use one of auto, {', '.join(providers)}")
     pr_mode(p)
     prov = providers[name](p)
     if merge_strategy(p) not in prov.merges:
-        raise ConfigError(f"[integrate] merge = {merge_strategy(p)!r} is not valid for {name}: use one of {', '.join(prov.merges)}")
+        raise ConfigError(f"[merge] strategy = {merge_strategy(p)!r} is not valid for {name}: use one of {', '.join(prov.merges)}")
     return prov

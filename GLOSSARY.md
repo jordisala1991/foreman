@@ -7,7 +7,7 @@ One name per fm concept: use the term in bold, in English, and never the words u
 **Task**
 A unit of work in the backlog: one PR, with an id (`FN-3`) and a title.
 _Chat_: tarea
-_Avoid_: issue, ticket, item
+_Avoid_: issue
 
 **Subtask**
 A task that names a parent: an ordinary task with its own agent, branch and PR.
@@ -71,22 +71,21 @@ _Avoid_: code review, review pass
 **Review round**
 One review of a tip. Round 1 reviews the branch; round 2 checks only the fixes.
 _Chat_: ronda de revisión
-_Avoid_: pass, iteration, cycle
+_Avoid_: iteration
 
 **Finding**
 One item under To fix in a review file. It has no severity.
 _Chat_: hallazgo
-_Avoid_: issue, comment, severity label (H/M/L, an L:)
+_Avoid_: issue, severity label (H/M/L, an L:)
 
 **Verdict**
 The reviewer's recorded result for a tip: how many findings stay open.
 _Chat_: veredicto
-_Avoid_: result
 
 **Report**
 The file the responsible agent fills at `<home>/reports/ID.md`, from `fm/briefs/report.md`.
 _Chat_: informe
-_Avoid_: summary, write-up
+_Avoid_: write-up
 
 **Description**
 The report as fm publishes it: the marked block plus fm's footer, used as the PR body.
@@ -125,59 +124,54 @@ _Avoid_: send back, devolver, bounce
 **triage**
 A task without acceptance criteria, or one a health check or a source filed. It waits for the owner's go.
 _Chat_: triaje
-_Avoid_: inbox, new
+_Avoid_: inbox
 
 **backlog**
 A task with acceptance criteria, waiting for a planning agent.
 _Chat_: por planificar
-_Avoid_: todo
 
 **refining**
 A task whose planning agent is working.
 _Chat_: planificándose
-_Avoid_: planning, defining
+_Avoid_: defining
 
 **ready**
 A task with acceptance criteria and a plan (or none, if trivial), waiting for a responsible agent.
 _Chat_: lista
-_Avoid_: planned
 
 **in progress**
 A task whose responsible agent is working.
 _Chat_: en marcha
-_Avoid_: doing, working
+_Avoid_: doing
 
 **in review**
 A delivered task waiting for its checks, the review and the owner's accept.
 _Chat_: cola de integración
-_Avoid_: queued, integration queue
+_Avoid_: integration queue
 
 **done**
 A task whose PR was merged.
 _Chat_: hecha
-_Avoid_: merged, closed
 
 **blocked**
 A flag with a reason, on any status; the loop leaves the task alone until the owner clears it. Not a status.
 _Chat_: bloqueada
-_Avoid_: stuck, parked
+_Avoid_: parked
 
 **canceled**
 A task closed without being delivered.
 _Chat_: cancelada
-_Avoid_: dropped
 
 ## System
 
 **Owner**
 The person who owns the project and files its tasks.
 _Chat_: dueño
-_Avoid_: user, human, operator, boss
+_Avoid_: human, operator, boss
 
 **Project**
 A repo plus its home, served by fm.
 _Chat_: proyecto
-_Avoid_: product, repo
 
 **Home**
 The project's folder: `fm.toml`, `backlog.json`, `state/`, `plans/`, `worktrees/`.
@@ -187,12 +181,12 @@ _Avoid_: project folder, workspace
 **Loop**
 The plain process, with no model, that moves tasks and launches agents.
 _Chat_: bucle
-_Avoid_: daemon, orchestrator, coordinator, scheduler
+_Avoid_: orchestrator, coordinator, scheduler
 
 **Tick**
 One run of the loop's steps.
 _Chat_: pasada
-_Avoid_: pass, cycle, iteration
+_Avoid_: iteration
 
 **Slot**
 One agent running at once; the project's `[agents] slots` is how many.
@@ -202,9 +196,9 @@ _Avoid_: seat, lane
 **Health check**
 Code that looks for a broken state on each tick.
 _Chat_: chequeo de salud
-_Avoid_: monitor, probe
+_Avoid_: monitor
 
 **Health finding**
 A broken state a health check found; fm files it as a task in triage.
 _Chat_: problema de salud
-_Avoid_: health task, health issue, triage issue, alert
+_Avoid_: health task, health issue, triage issue

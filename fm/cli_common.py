@@ -1,4 +1,4 @@
-"""What every `fm` command needs: the project it works on and the issue it speaks for."""
+"""What every `fm` command needs: the project it works on and the task it speaks for."""
 
 import argparse
 import os
@@ -19,7 +19,7 @@ def home(args: argparse.Namespace) -> Project:
 
 
 def mine(args: argparse.Namespace) -> str:
-    iid = os.environ.get("FM_ISSUE")
-    if not iid:
-        sys.exit("fm: which issue? (FM_ISSUE, set in an agent's session)")
-    return iid
+    tid = os.environ.get("FM_TASK")
+    if not tid:
+        sys.exit("fm: which task? (FM_TASK, set in an agent's session)")
+    return tid

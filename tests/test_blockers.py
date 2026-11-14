@@ -6,11 +6,11 @@ import unittest
 from helpers import Env, fm
 from test_subtasks import owner
 
-from fm import backlog, blockers, integrate, loop, util
+from fm import backlog, blockers, delivery, loop, util
 
 
-def events(e: Env, iid: str) -> list[str]:
-    return [x["text"] for x in util.read_jsonl(e.p.state / "events.jsonl") if x["issue"] == iid]
+def events(e: Env, tid: str) -> list[str]:
+    return [x["text"] for x in util.read_jsonl(e.p.state / "events.jsonl") if x["task"] == tid]
 
 
 class Blockers(unittest.TestCase):
@@ -23,8 +23,8 @@ class Blockers(unittest.TestCase):
     def y(self, *extra: str) -> str:
         return fm(self.e.home, "add", "y", "--criteria", "c", *extra).strip()
 
-    def ids(self, iid: str) -> list[str]:
-        return self.e.issue(iid).get("blocked_by", [])
+    def ids(self, tid: str) -> list[str]:
+        return self.e.task(tid).get("blocked_by", [])
 
     def test_add_and_edit_take_blockers_and_show_them(self):
         a = self.y("--blocked-by", self.X1, self.X2)
@@ -35,7 +35,7 @@ class Blockers(unittest.TestCase):
         self.assertEqual(json.loads(fm(self.e.home, "show", a))["waiting_for"], [self.X1])
         line = next(x for x in fm(self.e.home, "list").splitlines() if x.startswith(a))
         self.assertIn(self.X1, line)
-        integrate.close(self.e.p, self.X1, "done", "x")
+        delivery.close(self.e.p, self.X1, "done", "x")
         line = next(x for x in fm(self.e.home, "list").splitlines() if x.startswith(a))
         self.assertNotIn(self.X1, line)
         fm(self.e.home, "edit", a, "--blocked-by", "none")
@@ -53,23 +53,23 @@ class Blockers(unittest.TestCase):
                 y = self.y("--blocked-by", self.X1, self.X2)
                 backlog.set_status(self.e.p, y, status)
                 loop.tick(self.e.p)
-                self.assertEqual((self.e.calls(), self.e.issue(y)["status"]), ([], status))
-                integrate.close(self.e.p, self.X1, "done", "x")
+                self.assertEqual((self.e.calls(), self.e.task(y)["status"]), ([], status))
+                delivery.close(self.e.p, self.X1, "done", "x")
                 loop.tick(self.e.p)
                 self.assertEqual(self.e.calls(), [])
-                integrate.close(self.e.p, self.X2, "done", "x")
+                delivery.close(self.e.p, self.X2, "done", "x")
                 loop.tick(self.e.p)
-                self.assertEqual((len(self.e.calls()), self.e.issue(y)["status"]), (1, started))
+                self.assertEqual((len(self.e.calls()), self.e.task(y)["status"]), (1, started))
                 self.assertEqual(len([t for t in events(self.e, y) if "unblocked" in t]), 1)
                 loop.tick(self.e.p)
                 self.assertEqual(len([t for t in events(self.e, y) if "unblocked" in t]), 1)
 
     def test_a_task_filed_with_a_done_blocker_launches_at_once(self):
-        integrate.close(self.e.p, self.X1, "done", "x")
+        delivery.close(self.e.p, self.X1, "done", "x")
         y = self.y("--blocked-by", self.X1)
         loop.tick(self.e.p)
         self.assertEqual(len(self.e.calls()), 1)
-        self.assertEqual(self.e.issue(y)["status"], "refining")
+        self.assertEqual(self.e.task(y)["status"], "refining")
 
     def test_a_canceled_blocker_blocks_the_task_for_the_owner(self):
         for status in ("canceled", "duplicate"):
@@ -79,7 +79,7 @@ class Blockers(unittest.TestCase):
                 backlog.set_status(self.e.p, self.X1, status)
                 loop.tick(self.e.p)
                 self.assertEqual(self.e.calls(), [])
-                self.assertIn(self.X1, self.e.issue(y)["blocked"])
+                self.assertIn(self.X1, self.e.task(y)["blocked"])
                 n = len(events(self.e, y))
                 loop.tick(self.e.p)
                 self.assertEqual(len(events(self.e, y)), n)
@@ -92,7 +92,7 @@ class Blockers(unittest.TestCase):
         backlog.set_status(self.e.p, self.X1, "canceled")
         loop.tick(self.e.p)
         fm(self.e.home, "cancel", y)
-        self.assertEqual(self.e.issue(y)["status"], "canceled")
+        self.assertEqual(self.e.task(y)["status"], "canceled")
 
     def test_refused_changes_nothing(self):
         y = self.y("--blocked-by", self.X1)
@@ -122,16 +122,16 @@ class Blockers(unittest.TestCase):
                 backlog.update(self.e.p, y, plan_file="/x/p.md")
                 backlog.set_status(self.e.p, y, status)
                 fm(self.e.home, "edit", y, "--blocked-by", self.X1)
-                self.assertEqual((self.e.issue(y)["status"], self.e.issue(y)["plan_file"]), (status, "/x/p.md"))
+                self.assertEqual((self.e.task(y)["status"], self.e.task(y)["plan_file"]), (status, "/x/p.md"))
         for status in ("refining", "in progress", "in review", "done", "canceled", "duplicate"):
             with self.subTest(status=status):
                 backlog.set_status(self.e.p, y, status)
-                before = self.e.issue(y)
+                before = self.e.task(y)
                 with self.assertRaises(SystemExit):
                     fm(self.e.home, "edit", y, "--blocked-by", self.X2)
-                self.assertEqual(self.e.issue(y), before)
+                self.assertEqual(self.e.task(y), before)
 
     def test_pending_and_dead_by_status(self):
         for status, want in (("done", ([], [])), ("canceled", (["B"], ["B"])), ("in progress", (["B"], []))):
-            issues = [{"id": "A", "status": "backlog", "blocked_by": ["B"]}, {"id": "B", "status": status}]
-            self.assertEqual((blockers.pending(issues[0], issues), blockers.dead(issues[0], issues)), want)
+            tasks = [{"id": "A", "status": "backlog", "blocked_by": ["B"]}, {"id": "B", "status": status}]
+            self.assertEqual((blockers.pending(tasks[0], tasks), blockers.dead(tasks[0], tasks)), want)

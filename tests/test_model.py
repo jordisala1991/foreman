@@ -21,48 +21,48 @@ class Choice(unittest.TestCase):
         owner(self)
         self.e = Env(slots=3)
 
-    def shown(self, iid: str) -> dict:
-        return json.loads(fm(self.e.home, "show", iid))
+    def shown(self, tid: str) -> dict:
+        return json.loads(fm(self.e.home, "show", tid))
 
     def test_add_and_edit_take_every_model_and_effort(self):
         for m in config.MODELS:
             for f in config.EFFORTS:
-                iid = fm(self.e.home, "add", "T", "--criteria", "c", "--model", m, "--effort", f).strip()
-                i = self.shown(iid)
+                tid = fm(self.e.home, "add", "T", "--criteria", "c", "--model", m, "--effort", f).strip()
+                i = self.shown(tid)
                 self.assertEqual((i["model"], i["effort"]), (m, f))
-        fm(self.e.home, "edit", iid, "--model", "haiku", "--effort", "low")
-        i = self.shown(iid)
+        fm(self.e.home, "edit", tid, "--model", "haiku", "--effort", "low")
+        i = self.shown(tid)
         self.assertEqual((i["model"], i["effort"]), ("haiku", "low"))
 
     def test_unknown_value_fails_and_changes_nothing(self):
-        iid = backlog.add(self.e.p, "t", criteria="c")
-        before = self.e.issue(iid)
-        for args in (("add", "x", "--model", "gpt"), ("edit", iid, "--effort", "extreme"), ("ready", "--model", "gpt")):
+        tid = backlog.add(self.e.p, "t", criteria="c")
+        before = self.e.task(tid)
+        for args in (("add", "x", "--model", "gpt"), ("edit", tid, "--effort", "extreme"), ("ready", "--model", "gpt")):
             with self.assertRaises(SystemExit):
                 fm(self.e.home, *args)
-        self.assertEqual(self.e.issue(iid), before)
-        self.assertEqual(len(backlog.issues(backlog.load(self.e.p))), 1)
+        self.assertEqual(self.e.task(tid), before)
+        self.assertEqual(len(backlog.tasks(backlog.load(self.e.p))), 1)
 
     def test_edit_follows_the_other_fields_rules(self):
-        iid = backlog.add(self.e.p, "t", criteria="c")
+        tid = backlog.add(self.e.p, "t", criteria="c")
         for st in ("refining", "in progress", "in review"):
-            backlog.update(self.e.p, iid, status=st)
-            before = self.e.issue(iid)
+            backlog.update(self.e.p, tid, status=st)
+            before = self.e.task(tid)
             with self.assertRaises(SystemExit):
-                fm(self.e.home, "edit", iid, "--model", "opus")
-            self.assertEqual(self.e.issue(iid), before)
+                fm(self.e.home, "edit", tid, "--model", "opus")
+            self.assertEqual(self.e.task(tid), before)
         for st in ("triage", "backlog", "ready"):
-            backlog.update(self.e.p, iid, status=st, plan_file="/x/p.md")
-            fm(self.e.home, "edit", iid, "--model", "opus")
-            i = self.e.issue(iid)
+            backlog.update(self.e.p, tid, status=st, plan_file="/x/p.md")
+            fm(self.e.home, "edit", tid, "--model", "opus")
+            i = self.e.task(tid)
             self.assertEqual((i["status"], i["plan_file"], i["model"]), (st, "/x/p.md", "opus"))
 
     def test_ready_sets_model_and_effort(self):
-        iid = backlog.add(self.e.p, "t", criteria="c")
-        backlog.update(self.e.p, iid, status="refining")
-        with mock.patch.dict(os.environ, {"FM_ISSUE": iid}):
+        tid = backlog.add(self.e.p, "t", criteria="c")
+        backlog.update(self.e.p, tid, status="refining")
+        with mock.patch.dict(os.environ, {"FM_TASK": tid}):
             fm(self.e.home, "ready", "--no-plan", "x", "--model", "opus", "--effort", "high")
-        i = self.e.issue(iid)
+        i = self.e.task(tid)
         self.assertEqual((i["status"], i["model"], i["effort"]), ("ready", "opus", "high"))
 
     def test_responsible_agent_launches_with_the_tasks_choice(self):
@@ -71,18 +71,18 @@ class Choice(unittest.TestCase):
         c = backlog.add(self.e.p, "c", status="ready", criteria="c")
         loop.tick(self.e.p)
         got = {tuple(x["argv"][-1].split("\n")[0].strip("[]").split(" ")[1:]): flags(x) for x in self.e.calls()}
-        self.assertEqual(got[("work", a)], ("fable", "xhigh"))
-        self.assertEqual(got[("define", b)], ("sonnet", "high"))
-        self.assertEqual(got[("work", c)], ("sonnet", "medium"))
-        self.assertEqual(self.e.issue(a)["agent"]["effort"], "xhigh")
+        self.assertEqual(got[("responsible", a)], ("fable", "xhigh"))
+        self.assertEqual(got[("planning", b)], ("sonnet", "high"))
+        self.assertEqual(got[("responsible", c)], ("sonnet", "medium"))
+        self.assertEqual(self.e.task(a)["agent"]["effort"], "xhigh")
         ev = (self.e.p.state / "events.jsonl").read_text()
-        self.assertIn("(work, fable, xhigh, session", ev)
-        self.assertIn("(work, sonnet, medium, session", ev)
+        self.assertIn("(responsible, fable, xhigh, session", ev)
+        self.assertIn("(responsible, sonnet, medium, session", ev)
 
-    def test_define_brief_shows_the_choice(self):
+    def test_planning_brief_shows_the_choice(self):
         i = {"id": "TY-1", "title": "t", "model": "opus", "effort": "high"}
-        self.assertIn("opus / high", agents.brief(self.e.p, i, "define"))
-        self.assertIn("project default / project default", agents.brief(self.e.p, {**i, "model": "", "effort": ""}, "define"))
+        self.assertIn("opus / high", agents.brief(self.e.p, i, "planning"))
+        self.assertIn("project default / project default", agents.brief(self.e.p, {**i, "model": "", "effort": ""}, "planning"))
 
 
 class Measured(unittest.TestCase):
@@ -91,11 +91,11 @@ class Measured(unittest.TestCase):
 
     def test_metrics_row_and_line_show_model_and_effort(self):
         a = backlog.add(self.e.p, "a", criteria="c")
-        backlog.update(self.e.p, a, agent={"kind": "work", "model": "opus", "effort": "high"})
+        backlog.update(self.e.p, a, agent={"kind": "responsible", "model": "opus", "effort": "high"})
         b = backlog.add(self.e.p, "b", criteria="c", model="haiku")
         c = backlog.add(self.e.p, "c", criteria="c")
         with mock.patch("fm.costs.of_sessions", lambda s, seen=None: {"usd": 3.0, "minutes": 0}):
-            rows = {r["id"]: r for r in metrics.per_issue(self.e.p)}
+            rows = {r["id"]: r for r in metrics.per_task(self.e.p)}
         self.assertEqual((rows[a]["model"], rows[a]["effort"]), ("opus", "high"))
         self.assertEqual(rows[b]["model"], "haiku")
         self.assertIsNone(rows[c]["model"])
