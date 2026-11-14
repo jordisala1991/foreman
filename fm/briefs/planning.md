@@ -20,6 +20,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - A statement of scope («only X uses it», «nothing else reads this») cites the search that shows it, or says it was not checked.
 - You never split the task or file others. If it looks too big, say so to the owner with `fm ask`, proposing how, and file nothing.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
+- If an `fm` command exits non-zero, read its message, fix what it says and run it again. Never end your turn as if it had worked.
 
 # Model and effort of the responsible agent
 As filed: $model_effort. If the owner already set them, leave them. Otherwise choose with this rubric and pass `--model M --effort E` to `fm ready`. Pick the lowest row that fits; between two, the higher:
