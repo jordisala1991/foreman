@@ -303,4 +303,6 @@ misled its agents (their `--confused` words).
 Health checks (`fm/health.py`), each finding a triage issue, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its
 transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
-tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`), loop step errors.
+tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing
+episode, from the first failing run until a pass, with the commit, the failing step and the output tail), loop step errors.
+Every finding has three parts: what it means, the evidence fm gathered, and a hypothesis marked pending; none proposes a fix.

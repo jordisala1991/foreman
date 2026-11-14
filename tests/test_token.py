@@ -56,7 +56,7 @@ class Token(unittest.TestCase):
     def test_health_on_the_fallback_says_so(self):
         f = health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: True, login=LOGIN_OFF)
         self.assertEqual(f[0]["key"], "token-fallback")
-        self.assertIn("do not show in the Claude app; run /login", f[0]["detail"])
+        self.assertIn("do not show in the Claude app", f[0]["detail"])
 
     def test_health_is_quiet_while_the_login_works_and_warns_before_it_expires(self):
         def ok(claude: str) -> token.Login:
@@ -68,7 +68,7 @@ class Token(unittest.TestCase):
         self.assertEqual(health.claude_token(self.p, read=lambda: "", login=ok), [])
         f = health.claude_token(self.p, read=lambda: "", login=soon)
         self.assertEqual(f[0]["key"], "login-expiring")
-        self.assertIn("/login", f[0]["detail"])
+        self.assertIn("will stop working soon", f[0]["detail"])
 
     def test_login_status_reads_claude_auth_status(self):
         self.set_login(True, datetime.now(UTC) + timedelta(days=1))
@@ -84,15 +84,15 @@ class Token(unittest.TestCase):
         self.assertEqual(run.call_args[0][0][:2], ["security", "find-generic-password"])
         self.assertEqual(run.call_args[0][0][-3:], ["-s", "claude-oauth-token", "-w"])
 
-    def test_health_says_no_token_with_the_renew_command(self):
+    def test_health_says_no_token(self):
         f = health.claude_token(self.p, read=lambda: "", login=LOGIN_OFF)
         self.assertEqual(f[0]["title"], "No token")
-        self.assertIn("security add-generic-password -U", f[0]["detail"])
+        self.assertIn("no fallback token", f[0]["detail"])
 
     def test_health_says_token_does_not_work(self):
         f = health.claude_token(self.p, read=lambda: SECRET, works=lambda c, t: False, login=LOGIN_OFF)
         self.assertEqual(f[0]["title"], "Token does not work")
-        self.assertIn("claude setup-token", f[0]["detail"])
+        self.assertIn("rejects the fallback token", f[0]["detail"])
 
     def test_launchd_makes_two_jobs_without_the_token(self):
         os.environ[token.ENV] = SECRET
