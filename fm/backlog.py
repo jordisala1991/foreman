@@ -7,13 +7,12 @@ Statuses, and who moves an issue between them (DESIGN.md has the picture):
   refining     a planning agent works on it; it ends with `fm ready` (the plan, or «trivial»)
   ready        the loop launches the task's responsible agent
   in progress  the responsible agent works on it; it ends with `fm done`
-  in review    in the integration queue: checked (tests, diff, risk); the owner accepts, or the autonomy level does
-  done | canceled | duplicate
+  in review    in the integration queue: checked (tests, diff, risk); the owner accepts, or the autonomy level does; then done | canceled | duplicate
 
 Keys added to an issue: `agent` {name, session, short, kind: define|work, started, nudged}, `branch`, `worktree`,
 `sessions` (every session id), `session_kinds` (sid → define|work|review), `report` {summary, review, confused, at},
-`check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `source`
-(dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask).
+`check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `plan_approved` {by, at},
+`source` (dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask).
 A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text, kind, action?}.
 """
 
