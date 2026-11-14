@@ -13,17 +13,17 @@ DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @
 
 
 def tip(g: GH, iid: str, text: str, counts: tuple[int, int, int] = (0, 0, 0)) -> None:
-    """Delivers the task's current tip with a verdict (already sent back, so it is delivered) and ticks."""
+    """Delivers the task's current tip with a verdict (already returned, so it is delivered) and ticks."""
     backlog.set_status(g.e.p, iid, "in review", report={"summary": "does x", "confused": ""})
     g.e.review(iid, sum(counts))
     (g.e.home / "reviews" / f"{iid}.md").write_text(text)
-    backlog.update(g.e.p, iid, review={**g.e.issue(iid)["review"], "sent_back": True})
+    backlog.update(g.e.p, iid, review={**g.e.task(iid)["review"], "returned": True})
     loop.tick(g.e.p)
     loop.tick(g.e.p)
 
 
 def commit(g: GH, iid: str) -> str:
-    wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+    wt = g.e.repo.parent / g.e.task(iid)["worktree"]
     with open(wt / "app.py", "a") as f:
         f.write("# more\n")
     git(wt, "commit", "-qam", "more")
@@ -47,7 +47,7 @@ class Review_(unittest.TestCase):
         pr = self.pr(g)
         self.assertEqual(len(pr["reviews"]), 1)
         r = pr["reviews"][0]
-        self.assertEqual((r["event"], r["commit_id"]), ("COMMENT", g.e.issue(iid)["pr"] and git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()))
+        self.assertEqual((r["event"], r["commit_id"]), ("COMMENT", g.e.task(iid)["pr"] and git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()))
         self.assertEqual(pr["comments"], [])
         (c,) = r["comments"]
         self.assertEqual((c["path"], c["line"], c["side"]), ("app.py", 3, "RIGHT"))
@@ -79,7 +79,7 @@ class Review_(unittest.TestCase):
     def test_a_lost_record_does_not_post_the_review_twice(self):
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
-        backlog.update(g.e.p, iid, pr={**g.e.issue(iid)["pr"], "commented": ""})
+        backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         self.assertEqual(len(self.pr(g)["reviews"]), 1)
@@ -129,7 +129,7 @@ class Review_(unittest.TestCase):
 
     def test_body_links_point_at_the_comment_or_the_reviewed_commit_and_line(self):
         g, iid = self.make()
-        head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+        head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
         tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | M | app.py:3 | mid | why: because\n", (1, 1, 0))
         (r,) = self.pr(g)["reviews"]
         self.assertIn(f"https://github.com/o/r/blob/{head}/app.py#L99", r["body"])
@@ -141,13 +141,13 @@ class Review_(unittest.TestCase):
     def test_a_failed_comment_link_edit_keeps_the_file_links(self):
         g, iid = self.make()
         g.set(fail_put=True)
-        head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+        head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
         tip(g, iid, "Findings:\nF2 | M | app.py:3 | mid\n", (0, 1, 0))
         (r,) = self.pr(g)["reviews"]
         self.assertIn(f"/blob/{head}/app.py#L3", r["body"])
 
     def sha(self, g: GH, iid: str) -> str:
-        return git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+        return git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
 
     def resolves(self, g: GH) -> list[list[str]]:
         return [c for c in g.calls("api", "graphql") if any("resolveReviewThread" in x for x in c)]
@@ -166,7 +166,7 @@ class Review_(unittest.TestCase):
     def test_a_settled_thread_is_not_settled_again(self):
         g, iid = self.make()
         self.fixed_once(g, iid)
-        backlog.update(g.e.p, iid, pr={**g.e.issue(iid)["pr"], "commented": ""})
+        backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         commit(g, iid)
@@ -210,7 +210,7 @@ class Review_(unittest.TestCase):
                 tried.append(thread.id)
                 raise Transient("down")
 
-        pulls._settle(g.e.p, Down(), g.e.issue(iid), {"head": "h"}, [Thread("A", "k", False), Thread("B", "k", False)])
+        pulls._settle(g.e.p, Down(), g.e.task(iid), {"head": "h"}, [Thread("A", "k", False), Thread("B", "k", False)])
         self.assertEqual(tried, ["A"])
 
     def test_rejected_inline_comments_are_not_counted_new(self):
