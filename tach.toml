@@ -135,6 +135,9 @@ layer = "core"
 path = "fm.inline"
 layer = "core"
 [[modules]]
+path = "fm.evidence"
+layer = "core"
+[[modules]]
 path = "fm.subtasks"
 layer = "core"
 [[modules]]

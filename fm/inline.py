@@ -83,7 +83,7 @@ def line_comments(found: list[Finding], visible: dict[str, set[int]]) -> list[Li
     return list(out.values())
 
 
-LINK = re.compile(r"\[(`[^`\n]*`)\]\(fm-link:([^)\s]*)\)")  # the text is always the place in backticks, and may hold brackets
+LINK = re.compile(r"\[(`[^\n]*?`)\]\(fm-link:([^)\s]*)\)")  # the text is the place in backticks, whatever it holds
 _AT = re.compile(r"^(.+?):(\d+)(?:[-:]\d+)?$")  # path:line, path:first-last, path:line:column
 
 

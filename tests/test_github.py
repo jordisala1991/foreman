@@ -41,7 +41,7 @@ FAKE_GH = textwrap.dedent("""\
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
     if a[:2] == ["repo", "view"]:
-        print("https://github.com/o/r")
+        print("o/r" if "nameWithOwner" in a else "https://github.com/o/r")
         sys.exit(0)
     if a[:2] == ["api", "graphql"]:
         import subprocess

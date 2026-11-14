@@ -35,6 +35,7 @@ class Inline(unittest.TestCase):
         self.assertEqual(link("src/my file.py:7"), f"[`src/my file.py:7`]({base}/src/my%20file.py#L7) x")
         self.assertEqual(link("app/[id]/page.tsx:12"), f"[`app/[id]/page.tsx:12`]({base}/app/%5Bid%5D/page.tsx#L12) x")
         self.assertEqual(link("a[1].py:3"), f"[`a[1].py:3`]({base}/a%5B1%5D.py#L3) x")
+        self.assertEqual(link("a`b.py:3"), f"[`a`b.py:3`]({base}/a%60b.py#L3) x")
         self.assertEqual(link("the whole module"), "`the whole module` x")
 
 
