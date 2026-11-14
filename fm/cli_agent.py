@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, util
+from . import backlog, lessons, util
 from .cli_common import home, mine
 
 
@@ -21,7 +21,7 @@ def cmd_done(a: argparse.Namespace) -> None:
     iid = mine(a)
     report = {"summary": a.summary, "file": a.report or "", "confused": a.misled or "", "at": util.now()}
     backlog.set_status(p, iid, "in review", a.summary, report=report, blocked="")
-    backlog.lesson(p, iid, os.environ.get("FM_AGENT", "agent"), a.misled)
+    lessons.lesson(p, iid, os.environ.get("FM_AGENT", "agent"), a.misled)
     print(f"{iid} is in the integration queue: an independent reviewer reads it, then the owner. End your turn.")
 
 
@@ -42,7 +42,7 @@ def cmd_verdict(a: argparse.Namespace) -> None:
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
             i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
-    backlog.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
+    lessons.lesson(p, iid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
     backlog.event(p, iid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
     print("Verdict recorded. End your turn.")
 
@@ -64,7 +64,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
         i["status"], i["blocked"] = "ready", ""
     backlog.event(p, iid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
-    backlog.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)
+    lessons.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)
     print(f"{iid} is ready; the loop will launch its responsible agent. End your turn.")
 
 
