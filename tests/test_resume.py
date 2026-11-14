@@ -5,7 +5,7 @@ import unittest
 
 from helpers import Env
 
-from fm import backlog, loop, proc, sessions, talk, util
+from fm import backlog, health, loop, proc, sessions, talk, util
 
 
 def launched(e: Env) -> str:
@@ -139,3 +139,17 @@ class Resume(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(len(e.calls()), 2)
         self.assertEqual(e.issue(iid)["undelivered"], 1)
+
+    def test_answers_that_keep_failing_stay_undelivered_and_health_shows_them(self):
+        e = Env()
+        iid = launched(e)
+        e.set_state(iid.lower(), "done")
+        (e.bin / "fail_resume").write_text("")
+        answer(e, iid)
+        for _ in range(4):
+            loop.tick(e.p)
+        self.assertEqual(len(backlog.undelivered(backlog.load(e.p))), 1)
+        self.assertEqual(e.issue(iid)["blocked"], "")
+        with backlog.edit(e.p) as d:
+            d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
+        self.assertEqual(len(health.answers_undelivered(e.p)), 1)

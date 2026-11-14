@@ -11,7 +11,7 @@ default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 from pathlib import Path
 from typing import Any
 
-from . import backlog, proc, providers, pulls, sessions, util
+from . import backlog, proc, providers, pulls, sessions, subtasks, util
 from .config import Project
 from .providers import registry
 from .risk import Facts, allows, score
@@ -87,8 +87,8 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     i = backlog.get(d, iid)
     branch = i.get("branch", "")
     main = p.get("project", "main")
-    commits = int(git(p.repo, "rev-list", "--count", f"{main}..{branch}", check=False).out.strip() or 0)
-    head = git(p.repo, "rev-parse", branch).out.strip()
+    commits = pulls.commits_of(p, branch)
+    head = pulls.head_of(p, branch)
     tests = tests_at(p, head, iid.lower())
     if ci is None:
         ci = registry.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
@@ -98,7 +98,8 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     deleted = deleted_files(p, branch)
     v: backlog.Review | None = i.get("review")
     review = "" if not v else "clean" if backlog.open_findings(v) == 0 else f"open after round {v['round']}: {backlog.open_findings(v)}"
-    risk, reasons = score(p, Facts(tests, review, files, deleted, conflicts(p, branch), commits, ci))
+    conflict = conflicts(p, branch)
+    risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci))
     c = {
         "tests": tests,
         "ci": ci,
@@ -109,9 +110,9 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
         "risk": risk,
         "review": review,
         "reasons": reasons,
-        "head": git(p.repo, "rev-parse", branch).out.strip(),
+        "head": head,
         "main": git(p.repo, "rev-parse", main).out.strip(),
-        "conflict": conflicts(p, branch),
+        "conflict": conflict,
         "at": util.now(),
     }
     backlog.update(p, iid, check=c)
@@ -185,6 +186,9 @@ def merge_accepted(p: Project, iid: str) -> str:
     if not change["merge"]:
         change["merge"] = adopt_merge(p, i)
     if not change["merge"]:
+        pr: dict[str, Any] = i.get("pr") or {}
+        if pr.get("draft"):  # a PR from the running phase is still a draft: only pulls.deliver readies it
+            provider.ready(change)
         ref = request_merge(p, i, provider, change)
         backlog.update(p, iid, merge=ref)
         backlog.event(p, iid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
@@ -210,6 +214,7 @@ def merge_accepted(p: Project, iid: str) -> str:
         commit=seen.get("commit") or change["merge"],
         acceptance={**acceptance, "verdict": f"accepted by {by}"},
     )
+    settle_parent(p, iid)
     return "done"
 
 
@@ -236,11 +241,26 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
             sessions.stop_live(p, i["id"], a, rows)
 
 
-def close(p: Project, iid: str, status: str, why: str) -> None:
+def settle_parent(p: Project, iid: str) -> None:
+    """A parent closes by itself once its subtasks have: done if any is done, else canceled."""
+    d = backlog.load(p)
+    parent = backlog.get(d, iid).get("parent")
+    if not parent or backlog.get(d, parent)["status"] in backlog.CLOSED:
+        return
+    if status := subtasks.outcome(subtasks.of(backlog.issues(d), parent)):
+        backlog.set_status(p, parent, status, "its subtasks are closed")
+
+
+def close(p: Project, iid: str, status: str, why: str, *, settle: bool = True) -> None:
     """Closes an open issue as canceled or done (merged outside fm): stops its sessions, answers its open questions,
     removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
-    `fm cancel` and the sources' signals use it."""
-    i = backlog.get(backlog.load(p), iid)
+    `fm cancel` and the sources' signals use it. Canceling a parent first cancels its open subtasks."""
+    d = backlog.load(p)
+    i = backlog.get(d, iid)
+    if status == "canceled":
+        for s in subtasks.of(backlog.issues(d), iid):
+            if backlog.get(backlog.load(p), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it
+                close(p, s["id"], "canceled", f"its parent {iid} was canceled: {why}", settle=False)
     if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
         close_pull(p, i, why)
     stop_all(p, i)
@@ -250,3 +270,5 @@ def close(p: Project, iid: str, status: str, why: str) -> None:
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
     backlog.set_status(p, iid, status, why)
+    if settle:
+        settle_parent(p, iid)

@@ -27,6 +27,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
 | `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
+| `fm/subtasks.py` | ~35 | subtasks: which belong to a parent, listing order, when a subtask may be filed, how the parent closes (pure) |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
@@ -68,6 +69,10 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 - `in review`: the integration queue. The loop checks the branch; the owner accepts it or sends it back with a note.
 - `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
   nudge). The owner clears it (`fm unblock [--relaunch]`).
+- A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only the owner, only while the parent is
+  in triage or backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent; the
+  parent never gets an agent and closes by itself when every subtask has (done if any is done, else canceled).
+  `fm cancel` of a parent cancels its open subtasks and closes their PRs.
 - A question (`fm ask`) does not change the state: it is a decision tied to the issue and its agent. The agent ends
   its turn; the owner answers in the panel (or talks to the agent directly); the loop resumes *that* session with the
   answer.
@@ -93,7 +98,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    (`claude --bg --resume SID MESSAGE`, no other flag: a flag or a live process makes claude start a copy), when that
    session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
    one answer per task per tick; a copy (different short id) or an unreadable `claude agents` fails the send; dropped if the task closed meanwhile;
-   after 3 failed tries the task is blocked with the answer in the reason. A session id not listed yet at launch is
+   a failed try is retried next tick; the answer stays not delivered and `fm health` shows it after 10 minutes. A session id not listed yet at launch is
    filled in from its short id on a later tick.
 4. **agents**: an agent whose session ended its turn without `fm done`/`ready`/`ask`/`block`, and whose transcript
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
@@ -264,7 +269,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+| core | `risk`, `subtasks`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,

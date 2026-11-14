@@ -28,11 +28,11 @@ def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
     }
 
 
-def _head(p: Project, branch: str) -> str:
+def head_of(p: Project, branch: str) -> str:
     return proc.run(["git", "-C", str(p.repo), "rev-parse", "--verify", branch]).out.strip()
 
 
-def _commits(p: Project, branch: str) -> int:
+def commits_of(p: Project, branch: str) -> int:
     r = proc.run(["git", "-C", str(p.repo), "rev-list", "--count", f"{p.get('project', 'main')}..{branch}"])
     return int(r.out.strip() or 0)
 
@@ -56,8 +56,8 @@ def sync(p: Project, i: dict[str, Any]) -> None:
     """One running task: with commits of its own its branch is pushed, and (`pr = draft`) it gets its draft PR. Failures
     are the caller's (`loop.guarded`)."""
     provider = registry.get(p)
-    head = _head(p, i["branch"])
-    if not head or not _commits(p, i["branch"]):
+    head = head_of(p, i["branch"])
+    if not head or not commits_of(p, i["branch"]):
         return
     change = change_of(i, head)
     if not provider.pushed(change):
