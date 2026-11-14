@@ -1,9 +1,7 @@
 """The local provider: the branch is merged into the main checkout of the repo with git. Nothing is pushed."""
 
-from typing import Any
-
 from .. import proc
-from . import Conflict, Provider, ProviderError
+from . import Change, ChangeState, Conflict, Provider, ProviderError
 
 
 class Local(Provider):
@@ -20,13 +18,13 @@ class Local(Provider):
             raise ProviderError(f"git {' '.join(args)}: {(r.err or r.out).strip()[:300]}")
         return r
 
-    def merge(self, change: dict[str, Any], strategy: str) -> str:
-        main, branch = self.p.get("project", "main"), change["branch"]
+    def merge(self, change: Change, strategy: str) -> str:
+        main, branch = self.p.get("project", "main"), change.branch
         if self.git("rev-parse", "--abbrev-ref", "HEAD").out.strip() != main:
             raise ProviderError(f"the main checkout {self.p.repo} is not on {main}")
         if self.git("status", "--porcelain", "--untracked-files=no").out.strip():
             raise ProviderError(f"the main checkout {self.p.repo} has uncommitted changes")
-        msg = f"Merge {change['id']}: {change['title']}"
+        msg = f"Merge {change.id}: {change.title}"
         if strategy == "squash":
             r = self.git("merge", "--squash", branch, check=False)
             if r.code == 0:
@@ -42,8 +40,8 @@ class Local(Provider):
             raise ProviderError(why)
         return self.git("rev-parse", "HEAD").out.strip()
 
-    def state(self, change: dict[str, Any]) -> dict[str, Any]:
+    def state(self, change: Change) -> ChangeState:
         main = self.p.get("project", "main")
-        ref = change.get("merge") or ""
+        ref = change.merge
         merged = bool(ref) and self.git("merge-base", "--is-ancestor", ref, main, check=False).code == 0
-        return {"merged": merged, "closed": merged}
+        return ChangeState(merged, merged)

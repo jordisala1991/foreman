@@ -8,12 +8,13 @@ Accepting only records the decision; the merge step (`merge_accepted`, through t
 and the task closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from . import backlog, proc, providers, pulls, sessions, subtasks, util
 from .config import Project
-from .providers import registry
+from .providers import Change, registry
 from .risk import Facts, score
 
 
@@ -152,7 +153,7 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
     return found[0] if found else ""
 
 
-def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, change: dict[str, Any]) -> str:
+def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, change: Change) -> str:
     """Asks the provider to merge (marking `merging` first) and returns the merge ref. A refusal for a conflict that
     the local check confirms is a `MergeConflict`; any other platform error is a `DeliveryError`."""
     backlog.update(p, i["id"], merging=git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
@@ -179,20 +180,20 @@ def merge_accepted(p: Project, tid: str) -> str:
         backlog.update(p, tid, accepted=None)
         raise DeliveryError(f"{i['branch']} moved after it was accepted: accept again after the next check")
     change = pulls.change_of(i, head)
-    if not change["merge"]:
-        change["merge"] = adopt_merge(p, i)
-    if not change["merge"]:
+    if not change.merge:
+        change = replace(change, merge=adopt_merge(p, i))
+    if not change.merge:
         pr: dict[str, Any] = i.get("pr") or {}
         if pr.get("draft"):  # a PR from the running phase is still a draft: only pulls.deliver readies it
             provider.ready(change)
         ref = request_merge(p, i, provider, change)
         backlog.update(p, tid, merge=ref)
         backlog.event(p, tid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
-        change["merge"] = ref
+        change = replace(change, merge=ref)
     seen = provider.state(change)
-    if seen["closed"] and not seen["merged"]:
+    if seen.closed and not seen.merged:
         raise DeliveryError("its pull request was closed without merging: reopen it, or reject the task")
-    if not seen["merged"]:
+    if not seen.merged:
         return "merging"
     stop_all(p, i)
     if i.get("worktree"):
@@ -205,9 +206,9 @@ def merge_accepted(p: Project, tid: str) -> str:
         p,
         tid,
         "done",
-        f"merged, accepted by {by}, as {(seen.get('commit') or change['merge'])[:9]}",
+        f"merged, accepted by {by}, as {(seen.commit or change.merge)[:9]}",
         result=report.get("summary", ""),
-        commit=seen.get("commit") or change["merge"],
+        commit=seen.commit or change.merge,
         acceptance={**acceptance, "verdict": f"accepted by {by}"},
     )
     settle_parent(p, tid)

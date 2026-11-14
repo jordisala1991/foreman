@@ -264,7 +264,7 @@ The project's `[merge] autonomy` decides what merges without the owner: `manual`
 
 The merge goes through a *provider* module (`fm/providers/`), one per platform; the rest of fm does not know which.
 Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `diff` (its unified diff; empty locally), `review` (post the verdict as one PR review with its inline comments; no-op locally), `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
-in fm: a future queue is just another strategy) and `state` (merged? closed?). Steps:
+in fm: a future queue is just another strategy) and `state` (merged? closed?). Operations take a `Change` and return `Published` / `ChangeState`: no dict crosses the port. Steps:
 
 1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the task (it stays `in review`).
 2. **merge**: the loop's queue step asks the provider to merge once, and stores the merge reference.
@@ -327,7 +327,8 @@ Rules (enforced by `make check`):
   time limit (`start_new_session`, `killpg`).
 - Data from outside is typed at the border: `providers/github.py` turns `gh`'s JSON into its own types
   (`PullRequest`, the check buckets) with a small converter per shape, and a shape that does not fit is a
-  `ProviderError`; only those types go inward, never `gh`'s dicts.
+  `ProviderError`; only those types go inward, never `gh`'s dicts. The port's own operations take a `Change` and
+  return `Published` / `ChangeState`: no dict crosses it.
   The ratchet also counts `pylint: disable`, `pyright: basic|off` and `fmt: off|skip`.
 - An adapter imports neither the loop nor another adapter (tach).
 - Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services

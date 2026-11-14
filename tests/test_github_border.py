@@ -1,11 +1,14 @@
 """What gh says is turned into fm's own types at the border (see test_github for the fake gh)."""
 
+import inspect
+import typing
 import unittest
+from typing import Any
 
 from test_github import GH
 
 from fm import providers
-from fm.providers import github, registry
+from fm.providers import github, local, registry
 
 
 class Border(unittest.TestCase):
@@ -52,7 +55,16 @@ class Border(unittest.TestCase):
         self.addCleanup(g.close)
         g.set(prs={"1": {"draft": False, "state": "OPEN", "comments": []}}, bad_view=True)
         with self.assertRaises(providers.ProviderError):
-            registry.get(g.e.p).state({"pr": 1})
+            registry.get(g.e.p).state(providers.Change(id="FN-1", pr=1))
+
+    def test_no_operation_of_the_port_takes_or_returns_a_dict_of_any(self):
+        bad = dict[str, Any]
+        for cls in (providers.Provider, github.GitHub, local.Local):
+            for name, fn in inspect.getmembers(cls, callable):
+                if name.startswith("_"):
+                    continue
+                hints = typing.get_type_hints(fn)
+                self.assertNotIn(bad, hints.values(), f"{cls.__name__}.{name}")
 
 
 if __name__ == "__main__":
