@@ -1,7 +1,5 @@
 # ID: <imperative title: what this change does, under 10 words>
 
-Proof and Look here first: every claim cites what you ran or read (command, test, `file:line`) or is marked «(inferred: what it rests on)». Nothing inferred is written as seen.
-
 **In one sentence**
 <one sentence: what is different now, for the user or the system>
 
@@ -12,12 +10,12 @@ Proof and Look here first: every claim cites what you ran or read (command, test
 - <at most 4 bullets, one line each, grouped by behaviour, not by file>
 
 **Look here first**
-- <at most 3 bullets: a `file:line` that needs the owner's judgement and why, in one line; "Off the plan:" for a departure from the plan or from the task's scope>
+- <at most 3 bullets: a `file:line` that needs the owner's judgement and why, in one line; "Off the plan:" for a departure from the plan or from the task's scope; a claim you did not check is marked «(inferred: what it rests on)»>
 
 **Proof**
 | Acceptance criterion | Evidence |
 |---|---|
-| <each line of the acceptance criteria, short> | <evidence that fits its kind, one line: behaviour → a test by name; UI → before and after screenshots saved in reports/ID/ and shown as `![what it shows](before-home.png)` (bare file name); CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the check command and its result. Only evidence that exists: no figure without the test or command behind it> |
+| <each line of the acceptance criteria, short> | <evidence that fits its kind, one line: behaviour → a test by name; UI → before and after screenshots saved in reports/ID/ and shown as `![what it shows](before-home.png)` (bare file name); CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the check command and its result. Only evidence that exists: no figure without the test or command behind it; nothing inferred is written as seen> |
 
 **Risk**
 <at most 2 lines: what could break, including open review findings, or "none known">
