@@ -70,6 +70,8 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 - `in review`: the integration queue. The loop checks the branch; the owner accepts it or sends it back with a note.
 - `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
   nudge). The owner clears it (`fm unblock [--relaunch]`).
+- `fm edit` changes title, claim, criteria or detail of a task in triage, backlog or ready (never one with an agent,
+  nor a closed one); criteria or detail on a backlog or ready task drops its plan and sends it back to backlog.
 - A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only the owner, only while the parent is
   in triage or backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent; the
   parent never gets an agent and closes by itself when every subtask has (done if any is done, else canceled).

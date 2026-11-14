@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from . import agents, backlog, guard, health, integrate, lock, loop, metrics, plan_gate, providers, sessions, subtasks, token, util
+from . import agents, backlog, editing, guard, health, integrate, lock, loop, metrics, plan_gate, providers, sessions, subtasks, token, util
 from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -46,6 +46,25 @@ def cmd_add(a: argparse.Namespace) -> None:
         p, a.title, detail=a.detail or "", status=status, criteria=a.criteria or "", claim=a.claim or "", priority=a.priority, parent=a.parent or ""
     )
     print(iid)
+
+
+def cmd_edit(a: argparse.Namespace) -> None:
+    if os.environ.get("FM_ISSUE"):
+        sys.exit("fm: tasks are edited by the owner, not from an agent's session")
+    p = home(a)
+    fields = {f: v for f in editing.FIELDS if (v := getattr(a, f))}
+    with backlog.edit(p) as d:
+        i = backlog.get(d, a.id)
+        if why := editing.refusal(i, fields):
+            sys.exit(f"fm: {why}")
+        old = dict(i)
+        new = editing.edited(i, fields)
+        i.clear()
+        i.update(new)
+    reset = old["status"] != new["status"] or ("plan_file" in old and "plan_file" not in new)
+    backlog.event(p, a.id, "edited by the owner: " + ", ".join(fields) + ("; plan dropped, back to backlog" if reset else ""))
+    after = "; it stays blocked until fm unblock" if new.get("blocked") else "; it will be planned again"
+    print(f"{a.id} edited" + (after if reset else ""))
 
 
 def cmd_list(a: argparse.Namespace) -> None:
@@ -235,6 +254,7 @@ def cmd_launchd(a: argparse.Namespace) -> None:
 HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "init": cmd_init,
     "add": cmd_add,
+    "edit": cmd_edit,
     "list": cmd_list,
     "show": cmd_show,
     "ask": cmd_ask,

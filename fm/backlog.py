@@ -206,24 +206,6 @@ def update(p: Project, iid: str, **keys: Any) -> Issue:
     return i
 
 
-def lesson(p: Project, iid: str, who: str, text: str) -> None:
-    """What misled an agent, kept in the project's LESSONS.md for the next agents (the owner prunes it)."""
-    t = " ".join((text or "").split())
-    if not t or re.match(r"(?i)(none|nothing|n/a|-)\b", t):
-        return
-    f = ensure_lessons(p)
-    with util.file_lock(f):
-        util.write_text_atomic(f, f.read_text(encoding="utf-8") + f"- {date.today().isoformat()} {iid} ({who}): {t}\n")
-
-
-def ensure_lessons(p: Project) -> Any:
-    if not p.lessons_file.exists():
-        util.write_text_atomic(
-            p.lessons_file, "# Lessons\n\nWhat misled earlier agents in this project, in their words. The owner prunes it; agents read it before starting.\n\n"
-        )
-    return p.lessons_file
-
-
 def open_questions(d: Data, iid: str | None = None) -> list[dict[str, Any]]:
     return [q for q in d["decisions"] if q.get("issue") and (iid is None or q["issue"] == iid)]
 
