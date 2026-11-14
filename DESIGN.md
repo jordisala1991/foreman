@@ -211,7 +211,7 @@ owner allows it once from the panel (`fm allow QID`); the loop tells its agent; 
 | Action | Recognised by |
 |---|---|
 | `publish` | `npm/pnpm/yarn/cargo/uv/poetry publish`, `twine upload`, `docker push`, `gh release/pr/repo create|merge|edit|delete|upload` |
-| `push-main` | `git push` to the main branch (named, `HEAD` while on it, or bare while on it), or with `--force`/`--mirror`/`--all` |
+| `push-main` | `git push` to the main branch (named, `HEAD` while on it, or bare while on it), or with `--force`/`--mirror`/`--all` or a ref written with a leading `+` |
 | `delete` | `rm`/`rmdir`/`unlink`/`find -delete` of a path outside its worktree and temp dirs; `git branch -d/-D` of another branch; `git worktree remove`; `git push --delete` |
 | `config` | Edit/Write of the project's `fm.toml`; a shell command that writes it (`>`, `tee`, `sed -i`, `mv`, `cp`, `rm`) |
 | owner's own | `[guard] ask = [{name, pattern}]` in fm.toml: a regex on a shell segment |
