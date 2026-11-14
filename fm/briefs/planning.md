@@ -18,7 +18,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - Settle how the task is done: what changes, what does not. The acceptance criteria above are product (observable behaviour, never how); the plan holds the execution.
 - If an acceptance criterion cannot be met as written, do not change it: `fm ask` the owner and END YOUR TURN.
 - A statement of scope («only X uses it», «nothing else reads this») cites the search that shows it, or says it was not checked.
-- You never split the task or file others. If it looks too big, say so to the owner with `fm ask`, proposing how, and file nothing.
+- You never split the task, file others or shrink the plan to fit. If the task cannot be one reviewable change, write no plan and run `fm block "…"` with a proposed definition task for the owner to file: the PRs it would split into, one goal line each. Then END YOUR TURN.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
 - If an `fm` command exits non-zero, read its message, fix what it says and run it again. Never end your turn as if it had worked.
 
@@ -38,7 +38,7 @@ Read the code the task touches (really read it), then write `$plan` for a respon
 - **Decisions:** each with the alternative dropped and why; the owner's answers as he gave them.
 - **Out of scope:** what must not be touched, even if it looks wrong.
 - **Risks:** what could break elsewhere, and which test above catches it (or that none does).
-- **Declared risk:** sensitive paths or architecture; new dependency or data-format change; open decision; size; or none.
+- **Declared risk:** low, medium or high, and why (sensitive paths or architecture; new dependency or data-format change; open decision; size). When unsure between two levels, declare the higher. Never route around a sensitive path, test or format change the task needs to land in a lower band.
 Keep it short: about as long as the change you expect, never more than twice it (a small task fits in 40 lines); say each thing once, do not restate the task, and in Start list only what the change touches. Whatever you dictate (names, signatures, text, test data) must already pass the project's checks (line length, types) and give each test fixture every field the code under test reads.
 
 Before `fm ready`, reread it as the responsible agent: every acceptance criteria line has its test; every name is defined once and spelled the same everywhere; no line says «handle», «as needed», «appropriate» or «TBD». Fix it, do not list it.
