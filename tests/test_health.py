@@ -139,7 +139,6 @@ class Lessons(unittest.TestCase):
         self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.issue(iid), "work"))
 
 
-
 class Evidence(unittest.TestCase):
     def commit(self, e, name, text="x"):
         (e.repo / name).write_text(text)
@@ -236,7 +235,6 @@ class Evidence(unittest.TestCase):
         health.run(e.p, {})
         self.assertEqual(len(self.triage(e)), 2)  # one orphan, one error: each filed once
         self.assertEqual(sorted(i["source"] for i in self.triage(e)), ["health:error:s:bad", "health:orphan:ghost"])
-
 
 
 class Upgrade(unittest.TestCase):
