@@ -45,7 +45,7 @@ class Health(unittest.TestCase):
         self.assertEqual(len(self.triage()), 1)
 
     def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
-        iid = backlog.add(self.p, "x", status="ready", criterion="y")
+        iid = backlog.add(self.p, "x", status="ready", criteria="y")
         qid = backlog.ask(self.p, iid, "a", "A or B?")
         backlog.answer(self.p, qid, "B")
         self.assertEqual(health.answers_undelivered(self.p), [])
@@ -60,7 +60,7 @@ class Health(unittest.TestCase):
         self.assertEqual(len(health.answers_undelivered(self.p)), 1)
 
     def test_live_worktree_is_not_an_orphan(self):
-        backlog.add(self.p, "x", status="ready", criterion="y")
+        backlog.add(self.p, "x", status="ready", criteria="y")
         loop.tick(self.p)
         self.assertEqual(health.orphan_worktrees(self.p), [])
 
@@ -71,7 +71,7 @@ class Health(unittest.TestCase):
         self.assertEqual(json.loads((e.home / "state/ci.json").read_text())["result"], "fail")
 
     def test_stuck_agent(self):
-        iid = backlog.add(self.p, "x", status="ready", criterion="y")
+        iid = backlog.add(self.p, "x", status="ready", criteria="y")
         loop.tick(self.p)
         sid = self.e.issue(iid)["agent"]["session"]
         t = self.e.tmp / "transcripts/proj"
@@ -92,7 +92,7 @@ class Metrics(unittest.TestCase):
         from fm import costs, metrics
 
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, iid, sessions=["s1"])
         d = e.tmp / "transcripts/proj"
         d.mkdir(parents=True)
@@ -120,7 +120,7 @@ class Lessons(unittest.TestCase):
         from fm import loop
 
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         os.environ.update(FM_ISSUE=iid, FM_AGENT="ty-1")
         try:

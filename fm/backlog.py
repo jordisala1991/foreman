@@ -1,11 +1,11 @@
 """The backlog: one `backlog.json` in today's foreman format (schema 5: issues with id XX-n, title, status, detail,
-acceptance {claim, criterion, verdict}, result, priority, relations; decisions for the owner), with the keys the new
+acceptance {claim, criteria, verdict}, result, priority, relations; decisions for the owner), with the keys the new
 model needs. This module is its only writer; every write is under the file lock and atomic.
 
 Statuses, and who moves an issue between them (DESIGN.md has the picture):
   triage       filed by a health check or a source; waits for the owner's «go» (→ backlog or ready)
-  backlog      to define: the loop launches a defining agent
-  refining     a defining agent works on it; it ends with `fm ready` (goal + done criterion)
+  backlog      to plan (it has acceptance criteria): the loop launches a planning agent
+  refining     a planning agent works on it; it ends with `fm ready` (the plan, or «trivial»)
   ready        the loop launches the task's responsible agent
   in progress  the responsible agent works on it; it ends with `fm done`
   in review    in the integration queue: checked (tests, diff, risk); the owner accepts, or the autonomy level does
@@ -53,7 +53,7 @@ class Agent(TypedDict, total=False):
 
 class Acceptance(TypedDict, total=False):
     claim: str
-    criterion: str
+    criteria: str
     verdict: str
 
 
@@ -104,6 +104,10 @@ def load(p: Project) -> Data:
         raise BacklogError(f"{p.backlog_file}: schema {d.get('schema_version')!r}, expected 5")
     for k, v in empty().items():
         d.setdefault(k, v)
+    for i in d["issues"]:  # tasks stored before the rename carry `criterion`
+        acceptance = i.get("acceptance")
+        if acceptance and "criterion" in acceptance:
+            acceptance.setdefault("criteria", acceptance.pop("criterion"))
     return d
 
 
@@ -143,7 +147,7 @@ class NewIssue(TypedDict, total=False):
     """The optional fields of a new issue."""
 
     detail: str
-    criterion: str
+    criteria: str
     claim: str
     source: str | None
     priority: str
@@ -155,12 +159,12 @@ class Question(TypedDict, total=False):
 
 
 def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue]) -> str:
-    detail, criterion, claim = f.get("detail", ""), f.get("criterion", ""), f.get("claim", "")
+    detail, criteria, claim = f.get("detail", ""), f.get("criteria", ""), f.get("claim", "")
     source, priority = f.get("source"), f.get("priority", "none")
     if status not in ("triage", "backlog", "ready"):
         raise BacklogError("a new issue starts in triage, backlog or ready")
-    if status == "ready" and not criterion:
-        raise BacklogError("a ready issue needs a done criterion (--criterion)")
+    if not criteria:
+        status = "triage"  # only a task with acceptance criteria can be let in
     with edit(p) as d:
         if source and any(i.get("source") == source and i["status"] not in CLOSED for i in issues(d)):
             return ""
@@ -174,8 +178,8 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue
             "priority": priority,
             "created": util.now(),
         }
-        if criterion or claim:
-            issue["acceptance"] = {"claim": claim, "criterion": criterion}
+        if criteria or claim:
+            issue["acceptance"] = {"claim": claim, "criteria": criteria}
         if source:
             issue["source"] = source
         d["issues"].append(issue)

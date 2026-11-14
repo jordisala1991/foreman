@@ -11,7 +11,7 @@ GET   /api/state       one project: its issues (closed ones of the last week), o
 GET   /api/issue       one issue: as stored, its events, its questions, its cost, its agent's session state
 GET   /api/system      loop heartbeat, paused, health findings, metrics per issue and their total
 POST  /api/add  /api/answer  /api/allow  /api/deny  /api/accept  /api/reject  /api/go  /api/cancel  /api/unblock
-      /api/pause       (id=..., the text in the body; /api/add takes JSON {title, detail, claim, criterion})
+      /api/pause       (id=..., the text in the body; /api/add takes JSON {title, detail, claim, criteria})
 """
 
 import json

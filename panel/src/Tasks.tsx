@@ -1,5 +1,5 @@
 // The tasks: the backlog grouped by where each task is (what waits for the owner first), each card with its agent and
-// how to open its conversation, and a form to add a task (with a done criterion it starts ready, else to define).
+// how to open its conversation, and a form to add a task (with acceptance criteria it goes to be planned, else it waits in triage).
 import { useState } from "react";
 import { AgentLine, Attach, LoadFailed, Risk, useWrite } from "./cards";
 import { useFeed } from "./feed";
@@ -32,7 +32,7 @@ function TaskCard({ i, asking }: { i: Issue; asking: boolean }) {
           {i.status !== "triage" && i.status !== "backlog" && i.status !== "ready" ? <AgentLine i={i} /> : null}
           {asking ? <div className="line2 warn">{t("has_question")}</div> : null}
           {blocked(i) ? <div className="line2 warn clamp2">{t("blocked_why", { why: i.blocked ?? "" })}</div> : null}
-          {i.status === "ready" && i.acceptance?.criterion ? <div className="line2 clamp2">{i.acceptance.criterion}</div> : null}
+          {i.status === "ready" && i.acceptance?.criteria ? <div className="line2 clamp2">{i.acceptance.criteria}</div> : null}
           {i.status === "refining" || i.status === "in progress" || blocked(i) ? <Attach agent={i.agent} /> : null}
         </>
       )}
@@ -42,12 +42,12 @@ function TaskCard({ i, asking }: { i: Issue; asking: boolean }) {
 
 function AddTask({ p, done }: { p: string; done: () => void }) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ title: "", detail: "", claim: "", criterion: "" });
+  const [f, setF] = useState({ title: "", detail: "", claim: "", criteria: "" });
   const w = useWrite(done);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const add = async () => {
     if (await w.run(`/api/add?p=${enc(p)}`, JSON.stringify(f))) {
-      setF({ title: "", detail: "", claim: "", criterion: "" });
+      setF({ title: "", detail: "", claim: "", criteria: "" });
       setOpen(false);
     }
   };
@@ -62,8 +62,8 @@ function AddTask({ p, done }: { p: string; done: () => void }) {
       <label>{t("f_title")}<input value={f.title} onChange={set("title")} required autoFocus /></label>
       <label>{t("f_detail")}<textarea rows={4} value={f.detail} onChange={set("detail")} /></label>
       <label>{t("f_claim")}<input value={f.claim} onChange={set("claim")} /></label>
-      <label>{t("f_criterion")}<textarea rows={2} value={f.criterion} onChange={set("criterion")} /></label>
-      <p className="note">{t(f.criterion.trim() ? "f_goes_ready" : "f_goes_define")}</p>
+      <label>{t("f_criteria")}<textarea rows={2} value={f.criteria} onChange={set("criteria")} /></label>
+      <p className="note">{t(f.criteria.trim() ? "f_goes_ready" : "f_goes_define")}</p>
       {w.error ? <p className="error" role="alert">{w.error}</p> : null}
       <div className="actions end">
         <button type="button" className="btn ghost" onClick={() => setOpen(false)}>{t("cancel")}</button>

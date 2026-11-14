@@ -26,7 +26,7 @@ class Token(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def launch(self):
-        backlog.add(self.p, "x", status="ready", criterion="y")
+        backlog.add(self.p, "x", status="ready", criteria="y")
         loop.tick(self.p)
         return self.e.calls()[0]["token"]
 

@@ -13,9 +13,9 @@ class Launch(unittest.TestCase):
         self.p = self.e.p
 
     def test_defines_to_define_and_launches_ready_within_the_slots(self):
-        a = backlog.add(self.p, "vague idea")
-        b = backlog.add(self.p, "clear one", status="ready", criterion="tests pass")
-        c = backlog.add(self.p, "another", status="ready", criterion="x")
+        a = backlog.add(self.p, "vague idea", criteria="c")
+        b = backlog.add(self.p, "clear one", status="ready", criteria="tests pass")
+        c = backlog.add(self.p, "another", status="ready", criteria="x")
         t = backlog.add(self.p, "a finding", status="triage")
         loop.tick(self.p)
         self.assertEqual(self.e.issue(b)["status"], "in progress")
@@ -41,8 +41,8 @@ class Launch(unittest.TestCase):
         return out
 
     def run_all_kinds(self, e: Env) -> dict[str, tuple[str, str]]:
-        backlog.add(e.p, "vague idea")
-        w = backlog.add(e.p, "clear one", status="ready", criterion="x")
+        backlog.add(e.p, "vague idea", criteria="c")
+        w = backlog.add(e.p, "clear one", status="ready", criteria="x")
         loop.tick(e.p)
         backlog.set_status(e.p, w, "in review", report={"summary": "s"})
         e.hunt_then_review(w)
@@ -68,7 +68,7 @@ class Launch(unittest.TestCase):
         )
 
     def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self):
-        a = backlog.add(self.p, "vague idea")
+        a = backlog.add(self.p, "vague idea", criteria="c")
         loop.tick(self.p)
         self.assertEqual(self.e.issue(a)["status"], "refining")
         self.assertEqual(os.path.realpath(self.e.calls()[0]["cwd"]), str(self.e.repo))
@@ -76,7 +76,7 @@ class Launch(unittest.TestCase):
         self.assertNotIn("worktree", self.e.issue(a))
 
     def test_paused_launches_nothing(self):
-        backlog.add(self.p, "x", status="ready", criterion="y")
+        backlog.add(self.p, "x", status="ready", criteria="y")
         (self.p.state).mkdir(parents=True, exist_ok=True)
         (self.p.state / "paused").write_text("now")
         loop.tick(self.p)
@@ -86,7 +86,7 @@ class Launch(unittest.TestCase):
 class Answers(unittest.TestCase):
     def test_the_answer_goes_back_to_the_agent_that_asked(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         qid = backlog.ask(e.p, iid, iid.lower(), "A or B?")
         backlog.answer(e.p, qid, "B")
@@ -111,7 +111,7 @@ class Answers(unittest.TestCase):
 
     def delivered_to_idle(self, state, status):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         qid = backlog.ask(e.p, iid, iid.lower(), "A or B?")
         backlog.answer(e.p, qid, "B")
@@ -125,7 +125,7 @@ class Answers(unittest.TestCase):
 class Stopped(unittest.TestCase):
     def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "started": "2000-01-01 00:00:00"})
         e.set_state(iid.lower(), "done")
@@ -141,7 +141,7 @@ class Stopped(unittest.TestCase):
 
 class Queue(unittest.TestCase):
     def deliver(self, e: Env, lines: int = 1, open_findings: int = 0) -> str:
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         wt = e.issue(iid)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
@@ -210,7 +210,7 @@ class Queue(unittest.TestCase):
         (e.repo / "other.py").write_text("x = 1\n")
         git(e.repo, "add", "other.py")
         git(e.repo, "commit", "-qm", "main moves")
-        ready = backlog.add(e.p, "later", status="ready", criterion="z")
+        ready = backlog.add(e.p, "later", status="ready", criteria="z")
         util.BACKGROUND_WAIT_S = 0.2
         self.addCleanup(setattr, util, "BACKGROUND_WAIT_S", 20)
         loop.tick(e.p)
@@ -314,7 +314,7 @@ class Queue(unittest.TestCase):
 
     def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y", detail="DETAIL-OF-THE-TASK")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y", detail="DETAIL-OF-THE-TASK")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         loop.tick(e.p)
@@ -345,7 +345,7 @@ class Queue(unittest.TestCase):
 
     def test_a_finished_hunter_and_a_reviewer_with_a_verdict_are_stopped(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         e.hunt_then_review(iid)
@@ -358,7 +358,7 @@ class Queue(unittest.TestCase):
 
     def test_cancelling_a_task_in_review_stops_every_session_of_it(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         e.hunt_then_review(iid)
@@ -381,7 +381,7 @@ class Queue(unittest.TestCase):
 
     def test_a_blocked_task_still_has_its_finished_hunter_stopped(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         loop.tick(e.p)
@@ -394,7 +394,7 @@ class Queue(unittest.TestCase):
         from unittest import mock
 
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         with mock.patch("fm.sessions.stop", side_effect=proc.ProcError("timed out")):
             integrate.close(e.p, iid, "canceled", "no")
@@ -402,7 +402,7 @@ class Queue(unittest.TestCase):
 
     def test_cancel_stops_a_session_the_listing_does_not_show(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: the agent still runs
         integrate.close(e.p, iid, "canceled", "no")
@@ -410,7 +410,7 @@ class Queue(unittest.TestCase):
 
     def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         loop.tick(e.p)
@@ -422,7 +422,7 @@ class Queue(unittest.TestCase):
 
     def test_a_cancel_stops_each_session_once(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         name = e.issue(iid)["agent"]["name"]
         integrate.close(e.p, iid, "canceled", "no")
@@ -431,7 +431,7 @@ class Queue(unittest.TestCase):
 
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         backlog.set_status(e.p, iid, "in review", report={"summary": "s"})
         loop.tick(e.p)
