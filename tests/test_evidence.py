@@ -244,9 +244,12 @@ class Local(unittest.TestCase):
         (path.parent / tid).mkdir()
         (path.parent / tid / "x.png").write_bytes(PNG)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
+        backlog.update(e.p, tid, pr={"number": 1})  # so the tick reaches the description and its images
         e.review(tid)
         loop.tick(e.p)
         loop.tick(e.p)
+        self.assertTrue(e.task(tid)["pr"].get("described"))
+        self.assertFalse(e.task(tid).get("pr_error"))
         self.assertEqual(git(e.repo, "branch", "--list", "fm-evidence"), "")
         self.assertEqual(pulls.evidence_files(e.p, tid, BODY), {"x.png": path.parent / tid / "x.png"})
         events = [json.loads(x) for x in (e.p.state / "events.jsonl").read_text().splitlines()]
