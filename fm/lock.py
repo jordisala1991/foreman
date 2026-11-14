@@ -67,9 +67,9 @@ class Resource:
         with self._state() as d:
             return {"name": self.name, "slots": self.slots, "held": dict(d["held"]), "queue": list(d["queue"])}
 
-    def acquire(self, who: str, what: str, issue: str = "", say: Callable[[str], object] | None = None) -> tuple[str, float]:
+    def acquire(self, who: str, what: str, task: str = "", say: Callable[[str], object] | None = None) -> tuple[str, float]:
         """Waits for a free slot in arrival order; (slot, seconds waited)."""
-        me = {"who": who, "what": what, "issue": issue, "pid": os.getpid(), "since": util.now(), "t": time.time()}
+        me = {"who": who, "what": what, "task": task, "pid": os.getpid(), "since": util.now(), "t": time.time()}
         with self._state() as d:
             d["queue"].append(me)
         t0, said = time.time(), 0.0
@@ -97,9 +97,9 @@ class Resource:
             if d["held"].get(slot, {}).get("pid") == os.getpid():
                 del d["held"][slot]
 
-    def run(self, who: str, what: str, cmd: list[str], issue: str = "", say: Callable[[str], object] | None = None) -> int:
+    def run(self, who: str, what: str, cmd: list[str], task: str = "", say: Callable[[str], object] | None = None) -> int:
         """Holds the resource while `cmd` runs (FM_SLOT set), stops it at the time limit, always releases."""
-        slot, waited = self.acquire(who, what, issue, say)
+        slot, waited = self.acquire(who, what, task, say)
         t0, rc, event = time.time(), 1, "use"
         try:
             p = subprocess.Popen(cmd, env={**os.environ, "FM_SLOT": slot, "FM_RESOURCE": self.name}, start_new_session=True)
@@ -126,7 +126,7 @@ class Resource:
                     "time": util.now(),
                     "event": event,
                     "who": who,
-                    "issue": issue,
+                    "task": task,
                     "what": what,
                     "slot": slot,
                     "waited_s": round(waited, 1),

@@ -26,7 +26,7 @@ class Local(Provider):
             raise ProviderError(f"the main checkout {self.p.repo} is not on {main}")
         if self.git("status", "--porcelain", "--untracked-files=no").out.strip():
             raise ProviderError(f"the main checkout {self.p.repo} has uncommitted changes")
-        msg = f"Integrate {change['id']}: {change['title']}"
+        msg = f"Merge {change['id']}: {change['title']}"
         if strategy == "squash":
             r = self.git("merge", "--squash", branch, check=False)
             if r.code == 0:

@@ -136,7 +136,7 @@ class Env:
             [agents]
             slots = {slots}
             claude = "{self.bin / "claude"}"
-            [integrate]
+            [merge]
             autonomy = "{autonomy}"
             test = "{test}"
             [health]
@@ -178,32 +178,32 @@ class Env:
         f = self.bin / "agents.json"
         f.write_text(json.dumps([{k: v for k, v in r.items() if k != "pid" or r["name"] != name} for r in json.loads(f.read_text())]))
 
-    def hunter_done(self, iid: str) -> None:
+    def hunter_done(self, tid: str) -> None:
         """The hunter wrote its findings file and ended."""
-        h = self.issue(iid)["hunter"]
+        h = self.task(tid)["hunter"]
         Path(h["file"]).write_text("hunter findings\n")
         self.set_state(h["name"], "done")
 
-    def hunt_then_review(self, iid: str) -> None:
+    def hunt_then_review(self, tid: str) -> None:
         """A tick launches the hunter; it writes its file and ends; the next tick launches the reviewer."""
         from fm import loop
 
         loop.tick(self.p)
-        self.hunter_done(iid)
+        self.hunter_done(tid)
         loop.tick(self.p)
 
-    def review(self, iid: str, open_findings: int = 0) -> None:
+    def review(self, tid: str, open_findings: int = 0) -> None:
         """One tick launches the hunter, which writes its file; the next the reviewer; then its verdict, as `fm verdict` gives it."""
-        self.hunt_then_review(iid)
-        self.verdict(iid, open_findings)
+        self.hunt_then_review(tid)
+        self.verdict(tid, open_findings)
 
-    def verdict(self, iid: str, open_findings: int = 0) -> None:
+    def verdict(self, tid: str, open_findings: int = 0) -> None:
         """The reviewer's verdict, as `fm verdict` gives it."""
-        os.environ["FM_ISSUE"] = iid
+        os.environ["FM_TASK"] = tid
         try:
-            fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{iid}.md"))
+            fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{tid}.md"))
         finally:
-            os.environ.pop("FM_ISSUE")
+            os.environ.pop("FM_TASK")
 
-    def issue(self, iid: str) -> dict:
-        return backlog.get(backlog.load(self.p), iid)
+    def task(self, tid: str) -> dict:
+        return backlog.get(backlog.load(self.p), tid)

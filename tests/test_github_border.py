@@ -1,4 +1,4 @@
-"""The typed border of what gh answers."""
+"""The typed border of what gh answers, and the provider choice."""
 
 import unittest
 
@@ -7,6 +7,27 @@ from test_github import GH
 
 from fm import providers
 from fm.providers import github, registry
+
+
+class Provider(unittest.TestCase):
+    def test_provider_is_detected_from_origin_and_can_be_overridden(self):
+        e = Env()
+        self.assertEqual(registry.get(e.p).name, "local")
+        git(e.repo, "remote", "add", "origin", "git@github.com:o/r.git")
+        self.assertEqual(registry.get(e.p).name, "github")
+        git(e.repo, "remote", "set-url", "origin", "https://gitlab.com/o/r.git")
+        self.assertEqual(registry.get(e.p).name, "local")
+        git(e.repo, "remote", "set-url", "origin", "https://github.com/o/r.git")
+        e.p.cfg["merge"]["provider"] = "local"
+        self.assertEqual(registry.get(e.p).name, "local")
+
+    def test_local_has_no_rebase_github_has(self):
+        e = Env()
+        e.p.cfg["merge"]["strategy"] = "rebase"
+        with self.assertRaises(providers.ConfigError):
+            registry.get(e.p)
+        e.p.cfg["merge"]["provider"] = "github"
+        self.assertEqual(registry.get(e.p).name, "github")
 
 
 class Border(unittest.TestCase):
@@ -54,24 +75,3 @@ class Border(unittest.TestCase):
         g.set(prs={"1": {"draft": False, "state": "OPEN", "comments": []}}, bad_view=True)
         with self.assertRaises(providers.ProviderError):
             registry.get(g.e.p).state({"pr": 1})
-
-
-class Provider(unittest.TestCase):
-    def test_provider_is_detected_from_origin_and_can_be_overridden(self):
-        e = Env()
-        self.assertEqual(registry.get(e.p).name, "local")
-        git(e.repo, "remote", "add", "origin", "git@github.com:o/r.git")
-        self.assertEqual(registry.get(e.p).name, "github")
-        git(e.repo, "remote", "set-url", "origin", "https://gitlab.com/o/r.git")
-        self.assertEqual(registry.get(e.p).name, "local")
-        git(e.repo, "remote", "set-url", "origin", "https://github.com/o/r.git")
-        e.p.cfg["integrate"]["provider"] = "local"
-        self.assertEqual(registry.get(e.p).name, "local")
-
-    def test_local_has_no_rebase_github_has(self):
-        e = Env()
-        e.p.cfg["integrate"]["merge"] = "rebase"
-        with self.assertRaises(providers.ConfigError):
-            registry.get(e.p)
-        e.p.cfg["integrate"]["provider"] = "github"
-        self.assertEqual(registry.get(e.p).name, "github")

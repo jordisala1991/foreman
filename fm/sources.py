@@ -1,12 +1,12 @@
 """Signals from tools (CI, an error log, a pull request's activity) become backlog or reach it through small plug-in
 sources: each executable in `<home>/sources/` is run every tick with FM_CURSOR (the last cursor it printed, or empty)
 and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has a "key" (deduplication):
-  - without "task": `{"key", "title", "detail"}` files a `triage` issue (the owner lets it in), deduplicated by
+  - without "task": `{"key", "title", "detail"}` files a `triage` task (the owner lets it in), deduplicated by
     source and key. For what has no task yet: CI failing on main, an error log.
-  - with "task" (an issue id): `{"key", "task", "action", "text"}` acts on that open task, with the owner's own
+  - with "task" (a task id): `{"key", "task", "action", "text"}` acts on that open task, with the owner's own
     commands: note (text reaches its agent like an answer), reject (text; `fm reject`), accept (`fm accept`),
     done (closed as done: merged outside fm), cancel (`fm cancel`; text is the reason). A review on a task's own
-    change targets that task; it is not a new issue. Applied once per source and key (`state/applied/`); an unknown
+    change targets that task; it is not a new task. Applied once per source and key (`state/applied/`); an unknown
     or closed task, an unknown action, a missing key or one not valid for the task's state changes nothing and is logged
     in `state/errors.jsonl` (and is not retried); a transient failure (accept before its check, a busy checkout, a
     hung stop) is logged and the same key is tried again next tick. None is shipped yet: the contract is the point; the health checks (health.py) are the
@@ -17,9 +17,9 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import backlog, integrate, proc, util
+from . import backlog, delivery, proc, util
 from .config import Project
-from .talk import send_back
+from .talk import return_to_agent
 
 
 def run(p: Project) -> list[str]:
@@ -34,7 +34,7 @@ def run(p: Project) -> list[str]:
 
 
 def _poll(p: Project, exe: Path) -> list[str]:
-    """Runs one source once: its signals are handled in order; the ids of the triage issues it filed."""
+    """Runs one source once: its signals are handled in order; the ids of the triage tasks it filed."""
     cursor_file = p.state / "cursors" / exe.name
     cursor = cursor_file.read_text().strip() if cursor_file.exists() else ""
     try:
@@ -43,11 +43,11 @@ def _poll(p: Project, exe: Path) -> list[str]:
         util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": str(e)})
         return []
     ids = (_signal(p, exe.name, ln, cursor_file) for ln in r.out.splitlines())
-    return [iid for iid in ids if iid]
+    return [tid for tid in ids if tid]
 
 
 def _signal(p: Project, name: str, ln: str, cursor_file: Path) -> str | None:
-    """One line of a source's output; the id of the issue it filed, if it filed one."""
+    """One line of a source's output; the id of the task it filed, if it filed one."""
     try:
         s = util.json_object(json.loads(ln))
     except ValueError:
@@ -98,27 +98,27 @@ ACTIONS = ("note", "reject", "accept", "done", "cancel")
 
 def apply(p: Project, source: str, s: dict[str, Any]) -> None:
     """One signal on a task, through the owner's command path. Raises when it is not valid: nothing changed."""
-    iid, action, text = str(s["task"]), s.get("action"), str(s.get("text") or "")
-    i = backlog.get(backlog.load(p), iid)
+    tid, action, text = str(s["task"]), s.get("action"), str(s.get("text") or "")
+    i = backlog.get(backlog.load(p), tid)
     status = i["status"]
     if action not in ACTIONS:
-        raise ValueError(f"{iid}: unknown action {action!r}")
+        raise ValueError(f"{tid}: unknown action {action!r}")
     if status in backlog.CLOSED:
-        raise ValueError(f"{iid} is {status}: closed")
+        raise ValueError(f"{tid} is {status}: closed")
     if action in ("note", "reject") and not text:
-        raise ValueError(f"{iid}: {action} needs text")
+        raise ValueError(f"{tid}: {action} needs text")
     if action == "note":
         if status not in (*backlog.RUNNING, "in review"):
-            raise ValueError(f"{iid} is {status}: no agent to tell")
-        backlog.note(p, iid, text, source)
+            raise ValueError(f"{tid} is {status}: no agent to tell")
+        backlog.note(p, tid, text, source)
     elif action in ("reject", "accept"):
         if status != "in review":
-            raise ValueError(f"{iid} is {status}, not in the integration queue")
+            raise ValueError(f"{tid} is {status}, not in review")
         if action == "reject":
-            send_back(p, iid, "rejection", text)
+            return_to_agent(p, tid, "rejection", text)
         else:
-            integrate.accept(p, iid, by=source)
+            delivery.accept(p, tid, by=source)
     elif action == "done":
-        integrate.close(p, iid, "done", text or f"merged outside fm ({source})")
+        delivery.close(p, tid, "done", text or f"merged outside fm ({source})")
     else:
-        integrate.close(p, iid, "canceled", text or f"by {source}")
+        delivery.close(p, tid, "canceled", text or f"by {source}")

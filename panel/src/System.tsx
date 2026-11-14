@@ -1,21 +1,21 @@
 // The system watching itself: the loop's heartbeat and the pause switch, the health findings (each new one is filed
-// as a triage task), and per task what it cost and how it went (fm.metrics.per_issue), with the total.
+// as a triage task), and per task what it cost and how it went (fm.metrics.per_task), with the total.
 import { LoadFailed, Risk, useWrite } from "./cards";
 import { reloadAll, useFeed } from "./feed";
 import { ScreenHead } from "./head";
-import { enc, t, usd2, when, type Key, type Product, type SystemAnswer } from "./lib";
+import { enc, t, usd2, when, type Key, type Project, type SystemAnswer } from "./lib";
 
 const n0 = (x: number | null): string => (x === null ? "—" : String(Math.round(x)));
 
-export function System({ product }: { product: Product }) {
-  const path = `/api/system?p=${enc(product.name)}`;
+export function System({ project }: { project: Project }) {
+  const path = `/api/system?p=${enc(project.name)}`;
   const s = useFeed<SystemAnswer>(path, 30_000);
   const w = useWrite(() => reloadAll([path, "/api/projects"]));
   const d = s.data;
   const misled = (d?.metrics ?? []).filter((r) => r.confused && !["none", "nothing", "-"].includes(r.confused.trim().toLowerCase()));
   return (
     <div className="screen system">
-      <ScreenHead title={t("tab_system")} product={product} />
+      <ScreenHead title={t("tab_system")} project={project} />
       {!d && !s.failed ? <div className="card quiet">{t("loading")}</div> : null}
       {s.failed && !d ? <LoadFailed retry={s.reload} /> : null}
       {d ? (
@@ -29,7 +29,7 @@ export function System({ product }: { product: Product }) {
                 {d.paused ? <div className="sub warn">{t("paused_since", { when: when(d.paused) })}</div> : null}
               </div>
               <button type="button" className={d.paused ? "btn primary small-btn" : "btn small-btn"} disabled={w.busy}
-                onClick={() => void w.run(`/api/pause?p=${enc(product.name)}&on=${d.paused ? "0" : "1"}`)}>
+                onClick={() => void w.run(`/api/pause?p=${enc(project.name)}&on=${d.paused ? "0" : "1"}`)}>
                 {t(d.paused ? "resume" : "pause")}
               </button>
             </div>
@@ -47,7 +47,7 @@ export function System({ product }: { product: Product }) {
                   {Object.entries(l.held).map(([slot, h]) => (
                     <p key={slot}>
                       {l.slots.length > 1 ? `${slot}: ` : ""}
-                      <strong>{h.who}</strong> {h.issue ? `(${h.issue}) ` : ""}· {h.what} · {t("lock_since", { when: h.since.slice(11, 16) })}
+                      <strong>{h.who}</strong> {h.task ? `(${h.task}) ` : ""}· {h.what} · {t("lock_since", { when: h.since.slice(11, 16) })}
                     </p>
                   ))}
                   {l.queue.map((q, n) => (
@@ -88,7 +88,7 @@ export function System({ product }: { product: Product }) {
                 <tbody>
                   {d.metrics.map((r) => (
                     <tr key={r.id}>
-                      <td><a href={`#/issue/${r.id}`} className="mono">{r.id}</a> <span className="tt">{r.title}</span></td>
+                      <td><a href={`#/task/${r.id}`} className="mono">{r.id}</a> <span className="tt">{r.title}</span></td>
                       <td>{t(`st_${r.status.replace(" ", "_")}` as Key)}</td>
                       <td className="num">{usd2(r.usd)}</td>
                       <td className="num">{n0(r.to_done_min ?? r.to_review_min)}</td>
