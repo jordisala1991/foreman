@@ -32,12 +32,11 @@ class PanelTest(unittest.TestCase):
         util.write_json(home / "backlog.json", backlog.empty())
         register(home)
         self.p = Project.load(home)
-        self.triage = backlog.add(self.p, "A health finding", status="triage", criterion="it is gone")
-        self.work = backlog.add(self.p, "Some work", status="ready", criterion="it works")
+        self.triage = backlog.add(self.p, "A health finding", status="triage", criteria="it is gone")
+        self.work = backlog.add(self.p, "Some work", status="ready", criteria="it works")
         backlog.set_status(self.p, self.work, "in progress", agent={"name": "de-2", "short": "abc123"})
         self.qid = backlog.ask(self.p, self.work, "de-2", "Which colour?")
         self.perm = backlog.ask(self.p, self.work, "de-2", "push the tag", kind="permission", action="publish")
-        panel.forget()
         self.srv, self.key = panel.make_server(0, token="test-key")
         self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
@@ -63,16 +62,16 @@ class PanelTest(unittest.TestCase):
             with e:
                 return e.code, e.read().decode()
 
-    def test_issue_view_carries_the_description(self) -> None:
+    def test_task_view_carries_the_description(self) -> None:
         report = Path(self.tmp.name) / "r.md"
         report.write_text("Did X")
         done = {"summary": "s", "confused": "", "file": str(report)}
         backlog.set_status(self.p, self.work, "in review", report=done, check={"head": "0123456789abcdef", "at": "then"})
-        _, data = self.call(f"/api/issue?p=demo&id={self.work}")
-        self.assertIn("Did X", data["issue"]["description"])
-        self.assertIn("012345678", data["issue"]["description"])
-        _, other = self.call(f"/api/issue?p=demo&id={self.triage}")
-        self.assertNotIn("description", other["issue"])
+        _, data = self.call(f"/api/task?p=demo&id={self.work}")
+        self.assertIn("Did X", data["task"]["description"])
+        self.assertIn("012345678", data["task"]["description"])
+        _, other = self.call(f"/api/task?p=demo&id={self.triage}")
+        self.assertNotIn("description", other["task"])
 
     def test_key_required(self) -> None:
         self.assertEqual(self.call("/api/state", key=False)[0], 403)
@@ -85,14 +84,14 @@ class PanelTest(unittest.TestCase):
         code, d = self.call("/api/projects")
         self.assertEqual(code, 200)
         self.assertEqual(d["projects"][0]["name"], "demo")
-        self.assertEqual(d["projects"][0]["needs"], 3)  # two open questions and the triage issue
+        self.assertEqual(d["projects"][0]["needs"], 3)  # two open questions and the triage task
         code, d = self.call("/api/state?p=demo")
         self.assertEqual(code, 200)
-        self.assertEqual({i["id"] for i in d["issues"]}, {self.triage, self.work})
+        self.assertEqual({i["id"] for i in d["tasks"]}, {self.triage, self.work})
         self.assertEqual([q["id"] for q in d["questions"]], [self.qid, self.perm])
-        code, d = self.call(f"/api/issue?p=demo&id={self.work}")
+        code, d = self.call(f"/api/task?p=demo&id={self.work}")
         self.assertEqual(code, 200)
-        self.assertEqual(d["issue"]["agent"]["short"], "abc123")
+        self.assertEqual(d["task"]["agent"]["short"], "abc123")
         self.assertTrue(any("asks the owner" in e["text"] for e in d["events"]))
         code, d = self.call("/api/system?p=demo")
         self.assertEqual(code, 200)
@@ -110,16 +109,16 @@ class PanelTest(unittest.TestCase):
         self.assertEqual(self.call(f"/api/answer?p=demo&id={quote(self.perm)}", "yes")[0], 409)  # a permission: allow/deny
         code, _ = self.call(f"/api/go?p=demo&id={self.triage}", "")
         self.assertEqual(code, 200)
-        self.assertEqual(backlog.get(backlog.load(self.p), self.triage)["status"], "ready")  # it had a criterion
+        self.assertEqual(backlog.get(backlog.load(self.p), self.triage)["status"], "backlog")  # it had criteria: planned first
         self.assertEqual(self.call(f"/api/go?p=demo&id={self.triage}", "")[0], 409)  # no longer in triage
 
     def test_allow_add_pause(self) -> None:
         self.assertEqual(self.call(f"/api/allow?p=demo&id={quote(self.perm)}", "")[0], 200)
         grants = util.read_json(self.p.state / "grants.json", [])
-        self.assertEqual([(g["issue"], g["action"]) for g in grants], [(self.work, "publish")])
-        code, d = self.call("/api/add?p=demo", json.dumps({"title": "New", "criterion": "done"}))
+        self.assertEqual([(g["task"], g["action"]) for g in grants], [(self.work, "publish")])
+        code, d = self.call("/api/add?p=demo", json.dumps({"title": "New", "criteria": "done"}))
         self.assertEqual(code, 200)
-        self.assertEqual(backlog.get(backlog.load(self.p), d["id"])["status"], "ready")
+        self.assertEqual(backlog.get(backlog.load(self.p), d["id"])["status"], "backlog")
         self.assertEqual(self.call("/api/pause?p=demo&on=1", "")[0], 200)
         self.assertTrue((self.p.state / "paused").exists())
         evil = {"Origin": "http://127.0.0.1:1"}

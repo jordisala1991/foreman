@@ -51,7 +51,7 @@ export interface Loop {
   time: string | null;
   alive: boolean;
 }
-export interface Product {
+export interface Project {
   name: string;
   paused?: string | null;
   loop?: Loop;
@@ -60,13 +60,13 @@ export interface Product {
   broken?: string;
 }
 export interface Projects {
-  projects: Product[];
+  projects: Project[];
 }
 export interface Agent {
   name: string;
   short?: string;
   session?: string | null;
-  kind?: "define" | "work";
+  kind?: "planning" | "responsible";
   model?: string;
   started?: string;
 }
@@ -79,7 +79,7 @@ export interface Check {
   reasons: string[];
   at?: string;
 }
-export interface Issue {
+export interface Task {
   id: string;
   title: string;
   status: string;
@@ -88,7 +88,7 @@ export interface Issue {
   blocked?: string;
   created?: string;
   closed?: string;
-  acceptance?: { claim?: string; criterion?: string; verdict?: string };
+  acceptance?: { goal?: string; criteria?: string; verdict?: string };
   agent?: Agent;
   agent_state?: string | null; // working | done | stopped | gone
   description?: string;
@@ -103,7 +103,7 @@ export interface Issue {
 }
 export interface Question {
   id: string;
-  issue: string;
+  task: string;
   agent?: string;
   title: string;
   text: string;
@@ -116,19 +116,19 @@ export interface Question {
 }
 export interface Event {
   time: string;
-  issue: string | null;
+  task: string | null;
   text: string;
 }
 export interface State {
   name: string;
   paused: string | null;
   loop: Loop;
-  issues: Issue[];
+  tasks: Task[];
   questions: Question[];
   events: Event[];
 }
-export interface IssueAnswer {
-  issue: Issue;
+export interface TaskAnswer {
+  task: Task;
   events: Event[];
   questions: Question[];
   cost: { usd: number; minutes: number };
@@ -163,7 +163,7 @@ export interface SystemAnswer {
 }
 export interface LockUser {
   who: string;
-  issue: string;
+  task: string;
   what: string;
   since: string;
 }
@@ -175,4 +175,4 @@ export interface LockStatus {
 }
 
 export const stateUrl = (p: string): string => `/api/state?p=${enc(p)}`;
-export const blocked = (i: Issue): boolean => !!i.blocked && !["done", "canceled", "duplicate"].includes(i.status);
+export const blocked = (i: Task): boolean => !!i.blocked && !["done", "canceled", "duplicate"].includes(i.status);

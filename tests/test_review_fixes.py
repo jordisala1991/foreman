@@ -1,4 +1,4 @@
-"""One test per defect found by the code review (2026-11-08)."""
+"""One test per defect found by the review of 2026-11-08."""
 
 import os
 import unittest
@@ -34,66 +34,66 @@ class GuardFalsePositives(unittest.TestCase):
 class TestsRunOnTheCommit(unittest.TestCase):
     def test_an_uncommitted_file_cannot_make_the_tests_pass(self):
         e = Env(test="python3 -c 'import helper'", autonomy="low")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        wt = Path(e.issue(iid)["worktree"])
+        wt = Path(e.task(tid)["worktree"])
         (wt / "app.py").write_text("import helper\n")
         (wt / "helper.py").write_text("")  # never committed
         git(wt, "commit", "-qam", "uses helper")
-        backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
-        e.review(iid)
+        backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+        e.review(tid)
         loop.tick(e.p)
-        self.assertEqual((e.issue(iid)["status"], e.issue(iid)["check"]["tests"]), ("in review", "fail"))
+        self.assertEqual((e.task(tid)["status"], e.task(tid)["check"]["tests"]), ("in review", "fail"))
 
 
 class Sessions(unittest.TestCase):
     def test_a_session_not_listed_at_launch_gets_its_id_later_and_is_not_blocked(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        a = e.issue(iid)["agent"]
-        backlog.update(e.p, iid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"}, sessions=[])
+        a = e.task(tid)["agent"]
+        backlog.update(e.p, tid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"}, sessions=[])
         loop.tick(e.p)
-        i = e.issue(iid)
+        i = e.task(tid)
         self.assertEqual((i["agent"]["session"], i.get("blocked")), (a["session"], ""))
 
 
 class Isolation(unittest.TestCase):
-    def test_one_broken_queued_issue_does_not_stop_the_others(self):
+    def test_one_broken_queued_task_does_not_stop_the_others(self):
         e = Env(test="true", autonomy="low")
-        ids = [backlog.add(e.p, f"x{n}", status="ready", criterion="y") for n in range(2)]
+        ids = [backlog.add(e.p, f"x{n}", status="ready", criteria="y") for n in range(2)]
         loop.tick(e.p)
-        for iid in ids:
-            wt = Path(e.issue(iid)["worktree"])
-            (wt / f"{iid}.txt").write_text("x\n")
+        for tid in ids:
+            wt = Path(e.task(tid)["worktree"])
+            (wt / f"{tid}.txt").write_text("x\n")
             git(wt, "add", "-A")
             git(wt, "commit", "-qm", "c")
-            backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
+            backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
         loop.tick(e.p)  # both hunters start (two slots)
-        for iid in ids:
-            e.hunter_done(iid)
+        for tid in ids:
+            e.hunter_done(tid)
         loop.tick(e.p)  # then both reviewers
-        for iid in ids:
-            os.environ["FM_ISSUE"] = iid
+        for tid in ids:
+            os.environ["FM_TASK"] = tid
             fm(e.home, "verdict", "--open", "0", "--file", "r.md")
-        os.environ.pop("FM_ISSUE")
+        os.environ.pop("FM_TASK")
         backlog.update(e.p, ids[0], branch="no/such-branch")
         loop.tick(e.p)
-        self.assertIn("could not check", e.issue(ids[0])["blocked"])
-        self.assertEqual(e.issue(ids[1])["status"], "done")
+        self.assertIn("could not check", e.task(ids[0])["blocked"])
+        self.assertEqual(e.task(ids[1])["status"], "done")
 
 
 class Closed(unittest.TestCase):
     def test_cancel_closes_the_questions_and_no_answer_reaches_the_cancelled_agent(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        backlog.ask(e.p, iid, iid.lower(), "A or B?")
-        fm(e.home, "cancel", iid)
+        backlog.ask(e.p, tid, tid.lower(), "A or B?")
+        fm(e.home, "cancel", tid)
         d = backlog.load(e.p)
         self.assertEqual(backlog.open_questions(d), [])
-        self.assertFalse(Path(e.issue(iid)["worktree"]).exists())
-        e.set_state(iid.lower(), "done")
+        self.assertFalse(Path(e.task(tid)["worktree"]).exists())
+        e.set_state(tid.lower(), "done")
         loop.tick(e.p)
         self.assertEqual(len(e.calls()), 1)  # only the launch
 
@@ -101,30 +101,30 @@ class Closed(unittest.TestCase):
 class Orphans(unittest.TestCase):
     def test_a_ready_task_with_its_worktree_is_not_an_orphan(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         fm(e.home, "pause")
-        backlog.set_status(e.p, iid, "ready", "relaunch")
+        backlog.set_status(e.p, tid, "ready", "relaunch")
         self.assertEqual(health.orphan_worktrees(e.p), [])
 
 
 class LaunchRace(unittest.TestCase):
     def test_a_task_cancelled_while_its_session_starts_stays_cancelled(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         real = loop.sessions.start
 
         def start_and_cancel(*a, **k):
             r = real(*a, **k)
-            backlog.set_status(e.p, iid, "canceled", "owner")
+            backlog.set_status(e.p, tid, "canceled", "owner")
             return r
 
         loop.sessions.start = start_and_cancel
         try:
-            agents.launch(e.p, e.issue(iid))
+            agents.launch(e.p, e.task(tid))
         finally:
             loop.sessions.start = real
-        self.assertEqual(e.issue(iid)["status"], "canceled")
+        self.assertEqual(e.task(tid)["status"], "canceled")
 
     def test_only_one_loop_per_registry(self):
         import fcntl
@@ -152,20 +152,20 @@ if __name__ == "__main__":
 
 
 class ReviewerSeesOwnerNotes(unittest.TestCase):
-    def brief(self, e: Env, iid: str) -> str:
-        return agents.brief(e.p, e.issue(iid), "reviewer")
+    def brief(self, e: Env, tid: str) -> str:
+        return agents.brief(e.p, e.task(tid), "reviewer")
 
     def test_every_owner_note_of_the_task_reaches_the_reviewer_oldest_first_with_its_time(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
-        other = backlog.add(e.p, "z", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        other = backlog.add(e.p, "z", status="ready", criteria="y")
         loop.tick(e.p)
-        loop.send_back(e.p, iid, "rejection", "FIRSTNOTE use B")
-        loop.send_back(e.p, iid, "review", "REVIEWFIX")
-        loop.send_back(e.p, iid, "conflict", "CONFLICTFIX")
-        loop.send_back(e.p, iid, "rejection", "SECONDNOTE actually C")
-        loop.send_back(e.p, other, "rejection", "OTHERTASK")
-        text = self.brief(e, iid)
+        loop.return_to_agent(e.p, tid, "rejection", "FIRSTNOTE use B")
+        loop.return_to_agent(e.p, tid, "review", "REVIEWFIX")
+        loop.return_to_agent(e.p, tid, "conflict", "CONFLICTFIX")
+        loop.return_to_agent(e.p, tid, "rejection", "SECONDNOTE actually C")
+        loop.return_to_agent(e.p, other, "rejection", "OTHERTASK")
+        text = self.brief(e, tid)
         self.assertLess(text.index("FIRSTNOTE"), text.index("SECONDNOTE"))
         for gone in ("REVIEWFIX", "CONFLICTFIX", "OTHERTASK"):
             self.assertNotIn(gone, text)
@@ -174,8 +174,8 @@ class ReviewerSeesOwnerNotes(unittest.TestCase):
 
     def test_no_owner_notes_no_section(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        loop.send_back(e.p, iid, "review", "REVIEWFIX")
-        self.assertEqual(agents.owner_notes_section(e.p, iid), "")
-        self.assertNotIn("owner's notes", self.brief(e, iid))
+        loop.return_to_agent(e.p, tid, "review", "REVIEWFIX")
+        self.assertEqual(agents.owner_notes_section(e.p, tid), "")
+        self.assertNotIn("owner's notes", self.brief(e, tid))

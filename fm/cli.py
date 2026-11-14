@@ -1,4 +1,4 @@
-"""`fm`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their issue comes from FM_ISSUE);
+"""`fm`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their task comes from FM_TASK);
 the owner and the panel use the rest; launchd runs `fm loop`; Claude Code runs `fm guard` as the agents' hook."""
 
 import argparse
@@ -7,9 +7,10 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
-from . import agents, backlog, guard, health, integrate, lock, loop, metrics, providers, sessions, token, util
-from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_ready, cmd_verdict
+from . import agents, backlog, blockers, delivery, editing, guard, health, lock, loop, metrics, providers, sessions, subtasks, token, util
+from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
 from .config import Project, register
@@ -22,8 +23,8 @@ def cmd_init(a: argparse.Namespace) -> None:
         (h / "fm.toml").write_text(
             f'[project]\nname = "{h.name}"\nprefix = "{a.prefix}"\nrepo = "{a.repo}"\nmain = "main"\n\n'
             '[agents]\nslots = 2\nmodel = "sonnet"\neffort = "medium"\n'
-            'define_model = "sonnet"\ndefine_effort = "high"\nreview_model = "sonnet"\nreview_effort = "high"\n\n'
-            '[integrate]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nmerge = "squash"  # squash | merge\ntest = ""\n',
+            'planning_model = "sonnet"\nplanning_effort = "high"\nreview_model = "sonnet"\nreview_effort = "high"\n\n'
+            '[merge]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nstrategy = "squash"  # squash | merge\ntest = ""\n',
             encoding="utf-8",
         )
     p = Project.load(h)
@@ -36,27 +37,76 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "ready" if a.ready else "triage" if a.triage else "backlog"
-    iid = backlog.add(p, a.title, detail=a.detail or "", status=status, criterion=a.criterion or "", claim=a.claim or "", priority=a.priority)
-    print(iid)
+    status = "triage" if a.triage else "backlog"
+    if a.parent and os.environ.get("FM_TASK"):
+        sys.exit("fm: subtasks are filed by the owner, not from an agent's session")
+    tasks = backlog.tasks(backlog.load(p))
+    ids = blockers.ids(a.blocked_by or [])
+    if why := (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids):
+        sys.exit(f"fm: {why}")
+    tid = backlog.add(
+        p,
+        a.title,
+        detail=a.detail or "",
+        status=status,
+        criteria=a.criteria or "",
+        goal=a.goal or "",
+        priority=a.priority,
+        parent=a.parent or "",
+        blocked_by=ids,
+        model=a.model or "",
+        effort=a.effort or "",
+    )
+    print(tid)
+
+
+def cmd_edit(a: argparse.Namespace) -> None:
+    if os.environ.get("FM_TASK"):
+        sys.exit("fm: tasks are edited by the owner, not from an agent's session")
+    p = home(a)
+    fields: dict[str, Any] = {f: v for f in editing.FIELDS if (v := getattr(a, f))}
+    if a.blocked_by:
+        fields["blocked_by"] = blockers.ids(a.blocked_by)
+    with backlog.edit(p) as d:
+        i = backlog.get(d, a.id)
+        if why := editing.refusal(i, fields, backlog.tasks(d)):
+            sys.exit(f"fm: {why}")
+        old = dict(i)
+        new = editing.edited(i, fields)
+        i.clear()
+        i.update(new)
+    reset = old["status"] != new["status"] or ("plan_file" in old and "plan_file" not in new)
+    backlog.event(p, a.id, "edited by the owner: " + ", ".join(fields) + ("; plan dropped, back to backlog" if reset else ""))
+    after = "; it stays blocked until fm unblock" if new.get("blocked") else "; it will be planned again"
+    print(f"{a.id} edited" + (after if reset else ""))
 
 
 def cmd_list(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
-    for i in backlog.issues(d):
+    all_ = backlog.tasks(d)
+    status = {i["id"]: i["status"] for i in all_}
+    for i in subtasks.ordered(all_):
         if i["status"] in backlog.CLOSED and not a.all:
             continue
         agent: backlog.Agent = i.get("agent") or {}
         ag = agent.get("name", "")
-        print(f"{i['id']:8} {i['status']:12} {ag:14} {i['title']}" + (f"  [blocked: {i['blocked']}]" if i.get("blocked") else ""))
+        title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
+        note = (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
+        print(f"{i['id']:8} {i['status']:12} {ag:14} {title}{note}")
     for q in backlog.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
 
 
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
-    print(json.dumps(backlog.get(backlog.load(p), a.id), indent=2, ensure_ascii=False))
+    d = backlog.load(p)
+    i = backlog.get(d, a.id)
+    if wait := blockers.pending(i, backlog.tasks(d)):
+        i = {**i, "waiting_for": wait}
+    if subs := subtasks.of(backlog.tasks(d), a.id):
+        i = {**i, "subtasks": [{"id": s["id"], "status": s["status"], "title": s["title"]} for s in subs]}
+    print(json.dumps(i, indent=2, ensure_ascii=False))
 
 
 # --- the owner's side ---------------------------------------------------------------------------------------------
@@ -74,7 +124,7 @@ def cmd_allow(a: argparse.Namespace, allowed: bool = True) -> None:
     if not q or q.get("kind") != "permission":
         sys.exit(f"fm: {a.qid} is not an open permission request")
     if allowed:
-        guard.grant(p, q["issue"], q["action"])
+        guard.grant(p, q["task"], q["action"])
     backlog.answer(p, a.qid, a.text or ("allowed once" if allowed else "not allowed"))
     with backlog.edit(p) as d:
         next(x for x in d["decisions_resolved"] if x["id"] == a.qid)["allowed"] = allowed
@@ -83,17 +133,17 @@ def cmd_allow(a: argparse.Namespace, allowed: bool = True) -> None:
 def cmd_accept(a: argparse.Namespace) -> None:
     p = home(a)
     try:
-        integrate.accept(p, a.id)
+        delivery.accept(p, a.id)
         print(f"{a.id} accepted: the loop merges it next")
-    except (integrate.IntegrateError, providers.ConfigError) as e:
+    except (delivery.DeliveryError, providers.ConfigError) as e:
         sys.exit(f"fm: {e}")
 
 
 def cmd_reject(a: argparse.Namespace) -> None:
     p = home(a)
     if backlog.get(backlog.load(p), a.id)["status"] != "in review":
-        sys.exit(f"fm: {a.id} is not in the integration queue")
-    loop.send_back(p, a.id, "rejection", a.note)
+        sys.exit(f"fm: {a.id} is not in review")
+    loop.return_to_agent(p, a.id, "rejection", a.note)
 
 
 def cmd_review(a: argparse.Namespace) -> None:
@@ -101,7 +151,7 @@ def cmd_review(a: argparse.Namespace) -> None:
     with backlog.edit(p) as d:
         i = backlog.get(d, a.id)
         if i["status"] != "in review":
-            sys.exit(f"fm: {a.id} is not in the integration queue")
+            sys.exit(f"fm: {a.id} is not in review")
         if i.get("accepted"):
             sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
         if agents.review_running(i):
@@ -118,14 +168,15 @@ def cmd_go(a: argparse.Namespace) -> None:
     p = home(a)
     i = backlog.get(backlog.load(p), a.id)
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
-    status = "ready" if acceptance.get("criterion") else "backlog"
-    backlog.set_status(p, a.id, status, "let in by the owner", blocked="")
+    if not acceptance.get("criteria"):
+        sys.exit(f"fm: {a.id}: define its acceptance criteria with the owner first")
+    backlog.set_status(p, a.id, "backlog", "let in by the owner", blocked="")
 
 
 def cmd_cancel(a: argparse.Namespace) -> None:
     try:
-        integrate.close(home(a), a.id, "canceled", a.why or "by the owner")
-    except integrate.IntegrateError as e:
+        delivery.close(home(a), a.id, "canceled", a.why or "by the owner")
+    except delivery.DeliveryError as e:
         sys.exit(f"fm: {e}")
 
 
@@ -155,11 +206,11 @@ def cmd_health(a: argparse.Namespace) -> None:
     p = home(a)
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
-        print(f"! {f['title']}: {f['detail'].splitlines()[0] if f['detail'] else ''}")
+        print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
 
 
 def cmd_metrics(a: argparse.Namespace) -> None:
-    rows = metrics.per_issue(home(a))
+    rows = metrics.per_task(home(a))
     print(metrics.text(rows))
 
 
@@ -178,16 +229,16 @@ def cmd_lock(a: argparse.Namespace) -> None:
     if a.action == "status":
         s = r.status()
         for slot, h in s["held"].items():
-            print(f"{slot}: {h['who']} ({h['issue'] or '-'}): {h['what']} since {h['since']}")
+            print(f"{slot}: {h['who']} ({h['task'] or '-'}): {h['what']} since {h['since']}")
         for t in s["queue"]:
-            print(f"queued: {t['who']} ({t['issue'] or '-'}): {t['what']} since {t['since']}")
+            print(f"queued: {t['who']} ({t['task'] or '-'}): {t['what']} since {t['since']}")
         if not s["held"] and not s["queue"]:
             print("free")
         return
     if not a.command:
         sys.exit('fm: fm lock NAME run "what" command…')
     who = os.environ.get("FM_AGENT") or "owner"
-    sys.exit(r.run(who, a.what, a.command, os.environ.get("FM_ISSUE", ""), say=lambda m: print(m, file=sys.stderr)))
+    sys.exit(r.run(who, a.what, a.command, os.environ.get("FM_TASK", ""), say=lambda m: print(m, file=sys.stderr)))
 
 
 def cmd_panel(a: argparse.Namespace) -> None:
@@ -212,6 +263,7 @@ def cmd_launchd(a: argparse.Namespace) -> None:
 HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "init": cmd_init,
     "add": cmd_add,
+    "edit": cmd_edit,
     "list": cmd_list,
     "show": cmd_show,
     "ask": cmd_ask,
@@ -219,6 +271,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "verdict": cmd_verdict,
     "ready": cmd_ready,
     "block": cmd_block,
+    "diagnose": cmd_diagnose,
     "answer": cmd_answer,
     "allow": lambda a: cmd_allow(a, True),
     "deny": lambda a: cmd_allow(a, False),

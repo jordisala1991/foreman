@@ -73,11 +73,11 @@ branch_prefix = "next/demo-"
 [agents]
 slots = 2
 model = "sonnet"
-define_model = "sonnet"
+planning_model = "sonnet"
 # the demo agents run without today's foreman plugin: this prototype replaces it
 settings = { enabledPlugins = { "foreman@foreman" = false } }
 
-[integrate]
+[merge]
 autonomy = "manual"
 test = "python3 -m unittest -q"
 
@@ -86,12 +86,12 @@ loop_seconds = 20
 stuck_minutes = 30
 TOML
 "$fm" --home "$run/home" add --ready "word_count counts wrong on empty text and repeated spaces" \
-  --claim "word_count gives the number of words for any text" \
-  --criterion "word_count('') == 0 and word_count('  a   b ') == 2, with tests for both; all tests pass" \
+  --goal "word_count gives the number of words for any text" \
+  --criteria "word_count('') == 0 and word_count('  a   b ') == 2, with tests for both; all tests pass" \
   --detail "textkit.word_count splits on a single space."
 "$fm" --home "$run/home" add --ready "Add slugify(text)" \
-  --claim "textkit has slugify: lowercase words joined by hyphens, punctuation dropped" \
-  --criterion "slugify('Hello, World!') == 'hello-world' and slugify('  Many   spaces ') == 'many-spaces', tested; all tests pass"
+  --goal "textkit has slugify: lowercase words joined by hyphens, punctuation dropped" \
+  --criteria "slugify('Hello, World!') == 'hello-world' and slugify('  Many   spaces ') == 'many-spaces', tested; all tests pass"
 "$fm" --home "$run/home" add "The CLI should be friendlier" \
   --detail "Running cli.py with no arguments or with an unknown function crashes with a traceback."
 echo "demo ready in $run"

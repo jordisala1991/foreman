@@ -24,7 +24,7 @@ class Lock(unittest.TestCase):
         os.environ.pop("FM_LOCKS")
 
     def fm_lock(self, name: str, who: str, *cmd: str) -> subprocess.Popen:
-        env = {**os.environ, "FM_AGENT": who, "FM_ISSUE": who.upper()}
+        env = {**os.environ, "FM_AGENT": who, "FM_TASK": who.upper()}
         proc = subprocess.Popen(
             [sys.executable, FM, "--home", str(self.e.home), "lock", name, "run", f"job {who}", *cmd], env=env, stderr=subprocess.PIPE, text=True
         )
@@ -85,8 +85,8 @@ class Lock(unittest.TestCase):
         from fm.config import Project
 
         p = Project.load(self.e.home)
-        iid = backlog.add(p, "x", status="ready", criterion="y")
-        text = agents.brief(p, backlog.get(backlog.load(p), iid), "work")
+        tid = backlog.add(p, "x", status="ready", criteria="y")
+        text = agents.brief(p, backlog.get(backlog.load(p), tid), "responsible")
         self.assertIn("`gpu`, `sim` (2 slots)", text)
         self.assertIn("fm lock NAME run", text)
 

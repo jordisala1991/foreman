@@ -1,4 +1,4 @@
-"""The panel's write side: the owner's actions. They call what the CLI calls (fm.cli's functions, fm.integrate.accept), so the panel and `fm`
+"""The panel's write side: the owner's actions. They call what the CLI calls (fm.cli's functions, fm.delivery.accept), so the panel and `fm`
 cannot disagree. `act` routes a POST path to one small handler."""
 
 import argparse
@@ -9,7 +9,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from . import backlog, cli, integrate, providers
+from . import backlog, cli, delivery, providers
 from .config import Project
 from .panel_views import Obj, project
 
@@ -33,79 +33,72 @@ def run_cli(fn: Callable[[argparse.Namespace], Any], p: Project, **kw: Any) -> N
         raise Refused(str(e.code)) from None
 
 
-def open_permission(p: Project, qid: str) -> None:
-    q = next((q for q in backlog.load(p)["decisions"] if q["id"] == qid), None)
-    if not q or q.get("kind") != "permission":
-        raise Refused(f"{qid} is not an open permission request")
-
-
 def add(p: Project, body: str) -> Obj:
     f = json.loads(body or "{}")
     if not str(f.get("title", "")).strip():
         raise Refused("a task needs a title")
-    crit = str(f.get("criterion", "")).strip()
+    crit = str(f.get("criteria", "")).strip()
     new = backlog.add(
         p,
         f["title"].strip(),
         detail=str(f.get("detail", "")).strip(),
-        status="ready" if crit else "backlog",
-        criterion=crit,
-        claim=str(f.get("claim", "")).strip(),
+        status="backlog",
+        criteria=crit,
+        goal=str(f.get("goal", "")).strip(),
     )
     return {"id": new}
 
 
-def answer(p: Project, iid: str, text: str, q: Query) -> Obj:
+def answer(p: Project, tid: str, text: str, q: Query) -> Obj:
     if not text:
         raise Refused("the answer is empty")
-    open_q = next((x for x in backlog.load(p)["decisions"] if x["id"] == iid), None)
+    open_q = next((x for x in backlog.load(p)["decisions"] if x["id"] == tid), None)
     if open_q and open_q.get("kind") == "permission":
-        raise Refused(f"{iid} is a permission request: allow or deny it")
-    run_cli(cli.cmd_answer, p, qid=iid, text=text)
+        raise Refused(f"{tid} is a permission request: allow or deny it")
+    run_cli(cli.cmd_answer, p, qid=tid, text=text)
     return OK
 
 
 def permission(allowed: bool) -> Callable[[Project, str, str, Query], Obj]:
-    def handle(p: Project, iid: str, text: str, q: Query) -> Obj:
-        open_permission(p, iid)
-        run_cli(lambda a: cli.cmd_allow(a, allowed), p, qid=iid, text=text or None)
+    def handle(p: Project, tid: str, text: str, q: Query) -> Obj:
+        run_cli(lambda a: cli.cmd_allow(a, allowed), p, qid=tid, text=text or None)
         return OK
 
     return handle
 
 
-def accept(p: Project, iid: str, text: str, q: Query) -> Obj:
+def accept(p: Project, tid: str, text: str, q: Query) -> Obj:
     try:
-        return {"accepted": integrate.accept(p, iid, by="owner (panel)")}
-    except (integrate.IntegrateError, providers.ConfigError) as e:
+        return {"accepted": delivery.accept(p, tid, by="owner (panel)")}
+    except (delivery.DeliveryError, providers.ConfigError) as e:
         raise Refused(str(e)) from None
 
 
-def reject(p: Project, iid: str, text: str, q: Query) -> Obj:
+def reject(p: Project, tid: str, text: str, q: Query) -> Obj:
     if not text:
         raise Refused("say what to change: the note goes back to its agent")
-    run_cli(cli.cmd_reject, p, id=iid, note=text)
+    run_cli(cli.cmd_reject, p, id=tid, note=text)
     return OK
 
 
-def go(p: Project, iid: str, text: str, q: Query) -> Obj:
-    if backlog.get(backlog.load(p), iid)["status"] != "triage":
-        raise Refused(f"{iid} is not in triage")
-    run_cli(cli.cmd_go, p, id=iid)
+def go(p: Project, tid: str, text: str, q: Query) -> Obj:
+    if backlog.get(backlog.load(p), tid)["status"] != "triage":
+        raise Refused(f"{tid} is not in triage")
+    run_cli(cli.cmd_go, p, id=tid)
     return OK
 
 
-def cancel(p: Project, iid: str, text: str, q: Query) -> Obj:
-    run_cli(cli.cmd_cancel, p, id=iid, why=text or None)
+def cancel(p: Project, tid: str, text: str, q: Query) -> Obj:
+    run_cli(cli.cmd_cancel, p, id=tid, why=text or None)
     return OK
 
 
-def unblock(p: Project, iid: str, text: str, q: Query) -> Obj:
-    run_cli(cli.cmd_unblock, p, id=iid, relaunch=q.get("relaunch", [""])[0] == "1")
+def unblock(p: Project, tid: str, text: str, q: Query) -> Obj:
+    run_cli(cli.cmd_unblock, p, id=tid, relaunch=q.get("relaunch", [""])[0] == "1")
     return OK
 
 
-def pause(p: Project, iid: str, text: str, q: Query) -> Obj:
+def pause(p: Project, tid: str, text: str, q: Query) -> Obj:
     run_cli(cli.cmd_pause, p, off=q.get("on", ["1"])[0] == "0")
     return OK
 
@@ -129,10 +122,10 @@ def act(path: str, q: Query, body: str) -> Obj:
         return add(p, body)
     if path == "/api/pause":
         return pause(p, "", "", q)
-    iid = q.get("id", [""])[0]
-    if not iid:
+    tid = q.get("id", [""])[0]
+    if not tid:
         raise KeyError("id is missing")
     handler = BY_ID.get(path)
     if handler is None:
         raise LookupError(path)
-    return handler(p, iid, body.strip(), q)
+    return handler(p, tid, body.strip(), q)

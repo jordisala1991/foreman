@@ -61,13 +61,13 @@ class Bash(unittest.TestCase):
 class Hook(unittest.TestCase):
     def setUp(self):
         self.e = Env()
-        self.iid = backlog.add(self.e.p, "t", status="ready", criterion="c")
-        backlog.update(self.e.p, self.iid, worktree=str(self.e.tmp / "wt"), branch="fm/ty-1")
-        os.environ.update(FM_HOME=str(self.e.home), FM_ISSUE=self.iid)
+        self.tid = backlog.add(self.e.p, "t", status="ready", criteria="c")
+        backlog.update(self.e.p, self.tid, worktree=str(self.e.tmp / "wt"), branch="fm/ty-1")
+        os.environ.update(FM_HOME=str(self.e.home), FM_TASK=self.tid)
 
     def tearDown(self):
         os.environ.pop("FM_HOME")
-        os.environ.pop("FM_ISSUE")
+        os.environ.pop("FM_TASK")
 
     def call(self, tool: str, inp: dict) -> str:
         return guard.hook(json.dumps({"tool_name": tool, "tool_input": inp, "cwd": str(self.e.tmp / "wt")}))
@@ -83,7 +83,7 @@ class Hook(unittest.TestCase):
         self.assertEqual(self.call("Edit", {"file_path": str(self.e.tmp / "wt/app.py")}), "")
 
     def test_a_grant_lets_it_pass_once(self):
-        guard.grant(self.e.p, self.iid, "push-main")
+        guard.grant(self.e.p, self.tid, "push-main")
         self.assertEqual(self.call("Bash", {"command": "git push origin main"}), "")
         self.assertTrue(self.call("Bash", {"command": "git push origin main"}))
 

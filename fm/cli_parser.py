@@ -3,26 +3,34 @@
 import argparse
 from collections.abc import Callable
 
-from . import backlog
+from . import backlog, config
 
 Command = Callable[[str, str], argparse.ArgumentParser]
+
+
+def _model_effort(s: argparse.ArgumentParser) -> None:
+    s.add_argument("--model", choices=config.MODELS, help="the model of the task's responsible agent (default: the project's)")
+    s.add_argument("--effort", choices=config.EFFORTS, help="the effort of the task's responsible agent (default: the project's)")
 
 
 def _filing(c: Command) -> None:
     s = c("init", "make a project home and register it")
     s.add_argument("--repo", required=True)
     s.add_argument("--prefix", default="FM")
-    s = c("add", "file an issue (to define, unless --ready)")
+    s = c("add", "file a task (in triage until let in; --ready lets it in if it has --criteria)")
     s.add_argument("title")
     s.add_argument("--detail")
-    s.add_argument("--claim")
-    s.add_argument("--criterion")
+    s.add_argument("--goal")
+    s.add_argument("--criteria")
+    s.add_argument("--parent", help="file it as a subtask of this task (owner only, before it starts)")
+    blocked_by(s)
     s.add_argument("--ready", action="store_true")
     s.add_argument("--triage", action="store_true")
     s.add_argument("--priority", default="none", choices=backlog.PRIORITIES)
+    _model_effort(s)
     s = c("list", "the backlog and the open questions")
     s.add_argument("--all", action="store_true")
-    s = c("show", "one issue, as stored")
+    s = c("show", "one task, as stored")
     s.add_argument("id")
 
 
@@ -30,7 +38,7 @@ def _agent_side(c: Command) -> None:
     s = c("ask", "(agent) ask the owner; then end your turn")
     s.add_argument("text")
     s.add_argument("--action", help="the guard action you ask permission for")
-    s = c("done", "(agent) the task is ready to integrate")
+    s = c("done", "(responsible agent) deliver the task: it goes to review")
     s.add_argument("--summary", required=True)
     s.add_argument("--report", help="your report file")
     s.add_argument("--misled", default="", help="what was wrong or unclear in what you were given, or none")
@@ -39,14 +47,15 @@ def _agent_side(c: Command) -> None:
     s.add_argument("--file", required=True)
     s.add_argument("--tip", default="", help="the tip you reviewed (the brief gives it)")
     s.add_argument("--misled", default="")
-    s = c("ready", "(defining agent) the task is defined")
-    s.add_argument("--claim", required=True)
-    s.add_argument("--criterion", required=True)
+    s = c("ready", "(planning agent) the plan is written")
     s.add_argument("--detail")
+    _model_effort(s)
     g = s.add_mutually_exclusive_group(required=True)
     g.add_argument("--plan", metavar="PATH", help="the written plan (file, not empty)")
     g.add_argument("--no-plan", metavar="WHY", help="no plan, because the task is trivial")
     s.add_argument("--misled", default="")
+    s = c("diagnose", "(mechanic) your diagnosis of the task")
+    s.add_argument("--file", required=True, help="the diagnosis (markdown with the required ## sections)")
     s = c("block", "(agent) it cannot go on without the owner")
     s.add_argument("text")
 
@@ -59,19 +68,27 @@ def _owner_side(c: Command) -> None:
         s = c(name, f"{name} a guarded action once")
         s.add_argument("qid")
         s.add_argument("text", nargs="?")
-    s = c("accept", "integrate a queued issue")
+    s = c("accept", "accept a task in review: it may merge")
     s.add_argument("id")
-    s = c("reject", "send a queued issue back to its agent")
+    s = c("reject", "reject a task in review: return it to its agent with a note")
     s.add_argument("id")
     s.add_argument("note")
-    s = c("review", "review a queued issue again from scratch, as round 1")
+    s = c("review", "review a task in review again from scratch, as round 1")
     s.add_argument("id")
-    s = c("go", "let a triage issue in")
+    s = c("go", "let a triage task in")
     s.add_argument("id")
-    s = c("cancel", "cancel an issue (stops its agent)")
+    s = c("edit", "change a task before its agent starts (triage, backlog, ready)")
+    s.add_argument("id")
+    s.add_argument("--title")
+    s.add_argument("--goal")
+    s.add_argument("--detail")
+    s.add_argument("--criteria", help="one criterion per line, as in fm add")
+    blocked_by(s)
+    _model_effort(s)
+    s = c("cancel", "cancel a task (stops its agent)")
     s.add_argument("id")
     s.add_argument("why", nargs="?")
-    s = c("unblock", "clear an issue's block")
+    s = c("unblock", "clear a task's block")
     s.add_argument("id")
     s.add_argument("--relaunch", action="store_true", help="and launch a new agent for it")
 
@@ -95,6 +112,12 @@ def _operations(c: Command) -> None:
     s = c("launchd", "print the two launchd jobs (loop and panel) that start at login and restart if they die")
     s.add_argument("--dir", help="write dev.fm.loop.plist and dev.fm.panel.plist here (e.g. ~/Library/LaunchAgents) instead of printing")
     s.add_argument("--panel-host", default="127.0.0.1")
+
+
+def blocked_by(s: argparse.ArgumentParser) -> None:
+    s.add_argument(
+        "--blocked-by", nargs="+", action="extend", metavar="FN-n", help="wait for these tasks to be done; on edit it replaces the list, `none` clears it"
+    )
 
 
 def parser(description: str | None) -> argparse.ArgumentParser:

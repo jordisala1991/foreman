@@ -42,7 +42,13 @@ layer = "loop"
 path = "fm.sources"
 layer = "steps"
 [[modules]]
+path = "fm.release"
+layer = "steps"
+[[modules]]
 path = "fm.talk"
+layer = "steps"
+[[modules]]
+path = "fm.mechanic"
 layer = "steps"
 [[modules]]
 path = "fm.health"
@@ -56,7 +62,7 @@ layer = "steps"
 path = "fm.agents"
 layer = "services"
 [[modules]]
-path = "fm.integrate"
+path = "fm.delivery"
 layer = "services"
 [[modules]]
 path = "fm.pulls"
@@ -106,6 +112,9 @@ layer = "proc"
 path = "fm.risk"
 layer = "core"
 [[modules]]
+path = "fm.diagnosis"
+layer = "core"
+[[modules]]
 path = "fm.guard"
 layer = "core"
 [[modules]]
@@ -122,4 +131,17 @@ path = "fm.util"
 layer = "core"
 [[modules]]
 path = "fm.describe"
+layer = "core"
+[[modules]]
+path = "fm.subtasks"
+layer = "core"
+[[modules]]
+path = "fm.editing"
+layer = "core"
+[[modules]]
+path = "fm.blockers"
+layer = "core"
+
+[[modules]]
+path = "fm.lessons"
 layer = "core"

@@ -1,4 +1,4 @@
-"""The report as the task's description: pure text rules, the GitHub PR body, and the panel's description."""
+"""The report as the task's description: pure text rules, the PR on GitHub, and the panel."""
 
 import unittest
 
@@ -17,8 +17,8 @@ class Text(unittest.TestCase):
         self.assertNotIn("old", out)
 
     def test_merge_body_without_markers_appends(self):
-        out = describe.merge_body("human text", "new")
-        self.assertTrue(out.startswith("human text"))
+        out = describe.merge_body("someone's text", "new")
+        self.assertTrue(out.startswith("someone's text"))
         self.assertIn(describe.wrap("new"), out)
         self.assertEqual(describe.merge_body("  \n", "new"), describe.wrap("new"))
 
@@ -36,17 +36,17 @@ class Text(unittest.TestCase):
         self.assertIn("review round 1, 0 open", f)
         self.assertEqual(describe.review_line(None), "no review")
 
-    def test_render_description_falls_back_to_the_claim(self):
+    def test_render_description_falls_back_to_the_goal(self):
         g = GH()
         try:
-            iid = backlog.add(g.e.p, "T", claim="The claim", criterion="c")
+            tid = backlog.add(g.e.p, "T", goal="The goal", criteria="c")
             for rep in ({}, {"file": ""}, {"file": str(g.e.tmp / "nope.md")}):
-                i = {**g.e.issue(iid), "report": rep}
-                self.assertIn("The claim", pulls.description(g.e.p, i, "abcdef0123", "now"))
+                i = {**g.e.task(tid), "report": rep}
+                self.assertIn("The goal", pulls.description(g.e.p, i, "abcdef0123", "now"))
             blank = g.e.tmp / "blank.md"
             blank.write_text("  \n")
-            i = {**g.e.issue(iid), "report": {"file": str(blank)}}
-            self.assertIn("The claim", pulls.description(g.e.p, i, "abcdef0123", "now"))
+            i = {**g.e.task(tid), "report": {"file": str(blank)}}
+            self.assertIn("The goal", pulls.description(g.e.p, i, "abcdef0123", "now"))
         finally:
             g.close()
 
@@ -58,12 +58,12 @@ class OnGitHub(unittest.TestCase):
 
     def deliver(self, text="Did X"):
         g = self.g
-        iid = g.work()
-        path = g.e.home / "reports" / f"{iid}.md"
+        tid = g.work()
+        path = g.e.home / "reports" / f"{tid}.md"
         path.parent.mkdir(exist_ok=True)
         path.write_text(text)
-        backlog.set_status(g.e.p, iid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
-        return iid
+        backlog.set_status(g.e.p, tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
+        return tid
 
     def pr(self):
         return self.g.state["prs"]["1"]
@@ -73,21 +73,21 @@ class OnGitHub(unittest.TestCase):
             loop.tick(self.g.e.p)
 
     def test_github_pr_body_is_the_report(self):
-        iid = self.deliver()
-        self.g.e.review(iid)
+        tid = self.deliver()
+        self.g.e.review(tid)
         self.run_ticks()
         body = self.pr()["body"]
         self.assertIn("Did X", body.split(describe.OPEN)[1].split(describe.CLOSE)[0])
 
     def test_github_human_text_outside_the_block_survives(self):
-        iid = self.deliver()
-        self.g.e.review(iid)
+        tid = self.deliver()
+        self.g.e.review(tid)
         self.run_ticks()
         prs = self.g.state["prs"]
         prs["1"]["body"] = "my note\n" + describe.wrap("stale block") + "\nmy tail"
         self.g.set(prs=prs)
-        i = self.g.e.issue(iid)
-        backlog.update(self.g.e.p, iid, pr={**i["pr"], "described": ""})
+        i = self.g.e.task(tid)
+        backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
         self.run_ticks()
         body = self.pr()["body"]
         self.assertTrue(body.startswith("my note\n") and body.endswith("\nmy tail"))
@@ -95,56 +95,56 @@ class OnGitHub(unittest.TestCase):
         self.assertNotIn("stale block", body)
 
     def test_github_footer_has_the_commit(self):
-        iid = self.deliver()
-        self.g.e.review(iid)
+        tid = self.deliver()
+        self.g.e.review(tid)
         self.run_ticks()
-        head = git(self.g.e.repo, "rev-parse", self.g.e.issue(iid)["branch"]).strip()
+        head = git(self.g.e.repo, "rev-parse", self.g.e.task(tid)["branch"]).strip()
         self.assertIn(head[:9], self.pr()["body"])
         self.assertNotIn(head[:10], self.pr()["body"])
         self.assertIn("review round 1, 0 open", self.pr()["body"])
 
     def test_github_title_follows_a_renamed_task(self):
-        iid = self.deliver()
-        backlog.update(self.g.e.p, iid, title="New name")
-        self.g.e.review(iid)
+        tid = self.deliver()
+        backlog.update(self.g.e.p, tid, title="New name")
+        self.g.e.review(tid)
         self.run_ticks()
-        self.assertEqual(self.pr()["title"], f"{iid}: New name")
+        self.assertEqual(self.pr()["title"], f"{tid}: New name")
 
     def test_github_described_once_per_head(self):
-        iid = self.deliver()
-        self.g.e.review(iid)
+        tid = self.deliver()
+        self.g.e.review(tid)
         self.run_ticks(4)
         self.assertEqual(len(self.g.calls("pr", "edit")), 1)
 
     def test_github_describe_retries_after_a_failure(self):
-        iid = self.deliver()
-        self.g.e.review(iid)
+        tid = self.deliver()
+        self.g.e.review(tid)
         self.g.set(fail_once=["pr", "edit"])
         self.run_ticks(4)
         self.assertEqual(self.pr().get("edits"), 1)
-        self.assertEqual(self.g.e.issue(iid)["pr"]["described"], git(self.g.e.repo, "rev-parse", self.g.e.issue(iid)["branch"]).strip())
+        self.assertEqual(self.g.e.task(tid)["pr"]["described"], git(self.g.e.repo, "rev-parse", self.g.e.task(tid)["branch"]).strip())
 
     def test_github_a_failing_description_does_not_hold_back_the_verdict_comment(self):
-        iid = self.deliver()
-        self.g.e.review(iid)
+        tid = self.deliver()
+        self.g.e.review(tid)
         self.g.set(fail_always=["pr", "edit"])
         self.run_ticks(3)
         self.assertEqual(len(self.pr()["comments"]), 1)
-        i = self.g.e.issue(iid)
+        i = self.g.e.task(tid)
         self.assertIn("HTTP 502", i["pr_error"])
         self.assertFalse(i["pr"].get("described"))
 
 
 class Template(unittest.TestCase):
     def launched(self, e: Env) -> tuple[str, str]:
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        return iid, agents.report_file(e.p, iid).read_text()
+        return tid, agents.report_file(e.p, tid).read_text()
 
     def test_a_launched_work_agent_finds_the_template_at_its_report(self):
         e = Env(test="true")
-        iid, text = self.launched(e)
-        self.assertEqual(text, (agents.BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", iid))
+        tid, text = self.launched(e)
+        self.assertEqual(text, (agents.BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", tid))
 
     def test_a_repo_pr_template_wins_and_review_rounds_is_added(self):
         e = Env(test="true")
@@ -160,8 +160,8 @@ class Template(unittest.TestCase):
 
     def test_an_existing_report_is_not_overwritten_on_relaunch(self):
         e = Env(test="true")
-        iid, _ = self.launched(e)
-        f = agents.report_file(e.p, iid)
+        tid, _ = self.launched(e)
+        f = agents.report_file(e.p, tid)
         f.write_text("my work")
-        agents.seed_report(e.p, iid, e.repo)
+        agents.seed_report(e.p, tid, e.repo)
         self.assertEqual(f.read_text(), "my work")
