@@ -163,7 +163,7 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
         for role in ("agent", "hunter", "reviewer"):
             a: dict[str, Any] = i.get(role) or {}
             if a.get("short") and not a.get("session"):
-                sid = next((s for s, r in rows.items() if r.get("id") == a["short"] or s.startswith(a["short"])), None)
+                sid = sessions.find(rows, a["short"])
                 if sid:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
@@ -171,7 +171,7 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
                         record_session(it, sid, a.get("kind", "") if role == "agent" else "review")
 
 
-def idle_s(a: dict[str, Any]) -> float:
+def idle_s(a: backlog.Agent | dict[str, Any]) -> float:
     """Seconds since the agent's transcript last changed (or since it was started/resumed, if later)."""
     files = costs.files_of(a.get("session") or "")
     last = max((f.stat().st_mtime for f in files), default=0.0)

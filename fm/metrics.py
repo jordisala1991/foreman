@@ -2,7 +2,6 @@
 in review → done), rework (sent back by the owner), nudges (ended a turn without finishing), questions to the owner,
 guard stops, and what misled its agents (their own words, from `fm done --confused`)."""
 
-from datetime import datetime
 from typing import Any
 
 from . import backlog, costs, lock, util
@@ -10,11 +9,8 @@ from .config import Project
 
 
 def _minutes(a: str | None, b: str | None) -> float | None:
-    try:
-        f = "%Y-%m-%d %H:%M:%S"
-        return round((datetime.strptime(b or "", f) - datetime.strptime(a or "", f)).total_seconds() / 60, 1)
-    except ValueError:
-        return None
+    since_a, since_b = util.age_s(a), util.age_s(b)
+    return None if since_a is None or since_b is None else round((since_a - since_b) / 60, 1)
 
 
 def per_issue(p: Project) -> list[dict[str, Any]]:
