@@ -404,7 +404,7 @@ class Queue(unittest.TestCase):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: the agent still runs
+        (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: its agent still runs
         delivery.close(e.p, tid, "canceled", "no")
         self.assertEqual(e.stops(), [e.task(tid)["agent"]["short"]])
 

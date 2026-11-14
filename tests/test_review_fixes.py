@@ -1,4 +1,4 @@
-"""One test per defect found by the code review (2026-11-08)."""
+"""One test per defect found by the review of 2026-11-08."""
 
 import os
 import unittest

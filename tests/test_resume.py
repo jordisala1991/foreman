@@ -1,4 +1,4 @@
-"""A resume continues the agent's own session: the session is stopped first, no flag is given, a copy fails the send."""
+"""A resume continues an agent's own session: the session is stopped first, no flag is given, a copy fails the send."""
 
 import json
 import unittest

@@ -1,4 +1,4 @@
-"""The report as the task's description: pure text rules, the GitHub PR body, and the panel's description."""
+"""The report as the task's description: pure text rules, the PR on GitHub, and the panel."""
 
 import unittest
 
@@ -17,8 +17,8 @@ class Text(unittest.TestCase):
         self.assertNotIn("old", out)
 
     def test_merge_body_without_markers_appends(self):
-        out = describe.merge_body("human text", "new")
-        self.assertTrue(out.startswith("human text"))
+        out = describe.merge_body("someone's text", "new")
+        self.assertTrue(out.startswith("someone's text"))
         self.assertIn(describe.wrap("new"), out)
         self.assertEqual(describe.merge_body("  \n", "new"), describe.wrap("new"))
 
