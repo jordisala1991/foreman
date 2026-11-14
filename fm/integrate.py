@@ -186,6 +186,9 @@ def merge_accepted(p: Project, iid: str) -> str:
     if not change["merge"]:
         change["merge"] = adopt_merge(p, i)
     if not change["merge"]:
+        pr: dict[str, Any] = i.get("pr") or {}
+        if pr.get("draft"):  # a PR from the running phase is still a draft: only pulls.deliver readies it
+            provider.ready(change)
         ref = request_merge(p, i, provider, change)
         backlog.update(p, iid, merge=ref)
         backlog.event(p, iid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
