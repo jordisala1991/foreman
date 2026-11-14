@@ -123,6 +123,7 @@ class Check(unittest.TestCase):
         self.assertIn("lint: https://ci/lint", note)
         self.assertNotIn("test command", note)
         self.assertIn("https://pr/1", failing_note(check(tests="pass", ci="fail", failed_checks=[]), "https://pr/1"))
+        self.assertIn("The test command fails and prints nothing", failing_note(check(tests="fail", tests_output=""), ""))
 
     def test_autonomy_merges_alone(self):
         self.assertEqual(after_check(check(), "low", False), "merge")
