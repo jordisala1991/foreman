@@ -43,7 +43,16 @@ def cmd_add(a: argparse.Namespace) -> None:
         if why := subtasks.refusal(backlog.issues(backlog.load(p)), a.parent):
             sys.exit(f"fm: {why}")
     iid = backlog.add(
-        p, a.title, detail=a.detail or "", status=status, criteria=a.criteria or "", claim=a.claim or "", priority=a.priority, parent=a.parent or ""
+        p,
+        a.title,
+        detail=a.detail or "",
+        status=status,
+        criteria=a.criteria or "",
+        claim=a.claim or "",
+        priority=a.priority,
+        parent=a.parent or "",
+        model=a.model or "",
+        effort=a.effort or "",
     )
     print(iid)
 
