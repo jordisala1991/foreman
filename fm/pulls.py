@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from . import backlog, describe, evidence, inline, proc, providers, util, verdict
+from . import backlog, decide, describe, evidence, inline, proc, providers, util, verdict
 from .config import Project
 from .inline import Review
 from .providers import Permanent, Provider, ProviderError, Transient, registry
@@ -78,7 +78,7 @@ def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
     if not i.get("pr"):
         _open(p, provider, i, head, False)
     ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))
-    return ("wait", "CI is still running") if ci == "pending" else ("ok", ci)
+    return ("wait", "CI is still running") if decide.waits_for_ci(ci) else ("ok", ci)
 
 
 def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
