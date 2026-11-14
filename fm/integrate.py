@@ -255,7 +255,7 @@ def close(p: Project, iid: str, status: str, why: str, *, settle: bool = True) -
     i = backlog.get(d, iid)
     if status == "canceled":
         for s in subtasks.of(backlog.issues(d), iid):
-            if s["status"] not in backlog.CLOSED:
+            if backlog.get(backlog.load(p), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it
                 close(p, s["id"], "canceled", f"its parent {iid} was canceled: {why}", settle=False)
     if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
         close_pull(p, i, why)

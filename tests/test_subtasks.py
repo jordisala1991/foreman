@@ -11,12 +11,21 @@ from test_github import GH
 from fm import backlog, integrate, loop, subtasks
 
 
+def owner(case: unittest.TestCase) -> None:
+    """The owner's shell: no agent session (FM_ISSUE) leaks in, whatever the caller's environment."""
+    patch = mock.patch.dict(os.environ)
+    patch.start()
+    case.addCleanup(patch.stop)
+    os.environ.pop("FM_ISSUE", None)
+
+
 def count(e: Env) -> int:
     return len(backlog.issues(backlog.load(e.p)))
 
 
 class Filing(unittest.TestCase):
     def setUp(self):
+        owner(self)
         self.e = Env()
         self.P = backlog.add(self.e.p, "parent", status="triage")
 
@@ -52,6 +61,9 @@ class Filing(unittest.TestCase):
 
 
 class Showing(unittest.TestCase):
+    def setUp(self):
+        owner(self)
+
     def test_show_lists_subtasks_and_names_the_parent(self):
         e = Env()
         P = backlog.add(e.p, "parent", status="triage")
@@ -69,6 +81,14 @@ class Showing(unittest.TestCase):
         s = fm(e.home, "add", "s", "--parent", a).strip()
         self.assertEqual([ln.split()[0] for ln in fm(e.home, "list").splitlines()], [a, s, b])
 
+    def test_a_subtask_of_a_closed_parent_is_not_indented(self):
+        e = Env()
+        a = backlog.add(e.p, "a", status="triage")
+        s = fm(e.home, "add", "s", "--parent", a).strip()
+        integrate.close(e.p, a, "done", "x")
+        line = fm(e.home, "list").rstrip("\n")
+        self.assertEqual(line, f"{s:8} {'triage':12} {'':14} s")
+
 
 class Outcome(unittest.TestCase):
     def test_outcome_table(self):
@@ -85,6 +105,9 @@ class Outcome(unittest.TestCase):
 
 
 class Loop(unittest.TestCase):
+    def setUp(self):
+        owner(self)
+
     def test_a_parent_never_gets_an_agent(self):
         e = Env()
         P = backlog.add(e.p, "parent", status="backlog", criteria="c")
@@ -100,6 +123,7 @@ class Loop(unittest.TestCase):
 
 class Closing(unittest.TestCase):
     def setUp(self):
+        owner(self)
         self.e = Env()
         self.P = backlog.add(self.e.p, "parent", status="triage")
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--criteria", "c").strip()

@@ -51,12 +51,14 @@ def cmd_add(a: argparse.Namespace) -> None:
 def cmd_list(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
+    status = {i["id"]: i["status"] for i in backlog.issues(d)}
     for i in subtasks.ordered(backlog.issues(d)):
         if i["status"] in backlog.CLOSED and not a.all:
             continue
         agent: backlog.Agent = i.get("agent") or {}
         ag = agent.get("name", "")
-        title = ("  " if i.get("parent") else "") + i["title"]
+        shown = i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED)
+        title = ("  " if shown else "") + i["title"]
         print(f"{i['id']:8} {i['status']:12} {ag:14} {title}" + (f"  [blocked: {i['blocked']}]" if i.get("blocked") else ""))
     for q in backlog.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
