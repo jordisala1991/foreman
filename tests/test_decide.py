@@ -7,7 +7,7 @@ from typing import Any
 
 from helpers import ROOT
 
-from fm.decide import Seen, Step, after_check, checks_again, conflict_note, review_step, waits_for_ci
+from fm.decide import Seen, Step, after_check, checks_again, closes_review, conflict_note, review_step, waits_for_ci
 
 
 def seen(**kw: Any) -> Seen:
@@ -61,6 +61,11 @@ class Review(unittest.TestCase):
         self.assertEqual(review_step(seen(verdict_tip="t1", review_for="none", merge="resolved", auto="T"), v, 2), Step("hold"))
         self.assertEqual(step(merge="clean"), Step("hunt", "round"))
 
+    def test_a_review_closes_only_with_findings_open_after_the_last_round(self):
+        self.assertTrue(closes_review({"open": 1, "round": 2}, 2))
+        for v in ({"open": 0, "round": 2}, {"open": 0, "round": 1}, {"open": 1, "round": 1}):
+            self.assertFalse(closes_review(v, 2), v)
+
     def test_reject_and_conflict_launch_with_their_base(self):
         self.assertEqual(step(verdict_tip="t1", review_for="reject"), Step("hunt", "reject", "t1"))
         self.assertEqual(step(verdict_tip="t1", review_for="conflict", merge="resolved", auto="T"), Step("hunt", "conflict", "T"))
@@ -93,6 +98,7 @@ class Check(unittest.TestCase):
         self.assertEqual(after_check(check(conflict=True), "low", False), "conflict")
         self.assertEqual(after_check(check(conflict=True, risk="high"), "manual", False, "owner"), "conflict")
         self.assertEqual(after_check(check(risk="high"), "manual", False, "owner"), "merge")
+        self.assertEqual(after_check(check(risk="high"), "manual", False, "owner (panel)"), "merge")  # the panel's accept
         self.assertEqual(after_check(check(review="open after round 2: 1"), "manual", False, "owner"), "owner")
         self.assertEqual(after_check(check(tests="fail"), "manual", False, "owner"), "owner")
         self.assertEqual(after_check(check(ci="fail"), "manual", True, "owner"), "owner")

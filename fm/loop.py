@@ -127,8 +127,9 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     if step.do != "go":  # no verdict on this tip yet (a review first, or the last one holds), or its findings go back
         apply_review(p, i, head, step)
         return
-    if i.get("review_for") != "none":  # acted on: a later tip gets a review only for an owner reject or a conflict
-        backlog.update(p, i["id"], review_for="none")
+    closed = "none" if decide.closes_review(i.get("review") or {}, MAX_ROUNDS) else ""
+    if i.get("review_for", "") != closed:  # acted on: what a later tip gets is the rounds again, or (closed) nothing
+        backlog.update(p, i["id"], review_for=closed)
     pull, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
     if pull == "wait":
         return
@@ -162,7 +163,7 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
             backlog.event(p, i["id"], f"automatic merge failed: {e}")
     elif i.get("resolving"):
         backlog.update(p, i["id"], resolving="")
-        backlog.event(p, i["id"], "its accept is not carried over (findings open or checks failing): the owner decides")
+        backlog.event(p, i["id"], "its accept is not carried over: the owner decides")
 
 
 def check_guarded(p: Project, tid: str, ci: str | None) -> None:

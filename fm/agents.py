@@ -268,7 +268,6 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
             "tip": tip,
             "cwd": str(cwd),
             "file": str(out),
-            "rule": scope.rule,
         }
         it[role] = launch
         if role == "reviewer":

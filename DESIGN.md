@@ -142,8 +142,6 @@ on). The heartbeat is written before every step, so a long test run does not loo
 Each tick, for a task in review (not accepted, not blocked), in this order. The decisions are pure functions in
 `fm/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
 
-| Situation | What the loop does | Function | Test |
-|---|---|---|---|
 A review runs only when its result goes somewhere: to the agent (rounds 1-2, an owner reject, a conflict resolution)
 or, once, to the owner when the rounds run out. Each launch event ends with the rule that launched it
 (`rule: rounds 1-2`, `rule: owner reject`, `rule: conflict resolution`: `decide.RULES`).
@@ -156,7 +154,7 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 | The reviewer ended without a verdict | blocks the task | `review_step` → `block` | `test_reviewer_without_verdict_blocks` |
 | Verdict with findings open before the last round | back to its agent for review: its note, once | `review_step` → `back` | `test_open_findings_go_back_once` |
 | A new tip that only merges main, with no conflict | no review: the verdict holds (`review.holds`) | `launch_rule` → `hold` | `test_a_clean_merge_or_a_closed_review_holds`, `test_a_clean_merge_of_main_launches_nothing` |
-| A new tip after the loop acted on the last round's verdict (`review_for` none) | no review: the verdict holds; what is open stays for the owner | `launch_rule` → `hold` | `test_a_clean_merge_or_a_closed_review_holds`, `test_after_round_two_later_tips_launch_no_review` |
+| A new tip after the loop acted on a verdict with findings open after the last round (`review_for` none) | no review: the verdict holds; what is open stays for the owner (after a clean verdict, a new tip gets the next round) | `closes_review`, `launch_rule` → `hold` | `test_a_review_closes_only_with_findings_open_after_the_last_round`, `test_a_clean_merge_or_a_closed_review_holds`, `test_after_round_two_later_tips_launch_no_review`, `test_a_new_tip_after_a_clean_verdict_gets_a_review` |
 | The agent's fix after `fm reject` | one review of the fix only (`git diff` reviewed tip..new tip), from round 1; open findings back to its agent | `launch_rule` → `reject`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_reject_gets_a_review_of_the_fix_and_open_findings_go_back` |
 | A new tip that merges main resolving a conflict | one review of the resolution only (`git diff` git's automatic merge..new tip), from round 1; open findings back to its agent | `launch_rule` → `conflict`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
 | CI pending | waits | `waits_for_ci` | `test_pending_ci_waits` |

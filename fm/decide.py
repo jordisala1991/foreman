@@ -80,6 +80,12 @@ def review_step(seen: Seen, v: Mapping[str, Any], max_rounds: int) -> Step:
     return Step("wait", rule, base)
 
 
+def closes_review(v: Mapping[str, Any], max_rounds: int) -> bool:
+    """A verdict the loop acts on closes the review when its findings are open after the last round: they went to the
+    owner, and a later tip gets a review only for an owner reject or a conflict."""
+    return v.get("open", 0) > 0 and v.get("round", 0) >= max_rounds
+
+
 def back_note(v: Mapping[str, Any]) -> str:
     return (
         f"The review of your branch (round {v['round']}) leaves {v['open']} open: read {v['file']}. "
@@ -116,7 +122,7 @@ def after_check(c: Mapping[str, Any], autonomy: str, has_ci: bool, resolving: st
         not str(c.get("review", "")).startswith("open")
         and c.get("tests") != "fail"
         and (not has_ci or c.get("ci") == "pass")
-        and (resolving == "owner" or allows(autonomy, c["risk"]))
+        and ((bool(resolving) and not resolving.startswith("autonomy ")) or allows(autonomy, c["risk"]))
     )
     if not wants:
         return "owner"
