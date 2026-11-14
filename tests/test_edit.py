@@ -53,6 +53,12 @@ class Edit(unittest.TestCase):
                     self.assertEqual(i["status"], "backlog")
                     self.assertNotIn("plan_file", i)
 
+    def test_a_blocked_task_is_not_said_to_be_planned_again(self):
+        backlog.update(self.e.p, self.iid, status="ready", plan_file="/x/p.md", blocked="x")
+        out = fm(self.e.home, "edit", self.iid, "--criteria", "z")
+        self.assertIn("unblock", out)
+        self.assertNotIn("planned again", out)
+
     def test_title_or_claim_keep_plan_and_status(self):
         for status in ("backlog", "ready"):
             for flag in ("--title", "--claim"):

@@ -63,7 +63,8 @@ def cmd_edit(a: argparse.Namespace) -> None:
         i.update(new)
     reset = old["status"] != new["status"] or ("plan_file" in old and "plan_file" not in new)
     backlog.event(p, a.id, "edited by the owner: " + ", ".join(fields) + ("; plan dropped, back to backlog" if reset else ""))
-    print(f"{a.id} edited" + ("; it will be planned again" if reset else ""))
+    after = "; it stays blocked until fm unblock" if new.get("blocked") else "; it will be planned again"
+    print(f"{a.id} edited" + (after if reset else ""))
 
 
 def cmd_list(a: argparse.Namespace) -> None:
