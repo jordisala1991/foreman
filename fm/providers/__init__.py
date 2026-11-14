@@ -11,7 +11,7 @@ closed?), `ci` (the platform's checks),
 `has_ci` (attribute: is there CI that must be green? github yes, local no; autonomy merges only on a pass when so),
 `pushed` (is the branch on the platform at its tip?), `push` (put it there:
 never forced, never main; a failure is `Transient`, with the platform's own error).
-Config: `[integrate] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
+Config: `[merge] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
 `merge` (`squash` default | `merge` | `rebase`; local has no rebase) and `pr` (`draft` default | `done`)."""
 
 from typing import Any
@@ -106,14 +106,14 @@ class Provider:
 
 
 def merge_strategy(p: Project) -> str:
-    v = p.get("integrate", "merge")
+    v = p.get("merge", "strategy")
     if v not in MERGES:
-        raise ConfigError(f"[integrate] merge = {v!r} is not valid: use one of {', '.join(MERGES)}")
+        raise ConfigError(f"[merge] strategy = {v!r} is not valid: use one of {', '.join(MERGES)}")
     return str(v)
 
 
 def pr_mode(p: Project) -> str:
-    v = p.get("integrate", "pr")
+    v = p.get("merge", "pr")
     if v not in PRS:
-        raise ConfigError(f"[integrate] pr = {v!r} is not valid: use one of {', '.join(PRS)}")
+        raise ConfigError(f"[merge] pr = {v!r} is not valid: use one of {', '.join(PRS)}")
     return str(v)

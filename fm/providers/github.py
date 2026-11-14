@@ -251,7 +251,7 @@ class GitHub(Provider):
         merged it yet, a marker that the merge was requested, so it is not requested twice."""
         v = self.view(change)
         if v.state != "MERGED":
-            msg = ["--subject", f"Integrate {change['id']}: {change['title']}"] if strategy != "rebase" else []
+            msg = ["--subject", f"Merge {change['id']}: {change['title']}"] if strategy != "rebase" else []
             self.run("gh", "pr", "merge", str(change["pr"]), f"--{strategy}", *msg)
             v = self.view(change)
         return self.merge_commit(change, v) if v.state == "MERGED" else f"pr-{change['pr']}-merge-requested"

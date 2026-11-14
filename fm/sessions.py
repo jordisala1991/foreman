@@ -1,9 +1,9 @@
 """Agents are Claude Code sessions of their own (`claude --bg -n NAME …`), so the owner can open any of them and talk
-to it (`claude attach SHORT`, the agent view, or the Claude app). Adapted from foreman's sessionlaunch.py: the same
+to it (`claude attach SHORT`, Claude Code's agent view, or the Claude app). Adapted from foreman's sessionlaunch.py: the same
 measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the guard hook and our environment in
 `--settings`.
 
-`resume` continues a session that ended its turn (an owner's answer, a rejected integration, a nudge) under the same
+`resume` continues a session that ended its turn (an owner's answer, a rejection, a nudge) under the same
 id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
 id instead, so a resume carries none."""
 
@@ -30,10 +30,10 @@ class SessionError(Exception):
     pass
 
 
-def settings(p: Project, iid: str, agent: str) -> dict[str, Any]:
+def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
     env = {
         "FM_HOME": str(p.home),
-        "FM_ISSUE": iid,
+        "FM_TASK": tid,
         "FM_AGENT": agent,
         "PATH": f"{BIN}{os.pathsep}{os.environ.get('PATH', '')}",
     }
@@ -53,7 +53,7 @@ def settings(p: Project, iid: str, agent: str) -> dict[str, Any]:
 class Agent:
     """Who a session is for: its task, its name, its model."""
 
-    iid: str
+    tid: str
     name: str
     model: str
     effort: str
@@ -72,7 +72,7 @@ def command(p: Project, agent: Agent, prompt: str) -> list[str]:
         "--permission-mode",
         "bypassPermissions",
         "--settings",
-        json.dumps(settings(p, agent.iid, agent.name), separators=(",", ":")),
+        json.dumps(settings(p, agent.tid, agent.name), separators=(",", ":")),
         prompt,
     ]
 
@@ -167,7 +167,7 @@ def stop(p: Project, short: str) -> None:
     proc.run([p.get("agents", "claude"), "stop", short], timeout=30)
 
 
-def stop_live(p: Project, iid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
+def stop_live(p: Project, tid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
     """Best-effort: stops a recorded agent's session unless Claude Code shows it stopped. A failure is noted on the
     task, never raised: cleanup must not block a merge, a cancel or a review."""
     a = agent or {}
@@ -175,4 +175,4 @@ def stop_live(p: Project, iid: str, agent: dict[str, Any] | None, rows: dict[str
         try:
             stop(p, a["short"])
         except proc.ProcError as e:
-            backlog.event(p, iid, f"could not stop session {a['short']}: {e}")
+            backlog.event(p, tid, f"could not stop session {a['short']}: {e}")

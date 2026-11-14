@@ -2,16 +2,16 @@
 panel/src) and a JSON API over every registered project (`p=NAME` picks one; the first by default).
 
 Adapted from foreman's lib/foreman/panel.py: the key (`?key=` or the `fm_key` cookie the page sets), the routing by path. What only served the
-orchestrator is gone. The owner's actions call what the CLI calls (fm.cli's functions, fm.integrate.accept, fm.backlog.add), so the panel and `fm`
+old foreman is gone. The owner's actions call what the CLI calls (fm.cli's functions, fm.delivery.accept, fm.backlog.add), so the panel and `fm`
 cannot disagree.
 
 GET   /                index.html (sets the cookie)      /app.js, /app.css   the built files
 GET   /api/projects    each project: loop heartbeat, paused, what waits, what runs
-GET   /api/state       one project: its issues (closed ones of the last week), open questions, latest events
-GET   /api/issue       one issue: as stored, its events, its questions, its cost, its agent's session state
-GET   /api/system      loop heartbeat, paused, health findings, metrics per issue and their total
+GET   /api/state       one project: its tasks (closed ones of the last week), open questions, latest events
+GET   /api/task        one task: as stored, its events, its questions, its cost, its agent's session state
+GET   /api/system      loop heartbeat, paused, health findings, metrics per task and their total
 POST  /api/add  /api/answer  /api/allow  /api/deny  /api/accept  /api/reject  /api/go  /api/cancel  /api/unblock
-      /api/pause       (id=..., the text in the body; /api/add takes JSON {title, detail, claim, criteria})
+      /api/pause       (id=..., the text in the body; /api/add takes JSON {title, detail, goal, criteria})
 """
 
 import json
@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import backlog
 from .panel_actions import Refused, act
-from .panel_views import Obj, issue, project, projects, state, summary, system
+from .panel_views import Obj, project, projects, state, summary, system, task
 
 DIST = Path(__file__).resolve().parent.parent / "panel" / "dist"
 STATIC = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8")}
@@ -36,7 +36,7 @@ COOKIE = "fm_key"
 VIEWS: dict[str, Callable[[dict[str, list[str]]], Obj]] = {
     "/api/projects": lambda q: {"projects": [summary(p) for p in projects()]},
     "/api/state": lambda q: state(project(q)),
-    "/api/issue": lambda q: issue(project(q), q.get("id", [""])[0]),
+    "/api/task": lambda q: task(project(q), q.get("id", [""])[0]),
     "/api/system": lambda q: system(project(q)),
 }
 

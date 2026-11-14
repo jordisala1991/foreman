@@ -17,13 +17,13 @@ def tip(g: GH, iid: str, text: str, open: int = 0) -> None:
     backlog.set_status(g.e.p, iid, "in review", report={"summary": "does x", "confused": ""})
     g.e.review(iid, open)
     (g.e.home / "reviews" / f"{iid}.md").write_text(text)
-    backlog.update(g.e.p, iid, review={**g.e.issue(iid)["review"], "sent_back": True})
+    backlog.update(g.e.p, iid, review={**g.e.task(iid)["review"], "sent_back": True})
     loop.tick(g.e.p)
     loop.tick(g.e.p)
 
 
 def commit(g: GH, iid: str) -> str:
-    wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+    wt = g.e.repo.parent / g.e.task(iid)["worktree"]
     with open(wt / "app.py", "a") as f:
         f.write("# more\n")
     git(wt, "commit", "-qam", "more")
@@ -47,7 +47,7 @@ class Review_(unittest.TestCase):
         pr = self.pr(g)
         self.assertEqual(len(pr["reviews"]), 1)
         r = pr["reviews"][0]
-        self.assertEqual((r["event"], r["commit_id"]), ("COMMENT", g.e.issue(iid)["pr"] and git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()))
+        self.assertEqual((r["event"], r["commit_id"]), ("COMMENT", g.e.task(iid)["pr"] and git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()))
         self.assertEqual(pr["comments"], [])
         (c,) = r["comments"]
         self.assertEqual((c["path"], c["line"], c["side"]), ("app.py", 3, "RIGHT"))
@@ -79,7 +79,7 @@ class Review_(unittest.TestCase):
     def test_a_lost_record_does_not_post_the_review_twice(self):
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
-        backlog.update(g.e.p, iid, pr={**g.e.issue(iid)["pr"], "commented": ""})
+        backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         self.assertEqual(len(self.pr(g)["reviews"]), 1)
@@ -129,7 +129,7 @@ class Review_(unittest.TestCase):
 
     def test_body_links_point_at_the_comment_or_the_reviewed_commit_and_line(self):
         g, iid = self.make()
-        head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+        head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
         tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | M | app.py:3 | mid | why: because\n", 2)
         (r,) = self.pr(g)["reviews"]
         self.assertIn(f"https://github.com/o/r/blob/{head}/app.py#L99", r["body"])
@@ -141,7 +141,7 @@ class Review_(unittest.TestCase):
     def test_a_failed_comment_link_edit_keeps_the_file_links(self):
         g, iid = self.make()
         g.set(fail_put=True)
-        head = git(g.e.repo, "rev-parse", g.e.issue(iid)["branch"]).strip()
+        head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
         tip(g, iid, "Findings:\nF2 | M | app.py:3 | mid\n", 1)
         (r,) = self.pr(g)["reviews"]
         self.assertIn(f"/blob/{head}/app.py#L3", r["body"])

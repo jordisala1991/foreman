@@ -8,19 +8,19 @@ from unittest import mock
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm import backlog, integrate, loop, subtasks
+from fm import backlog, delivery, loop, subtasks
 
 
 def owner(case: unittest.TestCase) -> None:
-    """The owner's shell: no agent session (FM_ISSUE) leaks in, whatever the caller's environment."""
+    """The owner's shell: no agent session (FM_TASK) leaks in, whatever the caller's environment."""
     patch = mock.patch.dict(os.environ)
     patch.start()
     case.addCleanup(patch.stop)
-    os.environ.pop("FM_ISSUE", None)
+    os.environ.pop("FM_TASK", None)
 
 
 def count(e: Env) -> int:
-    return len(backlog.issues(backlog.load(e.p)))
+    return len(backlog.tasks(backlog.load(e.p)))
 
 
 class Filing(unittest.TestCase):
@@ -34,12 +34,12 @@ class Filing(unittest.TestCase):
             with self.subTest(status=status):
                 backlog.set_status(self.e.p, self.P, status)
                 s = fm(self.e.home, "add", "s", "--parent", self.P, "--criteria", "c").strip()
-                self.assertEqual((self.e.issue(s)["parent"], self.e.issue(s)["status"]), (self.P, "backlog"))
+                self.assertEqual((self.e.task(s)["parent"], self.e.task(s)["status"]), (self.P, "backlog"))
         s = fm(self.e.home, "add", "s", "--parent", self.P).strip()
-        self.assertEqual(self.e.issue(s)["status"], "triage")
+        self.assertEqual(self.e.task(s)["status"], "triage")
 
     def test_subtask_refused_from_an_agent_session(self):
-        with mock.patch.dict(os.environ, {"FM_ISSUE": "TY-9"}), self.assertRaises(SystemExit):
+        with mock.patch.dict(os.environ, {"FM_TASK": "TY-9"}), self.assertRaises(SystemExit):
             fm(self.e.home, "add", "s", "--parent", self.P, "--criteria", "c")
         self.assertEqual(count(self.e), 1)
 
@@ -85,7 +85,7 @@ class Showing(unittest.TestCase):
         e = Env()
         a = backlog.add(e.p, "a", status="triage")
         s = fm(e.home, "add", "s", "--parent", a).strip()
-        integrate.close(e.p, a, "done", "x")
+        delivery.close(e.p, a, "done", "x")
         line = fm(e.home, "list").rstrip("\n")
         self.assertEqual(line, f"{s:8} {'triage':12} {'':14} s")
 
@@ -114,11 +114,11 @@ class Loop(unittest.TestCase):
         s1 = fm(e.home, "add", "s1", "--parent", P, "--triage", "--criteria", "c").strip()
         loop.tick(e.p)
         self.assertEqual(e.calls(), [])
-        self.assertEqual(e.issue(P)["status"], "backlog")
+        self.assertEqual(e.task(P)["status"], "backlog")
         fm(e.home, "go", s1)
         loop.tick(e.p)
         self.assertEqual(len(e.calls()), 1)
-        self.assertEqual((e.issue(s1)["status"], e.issue(P)["status"]), ("refining", "backlog"))
+        self.assertEqual((e.task(s1)["status"], e.task(P)["status"]), ("refining", "backlog"))
 
 
 class Closing(unittest.TestCase):
@@ -129,11 +129,11 @@ class Closing(unittest.TestCase):
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--criteria", "c").strip()
         self.S2 = fm(self.e.home, "add", "two", "--parent", self.P).strip()
 
-    def status(self, iid: str) -> str:
-        return self.e.issue(iid)["status"]
+    def status(self, tid: str) -> str:
+        return self.e.task(tid)["status"]
 
     def test_parent_done_when_every_subtask_is_closed_and_one_is_done(self):
-        integrate.close(self.e.p, self.S1, "done", "x")
+        delivery.close(self.e.p, self.S1, "done", "x")
         self.assertEqual(self.status(self.P), "triage")
         fm(self.e.home, "cancel", self.S2)
         self.assertEqual(self.status(self.P), "done")
@@ -144,16 +144,16 @@ class Closing(unittest.TestCase):
         s = fm(e.home, "add", "one", "--parent", P, "--criteria", "c").strip()
         backlog.set_status(e.p, s, "ready")
         loop.tick(e.p)
-        wt = e.issue(s)["worktree"]
+        wt = e.task(s)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
             f.write("# 0\n")
         git(e.repo.parent / wt, "commit", "-qam", "change")
         backlog.set_status(e.p, s, "in review", report={"summary": "s", "confused": ""})
         e.review(s, 0)
         loop.tick(e.p)
-        integrate.accept(e.p, s)
+        delivery.accept(e.p, s)
         loop.tick(e.p)
-        self.assertEqual((e.issue(s)["status"], e.issue(P)["status"]), ("done", "done"))
+        self.assertEqual((e.task(s)["status"], e.task(P)["status"]), ("done", "done"))
 
     def test_parent_canceled_when_all_subtasks_are(self):
         fm(self.e.home, "cancel", self.S1)
@@ -163,7 +163,7 @@ class Closing(unittest.TestCase):
 
     def test_cancel_of_a_parent_cancels_its_open_subtasks(self):
         S3 = fm(self.e.home, "add", "three", "--parent", self.P, "--criteria", "c").strip()
-        integrate.close(self.e.p, S3, "done", "x")
+        delivery.close(self.e.p, S3, "done", "x")
         fm(self.e.home, "cancel", self.P)
         self.assertEqual([self.status(i) for i in (self.S1, self.S2, S3, self.P)], ["canceled", "canceled", "done", "canceled"])
 
@@ -171,12 +171,12 @@ class Closing(unittest.TestCase):
         g = GH()
         self.addCleanup(g.close)
         P = backlog.add(g.e.p, "parent", status="triage")
-        iid = g.work()
-        backlog.update(g.e.p, iid, parent=P)
+        tid = g.work()
+        backlog.update(g.e.p, tid, parent=P)
         loop.tick(g.e.p)
         fm(g.e.home, "cancel", P)
         self.assertEqual(g.state["prs"]["1"]["state"], "CLOSED")
-        self.assertEqual((g.e.issue(iid)["status"], g.e.issue(P)["status"]), ("canceled", "canceled"))
+        self.assertEqual((g.e.task(tid)["status"], g.e.task(P)["status"]), ("canceled", "canceled"))
 
 
 class Race(unittest.TestCase):
@@ -189,6 +189,6 @@ class Race(unittest.TestCase):
         def merged(p, i):  # the loop merges the subtask while the cascade closes it
             backlog.set_status(p, S, "done")
 
-        with mock.patch.object(integrate, "stop_all", side_effect=merged):
-            integrate.close(e.p, P, "canceled", "x")
-        self.assertEqual((e.issue(S)["status"], e.issue(P)["status"]), ("done", "canceled"))
+        with mock.patch.object(delivery, "stop_all", side_effect=merged):
+            delivery.close(e.p, P, "canceled", "x")
+        self.assertEqual((e.task(S)["status"], e.task(P)["status"]), ("done", "canceled"))
