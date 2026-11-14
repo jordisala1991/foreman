@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
+from ..inline import LineComment, Review, resolve_links
 from . import Conflict, Permanent, Provider, ProviderError, Transient
+from .checks import down, open_prs, pull
 
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -82,39 +84,18 @@ def pull_request(raw: object) -> PullRequest:
     return PullRequest(_field(o, "number", int, what), _field(o, "url", str, what), _field(o, "isDraft", bool, what), state, commit)
 
 
-ROLLUP = {"SUCCESS": "pass", "FAILURE": "fail", "ERROR": "fail", "PENDING": "pending", "EXPECTED": "pending"}
-
-
-def _at(o: dict[str, Any] | None, *keys: str) -> dict[str, Any]:
-    """Down the objects `keys` of a GraphQL answer; {} where one is missing or null (a PR with no checks has no rollup)."""
-    for k in keys:
-        o = util.json_object((o or {}).get(k))
-    return o or {}
-
-
-def _pull(item: object) -> tuple[str, dict[str, str]]:
-    """One GraphQL pull request node as (number, {head, ci}); ProviderError if it does not fit."""
-    n = util.json_object(item)
-    if not n or not isinstance(n.get("number"), int) or not isinstance(n.get("headRefOid"), str):
-        raise ProviderError(f"gh api graphql: unexpected pull request {item!r}"[:300])
-    last = util.json_object(next(iter(util.json_list(_at(n, "commits").get("nodes"))), None))
-    state = _at(last, "commit", "statusCheckRollup").get("state")
-    return str(n["number"]), {"head": n["headRefOid"], "ci": ROLLUP.get(str(state), "none")}
-
-
-def open_prs(raw: object) -> dict[str, dict[str, str]]:
-    """The answer of the open-PRs query as {number: {head, ci}}; ProviderError if it does not fit."""
-    return dict(_pull(n) for n in util.json_list(_at(util.json_object(raw), "data", "repository", "pullRequests").get("nodes")))
+def _marker(key: str) -> str:
+    return f"<!-- fm:{key} -->"
 
 
 class GitHub(Provider):
     has_ci = True
     name = "github"
 
-    def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
+    def run(self, prog: str, *args: str, check: bool = True, input: str | None = None) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, input=input)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if check and r.code != 0:
@@ -173,8 +154,51 @@ class GitHub(Provider):
     def ready(self, change: dict[str, Any]) -> None:
         self.run("gh", "pr", "ready", str(change["pr"]))
 
-    def comment(self, change: dict[str, Any], text: str) -> None:
-        self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
+    def diff(self, change: dict[str, Any]) -> str:
+        return self.run("gh", "pr", "diff", str(change["pr"]), "--color=never").out
+
+    def markers(self, change: dict[str, Any], what: str) -> set[str]:
+        """The `<!-- fm:KEY -->` markers in the bodies of the PR's reviews or review comments."""
+        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/{what}"
+        r = self.run("gh", "api", url, "--paginate", "--jq", '.[] | (.body // "") | scan("<!-- fm:[a-z0-9-]+ -->")')
+        return set(r.out.split("\n")) - {""}
+
+    def review(self, change: dict[str, Any], review: Review) -> int:
+        if _marker(review.key) in self.markers(change, "reviews"):
+            return 0
+        known = self.markers(change, "comments")
+        new = [c for c in review.comments if _marker(c.key) not in known]
+        base = self.run("gh", "repo", "view", "--json", "url", "-q", ".url").out.strip()
+        payload = {
+            "commit_id": change["head"],
+            "event": "COMMENT",
+            "body": resolve_links(f"{review.body}\n\n{_marker(review.key)}", base, change["head"], {}),
+            "comments": [{"path": c.path, "line": c.line, "side": "RIGHT", "body": f"{c.body}\n\n{_marker(c.key)}"} for c in new],
+        }
+        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews"
+        posted = self.run("gh", "api", "-X", "POST", url, "--input", "-", input=json.dumps(payload))
+        self.link_comments(change, review, new, (base, posted.out))
+        return len(new)
+
+    def link_comments(self, change: dict[str, Any], review: Review, new: list[LineComment], posted: tuple[str, str]) -> None:
+        """Best effort: the body's links to findings that got an inline comment point at that comment instead of the
+        file. A failure leaves the file links, which are right too."""
+        base, out = posted
+        if not new or "fm-link:" not in review.body:
+            return
+        try:
+            rid = json.loads(out)["id"]
+            listing = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}/comments"
+            r = self.run("gh", "api", listing, "--jq", r'.[] | "\(.id) \(.body | scan("<!-- fm:[a-z0-9-]+ -->"))"')
+            ids: dict[str, str] = {}
+            for line in r.out.splitlines():
+                num, _, mark = line.partition(" ")
+                ids[mark] = num
+            urls = {c.place: f"{base}/pull/{change['pr']}#discussion_r{ids[_marker(c.key)]}" for c in new if _marker(c.key) in ids}
+            body = resolve_links(review.body, base, change["head"], urls) + f"\n\n{_marker(review.key)}"
+            self.run("gh", "api", "-X", "PUT", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}", "--input", "-", input=json.dumps({"body": body}))
+        except (ValueError, KeyError, TypeError, ProviderError, Transient, Permanent):
+            return
 
     def is_open(self, change: dict[str, Any]) -> bool:
         return self.view(change).state == "OPEN"
@@ -217,7 +241,7 @@ class GitHub(Provider):
                 "-F",
                 f"number={pr}",
             )
-            found.update([_pull(_at(util.json_object(one), "data", "repository").get("pullRequest"))])
+            found.update([pull(down(util.json_object(one), "data", "repository").get("pullRequest"))])
         at = util.now()
         kept = util.read_json(self.p.state / "pr_ci.json", {})
         util.write_json(self.p.state / "pr_ci.json", {**kept, **{n: {**e, "at": at} for n, e in found.items()}})

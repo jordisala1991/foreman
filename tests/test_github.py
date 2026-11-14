@@ -14,7 +14,7 @@ from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys
+    import json, os, re, sys
     d = os.path.dirname(os.path.abspath(__file__))
     a = sys.argv[1:]
     f = os.path.join(d, "gh.json")
@@ -40,6 +40,9 @@ FAKE_GH = textwrap.dedent("""\
     if a[:2] == ["pr", "create"] and flag("--head") == s.get("flaky"):
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
+    if a[:2] == ["repo", "view"]:
+        print("https://github.com/o/r")
+        sys.exit(0)
     if a[:2] == ["api", "graphql"]:
         import subprocess
         def node(n, pr):
@@ -54,6 +57,41 @@ FAKE_GH = textwrap.dedent("""\
             print(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
         sys.exit(0)
     if a[:1] == ["api"]:
+        url = next(x for x in a if x.startswith("repos/"))
+        parts = url.split("/")
+        tail = parts[5:]
+        if parts[4].isdigit() and tail[:1] == ["reviews"] and len(tail) == 3:
+            bodies = s["prs"][parts[4]].get("review_comments", [])
+            for n, b in enumerate(bodies, 1):
+                print(n, *re.findall(r"<!-- fm:[a-z0-9-]+ -->", b))
+            sys.exit(0)
+        if parts[4].isdigit() and tail[:1] == ["reviews"] and len(tail) == 2:
+            if s.get("fail_put"):
+                print("HTTP 404", file=sys.stderr)
+                sys.exit(1)
+            pr = s["prs"][parts[4]]
+            pr["reviews"][int(tail[1]) - 1]["body"] = json.load(sys.stdin)["body"]
+            save()
+            print("{}")
+            sys.exit(0)
+        if parts[4].isdigit() and tail in (["reviews"], ["comments"]):
+            pr = s["prs"][parts[4]]
+            if "-X" in a:
+                body = json.load(sys.stdin)
+                if s.get("reject_inline") and body["comments"]:
+                    print("HTTP 422", file=sys.stderr)
+                    sys.exit(1)
+                pr.setdefault("reviews", []).append(body)
+                for c in body["comments"]:
+                    pr.setdefault("review_comments", []).append(c["body"])
+                save()
+                print(json.dumps({"id": len(pr["reviews"])}))
+            else:
+                bodies = [r["body"] or "" for r in pr.get("reviews", [])] if tail == ["reviews"] else pr.get("review_comments", [])
+                for b in bodies:
+                    for m in re.findall(r"<!-- fm:[a-z0-9-]+ -->", b):
+                        print(m)
+            sys.exit(0)
         print(s.get("api_sha") or "null")
         sys.exit(0)
     if a[:2] == ["pr", "create"]:
@@ -77,6 +115,8 @@ FAKE_GH = textwrap.dedent("""\
         pr["edits"] = pr.get("edits", 0) + 1
     elif a[:2] == ["pr", "view"] and "body" in a:
         print(json.dumps({"body": pr["body"]}))
+    elif a[:2] == ["pr", "diff"]:
+        print(s.get("diff", ""))
     elif a[:2] == ["pr", "comment"]:
         pr["comments"].append(flag("--body"))
     elif a[:2] == ["pr", "close"]:
@@ -171,53 +211,6 @@ class Provider(unittest.TestCase):
         self.assertEqual(registry.get(e.p).name, "github")
 
 
-class Border(unittest.TestCase):
-    """What gh says is turned into fm's own types at the border; a shape that does not fit is a clear ProviderError."""
-
-    GOOD = {"number": 7, "url": "https://github.com/o/r/pull/7", "isDraft": True, "state": "OPEN", "mergeCommit": None}
-
-    def test_a_pull_request_becomes_a_typed_value(self):
-        pr = github.pull_request(self.GOOD)
-        self.assertEqual((pr.number, pr.url, pr.draft, pr.state, pr.merge_commit), (7, "https://github.com/o/r/pull/7", True, "OPEN", ""))
-        merged = github.pull_request({**self.GOOD, "state": "MERGED", "mergeCommit": {"oid": "abc"}})
-        self.assertEqual((merged.state, merged.merge_commit), ("MERGED", "abc"))
-
-    def test_a_pull_request_of_the_wrong_shape_is_a_provider_error(self):
-        for bad in (
-            [],
-            "x",
-            {**self.GOOD, "state": "SIDEWAYS"},
-            {**self.GOOD, "number": "7"},
-            {**self.GOOD, "number": True},
-            {**self.GOOD, "isDraft": "yes"},
-            {**self.GOOD, "mergeCommit": "abc"},
-            {**self.GOOD, "mergeCommit": {"oid": 1}},
-            {k: v for k, v in self.GOOD.items() if k != "url"},
-        ):
-            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.pull_request(bad)
-
-    def test_the_open_prs_answer_becomes_head_and_ci_or_a_provider_error(self):
-        def node(state):
-            return {"number": 1, "headRefOid": "abc", "commits": {"nodes": [{"commit": {"statusCheckRollup": state}}]}}
-
-        def answer(*nodes):
-            return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
-
-        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass"}})
-        self.assertEqual(github.open_prs(answer(node(None)))["1"]["ci"], "none")
-        for bad in (answer({"number": "1"}), answer("x")):
-            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.open_prs(bad)
-
-    def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self):
-        g = GH()
-        self.addCleanup(g.close)
-        g.set(prs={"1": {"draft": False, "state": "OPEN", "comments": []}}, bad_view=True)
-        with self.assertRaises(providers.ProviderError):
-            registry.get(g.e.p).state({"pr": 1})
-
-
 class Pulls(unittest.TestCase):
     def make(self, extra: str = "", **kw) -> GH:
         g = GH(extra, **kw)
@@ -274,7 +267,7 @@ class Pulls(unittest.TestCase):
         (create,) = g.calls("pr", "create")
         self.assertNotIn("--draft", create)
 
-    def test_fm_done_readies_the_draft_and_comments_risk_and_verdict_once(self):
+    def test_fm_done_readies_the_draft_and_reviews_the_verdict_once(self):
         g = self.make(test="true")
         tid = g.work()
         loop.tick(g.e.p)
@@ -284,9 +277,10 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         pr = g.state["prs"]["1"]
         self.assertFalse(pr["draft"])
-        self.assertEqual(len(pr["comments"]), 1)
-        self.assertIn("merge risk low", pr["comments"][0])
-        self.assertIn("round 1: 0 open", pr["comments"][0])
+        self.assertEqual(pr["comments"], [])
+        self.assertEqual(len(pr["reviews"]), 1)
+        self.assertEqual(pr["reviews"][0]["event"], "COMMENT")
+        self.assertIn("Why low", pr["reviews"][0]["body"])
 
     def test_cancel_closes_the_pr_with_the_reason_and_a_task_without_one_is_canceled_as_before(self):
         g = self.make(test="true")

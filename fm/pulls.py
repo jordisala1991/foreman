@@ -1,15 +1,18 @@
 """Pull requests (the loop's side: the loop pushes the task branches, the agents never do).
 `running` and `sync` push a running task's new commits and, once it has some, gives it a draft PR (`[merge] pr = draft`);
-`prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
+`prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and posts the verdict as a PR review.
 Every function calls the provider's operations whatever the platform; the local provider answers each as a no-op, and
 a task with no PR (`publish` returned nothing) has nothing to deliver to."""
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from . import backlog, describe, proc, providers, util
+from . import backlog, describe, inline, proc, providers, util, verdict
 from .config import Project
-from .providers import Provider, registry
+from .inline import Review
+from .providers import Permanent, Provider, ProviderError, Transient, registry
+from .verdict import Case, Finding
 
 
 def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
@@ -93,11 +96,47 @@ def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
     return describe.render(text, describe.footer(head, describe.review_line(i.get("review")), at))
 
 
-def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
+def findings_of(i: dict[str, Any], head: str) -> list[Finding]:
+    """The open findings of the review of this tip (none when there is no review, it is of another tip, or unreadable)."""
     v: dict[str, Any] = i.get("review") or {}
-    review = "no review" if not v else f"round {v['round']}: {v['open']} open" + (f" ({v['file']})" if v.get("file") else "")
-    reasons = "\n".join(f"- {r}" for r in c.get("reasons", []))
-    return f"**fm: merge risk {c['risk']}**\n\n{reasons}\n\nTests: {c['tests']} · CI: {c.get('ci') or 'none'}\nIndependent review, {review}\n"
+    if not v.get("file") or v.get("tip") != head:
+        return []
+    try:
+        return verdict.findings(Path(v["file"]).read_text())
+    except OSError:
+        return []
+
+
+def case_of(i: dict[str, Any], c: dict[str, Any]) -> Case:
+    v: dict[str, Any] = i.get("review") or {}
+    counted = int(v["open"]) if v.get("tip") == c["head"] else None
+    report: dict[str, Any] = i.get("report") or {}
+    return Case(c["risk"], c.get("reasons", []), c["tests"], c.get("ci", ""), c["head"], report.get("summary") or i["title"], c["files"], c["lines"], counted)
+
+
+def _visible(p: Project, provider: Provider, i: dict[str, Any], change: dict[str, Any], found: list[Finding]) -> dict[str, set[int]]:
+    if not any(":" in f.place for f in found):
+        return {}
+    try:
+        return inline.visible_lines(provider.diff(change))
+    except (ProviderError, Transient, Permanent) as e:
+        backlog.event(p, i["id"], f"could not read the diff, review posted without inline comments: {e}"[:300])
+        return {}
+
+
+def _post_review(p: Project, provider: Provider, i: dict[str, Any], c: dict[str, Any]) -> None:
+    change = change_of(i, c["head"])
+    found = findings_of(i, c["head"])
+    comments = inline.line_comments(found, _visible(p, provider, i, change, found))
+    body = verdict.render(case_of(i, c), found, {x.place for x in comments})
+    review = Review(f"review-{c['head']}", body, comments)
+    try:
+        provider.review(change, review)
+    except (Transient, Permanent) as e:
+        if not comments:
+            raise
+        backlog.event(p, i["id"], f"inline comments rejected, review posted without them: {e}"[:300])
+        provider.review(change, replace(review, comments=[]))
 
 
 def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: dict[str, Any]) -> dict[str, Any]:
@@ -132,5 +171,5 @@ def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     if pr.get("described") != c["head"]:
         pr = _describe(p, provider, i, c["head"], pr)
     if pr.get("commented") != c["head"]:
-        provider.comment(change, verdict_text(i, c))
+        _post_review(p, provider, i, c)
         backlog.update(p, i["id"], pr={**pr, "commented": c["head"], "at": util.now()})

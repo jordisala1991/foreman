@@ -26,6 +26,8 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 || `fm/delivery.py` | ~200 | check a delivered branch, risk score, autonomy, accept (records), merge step ||
+| `fm/verdict.py` | ~100 | the verdict as a review body and the `Findings:` line parser (pure text) |
+| `fm/inline.py` | ~80 | the diff's visible lines and findings as line comments (pure) |
 | `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
 | `fm/subtasks.py` | ~35 | subtasks: which belong to a parent, listing order, when a subtask may be filed, how the parent closes (pure) |
 | `fm/blockers.py` | ~50 | which tasks a task waits for (`blocked_by`): pending, dead, refusals incl. cycles (pure) |
@@ -238,7 +240,7 @@ The project's `[merge] autonomy` decides what merges without the owner: `manual`
 ### Provider, accepted → merged
 
 The merge goes through a *provider* module (`fm/providers/`), one per platform; the rest of fm does not know which.
-Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `comment`, `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
+Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `diff` (its unified diff; empty locally), `review` (post the verdict as one PR review with its inline comments; no-op locally), `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
 in fm: a future queue is just another strategy) and `state` (merged? closed?). Steps:
 
 1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the task (it stays `in review`).
@@ -259,8 +261,8 @@ never forced, never main, 20 s timeout; a failure is `Transient` with git's erro
 comments on and merges PRs through `gh` (the guard keeps stopping `gh pr` for agents). `[merge] pr = "draft"`
 (default): a task in progress has its commits pushed and gets a **draft PR** as soon as it has its first commit; `pr = "done"`: no PR until
 `fm done`. In review, after the hunter and the reviewer: the branch is pushed at its tip if it is not yet, the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
-with no `[merge] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and a comment
-carries the risk, its reasons and the review's verdict. Accepted → `gh pr merge` with the configured type; the task
+with no `[merge] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and a pull request review
+(event COMMENT) carries the verdict (decision, risk and its reasons, checks); each finding inside the diff is also a comment on its line. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
 origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the responsible agent as before, also when the merge itself is refused for a conflict after acceptance: the acceptance is dropped and the new tip is checked and accepted again. Out of
