@@ -270,7 +270,7 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 Hexagonal-lite: a small core, ports only where something external varies, everything else outside. Not Clean Architecture
 nor full DDD; what is shared is a vocabulary: *task* (an issue in the backlog), *round* (one review pass), *risk* (low,
-medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act).
+medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act). The whole vocabulary is in `GLOSSARY.md`; it changes only by the owner's decision.
 
 Layers, outside in (`tach.toml`; a module imports its own layer and the ones below, never above):
 
