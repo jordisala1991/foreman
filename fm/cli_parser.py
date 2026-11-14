@@ -18,6 +18,7 @@ def _filing(c: Command) -> None:
     s.add_argument("--claim")
     s.add_argument("--criteria")
     s.add_argument("--parent", help="file it as a subtask of this task (owner only, before it starts)")
+    blocked_by(s)
     s.add_argument("--ready", action="store_true")
     s.add_argument("--triage", action="store_true")
     s.add_argument("--priority", default="none", choices=backlog.PRIORITIES)
@@ -73,6 +74,7 @@ def _owner_side(c: Command) -> None:
     s.add_argument("--claim")
     s.add_argument("--detail")
     s.add_argument("--criteria", help="one criterion per line, as in fm add")
+    blocked_by(s)
     s = c("cancel", "cancel an issue (stops its agent)")
     s.add_argument("id")
     s.add_argument("why", nargs="?")
@@ -100,6 +102,12 @@ def _operations(c: Command) -> None:
     s = c("launchd", "print the two launchd jobs (loop and panel) that start at login and restart if they die")
     s.add_argument("--dir", help="write dev.fm.loop.plist and dev.fm.panel.plist here (e.g. ~/Library/LaunchAgents) instead of printing")
     s.add_argument("--panel-host", default="127.0.0.1")
+
+
+def blocked_by(s: argparse.ArgumentParser) -> None:
+    s.add_argument(
+        "--blocked-by", nargs="+", action="extend", metavar="FN-n", help="wait for these tasks to be done; on edit it replaces the list, `none` clears it"
+    )
 
 
 def parser(description: str | None) -> argparse.ArgumentParser:

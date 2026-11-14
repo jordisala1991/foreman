@@ -42,6 +42,9 @@ layer = "loop"
 path = "fm.sources"
 layer = "steps"
 [[modules]]
+path = "fm.release"
+layer = "steps"
+[[modules]]
 path = "fm.talk"
 layer = "steps"
 [[modules]]
@@ -124,6 +127,9 @@ path = "fm.subtasks"
 layer = "core"
 [[modules]]
 path = "fm.editing"
+layer = "core"
+[[modules]]
+path = "fm.blockers"
 layer = "core"
 
 [[modules]]

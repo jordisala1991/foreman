@@ -12,7 +12,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
    backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, loop heartbeat)
               │
    fm loop (plain process, launchd KeepAlive) ── every N s, per registered project:
-      sources → answers → agents → queue → health → launch
+      sources → answers → agents → queue → health → blockers → launch
               │
    claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
       planning agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
@@ -28,6 +28,8 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/integrate.py` | ~200 | check a delivered branch, risk score, autonomy level, accept (records), merge step |
 | `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
 | `fm/subtasks.py` | ~35 | subtasks: which belong to a parent, listing order, when a subtask may be filed, how the parent closes (pure) |
+| `fm/blockers.py` | ~50 | which tasks a task waits for (`blocked_by`): pending, dead, refusals incl. cycles (pure) |
+| `fm/release.py` | ~25 | the loop's blockers step: marks a task unblocked once, or blocks it when a blocker closed undone |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
@@ -69,7 +71,10 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 - `in review`: the integration queue. The loop checks the branch; the owner accepts it or sends it back with a note.
 - `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
   nudge). The owner clears it (`fm unblock [--relaunch]`).
-- `fm edit` changes title, claim, criteria or detail of a task in triage, backlog or ready (never one with an agent,
+- `blocked_by` (`fm add/edit --blocked-by FN-n …`; `none` clears): the task is never planned or launched until every
+  blocker is `done`, then the loop marks it unblocked in the history. A canceled or duplicate blocker blocks the task
+  with a reason: the owner edits `--blocked-by` or cancels, then `fm unblock`.
+- `fm edit` changes title, claim, criteria, detail or blockers of a task in triage, backlog or ready (never one with an agent,
   nor a closed one); criteria or detail on a backlog or ready task drops its plan and sends it back to backlog.
 - A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only the owner, only while the parent is
   in triage or backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent; the
@@ -114,8 +119,10 @@ on). The heartbeat is written before every step, so a long test run does not loo
    removes the worktree and branch and closes the issue.
 6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
    only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
-7. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
-   agent) or `backlog` issue (its planning agent), by priority then id. If the issue changed while its session
+7. **blockers**: a task whose blockers are all `done` is marked unblocked once; one whose blocker closed undone is blocked
+   with a reason (`fm/release.py`).
+8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
+   agent) or `backlog` issue (its planning agent), by priority then id, skipping any with a blocker not `done`. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
 
 `fm cancel` stops the agent, closes its open questions and removes its worktree (the branch stays).
@@ -267,7 +274,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `subtasks`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+| core | `risk`, `subtasks`, `blockers`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
