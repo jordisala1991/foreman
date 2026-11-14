@@ -112,5 +112,5 @@ class Text(unittest.TestCase):
 
     def test_old_columns_unchanged(self):
         head = metrics.text(self.rows()).splitlines()[0].split()
-        old = "id status $ model effort planning$ responsible$ rounds min rework confl nudge ask stop risk"
+        old = "id status $ model effort planning$ responsible$ rounds min rework confl fail nudge ask stop risk"
         self.assertEqual(head, old.split())

@@ -7,7 +7,7 @@ Operations: `publish` (make the branch visible: open the change), `ready` (mark 
 `body` (its description now), `describe` (set its body and title), `evidence` (publish the report's images),
 `merge(change, strategy)` (the one merge in fm; a future queue is just another strategy; raises `Conflict` when the
 branch conflicts with main), `state` (is it merged?
-closed?), `ci` (the platform's checks),
+closed?), `ci` (the platform's checks), `failed_checks` (the name and link of each failing one),
 `has_ci` (attribute: is there CI that must be green? github yes, local no; autonomy merges only on a pass when so),
 `pushed` (is the branch on the platform at its tip?), `push` (put it there:
 never forced, never main; a failure is `Transient`, with the platform's own error).
@@ -47,6 +47,14 @@ class Published:
     number: int
     url: str
     draft: bool
+
+
+@dataclass(frozen=True)
+class FailedCheck:
+    """A check of the platform's CI that failed on the change's tip: its name and a link to its output."""
+
+    name: str
+    url: str
 
 
 @dataclass(frozen=True)
@@ -140,6 +148,10 @@ class Provider:
     def ci(self, change: Change) -> str:
         """pass | fail | pending | none (no checks, or no platform)."""
         return ""
+
+    def failed_checks(self, change: Change) -> list[FailedCheck]:
+        """The checks that failed on the change's tip, as the last `ci` read saw them (none without a platform)."""
+        return []
 
     def state(self, change: Change) -> ChangeState:
         """Is the change merged? closed? As seen on the platform now."""

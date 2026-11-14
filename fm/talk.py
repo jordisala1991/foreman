@@ -11,7 +11,7 @@ NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this lon
 
 def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
     """What an agent is told about a delivered answer, by its kind."""
-    if q.get("kind") in ("conflict", "review"):
+    if q.get("kind") in ("conflict", "failing", "review"):
         return q["answer"]
     elif q.get("kind") == "rejection":
         return f"The owner rejected task {i['id']}: «{q['answer']}». Fix it, review again if you change much, and run `fm done` again."
@@ -81,13 +81,15 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
 
 
 def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") -> None:
-    """Returns the task to its agent (status in progress), with a note the loop delivers to its session. A reject or a
-    conflict starts a review of only that fix, from round 1 (`review_for`, `review_from`); a conflict keeps who accepted
-    it (`resolving`, from `by`), so it merges once resolved without a new accept."""
+    """Returns the task to its agent (status in progress), with a note the loop delivers to its session. A reject, a
+    conflict or failing tests or CI start a review of only that fix, from round 1 (`review_for`, `review_from`); a
+    conflict keeps who accepted it (`resolving`, from `by`), so it merges once resolved without a new accept. Failing
+    keeps its check (the panel shows why it is back) and counts the returns (`failures`) and the row (`failure_streak`)."""
     with backlog.edit(p) as d:
         i = backlog.get(d, tid)
         i["status"] = "in progress"
-        i.pop("check", None)
+        if kind != "failing":
+            i.pop("check", None)
         for k in ("accepted", "merge", "merging"):  # a merge ref or marker of the old tip must not close the new work
             i.pop(k, None)
         if kind == "rejection":
@@ -97,12 +99,15 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
             i["conflicts"] = i.get("conflicts", 0) + 1
             if by:
                 i["resolving"] = by
-        if kind in ("rejection", "conflict"):
-            i["review_for"] = "reject" if kind == "rejection" else "conflict"
+        elif kind == "failing":
+            i["failures"] = i.get("failures", 0) + 1
+            i["failure_streak"] = i.get("failure_streak", 0) + 1
+        if kind in ("rejection", "conflict", "failing"):
+            i["review_for"] = "reject" if kind == "rejection" else kind
             i["review_from"] = len(i.get("reviews") or [])
         else:
             i.pop("review_for", None)
         agent: dict[str, Any] = {**(i.get("agent") or {}), "started": util.now(), "nudged": None}
         i["agent"] = agent
-        backlog.message(d, i, "R", ("rejection", "conflict", "review"), kind=kind, text="review", answer=note, at=util.now())
+        backlog.message(d, i, "R", ("rejection", "conflict", "failing", "review"), kind=kind, text="review", answer=note, at=util.now())
     backlog.event(p, tid, f"→ in progress: returned to its agent ({kind}): {note}")

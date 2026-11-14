@@ -143,13 +143,21 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
         c = backlog.get(backlog.load(p), i["id"]).get("check") or {}
         if t.is_alive() or c.get("head") != head:  # still running, or it failed (the task says why)
             return
-    act_on(p, i, c, decide.after_check(c, p.get("merge", "autonomy"), registry.get(p).has_ci, i.get("resolving", "")))
+    failed = int(i.get("failure_streak") or 0)
+    act_on(p, i, c, decide.after_check(c, p.get("merge", "autonomy"), registry.get(p).has_ci, i.get("resolving", ""), failed))
 
 
 def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> None:
-    """After the check: back to its agent for a conflict someone wants merged, or deliver it, merging it when wanted (by
-    the accept a conflict carried over, or the autonomy). An accept carried over lapses when the owner must decide."""
+    """After the check: back to its agent for failing tests or CI, or for a conflict someone wants merged; or deliver
+    it, merging it when wanted (by the accept a conflict carried over, or the autonomy). An accept carried over lapses
+    when the owner must decide. A check without failing tests or CI ends a row of failures."""
     by = i.get("resolving") or "autonomy " + p.get("merge", "autonomy")
+    if action == "failing":
+        pr: dict[str, Any] = i.get("pr") or {}
+        return_to_agent(p, i["id"], "failing", decide.failing_note(c, pr.get("url", "")))
+        return
+    if i.get("failure_streak") and not decide.failing(c):
+        backlog.update(p, i["id"], failure_streak=0)
     if action == "conflict":
         return_to_agent(p, i["id"], "conflict", decide.conflict_note(p.get("project", "main")), by=by)
         return

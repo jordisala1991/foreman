@@ -25,6 +25,11 @@ class PlanVsWork(unittest.TestCase):
         backlog.update(self.e.p, tid, **keys)
         return tid
 
+    def test_returns_for_failures_are_counted_next_to_conflicts(self):
+        r = self.row(self.make(failures=2, conflicts=1))
+        self.assertEqual((r["failures"], r["conflicts"]), (2, 1))
+        self.assertIn("confl fail", metrics.text([r]))
+
     def test_split_by_kind(self):
         tid = self.make(sessions=["A", "B", "C"], session_kinds={"A": "planning", "B": "responsible", "C": "review"}, reviews=[{}])
         r = self.row(tid)

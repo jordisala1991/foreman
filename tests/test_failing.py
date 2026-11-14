@@ -1,0 +1,111 @@
+"""Failing tests or CI return a delivered branch to its agent (FN-67): one test per row of DESIGN.md's table "What the
+loop does with a task in review" that this adds. The owner only sees branches that pass."""
+
+import unittest
+
+from helpers import Env, git
+from test_github import GH
+from test_review_rules import commit, head, launched, take_note
+
+from fm import backlog, loop
+
+
+def deliver(e: Env, name: str = "app.py") -> str:
+    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    loop.tick(e.p)
+    commit(e.task(tid)["worktree"], name, "# change\n")
+    backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+    e.review(tid)
+    return tid
+
+
+def fix(e: Env, tid: str, open_findings: int = 0) -> None:
+    """The agent takes the note, commits a fix and delivers it; its review gives the verdict."""
+    take_note(e, tid)
+    commit(e.task(tid)["worktree"], "app.py", "# fix\n")
+    backlog.set_status(e.p, tid, "in review")
+    e.review(tid, open_findings)
+
+
+class Failing(unittest.TestCase):
+    def test_failing_tests_go_back_with_the_output(self):
+        e = Env(test="echo BOOM-LINE; exit 1")
+        tid = deliver(e)
+        loop.tick(e.p)
+        i = e.task(tid)
+        self.assertEqual((i["status"], i["failures"]), ("in progress", 1))
+        self.assertIn("tests fail [tests]", i["check"]["reasons"])  # kept for the panel while it is back
+        take_note(e, tid)
+        self.assertIn("BOOM-LINE", e.calls()[-1]["argv"][-1])
+
+    def test_only_the_last_lines_of_the_output_go_back(self):
+        e = Env(test="for n in $(seq 1 30); do echo L$n; done; exit 1")
+        tid = deliver(e)
+        loop.tick(e.p)
+        take_note(e, tid)
+        note = e.calls()[-1]["argv"][-1]
+        self.assertIn("L30", note)
+        self.assertNotIn("L1\n", note)
+
+    def test_the_fix_gets_a_review_of_only_that_fix(self):
+        e = Env(test="echo BOOM-LINE; exit 1")
+        tid = deliver(e)
+        loop.tick(e.p)
+        old = head(e, tid)
+        take_note(e, tid)
+        commit(e.task(tid)["worktree"], "app.py", "# fix\n")
+        backlog.set_status(e.p, tid, "in review")
+        e.hunt_then_review(tid)
+        self.assertTrue(launched(e, tid)[-1].endswith("rule: failing tests or CI"), launched(e, tid))
+        self.assertIn(f"git diff {old} {head(e, tid)}", e.calls()[-1]["argv"][-1])
+        e.verdict(tid, 1)
+        loop.tick(e.p)
+        i = e.task(tid)
+        self.assertEqual((i["status"], i["failures"]), ("in progress", 1))  # open findings go back: not a failure
+
+    def test_the_third_failure_waits_for_the_owner(self):
+        e = Env(test="echo BOOM-LINE; exit 1")
+        tid = deliver(e)
+        for n in (1, 2):
+            loop.tick(e.p)
+            self.assertEqual((e.task(tid)["status"], e.task(tid)["failures"]), ("in progress", n))
+            fix(e, tid)
+        before = len(e.calls())
+        loop.tick(e.p)
+        i = e.task(tid)
+        self.assertEqual((i["status"], i["failures"]), ("in review", 2))
+        self.assertIn("tests fail [tests]", i["check"]["reasons"])
+        self.assertEqual(len(e.calls()), before)
+
+    def test_a_green_check_ends_the_row(self):
+        e = Env(test="test ! -e bad")
+        tid = deliver(e, "bad")
+        loop.tick(e.p)
+        self.assertEqual(e.task(tid)["failure_streak"], 1)
+        take_note(e, tid)
+        wt = e.task(tid)["worktree"]
+        git(e.repo.parent / wt, "rm", "-q", "bad")
+        git(e.repo.parent / wt, "commit", "-qm", "fix")
+        backlog.set_status(e.p, tid, "in review")
+        e.review(tid)
+        loop.tick(e.p)
+        i = e.task(tid)
+        self.assertEqual((i["status"], i["failure_streak"], i["failures"]), ("in review", 0, 1))
+
+    def test_failing_ci_goes_back_with_each_check(self):
+        g = GH(test="true")
+        self.addCleanup(g.close)
+        g.set(ci="fail", failed=[["lint", "https://ci/lint"], ["unit", "https://ci/unit"]])
+        tid = g.work()
+        g.deliver(tid)
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.task(tid)["status"], "in progress")
+        take_note(g.e, tid)
+        note = g.e.calls()[-1]["argv"][-1]
+        for s in ("lint: https://ci/lint", "unit: https://ci/unit"):
+            self.assertIn(s, note)
+        self.assertNotIn("build", note)
+
+
+if __name__ == "__main__":
+    unittest.main()

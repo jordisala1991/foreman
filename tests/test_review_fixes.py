@@ -43,7 +43,7 @@ class TestsRunOnTheCommit(unittest.TestCase):
         backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
         e.review(tid)
         loop.tick(e.p)
-        self.assertEqual((e.task(tid)["status"], e.task(tid)["check"]["tests"]), ("in review", "fail"))
+        self.assertEqual((e.task(tid)["status"], e.task(tid)["check"]["tests"]), ("in progress", "fail"))  # returned to its agent (FN-67)
 
 
 class Sessions(unittest.TestCase):

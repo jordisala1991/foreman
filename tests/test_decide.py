@@ -7,7 +7,7 @@ from typing import Any
 
 from helpers import ROOT
 
-from fm.decide import Seen, Step, after_check, checks_again, closes_review, conflict_note, review_step, waits_for_ci
+from fm.decide import Seen, Step, after_check, checks_again, closes_review, conflict_note, failing_note, review_step, waits_for_ci
 
 
 def seen(**kw: Any) -> Seen:
@@ -101,10 +101,28 @@ class Check(unittest.TestCase):
         self.assertEqual(after_check(check(risk="high"), "manual", False, "owner"), "merge")
         self.assertEqual(after_check(check(risk="high"), "manual", False, "owner (panel)"), "merge")  # the panel's accept
         self.assertEqual(after_check(check(review="open after round 2: 1"), "manual", False, "owner"), "owner")
-        self.assertEqual(after_check(check(tests="fail"), "manual", False, "owner"), "owner")
-        self.assertEqual(after_check(check(ci="fail"), "manual", True, "owner"), "owner")
+        self.assertEqual(after_check(check(tests="fail"), "manual", False, "owner", failed=2), "owner")
+        self.assertEqual(after_check(check(ci="fail"), "manual", True, "owner", failed=2), "owner")
         self.assertEqual(after_check(check(risk="high"), "low", False, "autonomy low"), "owner")  # high never merges alone
         self.assertEqual(after_check(check(), "low", False, "autonomy low"), "merge")
+
+    def test_failing_tests_or_ci_go_back_up_to_the_cap(self):
+        rows = [(check(tests="fail"), "manual", False, ""), (check(ci="fail"), "low", True, ""), (check(tests="fail", conflict=True), "low", False, "owner")]
+        for c, autonomy, has_ci, resolving in rows:
+            self.assertEqual(after_check(c, autonomy, has_ci, resolving), "failing", c)
+            self.assertEqual(after_check(c, autonomy, has_ci, resolving, failed=2), "owner", c)
+        self.assertEqual(after_check(check(tests="pass", ci="pass"), "low", True, failed=2), "merge")
+
+    def test_the_fix_of_a_failure_gets_a_review_of_only_that_fix(self):
+        self.assertEqual(step(verdict_tip="t1", review_for="failing"), Step("hunt", "failing", "t1"))
+
+    def test_failing_note_names_the_output_and_the_checks(self):
+        note = failing_note(check(tests="fail", tests_output="L9\nL10"), "https://pr/1")
+        self.assertIn("L9\nL10", note)
+        note = failing_note(check(tests="pass", ci="fail", failed_checks=[{"name": "lint", "url": "https://ci/lint"}]), "https://pr/1")
+        self.assertIn("lint: https://ci/lint", note)
+        self.assertNotIn("test command", note)
+        self.assertIn("https://pr/1", failing_note(check(tests="pass", ci="fail", failed_checks=[]), "https://pr/1"))
 
     def test_autonomy_merges_alone(self):
         self.assertEqual(after_check(check(), "low", False), "merge")
@@ -117,11 +135,11 @@ class Check(unittest.TestCase):
             (check(risk="high"), "medium", False),
             (check(risk="medium"), "low", False),
             (check(review="open after round 2: 1"), "medium", False),
-            (check(ci="fail"), "low", True),
             (check(ci=""), "low", True),
         ]
         for c, autonomy, has_ci in rows:
             self.assertEqual(after_check(c, autonomy, has_ci), "owner", (c, autonomy, has_ci))
+        self.assertEqual(after_check(check(ci="fail"), "low", True, failed=2), "owner")  # failing, past its returns
 
 
 ALLOWED = {"collections.abc", "dataclasses", "typing", ".risk"}
