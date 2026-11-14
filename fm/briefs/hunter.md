@@ -2,7 +2,7 @@ You review branch `$branch` of task $id in project $project before it is integra
 
 # The task
 $id · $title
-Goal: $claim
+Goal: $goal
 Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes

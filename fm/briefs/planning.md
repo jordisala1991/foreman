@@ -17,7 +17,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - Read the repo at `$repo` (read only: do not edit, commit or create branches) and whatever else you need, with subagents if it helps.
 - Settle how the task is done: what changes, what does not. The acceptance criteria above are product (observable behaviour, never how); the plan holds the execution.
 - If an acceptance criterion cannot be met as written, do not change it: `fm ask` the owner and END YOUR TURN.
-- A claim of scope («only X uses it», «nothing else reads this») cites the search that shows it, or says it was not checked.
+- A goal of scope («only X uses it», «nothing else reads this») cites the search that shows it, or says it was not checked.
 - You never split the task or file others. If it looks too big, say so to the owner with `fm ask`, proposing how, and file nothing.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
 

@@ -9,7 +9,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, cli, integrate, loop, providers, util
+from fm import backlog, cli, delivery, loop, providers, util
 from fm.providers import github, registry
 
 FAKE_GH = textwrap.dedent("""\
@@ -111,7 +111,7 @@ class GH:
         self.path = os.environ["PATH"]
         os.environ["PATH"] = f"{e.bin}:{self.path}"
         toml = e.home / "fm.toml"
-        toml.write_text(toml.read_text().replace("[integrate]", f'[integrate]\nprovider = "github"\n{extra}'))
+        toml.write_text(toml.read_text().replace("[merge]", f'[merge]\nprovider = "github"\n{extra}'))
         e.p = type(e.p).load(e.home)
         self.poll, github.POLL = github.POLL, 0  # a pending answer is read again at every call, unless a test says otherwise
 
@@ -135,19 +135,19 @@ class GH:
     def work(self, push: bool = True) -> str:
         """A running task with one commit, pushed or not."""
         e = self.e
-        iid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        wt = e.repo.parent / e.issue(iid)["worktree"]
+        wt = e.repo.parent / e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# change\n")
         git(wt, "commit", "-qam", "change")
         if push:
-            git(wt, "push", "-q", "origin", e.issue(iid)["branch"])
-        return iid
+            git(wt, "push", "-q", "origin", e.task(tid)["branch"])
+        return tid
 
-    def deliver(self, iid: str) -> None:
-        backlog.set_status(self.e.p, iid, "in review", report={"summary": "s", "confused": ""})
-        self.e.review(iid)
+    def deliver(self, tid: str) -> None:
+        backlog.set_status(self.e.p, tid, "in review", report={"summary": "s", "confused": ""})
+        self.e.review(tid)
 
 
 class Provider(unittest.TestCase):
@@ -159,15 +159,15 @@ class Provider(unittest.TestCase):
         git(e.repo, "remote", "set-url", "origin", "https://gitlab.com/o/r.git")
         self.assertEqual(registry.get(e.p).name, "local")
         git(e.repo, "remote", "set-url", "origin", "https://github.com/o/r.git")
-        e.p.cfg["integrate"]["provider"] = "local"
+        e.p.cfg["merge"]["provider"] = "local"
         self.assertEqual(registry.get(e.p).name, "local")
 
     def test_local_has_no_rebase_github_has(self):
         e = Env()
-        e.p.cfg["integrate"]["merge"] = "rebase"
+        e.p.cfg["merge"]["strategy"] = "rebase"
         with self.assertRaises(providers.ConfigError):
             registry.get(e.p)
-        e.p.cfg["integrate"]["provider"] = "github"
+        e.p.cfg["merge"]["provider"] = "github"
         self.assertEqual(registry.get(e.p).name, "github")
 
 
@@ -224,62 +224,62 @@ class Pulls(unittest.TestCase):
         self.addCleanup(g.close)
         return g
 
-    def origin_tip(self, g: GH, iid: str) -> str:
-        ref = "refs/heads/" + g.e.issue(iid)["branch"]
+    def origin_tip(self, g: GH, tid: str) -> str:
+        ref = "refs/heads/" + g.e.task(tid)["branch"]
         r = subprocess.run(["git", "--git-dir", str(g.bare), "rev-parse", "--verify", "-q", ref], capture_output=True, text=True)
         return r.stdout.strip()
 
-    def local_tip(self, g: GH, iid: str) -> str:
-        return subprocess.run(["git", "-C", str(g.e.repo), "rev-parse", g.e.issue(iid)["branch"]], capture_output=True, text=True).stdout.strip()
+    def local_tip(self, g: GH, tid: str) -> str:
+        return subprocess.run(["git", "-C", str(g.e.repo), "rev-parse", g.e.task(tid)["branch"]], capture_output=True, text=True).stdout.strip()
 
     def test_the_loop_pushes_a_running_tasks_commits_and_opens_its_draft(self):
         g = self.make(test="true")
-        iid = g.work(push=False)
-        self.assertEqual(self.origin_tip(g, iid), "")
+        tid = g.work(push=False)
+        self.assertEqual(self.origin_tip(g, tid), "")
         loop.tick(g.e.p)
         loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
-        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+        self.assertEqual(self.origin_tip(g, tid), self.local_tip(g, tid))
+        wt = g.e.repo.parent / g.e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# second\n")
         git(wt, "commit", "-qam", "second")
         loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+        self.assertEqual(self.origin_tip(g, tid), self.local_tip(g, tid))
         self.assertEqual(len(g.calls("pr", "create")), 1)  # once
         self.assertIn("--draft", g.calls("pr", "create")[0])
-        self.assertEqual(g.e.issue(iid)["pr"]["number"], 1)
+        self.assertEqual(g.e.task(tid)["pr"]["number"], 1)
 
     def test_nothing_is_pushed_before_the_task_has_commits_and_main_never(self):
         g = self.make(test="true")
-        iid = backlog.add(g.e.p, "x", status="ready", criteria="y")
+        tid = backlog.add(g.e.p, "x", status="ready", criteria="y")
         loop.tick(g.e.p)
         loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, iid), "")
+        self.assertEqual(self.origin_tip(g, tid), "")
         self.assertEqual(g.calls("pr", "create"), [])
 
     def test_pr_done_pushes_early_but_opens_the_pr_only_at_fm_done(self):
         g = self.make('pr = "done"', test="true")
-        iid = g.work(push=False)
+        tid = g.work(push=False)
         loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, iid), self.local_tip(g, iid))
+        self.assertEqual(self.origin_tip(g, tid), self.local_tip(g, tid))
         self.assertEqual(g.calls("pr", "create"), [])
 
     def test_pr_done_opens_nothing_until_fm_done_and_then_a_ready_pr(self):
         g = self.make('pr = "done"', test="true")
-        iid = g.work()
+        tid = g.work()
         loop.tick(g.e.p)
         self.assertEqual(g.calls("pr", "create"), [])
-        g.deliver(iid)
+        g.deliver(tid)
         loop.tick(g.e.p)
         (create,) = g.calls("pr", "create")
         self.assertNotIn("--draft", create)
 
     def test_fm_done_readies_the_draft_and_comments_risk_and_verdict_once(self):
         g = self.make(test="true")
-        iid = g.work()
+        tid = g.work()
         loop.tick(g.e.p)
         self.assertTrue(g.state["prs"]["1"]["draft"])
-        g.deliver(iid)
+        g.deliver(tid)
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         pr = g.state["prs"]["1"]
@@ -290,64 +290,64 @@ class Pulls(unittest.TestCase):
 
     def test_cancel_closes_the_pr_with_the_reason_and_a_task_without_one_is_canceled_as_before(self):
         g = self.make(test="true")
-        iid = g.work()
+        tid = g.work()
         loop.tick(g.e.p)
-        fm(g.e.home, "cancel", iid, "not needed")
+        fm(g.e.home, "cancel", tid, "not needed")
         pr = g.state["prs"]["1"]
         self.assertEqual(pr["state"], "CLOSED")
         self.assertIn("not needed", pr["comments"][-1])
-        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        self.assertEqual(g.e.task(tid)["status"], "canceled")
         bare = g.work(push=False)
         fm(g.e.home, "cancel", bare)
-        self.assertEqual(g.e.issue(bare)["status"], "canceled")
+        self.assertEqual(g.e.task(bare)["status"], "canceled")
         self.assertEqual(len(g.calls("pr", "close")), 1)
 
     def test_cancel_with_a_failing_gh_changes_nothing_and_a_closed_pr_is_left_alone(self):
         g = self.make(test="true")
-        iid = g.work()
+        tid = g.work()
         loop.tick(g.e.p)
-        wt = g.e.issue(iid)["worktree"]
+        wt = g.e.task(tid)["worktree"]
         g.set(fail_always=["pr", "close"])
         with self.assertRaises(SystemExit):
-            cli.main(["--home", str(g.e.home), "cancel", iid])
-        self.assertEqual(g.e.issue(iid)["status"], "in progress")
+            cli.main(["--home", str(g.e.home), "cancel", tid])
+        self.assertEqual(g.e.task(tid)["status"], "in progress")
         self.assertTrue((g.e.repo.parent / wt).exists())
         g.set(fail_always=None)
         tried = len(g.calls("pr", "close"))
         pr = g.state["prs"]["1"]
         pr["state"] = "CLOSED"
         g.set(prs={"1": pr})
-        fm(g.e.home, "cancel", iid)
-        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        fm(g.e.home, "cancel", tid)
+        self.assertEqual(g.e.task(tid)["status"], "canceled")
         self.assertEqual(len(g.calls("pr", "close")), tried)
 
     def test_cancel_of_a_pr_merged_by_hand_with_no_merge_commit_just_cancels(self):
         g = self.make(test="true")
-        iid = g.work()
+        tid = g.work()
         loop.tick(g.e.p)
         pr = g.state["prs"]["1"]
         pr["state"] = "MERGED"
         g.set(prs={"1": pr}, no_oid=True)
-        fm(g.e.home, "cancel", iid)
-        self.assertEqual(g.e.issue(iid)["status"], "canceled")
+        fm(g.e.home, "cancel", tid)
+        self.assertEqual(g.e.task(tid)["status"], "canceled")
         self.assertEqual(g.calls("pr", "close"), [])
         self.assertEqual(g.calls("api"), [])
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
         g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
-        iid = g.work()
-        g.deliver(iid)
+        tid = g.work()
+        g.deliver(tid)
         loop.tick(g.e.p)
-        integrate.accept(g.e.p, iid)
-        return g, iid
+        delivery.accept(g.e.p, tid)
+        return g, tid
 
     def test_the_configured_merge_type_is_used(self):
         for strategy, used in ((None, "squash"), ("merge", "merge"), ("rebase", "rebase")):
-            g, iid = self.merged(strategy)
+            g, tid = self.merged(strategy)
             loop.tick(g.e.p)
             self.assertEqual(g.state["prs"]["1"]["strategy"], used)
-            self.assertEqual(g.e.issue(iid)["status"], "done")
-            self.assertEqual(g.e.issue(iid)["commit"], "c0ffee")
+            self.assertEqual(g.e.task(tid)["status"], "done")
+            self.assertEqual(g.e.task(tid)["commit"], "c0ffee")
             self.assertEqual(g.calls("pr", "merge")[0][:3], ["pr", "merge", "1"])
 
     def main_changes_app(self, g: GH) -> None:
@@ -355,11 +355,11 @@ class Pulls(unittest.TestCase):
         git(g.e.repo, "commit", "-qam", "main moved")
 
     def test_a_pr_refused_for_conflicts_goes_back_as_a_conflict(self):
-        g, iid = self.merged(None)
+        g, tid = self.merged(None)
         self.main_changes_app(g)
         g.set(refuse_merge="Pull Request has merge conflicts")
         loop.tick(g.e.p)
-        i = g.e.issue(iid)
+        i = g.e.task(tid)
         self.assertEqual(i["status"], "in progress")
         self.assertEqual(i["conflicts"], 1)
         self.assertEqual(backlog.load(g.e.p)["decisions_resolved"][-1]["kind"], "conflict")
@@ -369,19 +369,19 @@ class Pulls(unittest.TestCase):
         self.assertEqual(git(g.e.repo, "status", "--porcelain", "--untracked-files=no").strip(), "")
 
     def test_a_pr_refused_for_another_reason_still_blocks(self):
-        g, iid = self.merged(None)
+        g, tid = self.merged(None)
         g.set(refuse_merge="Pull request is closed")
         loop.tick(g.e.p)
-        i = g.e.issue(iid)
+        i = g.e.task(tid)
         self.assertTrue(i["blocked"])
         self.assertEqual(i["status"], "in review")
         self.assertNotIn("conflicts", i)
 
     def test_a_refusal_the_local_check_cannot_reproduce_stays_blocked(self):
-        g, iid = self.merged(None)
+        g, tid = self.merged(None)
         g.set(refuse_merge="Pull Request has merge conflicts")
         loop.tick(g.e.p)
-        i = g.e.issue(iid)
+        i = g.e.task(tid)
         self.assertTrue(i["blocked"])
         self.assertEqual(i["status"], "in review")
         self.assertNotIn("conflicts", i)
@@ -392,118 +392,118 @@ class Pulls(unittest.TestCase):
             self.assertNotIsInstance(github.failure("gh", text), providers.Conflict)
 
     def test_an_accepted_task_whose_pr_is_still_a_draft_is_readied_then_merged(self):
-        g, iid = self.merged(None)
+        g, tid = self.merged(None)
         s = g.state
         s["prs"]["1"]["draft"] = True
         g.set(prs=s["prs"])
-        backlog.update(g.e.p, iid, pr={**g.e.issue(iid)["pr"], "draft": True})
+        backlog.update(g.e.p, tid, pr={**g.e.task(tid)["pr"], "draft": True})
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["status"], "done")
+        self.assertEqual(g.e.task(tid)["status"], "done")
         self.assertEqual(len(g.calls("pr", "ready")), 1)
 
     def test_the_task_closes_only_once_the_pr_is_seen_merged(self):
-        g, iid = self.merged(None)
+        g, tid = self.merged(None)
         g.set(lag=True)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["status"], "in review")
+        self.assertEqual(g.e.task(tid)["status"], "in review")
         loop.tick(g.e.p)  # not merged twice
         self.assertEqual(len(g.calls("pr", "merge")), 1)
         s = g.state
         s["prs"]["1"]["state"] = "MERGED"
         g.set(prs=s["prs"])
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["status"], "done")
+        self.assertEqual(g.e.task(tid)["status"], "done")
 
     def test_a_pr_closed_unmerged_blocks_the_task(self):
-        g, iid = self.merged(None)
+        g, tid = self.merged(None)
         g.set(lag=True)
         loop.tick(g.e.p)
         s = g.state
         s["prs"]["1"]["state"] = "CLOSED"
         g.set(prs=s["prs"])
         loop.tick(g.e.p)
-        self.assertIn("closed without merging", g.e.issue(iid)["blocked"])
+        self.assertIn("closed without merging", g.e.task(tid)["blocked"])
 
     def test_failing_ci_is_high_risk(self):
         g = self.make(test="true", autonomy="medium")
         g.set(ci="fail")
-        iid = g.work()
-        g.deliver(iid)
+        tid = g.work()
+        g.deliver(tid)
         loop.tick(g.e.p)
-        c = g.e.issue(iid)["check"]
+        c = g.e.task(tid)["check"]
         self.assertEqual((c["risk"], c["ci"]), ("high", "fail"))
         self.assertIn("CI fails [ci]", c["reasons"])
-        self.assertEqual(g.e.issue(iid)["status"], "in review")
+        self.assertEqual(g.e.task(tid)["status"], "in review")
 
     def test_ci_replaces_the_local_test_without_a_test_command(self):
         for ci, tests in (("pass", "pass"), ("fail", "fail"), ("none", "none")):
             g = self.make()
             g.set(ci=ci)
-            iid = g.work()
-            g.deliver(iid)
+            tid = g.work()
+            g.deliver(tid)
             loop.tick(g.e.p)
-            self.assertEqual(g.e.issue(iid)["check"]["tests"], tests)
+            self.assertEqual(g.e.task(tid)["check"]["tests"], tests)
 
     def test_pending_ci_waits_for_the_result(self):
         g = self.make(test="true")
         g.set(ci="pending")
-        iid = g.work()
-        g.deliver(iid)
+        tid = g.work()
+        g.deliver(tid)
         loop.tick(g.e.p)
-        self.assertNotIn("check", g.e.issue(iid))
+        self.assertNotIn("check", g.e.task(tid))
         g.set(ci="pass")
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")
+        self.assertEqual(g.e.task(tid)["check"]["ci"], "pass")
 
     def test_autonomy_merges_only_with_green_ci(self):
         for ci, status in (("none", "in review"), ("pending", "in review"), ("fail", "in review"), ("pass", "done")):
             g = self.make(test="true", autonomy="medium")
             g.set(ci=ci)
-            iid = g.work()
-            g.deliver(iid)
+            tid = g.work()
+            g.deliver(tid)
             loop.tick(g.e.p)
             loop.tick(g.e.p)
-            self.assertEqual(g.e.issue(iid)["status"], status, ci)
+            self.assertEqual(g.e.task(tid)["status"], status, ci)
 
     def test_ci_is_read_again_at_every_decision_not_cached_with_the_check(self):
         g = self.make(test="true", autonomy="medium")
         g.set(ci="none")
-        iid = g.work()
-        g.deliver(iid)
+        tid = g.work()
+        g.deliver(tid)
         loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["status"], g.e.issue(iid)["check"]["ci"]), ("in review", "none"))
+        self.assertEqual((g.e.task(tid)["status"], g.e.task(tid)["check"]["ci"]), ("in review", "none"))
         g.set(ci="pass")  # the CI registered later: no new push needed
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["status"], "done")
+        self.assertEqual(g.e.task(tid)["status"], "done")
 
     def graphql(self, g: GH) -> int:
         return len(g.calls("api", "graphql"))
 
     def test_a_settled_ci_is_not_read_again_until_the_branch_gets_a_commit(self):
         g = self.make(test="true", autonomy="manual")
-        iid = g.work()
-        g.deliver(iid)
+        tid = g.work()
+        g.deliver(tid)
         loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("pass", 1))
+        self.assertEqual((g.e.task(tid)["check"]["ci"], self.graphql(g)), ("pass", 1))
         for _ in range(3):
             loop.tick(g.e.p)
         self.assertEqual(self.graphql(g), 1)
-        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+        wt = g.e.repo.parent / g.e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# fix\n")
         git(wt, "commit", "-qam", "fix")
         g.set(ci="fail")
-        g.e.review(iid)  # the new tip is reviewed first
+        g.e.review(tid)  # the new tip is reviewed first
         loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("fail", 2))
+        self.assertEqual((g.e.task(tid)["check"]["ci"], self.graphql(g)), ("fail", 2))
 
     def test_a_pr_missing_from_the_open_list_is_read_on_its_own_and_kept(self):
         g = self.make(test="true", autonomy="manual")
         g.set(hidden=["1"])  # still there, but not in the open list (closed outside fm, or past the first 100)
-        iid = g.work()
-        g.deliver(iid)
+        tid = g.work()
+        g.deliver(tid)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")
+        self.assertEqual(g.e.task(tid)["check"]["ci"], "pass")
         before = self.graphql(g)
         loop.tick(g.e.p)
         self.assertEqual(self.graphql(g), before)
@@ -513,24 +513,24 @@ class Pulls(unittest.TestCase):
         g.set(ci="pending")
         github.POLL = 3600
         ids = [g.work(), g.work()]
-        for iid in ids:
-            g.deliver(iid)
+        for tid in ids:
+            g.deliver(tid)
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         self.assertEqual(self.graphql(g), 1)
-        self.assertTrue(all("check" not in g.e.issue(iid) for iid in ids))
+        self.assertTrue(all("check" not in g.e.task(tid) for tid in ids))
 
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
         for failing in (["api", "graphql"], ["pr", "merge"], ["pr", "view"]):
             g = self.make(test="true", autonomy="medium")
             g.set(ci="pending")
-            iid = g.work()
-            g.deliver(iid)
+            tid = g.work()
+            g.deliver(tid)
             g.set(ci="pass", fail_once=failing)
             loop.tick(g.e.p)
             loop.tick(g.e.p)
             loop.tick(g.e.p)
-            i = g.e.issue(iid)
+            i = g.e.task(tid)
             self.assertFalse(i.get("blocked"), failing)
             self.assertEqual(i["status"], "done", failing)
 
@@ -543,12 +543,12 @@ class Pulls(unittest.TestCase):
             events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
             self.assertEqual(len(events), 1)
             self.assertIn(text, events[0])
-            self.assertFalse(g.e.issue(first).get("blocked"))
+            self.assertFalse(g.e.task(first).get("blocked"))
             g.set(flaky="")
             loop.tick(g.e.p)
-            self.assertIn("pr", g.e.issue(second))  # the failure did not stop the next task
-            self.assertIn("pr", g.e.issue(first))
-            self.assertEqual(g.e.issue(first)["retry_error"], "")
+            self.assertIn("pr", g.e.task(second))  # the failure did not stop the next task
+            self.assertIn("pr", g.e.task(first))
+            self.assertEqual(g.e.task(first)["retry_error"], "")
 
     def test_only_known_permanent_errors_are_permanent_and_unblock_clears_the_errors(self):
         from fm.providers import github
@@ -567,22 +567,22 @@ class Pulls(unittest.TestCase):
         for text, kind in cases:
             self.assertIsInstance(github.failure("gh", text), kind, text)
         g = self.make(test="true")
-        iid = g.work()
-        backlog.update(g.e.p, iid, blocked="x", pr_error="a", retry_error="b")
-        fm(g.e.home, "unblock", iid)
-        i = g.e.issue(iid)
+        tid = g.work()
+        backlog.update(g.e.p, tid, blocked="x", pr_error="a", retry_error="b")
+        fm(g.e.home, "unblock", tid)
+        i = g.e.task(tid)
         self.assertEqual((i["blocked"], i["pr_error"], i["retry_error"]), ("", "", ""))
 
     def test_a_merged_pr_without_a_merge_commit_is_read_from_the_api_or_fails_clearly(self):
-        g, iid = self.merged(None)
+        g, tid = self.merged(None)
         g.set(no_oid=True)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["status"], "in review")  # no sha anywhere: retried, no invented reference
-        self.assertNotIn("merge", g.e.issue(iid))
-        self.assertIn("no merge commit", g.e.issue(iid)["retry_error"])
+        self.assertEqual(g.e.task(tid)["status"], "in review")  # no sha anywhere: retried, no invented reference
+        self.assertNotIn("merge", g.e.task(tid))
+        self.assertIn("no merge commit", g.e.task(tid)["retry_error"])
         g.set(api_sha="feed01")
         loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["status"], g.e.issue(iid)["commit"]), ("done", "feed01"))
+        self.assertEqual((g.e.task(tid)["status"], g.e.task(tid)["commit"]), ("done", "feed01"))
 
     def test_the_provider_never_tags_releases_or_forces(self):
         import inspect

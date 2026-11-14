@@ -2,7 +2,7 @@ You are the responsible agent of task $id in project $project: you own this whol
 
 # The task
 $id · $title
-Goal: $claim
+Goal: $goal
 Acceptance criteria: $criteria
 $detail
 

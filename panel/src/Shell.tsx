@@ -1,23 +1,23 @@
 // The shell, as in foreman's panel: on a wide screen a 248 px sidebar (the project picker and the three sections with
 // their badges); on the phone the picker and the loop's pill on top and a bottom bar of three tabs. A task's page is
-// #/issue/ID. The theme follows the system (app.css).
+// #/task/ID. The theme follows the system (app.css).
 import { useEffect, useState } from "react";
 import { Boundary } from "./Boundary";
 import { useFeedPart } from "./feed";
 import { StatusPill } from "./head";
 import { Chevron, Icon } from "./icons";
-import { Issue } from "./Issue";
+import { Task } from "./Task";
 import { t, type Key, type Product, type Projects } from "./lib";
 import { Needs } from "./Needs";
 import { System } from "./System";
 import { Tasks } from "./Tasks";
 
 const TABS = ["tasks", "needs", "system"] as const;
-type Tab = (typeof TABS)[number] | "issue";
+type Tab = (typeof TABS)[number] | "task";
 
 const route = (): { tab: Tab; id: string } => {
   const [r = "", id = ""] = location.hash.replace(/^#\/?/, "").split("/");
-  return { tab: (TABS as readonly string[]).includes(r) || r === "issue" ? (r as Tab) : "tasks", id: decodeURIComponent(id) };
+  return { tab: (TABS as readonly string[]).includes(r) || r === "task" ? (r as Tab) : "tasks", id: decodeURIComponent(id) };
 };
 
 function Picker({ products, product, pick }: { products: Product[]; product: Product; pick: (name: string) => void }) {
@@ -72,11 +72,11 @@ export function Shell({ all: initial }: { all: Product[] }) {
     location.hash = "#/tasks";
   };
   const badge: Partial<Record<Tab, number>> = { needs: p.needs ?? 0, tasks: p.running ?? 0 };
-  const current = (k: Tab) => (r.tab === k || (k === "tasks" && r.tab === "issue") ? "page" : undefined);
+  const current = (k: Tab) => (r.tab === k || (k === "tasks" && r.tab === "task") ? "page" : undefined);
   const screen =
     r.tab === "needs" ? <Needs product={p} />
     : r.tab === "system" ? <System product={p} />
-    : r.tab === "issue" && r.id ? <Issue product={p} id={r.id} />
+    : r.tab === "task" && r.id ? <Task product={p} id={r.id} />
     : <Tasks product={p} />;
   return (
     <div className="shell">

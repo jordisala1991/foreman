@@ -64,7 +64,7 @@
   "add": "Add",
   "f_title": "Title",
   "f_detail": "Detail (optional)",
-  "f_claim": "Goal (optional)",
+  "f_goal": "Goal (optional)",
   "f_criteria": "Acceptance criteria (needed to let it in)",
   "f_goes_ready": "With acceptance criteria it goes to be planned, then worked.",
   "f_goes_define": "Without acceptance criteria it waits in Triage.",

@@ -20,10 +20,10 @@ def facts(*paths: str, **kw) -> risk.Facts:
 
 class Score(unittest.TestCase):
     def test_custom_high_path_names_label_and_path(self):
-        p = project('[risk.high]\n"the merge path" = ["fm/integrate.py"]\n')
-        r, why = risk.score(p, facts("fm/integrate.py"))
+        p = project('[risk.high]\n"the merge path" = ["fm/delivery.py"]\n')
+        r, why = risk.score(p, facts("fm/delivery.py"))
         self.assertEqual(r, "high")
-        self.assertTrue(any("the merge path" in x and "fm/integrate.py" in x and x.endswith("[diff]") for x in why))
+        self.assertTrue(any("the merge path" in x and "fm/delivery.py" in x and x.endswith("[diff]") for x in why))
 
     def test_default_ci_file_is_high(self):
         self.assertEqual(risk.score(project(), facts(".github/workflows/ci.yml"))[0], "high")

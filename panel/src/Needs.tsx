@@ -25,9 +25,9 @@ export function Needs({ product }: { product: Product }) {
   const p = product.name;
   const perms = (d?.questions ?? []).filter((q) => q.kind === "permission");
   const questions = (d?.questions ?? []).filter((q) => q.kind !== "permission");
-  const queue = (d?.issues ?? []).filter((i) => i.status === "in review");
-  const triage = (d?.issues ?? []).filter((i) => i.status === "triage");
-  const stuck = (d?.issues ?? []).filter((i) => blocked(i) && i.status !== "triage" && i.status !== "in review");
+  const queue = (d?.tasks ?? []).filter((i) => i.status === "in review");
+  const triage = (d?.tasks ?? []).filter((i) => i.status === "triage");
+  const stuck = (d?.tasks ?? []).filter((i) => blocked(i) && i.status !== "triage" && i.status !== "in review");
   const total = perms.length + questions.length + queue.length + triage.length + stuck.length;
   return (
     <div className="screen needs">

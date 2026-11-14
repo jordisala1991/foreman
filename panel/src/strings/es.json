@@ -64,7 +64,7 @@
   "add": "Añadir",
   "f_title": "Título",
   "f_detail": "Detalle (opcional)",
-  "f_claim": "Objetivo (opcional)",
+  "f_goal": "Objetivo (opcional)",
   "f_criteria": "Criterios de aceptación (necesarios para dejarla entrar)",
   "f_goes_ready": "Con criterios de aceptación va a planificarse y luego a trabajarse.",
   "f_goes_define": "Sin criterios de aceptación espera en Triage.",

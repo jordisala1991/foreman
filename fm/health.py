@@ -1,6 +1,6 @@
 """The system watches itself. Each check finds broken states and returns findings {key, title, detail}; each new
-finding becomes one `triage` issue (the owner lets it in, then it is defined and fixed like any task), deduplicated:
-not while an issue with its key is open, and not again while the finding stays (state/seen.json); it is filed again
+finding becomes one `triage` task (the owner lets it in, then it is defined and fixed like any task), deduplicated:
+not while a task with its key is open, and not again while the finding stays (state/seen.json); it is filed again
 only if it went away and came back.
 
 Every finding has three parts: what it means, the evidence fm gathered, and a hypothesis marked pending; none
@@ -8,7 +8,7 @@ proposes a fix.
 
 Checks: loop dead (heartbeat too old: seen from outside the loop, `fm health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
-· orphan worktree (under the worktrees folder with no live issue) · tests failing on main (the project's test command
+· orphan worktree (under the worktrees folder with no live task) · tests failing on main (the project's test command
 on main's head, every `ci_every_minutes`; one task per failing episode) · answer not delivered for 10 minutes · loop step errors."""
 
 import re
@@ -17,7 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, integrate, token, util
+from . import backlog, delivery, token, util
 from .agents import idle_s
 from .config import Project
 
@@ -95,13 +95,13 @@ def claude_token(
 def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
     out: list[Finding] = []
     stuck_s = 60 * int(p.get("health", "stuck_minutes"))
-    for i in backlog.issues(backlog.load(p)):
+    for i in backlog.tasks(backlog.load(p)):
         a: backlog.Agent = i.get("agent") or {}
         row: dict[str, Any] = rows.get(a.get("session") or "") or {}
         if i["status"] in backlog.RUNNING and row.get("state") == "working":
             quiet = idle_s(a)
             if quiet > stuck_s:
-                meaning = "A working agent has produced no output for longer than stuck_minutes."
+                meaning = "A running agent has produced no output for longer than stuck_minutes."
                 evidence = f"{a.get('name')} ({i['id']}), silent {int(quiet // 60)} min while working; limit {stuck_s // 60} min."
                 out.append(finding(f"stuck:{i['id']}:{a.get('session')}", f"{i['id']}'s agent looks stuck", meaning, evidence))
         blocked = i.get("blocked") or ""
@@ -119,7 +119,7 @@ def answers_undelivered(p: Project) -> list[Finding]:
     for q in backlog.undelivered(backlog.load(p)):
         since = q.get("answered_at") or q.get("at") or str(q.get("by", "")).rpartition(", ")[2]
         if (util.age_s(since) or 0) > 60 * UNDELIVERED_MINUTES:
-            title = f"{q['issue']}'s agent has not received a {q.get('kind') or 'question'} message"
+            title = f"{q['task']}'s agent has not received a {q.get('kind') or 'question'} message"
             evidence = f"{q['id']} was answered at {since} and is still not delivered after {UNDELIVERED_MINUTES} min: «{q.get('answer')}»."
             out.append(finding(f"undelivered:{q['id']}", title, "An answer has not reached its agent.", evidence))
     return out
@@ -127,9 +127,9 @@ def answers_undelivered(p: Project) -> list[Finding]:
 
 def orphan_worktrees(p: Project) -> list[Finding]:
     root = p.path("worktrees").resolve()
-    live = {str(Path(i["worktree"]).resolve()) for i in backlog.issues(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
+    live = {str(Path(i["worktree"]).resolve()) for i in backlog.tasks(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
     out: list[Finding] = []
-    listing = integrate.git(p.repo, "worktree", "list", "--porcelain", check=False).out
+    listing = delivery.git(p.repo, "worktree", "list", "--porcelain", check=False).out
     for ln in listing.splitlines():
         if ln.startswith("worktree "):
             wt = Path(ln.split(" ", 1)[1]).resolve()
@@ -147,7 +147,7 @@ def failing_step(tail: str, command: str) -> str:
 
 def record_main_tests(p: Project, head: str) -> None:
     """Runs the tests on `head` and writes ci.json. `since` stamps when the current failing episode began."""
-    result, tail = integrate.tests_at(p, head, "main")
+    result, tail = delivery.tests_at(p, head, "main")
     before = util.read_json(p.state / "ci.json", {})
     # an older ci.json has no `since`: its failing key was the commit, so the open task keeps matching
     carried = before.get("since") or (before.get("head") or "")[:12]
@@ -157,10 +157,10 @@ def record_main_tests(p: Project, head: str) -> None:
 
 def main_tests(p: Project, run: bool = True) -> list[Finding]:
     """With `run` False (the panel, `fm health`) it only reads the last result; the loop runs the tests."""
-    cmd = p.get("integrate", "test")
+    cmd = p.get("merge", "test")
     if not cmd:
         return []
-    head = integrate.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
+    head = delivery.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
     ci = util.read_json(p.state / "ci.json", {})
     due = ci.get("head") != head or (util.age_s(ci.get("at")) or 1e9) > 60 * int(p.get("health", "ci_every_minutes"))
     if due and run:  # slow: in the background, the tick waits a little and goes on; the result lands in ci.json
@@ -212,9 +212,9 @@ def run(p: Project, rows: dict[str, Any], outside: bool = False) -> list[str]:
     with util.locked_json(p.state / "seen.json", {}) as seen:
         for key, f in found.items():
             if key not in seen:
-                iid = backlog.add(p, f["title"], detail=f["detail"], status="triage", source=f"health:{key}")
-                if iid:
-                    filed.append(iid)
+                tid = backlog.add(p, f["title"], detail=f["detail"], status="triage", source=f"health:{key}")
+                if tid:
+                    filed.append(tid)
             seen[key] = util.now()
         for key in [k for k in seen if k not in found]:
             del seen[key]

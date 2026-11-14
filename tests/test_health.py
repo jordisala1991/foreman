@@ -10,7 +10,7 @@ from unittest import mock
 
 from helpers import Env, fm, git
 
-from fm import agents, backlog, health, integrate, loop, token, util
+from fm import agents, backlog, delivery, health, loop, token, util
 
 
 class Health(unittest.TestCase):
@@ -19,7 +19,7 @@ class Health(unittest.TestCase):
         self.p = self.e.p
 
     def triage(self):
-        return [i for i in backlog.issues(backlog.load(self.p)) if i["status"] == "triage"]
+        return [i for i in backlog.tasks(backlog.load(self.p)) if i["status"] == "triage"]
 
     def test_dead_loop_is_seen_from_outside(self):
         self.assertEqual(health.loop_dead(self.p)[0]["key"], "loop-dead")
@@ -34,7 +34,7 @@ class Health(unittest.TestCase):
         self.assertEqual(len(t), 1)
         self.assertIn("ghost", t[0]["title"])
 
-    def test_a_finding_that_goes_away_and_returns_is_filed_again_only_once_its_issue_closed(self):
+    def test_a_finding_that_goes_away_and_returns_is_filed_again_only_once_its_task_closed(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
         health.run(self.p, {})
         first = self.triage()[0]["id"]
@@ -48,14 +48,14 @@ class Health(unittest.TestCase):
         self.assertEqual(len(self.triage()), 1)
 
     def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
-        iid = backlog.add(self.p, "x", status="ready", criteria="y")
-        qid = backlog.ask(self.p, iid, "a", "A or B?")
+        tid = backlog.add(self.p, "x", status="ready", criteria="y")
+        qid = backlog.ask(self.p, tid, "a", "A or B?")
         backlog.answer(self.p, qid, "B")
         self.assertEqual(health.answers_undelivered(self.p), [])
         with backlog.edit(self.p) as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
         (f,) = health.answers_undelivered(self.p)
-        self.assertIn(iid, f["title"])
+        self.assertIn(tid, f["title"])
         self.assertIn("«B»", f["detail"])
         with backlog.edit(self.p) as d:  # an answer made before the stamp existed: its `by` still has the time
             del d["decisions_resolved"][0]["answered_at"]
@@ -74,17 +74,17 @@ class Health(unittest.TestCase):
         self.assertEqual(json.loads((e.home / "state/ci.json").read_text())["result"], "fail")
 
     def test_stuck_agent(self):
-        iid = backlog.add(self.p, "x", status="ready", criteria="y")
+        tid = backlog.add(self.p, "x", status="ready", criteria="y")
         loop.tick(self.p)
-        sid = self.e.issue(iid)["agent"]["session"]
+        sid = self.e.task(tid)["agent"]["session"]
         t = self.e.tmp / "transcripts/proj"
         t.mkdir(parents=True)
         (t / f"{sid}.jsonl").write_text("{}\n")
         old = time.time() - 3 * 3600
         os.utime(t / f"{sid}.jsonl", (old, old))
-        backlog.update(self.p, iid, agent={**self.e.issue(iid)["agent"], "started": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old))})
+        backlog.update(self.p, tid, agent={**self.e.task(tid)["agent"], "started": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old))})
         rows = {sid: {"state": "working"}}
-        self.assertEqual(health.agents(self.p, rows)[0]["title"], f"{iid}'s agent looks stuck")
+        self.assertEqual(health.agents(self.p, rows)[0]["title"], f"{tid}'s agent looks stuck")
 
     def test_loop_step_errors_become_findings(self):
         util.append_jsonl(self.p.state / "errors.jsonl", {"time": util.now(), "step": "queue", "error": "boom"})
@@ -96,8 +96,8 @@ class Metrics(unittest.TestCase):
         from fm import costs, metrics
 
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.update(e.p, iid, sessions=["s1"])
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        backlog.update(e.p, tid, sessions=["s1"])
         d = e.tmp / "transcripts/proj"
         d.mkdir(parents=True)
         rec = {
@@ -107,7 +107,7 @@ class Metrics(unittest.TestCase):
         }
         (d / "s1.jsonl").write_text(json.dumps(rec) + "\n" + json.dumps(rec) + "\n")
         self.assertEqual(costs.of_sessions(["s1"])["usd"], 2.0)
-        self.assertEqual(metrics.per_issue(e.p)[0]["usd"], 2.0)
+        self.assertEqual(metrics.per_task(e.p)[0]["usd"], 2.0)
 
     def test_usage_skips_lines_that_are_not_objects(self):
         from fm import costs
@@ -124,19 +124,19 @@ class Lessons(unittest.TestCase):
         from fm import loop
 
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        os.environ.update(FM_ISSUE=iid, FM_AGENT="ty-1")
+        os.environ.update(FM_TASK=tid, FM_AGENT="ty-1")
         try:
             fm(e.home, "done", "--summary", "s", "--misled", "brief: the test command is wrong")
             fm(e.home, "verdict", "--open", "0", "--file", "r", "--misled", "none")
         finally:
-            os.environ.pop("FM_ISSUE")
+            os.environ.pop("FM_TASK")
             os.environ.pop("FM_AGENT")
         text = e.p.lessons_file.read_text()
         self.assertIn("TY-1 (ty-1): brief: the test command is wrong", text)
         self.assertEqual(text.count("\n- "), 1)
-        self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.issue(iid), "work"))
+        self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.task(tid), "responsible"))
 
 
 class Evidence(unittest.TestCase):
@@ -146,7 +146,7 @@ class Evidence(unittest.TestCase):
         git(e.repo, "commit", "-qm", name)
 
     def triage(self, e):
-        return [i for i in backlog.issues(backlog.load(e.p)) if i["status"] == "triage"]
+        return [i for i in backlog.tasks(backlog.load(e.p)) if i["status"] == "triage"]
 
     def test_failing_main_is_one_task_until_it_passes(self):
         e = Env(test="test ! -e broken")
@@ -170,13 +170,13 @@ class Evidence(unittest.TestCase):
         e = Env(test="echo lint ok; echo boom 1>&2; exit 1")
         health.run(e.p, {})
         (i,) = self.triage(e)
-        head = integrate.git(e.repo, "rev-parse", "main").out.strip()[:12]
+        head = delivery.git(e.repo, "rev-parse", "main").out.strip()[:12]
         for text in (head, "echo lint ok", "boom"):
             self.assertIn(text, i["detail"])
 
     def test_run_tests_keeps_the_last_twenty_lines(self):
         e = Env(test="seq 1 30; exit 1")
-        self.assertEqual(integrate.run_tests(e.p, e.repo), ("fail", "\n".join(map(str, range(11, 31)))))
+        self.assertEqual(delivery.run_tests(e.p, e.repo), ("fail", "\n".join(map(str, range(11, 31)))))
 
     def test_failing_step_is_the_make_target(self):
         out = "lint ok\nFAIL line\nmake[1]: *** [test] Error 1\nmake: *** [check] Error 2\n"
@@ -189,8 +189,8 @@ class Evidence(unittest.TestCase):
         git(e.repo, "worktree", "add", "-q", "-b", "x", str(e.home / "worktrees/ghost"), "main")
         (e.p.state).mkdir(parents=True, exist_ok=True)
         (e.p.state / "errors.jsonl").write_text(json.dumps({"step": "s", "error": "bad", "time": util.now()}) + "\n")
-        iid = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.update(e.p, iid, blocked="its agent stopped: x")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        backlog.update(e.p, tid, blocked="its agent stopped: x")
         env = {k: v for k, v in os.environ.items() if k != token.ENV}
 
         def no(c):
@@ -240,11 +240,11 @@ class Evidence(unittest.TestCase):
 class Upgrade(unittest.TestCase):
     def test_an_open_ci_task_from_before_since_is_not_duplicated(self):
         e = Env(test="false")
-        head = integrate.git(e.repo, "rev-parse", "main").out.strip()
+        head = delivery.git(e.repo, "rev-parse", "main").out.strip()
         util.write_json(e.p.state / "ci.json", {"head": head, "at": "2020-01-01 00:00:00", "result": "fail"})
         backlog.add(e.p, "Tests fail on main", status="triage", source=f"health:ci:{head[:12]}")
         health.run(e.p, {})
-        self.assertEqual(len(backlog.issues(backlog.load(e.p))), 1)
+        self.assertEqual(len(backlog.tasks(backlog.load(e.p))), 1)
 
 
 if __name__ == "__main__":

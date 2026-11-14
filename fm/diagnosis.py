@@ -1,4 +1,4 @@
-"""A mechanic's diagnosis of a health task: the sections it must have, and how it is stored in the task."""
+"""A mechanic's diagnosis of a health finding: the sections it must have, and how it is stored in the task."""
 
 from . import backlog, util
 from .config import Project
@@ -14,10 +14,10 @@ def missing_sections(text: str) -> list[str]:
     return [s for s in required if s.lower() not in found]
 
 
-def record(p: Project, iid: str, title: str, body: str, **marker: str) -> bool:
+def record(p: Project, tid: str, title: str, body: str, **marker: str) -> bool:
     """Appends the diagnosis to the task's detail and marks it; False (nothing changed) if it already has one."""
     with backlog.edit(p) as d:
-        i = backlog.get(d, iid)
+        i = backlog.get(d, tid)
         if i.get("diagnosis"):
             return False
         i["detail"] = (i.get("detail", "") + f"\n\n# {title}\n{body.strip()}").strip()

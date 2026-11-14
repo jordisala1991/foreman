@@ -1,4 +1,4 @@
-// The page of a task: what waits on it (its questions, the queue, triage, a block), what it is for (claim and done
+// The page of a task: what waits on it (its questions, the queue, triage, a block), what it is for (goal and done
 // criterion), its detail, its agent's report and the queue's check, what was asked, its events, its data and cost.
 import type { ReactNode } from "react";
 import {
@@ -6,7 +6,7 @@ import {
   useWrite,
 } from "./cards";
 import { useFeed } from "./feed";
-import { enc, stateUrl, t, usd2, when, type IssueAnswer, type Key, type Product } from "./lib";
+import { enc, stateUrl, t, usd2, when, type TaskAnswer, type Key, type Product } from "./lib";
 import { reloadAll } from "./feed";
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
@@ -31,9 +31,9 @@ function Cancel({ p, id, done }: { p: string; id: string; done: () => void }) {
   );
 }
 
-export function Issue({ product, id }: { product: Product; id: string }) {
-  const path = `/api/issue?p=${enc(product.name)}&id=${enc(id)}`;
-  const a = useFeed<IssueAnswer>(path, 10_000);
+export function Task({ product, id }: { product: Product; id: string }) {
+  const path = `/api/task?p=${enc(product.name)}&id=${enc(id)}`;
+  const a = useFeed<TaskAnswer>(path, 10_000);
   const reload = () => reloadAll([path, stateUrl(product.name)]);
   const crumbs = (
     <div className="crumbs">
@@ -49,7 +49,7 @@ export function Issue({ product, id }: { product: Product; id: string }) {
         {a.failed ? <LoadFailed retry={a.reload} /> : <div className="card quiet">{t("loading")}</div>}
       </div>
     );
-  const { issue: i, events, questions, cost } = a.data;
+  const { task: i, events, questions, cost } = a.data;
   const p = product.name;
   const open = questions.filter((q) => q.answer === undefined && q.kind !== "rejection");
   const past = questions.filter((q) => q.answer !== undefined);
@@ -86,9 +86,9 @@ export function Issue({ product, id }: { product: Product; id: string }) {
           {i.status === "in review" ? <QueueCard i={i} p={p} reload={reload} /> : null}
           {i.status !== "triage" && i.status !== "in review" ? <BlockedCard i={i} p={p} reload={reload} /> : null}
           <Section title={t("isu_purpose")}>
-            {i.acceptance?.claim || i.acceptance?.criteria ? (
+            {i.acceptance?.goal || i.acceptance?.criteria ? (
               <div className="card purpose">
-                {i.acceptance.claim ? (<><div className="lbl">{t("isu_goal")}</div><p>{i.acceptance.claim}</p></>) : null}
+                {i.acceptance.goal ? (<><div className="lbl">{t("isu_goal")}</div><p>{i.acceptance.goal}</p></>) : null}
                 {i.acceptance.criteria ? (<><div className="lbl">{t("isu_criteria")}</div><p>{i.acceptance.criteria}</p></>) : null}
                 {i.acceptance.verdict ? (<><div className="lbl">{t("isu_verdict")}</div><p>{i.acceptance.verdict}</p></>) : null}
               </div>

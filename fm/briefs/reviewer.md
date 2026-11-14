@@ -2,7 +2,7 @@ You are the second pass on branch `$branch` of task $id in project $project, rou
 
 # The task
 $id · $title
-Goal: $claim
+Goal: $goal
 Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
@@ -11,7 +11,7 @@ $owner_notes
 Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
 
 # How
-1. **Read** the acceptance criteria, `${hunter_file}`, then the diff (`git diff $main...$branch`) and the plan (`$plan`) as you need them. The agent's report (`$report`) is a claim, never evidence.
+1. **Read** the acceptance criteria, `${hunter_file}`, then the diff (`git diff $main...$branch`) and the plan (`$plan`) as you need them. The agent's report (`$report`) is a goal, never evidence.
 2. **Each Wrong or Missing finding:** try to confirm it: run it (the tests, a command, a one-off call) or follow the exact code path, line by line, from the input to the wrong result. Then:
    - **confirmed**: you saw it fail, or traced the whole path → To fix, with that evidence.
    - **refuted**: you found the line or the output that shows the stated failure does not happen (a guard, a caller that never passes that input, a test that covers it and passes) → Noted, citing that line or output.
@@ -20,7 +20,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 3. **Each Too much item:** check that it is in the diff and that no acceptance criteria line or plan item needs it. If one does, cite it and move the item to Noted; otherwise it stays: «remove X».
 4. **Do not add findings of your own.** Something new you notice goes to Noted.
 5. **Acceptance criteria table:** rebuild it with your own evidence.
-6. **Evidence:** every claim names a file:line or a command you ran in this session, with its output. Never describe output you did not see; if you did not run something, say «not run» and why.
+6. **Evidence:** every goal names a file:line or a command you ran in this session, with its output. Never describe output you did not see; if you did not run something, say «not run» and why.
 $round2
 # The review
 Write it to `$review_file`. Its first lines, plain:

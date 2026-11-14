@@ -1,5 +1,5 @@
 // The system watching itself: the loop's heartbeat and the pause switch, the health findings (each new one is filed
-// as a triage task), and per task what it cost and how it went (fm.metrics.per_issue), with the total.
+// as a triage task), and per task what it cost and how it went (fm.metrics.per_task), with the total.
 import { LoadFailed, Risk, useWrite } from "./cards";
 import { reloadAll, useFeed } from "./feed";
 import { ScreenHead } from "./head";
@@ -47,7 +47,7 @@ export function System({ product }: { product: Product }) {
                   {Object.entries(l.held).map(([slot, h]) => (
                     <p key={slot}>
                       {l.slots.length > 1 ? `${slot}: ` : ""}
-                      <strong>{h.who}</strong> {h.issue ? `(${h.issue}) ` : ""}· {h.what} · {t("lock_since", { when: h.since.slice(11, 16) })}
+                      <strong>{h.who}</strong> {h.task ? `(${h.task}) ` : ""}· {h.what} · {t("lock_since", { when: h.since.slice(11, 16) })}
                     </p>
                   ))}
                   {l.queue.map((q, n) => (
@@ -88,7 +88,7 @@ export function System({ product }: { product: Product }) {
                 <tbody>
                   {d.metrics.map((r) => (
                     <tr key={r.id}>
-                      <td><a href={`#/issue/${r.id}`} className="mono">{r.id}</a> <span className="tt">{r.title}</span></td>
+                      <td><a href={`#/task/${r.id}`} className="mono">{r.id}</a> <span className="tt">{r.title}</span></td>
                       <td>{t(`st_${r.status.replace(" ", "_")}` as Key)}</td>
                       <td className="num">{usd2(r.usd)}</td>
                       <td className="num">{n0(r.to_done_min ?? r.to_review_min)}</td>
