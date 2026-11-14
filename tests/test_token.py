@@ -110,11 +110,11 @@ class Token(unittest.TestCase):
         out = fm(self.p.home, "init", "--prefix", "ZZ", "--repo", "r")
         self.assertIn("claude setup-token", out)
 
-    def test_fm_health_cli_shows_the_renew_command_for_no_token(self):
+    def test_fm_health_cli_shows_what_no_token_means(self):
         self.set_login(False)
         with mock.patch.object(token, "keychain", lambda: ""):
             out = fm(self.p.home, "health")
-        self.assertIn("security add-generic-password -U", out)
+        self.assertIn("no fallback token", out)
         self.assertIn("claude setup-token", out)
 
     def test_unreadable_keychain_is_not_no_token_and_files_nothing(self):
