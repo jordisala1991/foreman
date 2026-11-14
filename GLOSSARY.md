@@ -148,7 +148,7 @@ _Chat_: en marcha
 _Avoid_: doing, working
 
 **in review**
-A delivered task in the integration queue, waiting for its checks, the review and the owner's accept.
+A delivered task waiting for its checks, the review and the owner's accept.
 _Chat_: cola de integración
 _Avoid_: queued, integration queue
 
@@ -170,7 +170,7 @@ _Avoid_: dropped
 ## System
 
 **Owner**
-The person who owns the project and decides every name, scope and merge.
+The person who owns the project and files its tasks.
 _Chat_: dueño
 _Avoid_: user, human, operator, boss
 
