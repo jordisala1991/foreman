@@ -29,8 +29,10 @@ Branch: $branch
 Tip: $tip
 Round: $round
 Open: N
+Findings:
+F1 | M | path:line | what is wrong, one line | why: the failing case, one line
 ```
-N is the number of items under To fix. Then:
+N is the number of items under To fix. `Findings:` has one line per To fix item, five fields separated by `|` (none of the first four may contain a `|`; severity H, M or L: H blocks, M should be fixed, L is a nit); `path:line` is the line in the branch's final file, or `-` when it has none; leave `Findings:` out when N is 0. The owner reads these lines on the PR. Then:
 - the acceptance criteria table: one row per line of the acceptance criteria: met / not met / not shown, and its evidence;
 - `## To fix`: what the responsible agent must act on, and only that. A Missing finding is only an acceptance criterion not met: a plan item not done is not a finding while the criteria are met (the plan still counts for Too much). F1, F2…, each: kind (Wrong / Missing / Too much), file:line, what happens, the evidence (the command and its output, or the exact code path);
 - `## Noted (not sent to the responsible agent)` (optional): the rest, one line each, with why it is not to fix;

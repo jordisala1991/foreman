@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
-from . import Conflict, Permanent, Provider, ProviderError, Transient
+from ..inline import Review, Thread, resolve_links
+from . import Conflict, Permanent, Provider, ProviderError, Transient, gh_review, gh_threads
+from .gh_review import marker
 
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -111,10 +113,10 @@ class GitHub(Provider):
     has_ci = True
     name = "github"
 
-    def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
+    def run(self, prog: str, *args: str, check: bool = True, input: str | None = None) -> proc.Result:
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None)
+            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, input=input)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if check and r.code != 0:
@@ -173,8 +175,42 @@ class GitHub(Provider):
     def ready(self, change: dict[str, Any]) -> None:
         self.run("gh", "pr", "ready", str(change["pr"]))
 
-    def comment(self, change: dict[str, Any], text: str) -> None:
-        self.run("gh", "pr", "comment", str(change["pr"]), "--body", text)
+    def diff(self, change: dict[str, Any]) -> str:
+        return self.run("gh", "pr", "diff", str(change["pr"]), "--color=never").out
+
+    def markers(self, change: dict[str, Any], what: str) -> set[str]:
+        """The `<!-- fm:KEY -->` markers in the bodies of the PR's reviews or review comments."""
+        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/{what}"
+        r = self.run("gh", "api", url, "--paginate", "--jq", '.[] | (.body // "") | scan("<!-- fm:[a-z0-9-]+ -->")')
+        return set(r.out.split("\n")) - {""}
+
+    def review(self, change: dict[str, Any], review: Review) -> int:
+        if marker(review.key) in self.markers(change, "reviews"):
+            return 0
+        known = self.markers(change, "comments")
+        new = [c for c in review.comments if marker(c.key) not in known]
+        base = self.run("gh", "repo", "view", "--json", "url", "-q", ".url").out.strip()
+        payload = {
+            "commit_id": change["head"],
+            "event": "COMMENT",
+            "body": resolve_links(f"{review.body}\n\n{marker(review.key)}", base, change["head"], {}),
+            "comments": [{"path": c.path, "line": c.line, "side": "RIGHT", "body": f"{c.body}\n\n{marker(c.key)}"} for c in new],
+        }
+        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews"
+        posted = self.run("gh", "api", "-X", "POST", url, "--input", "-", input=json.dumps(payload))
+        gh_review.link_comments(self.run, change, review, new, (base, posted.out))
+        return len(new)
+
+    def threads(self, change: dict[str, Any]) -> list[Thread]:
+        args = ["api", "graphql", "--paginate", "-F", "owner={owner}", "-F", "repo={repo}", "-F", f"number={change['pr']}"]
+        return gh_threads.parse(self.run("gh", *args, "-f", f"query={gh_threads.READ}", "--jq", gh_threads.JQ).out)
+
+    def settle(self, change: dict[str, Any], thread: Thread, sha: str) -> None:
+        try:
+            self.run("gh", "api", "graphql", "-f", f"query={gh_threads.RESOLVE}", "-f", f"id={thread.id}")
+        except (Transient, Permanent):
+            body = gh_threads.fixed_text(thread.key, sha)
+            self.run("gh", "api", "graphql", "-f", f"query={gh_threads.REPLY}", "-f", f"id={thread.id}", "-f", f"body={body}")
 
     def is_open(self, change: dict[str, Any]) -> bool:
         return self.view(change).state == "OPEN"

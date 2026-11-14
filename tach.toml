@@ -91,6 +91,14 @@ layer = "ports"
 [[modules]]
 path = "fm.providers.github"
 layer = "adapters"
+depends_on = ["fm.providers", "fm.providers.gh_threads", "fm.providers.gh_review"]
+[[modules]]
+path = "fm.providers.gh_review"
+layer = "adapters"
+depends_on = ["fm.providers"]
+[[modules]]
+path = "fm.providers.gh_threads"
+layer = "adapters"
 depends_on = ["fm.providers"]
 [[modules]]
 path = "fm.providers.local"
@@ -127,6 +135,12 @@ path = "fm.util"
 layer = "core"
 [[modules]]
 path = "fm.describe"
+layer = "core"
+[[modules]]
+path = "fm.verdict"
+layer = "core"
+[[modules]]
+path = "fm.inline"
 layer = "core"
 [[modules]]
 path = "fm.subtasks"
