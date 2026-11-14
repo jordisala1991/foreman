@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .. import evidence, proc, util
-from ..inline import LineComment, Review, resolve_links
-from . import Conflict, Permanent, Provider, ProviderError, Transient
+from ..inline import Review
+from . import Conflict, Permanent, Provider, ProviderError, Transient, ghreview
 from .checks import down, open_prs, pull
 
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
@@ -85,10 +85,6 @@ def pull_request(raw: object) -> PullRequest:
             raise ProviderError(f"{what}: `mergeCommit` should be an object or null, gh gave {merge!r}")
         commit = _field(mo, "oid", str, what)
     return PullRequest(_field(o, "number", int, what), _field(o, "url", str, what), _field(o, "isDraft", bool, what), state, commit)
-
-
-def _marker(key: str) -> str:
-    return f"<!-- fm:{key} -->"
 
 
 class GitHub(Provider):
@@ -196,48 +192,8 @@ class GitHub(Provider):
     def diff(self, change: dict[str, Any]) -> str:
         return self.run("gh", "pr", "diff", str(change["pr"]), "--color=never").out
 
-    def markers(self, change: dict[str, Any], what: str) -> set[str]:
-        """The `<!-- fm:KEY -->` markers in the bodies of the PR's reviews or review comments."""
-        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/{what}"
-        r = self.run("gh", "api", url, "--paginate", "--jq", '.[] | (.body // "") | scan("<!-- fm:[a-z0-9-]+ -->")')
-        return set(r.out.split("\n")) - {""}
-
     def review(self, change: dict[str, Any], review: Review) -> int:
-        if _marker(review.key) in self.markers(change, "reviews"):
-            return 0
-        known = self.markers(change, "comments")
-        new = [c for c in review.comments if _marker(c.key) not in known]
-        base = self.run("gh", "repo", "view", "--json", "url", "-q", ".url").out.strip()
-        payload = {
-            "commit_id": change["head"],
-            "event": "COMMENT",
-            "body": resolve_links(f"{review.body}\n\n{_marker(review.key)}", base, change["head"], {}),
-            "comments": [{"path": c.path, "line": c.line, "side": "RIGHT", "body": f"{c.body}\n\n{_marker(c.key)}"} for c in new],
-        }
-        url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews"
-        posted = self.run("gh", "api", "-X", "POST", url, "--input", "-", input=json.dumps(payload))
-        self.link_comments(change, review, new, (base, posted.out))
-        return len(new)
-
-    def link_comments(self, change: dict[str, Any], review: Review, new: list[LineComment], posted: tuple[str, str]) -> None:
-        """Best effort: the body's links to findings that got an inline comment point at that comment instead of the
-        file. A failure leaves the file links, which are right too."""
-        base, out = posted
-        if not new or "fm-link:" not in review.body:
-            return
-        try:
-            rid = json.loads(out)["id"]
-            listing = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}/comments"
-            r = self.run("gh", "api", listing, "--jq", r'.[] | "\(.id) \(.body | scan("<!-- fm:[a-z0-9-]+ -->"))"')
-            ids: dict[str, str] = {}
-            for line in r.out.splitlines():
-                num, _, mark = line.partition(" ")
-                ids[mark] = num
-            urls = {c.place: f"{base}/pull/{change['pr']}#discussion_r{ids[_marker(c.key)]}" for c in new if _marker(c.key) in ids}
-            body = resolve_links(review.body, base, change["head"], urls) + f"\n\n{_marker(review.key)}"
-            self.run("gh", "api", "-X", "PUT", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}", "--input", "-", input=json.dumps({"body": body}))
-        except (ValueError, KeyError, TypeError, ProviderError, Transient, Permanent):
-            return
+        return ghreview.post(self.run, change, review)
 
     def is_open(self, change: dict[str, Any]) -> bool:
         return self.view(change).state == "OPEN"
