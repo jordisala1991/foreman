@@ -22,7 +22,6 @@ Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$
 - A lint or type error is fixed at its root. Do not silence it (noqa, ignore, cast, exception lists, helpers whose only purpose is to please the checker) without asking first with `fm ask`.
 - Ask the owner only what only he can answer (a preference, a choice of scope). Run `fm ask "…"` and END YOUR TURN: his answer comes back to you here. Do not guess on that point meanwhile. A good question stands alone: the context in one line, the options, your recommendation and why.
 - A few actions need the owner's yes: publishing, pushing to `$main`, deleting what is not yours, changing fm.toml. If you know you need one, ask with `fm ask --action publish|push-main|delete|config "what and why"`. If the guard stops one, do not look for another way: ask the same way; if he allows it you are told here, and it passes once.
-- `fm note "text"`: a short progress line the owner sees in the panel (a result, a blocker; not routine steps).
 - $resources
 - Leave no live processes behind.
 

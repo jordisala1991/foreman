@@ -58,9 +58,9 @@ class Limited(unittest.TestCase):
             g.e.verdict(iid)
         reset = int(time.time()) + 600
         g.set(reset=reset, limited=True)
-        before = len(g.calls("pr", "checks"))
+        before = len(g.calls("api", "graphql"))
         loop.tick(g.e.p)
-        self.assertEqual(len(g.calls("pr", "checks")), before + 1)
+        self.assertEqual(len(g.calls("api", "graphql")), before + 1)
         n = len(g.calls())
         for _ in range(9):
             loop.tick(g.e.p)

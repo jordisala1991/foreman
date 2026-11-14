@@ -131,7 +131,7 @@ export interface IssueAnswer {
   issue: Issue;
   events: Event[];
   questions: Question[];
-  cost: { usd: number; tokens: number; minutes: number };
+  cost: { usd: number; minutes: number };
 }
 export interface Finding {
   key: string;
@@ -143,8 +143,6 @@ export interface MetricRow {
   title: string;
   status: string;
   usd: number;
-  tokens: number;
-  agent_minutes: number;
   to_review_min: number | null;
   to_done_min: number | null;
   rework: number;

@@ -50,6 +50,22 @@ FAKE_GH = textwrap.dedent("""\
         else:
             print(json.dumps({"resources": {}}))
         sys.exit(0)
+    if s.get("limited") and a[:2] == ["api", "graphql"]:
+        print("GraphQL: API rate limit already exceeded for user ID 1.", file=sys.stderr)
+        sys.exit(1)
+    if a[:2] == ["api", "graphql"]:
+        import subprocess
+        def node(n, pr):
+            sha = subprocess.run(["git", "ls-remote", "origin", "refs/heads/" + pr["head"]], capture_output=True, text=True).stdout.split()[:1]
+            roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]]}
+            return {"number": int(n), "headRefOid": sha[0] if sha else "", "commits": {"nodes": [{"commit": {"statusCheckRollup": roll}}]}}
+        one = [x for x in a if x.startswith("number=")]
+        if one:  # a PR on its own, open or not
+            print(json.dumps({"data": {"repository": {"pullRequest": node(one[0][7:], s["prs"][one[0][7:]])}}}))
+        else:
+            nodes = [node(n, pr) for n, pr in s["prs"].items() if pr["state"] == "OPEN" and n not in s.get("hidden", [])]
+            print(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
+        sys.exit(0)
     if a[:1] == ["api"]:
         print(s.get("api_sha") or "null")
         sys.exit(0)
@@ -64,9 +80,6 @@ FAKE_GH = textwrap.dedent("""\
         sys.exit(1)
     if s.get("limited_body") and a[:2] == ["pr", "view"] and "body" in a:
         print("API rate limit exceeded for user ID 1.", file=sys.stderr)
-        sys.exit(1)
-    if s.get("limited") and a[:2] == ["pr", "checks"]:
-        print("GraphQL: API rate limit already exceeded for user ID 1.", file=sys.stderr)
         sys.exit(1)
     pr = s["prs"][a[2]]
     if a[:2] == ["pr", "ready"]:
@@ -87,12 +100,6 @@ FAKE_GH = textwrap.dedent("""\
         pr["subject"] = flag("--subject")
         if not s["lag"]:
             pr["state"] = "MERGED"
-    elif a[:2] == ["pr", "checks"]:
-        if s["ci"] == "none":
-            print("no checks reported", file=sys.stderr)
-            sys.exit(1)
-        print(json.dumps([{"bucket": s["ci"]}]))
-        sys.exit(8 if s["ci"] == "pending" else 0)
     elif a[:2] == ["pr", "view"] and s.get("bad_view"):
         print(json.dumps({"state": "SIDEWAYS", "number": "one"}))
     elif a[:2] == ["pr", "view"]:
@@ -119,9 +126,11 @@ class GH:
         toml = e.home / "fm.toml"
         toml.write_text(toml.read_text().replace("[integrate]", f'[integrate]\nprovider = "github"\n{extra}'))
         e.p = type(e.p).load(e.home)
+        self.poll, github.POLL = github.POLL, 0  # a pending answer is read again at every call, unless a test says otherwise
 
     def close(self) -> None:
         os.environ["PATH"] = self.path
+        github.POLL = self.poll
 
     @property
     def state(self) -> dict:
@@ -201,11 +210,18 @@ class Border(unittest.TestCase):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
                 github.pull_request(bad)
 
-    def test_checks_become_buckets_or_a_provider_error(self):
-        self.assertEqual(github.buckets([{"bucket": "pass"}, {"bucket": "pending"}]), {"pass", "pending"})
-        for bad in ({}, [{"bucket": "weird"}], [{"state": "x"}], ["pass"]):
+    def test_the_open_prs_answer_becomes_head_and_ci_or_a_provider_error(self):
+        def node(state):
+            return {"number": 1, "headRefOid": "abc", "commits": {"nodes": [{"commit": {"statusCheckRollup": state}}]}}
+
+        def answer(*nodes):
+            return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
+
+        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass"}})
+        self.assertEqual(github.open_prs(answer(node(None)))["1"]["ci"], "none")
+        for bad in (answer({"number": "1"}), answer("x")):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.buckets(bad)
+                github.open_prs(bad)
 
     def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self):
         g = GH()
@@ -463,24 +479,57 @@ class Pulls(unittest.TestCase):
         loop.tick(g.e.p)
         self.assertEqual(g.e.issue(iid)["status"], "done")
 
-    def test_ci_turning_red_on_the_same_head_stops_autonomy(self):
+    def graphql(self, g: GH) -> int:
+        return len(g.calls("api", "graphql"))
+
+    def test_a_settled_ci_is_not_read_again_until_the_branch_gets_a_commit(self):
         g = self.make(test="true", autonomy="manual")
         iid = g.work()
         g.deliver(iid)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")  # cached, head and main unchanged
-        g.set(ci="fail")  # a CI re-run failed on the same head
-        g.e.p.cfg["integrate"]["autonomy"] = "medium"
+        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("pass", 1))
+        for _ in range(3):
+            loop.tick(g.e.p)
+        self.assertEqual(self.graphql(g), 1)
+        wt = g.e.repo.parent / g.e.issue(iid)["worktree"]
+        with open(wt / "app.py", "a") as f:
+            f.write("# fix\n")
+        git(wt, "commit", "-qam", "fix")
+        g.set(ci="fail")
+        g.e.review(iid)  # the new tip is reviewed first
         loop.tick(g.e.p)
-        self.assertEqual((g.e.issue(iid)["check"]["ci"], g.e.issue(iid)["status"]), ("fail", "in review"))
-        self.assertEqual(g.calls("pr", "merge"), [])
+        self.assertEqual((g.e.issue(iid)["check"]["ci"], self.graphql(g)), ("fail", 2))
+
+    def test_a_pr_missing_from_the_open_list_is_read_on_its_own_and_kept(self):
+        g = self.make(test="true", autonomy="manual")
+        g.set(hidden=["1"])  # still there, but not in the open list (closed outside fm, or past the first 100)
+        iid = g.work()
+        g.deliver(iid)
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")
+        before = self.graphql(g)
+        loop.tick(g.e.p)
+        self.assertEqual(self.graphql(g), before)
+
+    def test_pending_ci_of_several_tasks_is_one_call_per_poll(self):
+        g = self.make(test="true", autonomy="manual")
+        g.set(ci="pending")
+        github.POLL = 3600
+        ids = [g.work(), g.work()]
+        for iid in ids:
+            g.deliver(iid)
+        loop.tick(g.e.p)
+        loop.tick(g.e.p)
+        self.assertEqual(self.graphql(g), 1)
+        self.assertTrue(all("check" not in g.e.issue(iid) for iid in ids))
 
     def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
-        for failing in (["pr", "checks"], ["pr", "merge"], ["pr", "view"]):
+        for failing in (["api", "graphql"], ["pr", "merge"], ["pr", "view"]):
             g = self.make(test="true", autonomy="medium")
+            g.set(ci="pending")
             iid = g.work()
             g.deliver(iid)
-            g.set(fail_once=failing)
+            g.set(ci="pass", fail_once=failing)
             loop.tick(g.e.p)
             loop.tick(g.e.p)
             loop.tick(g.e.p)

@@ -10,6 +10,7 @@ from typing import Any, Literal
 from .. import proc, util
 from . import Conflict, Permanent, Provider, ProviderError, RateLimited, Transient
 
+POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
 PUSH_TIMEOUT = 20  # seconds for a push
 
 
@@ -67,9 +68,7 @@ def failure(what: str, text: str) -> Exception:
 
 
 State = Literal["OPEN", "MERGED", "CLOSED"]
-Bucket = Literal["pass", "fail", "cancel", "pending", "skipping"]
 STATES: dict[str, State] = {s: s for s in ("OPEN", "MERGED", "CLOSED")}
-BUCKETS: dict[str, Bucket] = {b: b for b in ("pass", "fail", "cancel", "pending", "skipping")}
 
 
 @dataclass(frozen=True)
@@ -109,19 +108,29 @@ def pull_request(raw: object) -> PullRequest:
     return PullRequest(_field(o, "number", int, what), _field(o, "url", str, what), _field(o, "isDraft", bool, what), state, commit)
 
 
-def buckets(raw: object) -> set[Bucket]:
-    """`gh pr checks --json bucket` as the set of its buckets; ProviderError if it does not fit."""
-    items = util.json_list(raw)
-    if not isinstance(raw, list):
-        raise ProviderError(f"gh pr checks: expected a JSON list, gh gave {raw!r}"[:300])
-    out: set[Bucket] = set()
-    for item in items:
-        o = util.json_object(item)
-        b = BUCKETS.get(o["bucket"]) if o and isinstance(o.get("bucket"), str) else None
-        if b is None:
-            raise ProviderError(f"gh pr checks: unexpected check {item!r}"[:300])
-        out.add(b)
-    return out
+ROLLUP = {"SUCCESS": "pass", "FAILURE": "fail", "ERROR": "fail", "PENDING": "pending", "EXPECTED": "pending"}
+
+
+def _at(o: dict[str, Any] | None, *keys: str) -> dict[str, Any]:
+    """Down the objects `keys` of a GraphQL answer; {} where one is missing or null (a PR with no checks has no rollup)."""
+    for k in keys:
+        o = util.json_object((o or {}).get(k))
+    return o or {}
+
+
+def _pull(item: object) -> tuple[str, dict[str, str]]:
+    """One GraphQL pull request node as (number, {head, ci}); ProviderError if it does not fit."""
+    n = util.json_object(item)
+    if not n or not isinstance(n.get("number"), int) or not isinstance(n.get("headRefOid"), str):
+        raise ProviderError(f"gh api graphql: unexpected pull request {item!r}"[:300])
+    last = util.json_object(next(iter(util.json_list(_at(n, "commits").get("nodes"))), None))
+    state = _at(last, "commit", "statusCheckRollup").get("state")
+    return str(n["number"]), {"head": n["headRefOid"], "ci": ROLLUP.get(str(state), "none")}
+
+
+def open_prs(raw: object) -> dict[str, dict[str, str]]:
+    """The answer of the open-PRs query as {number: {head, ci}}; ProviderError if it does not fit."""
+    return dict(_pull(n) for n in util.json_list(_at(util.json_object(raw), "data", "repository", "pullRequests").get("nodes")))
 
 
 class GitHub(Provider):
@@ -230,18 +239,44 @@ class GitHub(Provider):
         self.run("gh", "pr", "close", str(change["pr"]), "--comment", text)
 
     def ci(self, change: dict[str, Any]) -> str:
-        r = self.run("gh", "pr", "checks", str(change["pr"]), "--json", "bucket", check=False)  # exit 8 = pending
+        """The PR's CI. A pass or fail is kept for its commit and not read again; pending or no checks is reused for POLL
+        seconds. A read asks GitHub once for every open PR, so all tasks of a poll share one call; a PR that is not in that
+        answer (past the first 100, or no longer open) is read on its own."""
+        pr, head = str(change["pr"]), change["head"]
+        e = util.read_json(self.p.state / "pr_ci.json", {}).get(pr)
+        if not (e and e["head"] == head and (e["ci"] in ("pass", "fail") or (util.age_s(e["at"]) or 1e9) < POLL)):
+            self.refresh(pr)
+            e = util.read_json(self.p.state / "pr_ci.json", {}).get(pr)
+        return e["ci"] if e and e["head"] == head else "pending"  # GitHub has not shown this commit yet
+
+    def graphql(self, query: str, *fields: str) -> object:
+        r = self.run("gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}", *fields, "-f", f"query={query}")
         try:
-            found = buckets(json.loads(r.out))
+            return json.loads(r.out)
         except ValueError:
-            if "no checks" in (r.err + r.out).lower():
-                return "none"
-            raise failure("gh pr checks", r.err or r.out) from None
-        if found & {"fail", "cancel"}:
-            return "fail"
-        if "pending" in found:
-            return "pending"
-        return "pass" if "pass" in found else "none"
+            raise ProviderError(f"gh api graphql: not JSON: {r.out.strip()[:200]!r}") from None
+
+    def refresh(self, pr: str) -> None:
+        """One GraphQL call: head commit and check state of every open PR into state/pr_ci.json; then, if `pr` is not among
+        them, one more for that PR."""
+        fields = "number headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+        found = open_prs(
+            self.graphql(
+                "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) "
+                f"{{ pullRequests(states: OPEN, first: 100) {{ nodes {{ {fields} }} }} }} }}"
+            )
+        )
+        if pr not in found:
+            one = self.graphql(
+                "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) "
+                f"{{ pullRequest(number: $number) {{ {fields} }} }} }}",
+                "-F",
+                f"number={pr}",
+            )
+            found.update([_pull(_at(util.json_object(one), "data", "repository").get("pullRequest"))])
+        at = util.now()
+        kept = util.read_json(self.p.state / "pr_ci.json", {})
+        util.write_json(self.p.state / "pr_ci.json", {**kept, **{n: {**e, "at": at} for n, e in found.items()}})
 
     def merge(self, change: dict[str, Any], strategy: str) -> str:
         """Merges the PR once (a retry after a crash finds it merged). Returns the merge commit; if GitHub has not
