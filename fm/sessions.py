@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import backlog, proc, token, util
+from . import backlog, login, proc, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
@@ -79,7 +79,7 @@ def command(p: Project, agent: Agent, prompt: str) -> list[str]:
 
 def _run(cmd: list[str], cwd: Path) -> str:
     try:
-        r = proc.run(cmd, cwd=cwd, timeout=120, env=token.child_env(cmd[0]))
+        r = proc.run(cmd, cwd=cwd, timeout=120, env=login.child_env())
     except proc.ProcError as e:
         raise SessionError(f"claude did not start: {e}") from e
     m = BACKGROUNDED.search(r.out + r.err)
@@ -128,7 +128,7 @@ def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
 def listing(p: Project) -> dict[str, dict[str, Any]]:
     """Every background session Claude Code knows (done ones included), by full session id; {} when unreadable."""
     try:
-        rows = util.json_list(proc.run_json([p.get("agents", "claude"), "agents", "--json", "--all"], timeout=30))
+        rows = util.json_list(proc.run_json([p.get("agents", "claude"), "agents", "--json", "--all"], timeout=30, env=login.child_env()))
     except proc.ProcError:
         return {}
     found: dict[str, dict[str, Any]] = {}
@@ -164,7 +164,7 @@ def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
 
 
 def stop(p: Project, short: str) -> None:
-    proc.run([p.get("agents", "claude"), "stop", short], timeout=30)
+    proc.run([p.get("agents", "claude"), "stop", short], timeout=30, env=login.child_env())
 
 
 def stop_live(p: Project, tid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:

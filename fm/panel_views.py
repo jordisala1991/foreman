@@ -97,7 +97,7 @@ def task(p: Project, tid: str) -> Obj:
 
 
 def system(p: Project) -> Obj:
-    found = health.findings(p, sessions.listing(p), outside=True, probe=False)
+    found = health.findings(p, sessions.listing(p), outside=True)
     rows = metrics.per_task(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     return {
