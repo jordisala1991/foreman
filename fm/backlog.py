@@ -47,7 +47,6 @@ class Agent(TypedDict, total=False):
     name: str
     short: str
     session: str
-    model: str
     cwd: str
 
 

@@ -7,7 +7,6 @@ from .agents import idle_s, send, update_agent
 from .config import Project
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
-MAX_SEND_FAILS = 3
 
 
 def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
@@ -49,11 +48,7 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
         else:
             sent.add(i["id"])
-            fails = i.get("undelivered", 0) + 1
-            backlog.update(p, i["id"], undelivered=fails)
-            if fails >= MAX_SEND_FAILS:
-                backlog.mark_delivered(p, q["id"])
-                backlog.update(p, i["id"], blocked=f"its agent could not be reached to deliver {q['id']}: «{q['answer']}». Open it and tell it, or relaunch.")
+            backlog.update(p, i["id"], undelivered=i.get("undelivered", 0) + 1)
 
 
 def watch_agents(p: Project, rows: dict[str, Any]) -> None:
