@@ -36,8 +36,8 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "ready" if a.ready else "triage" if a.triage else "backlog"
-    iid = backlog.add(p, a.title, detail=a.detail or "", status=status, criterion=a.criterion or "", claim=a.claim or "", priority=a.priority)
+    status = "triage" if a.triage else "backlog"
+    iid = backlog.add(p, a.title, detail=a.detail or "", status=status, criteria=a.criteria or "", claim=a.claim or "", priority=a.priority)
     print(iid)
 
 
@@ -126,8 +126,9 @@ def cmd_go(a: argparse.Namespace) -> None:
     p = home(a)
     i = backlog.get(backlog.load(p), a.id)
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
-    status = "ready" if acceptance.get("criterion") else "backlog"
-    backlog.set_status(p, a.id, status, "let in by the owner", blocked="")
+    if not acceptance.get("criteria"):
+        sys.exit(f"fm: {a.id}: define its acceptance criteria with the owner first")
+    backlog.set_status(p, a.id, "backlog", "let in by the owner", blocked="")
 
 
 def cmd_cancel(a: argparse.Namespace) -> None:

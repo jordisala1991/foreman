@@ -88,7 +88,7 @@ export interface Issue {
   blocked?: string;
   created?: string;
   closed?: string;
-  acceptance?: { claim?: string; criterion?: string; verdict?: string };
+  acceptance?: { claim?: string; criteria?: string; verdict?: string };
   agent?: Agent;
   agent_state?: string | null; // working | done | stopped | gone
   description?: string;

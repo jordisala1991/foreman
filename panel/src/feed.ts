@@ -2,8 +2,8 @@
 // shared by everyone who watches it (the shell's counts, a screen and its sub-screens ask the same /api/state once per
 // turn), and a new answer replaces the old one only when its text differs. An answer equal to the last one changes
 // nothing, so nothing redraws; one that differs, or a failure, replaces the snapshot, and a refresh never empties it:
-// what is on screen stays until the new answer is there. (The server also sends an ETag, and `no-cache` makes the
-// browser ask with it; this is the same check on the page's side, where the cost was: a new object per poll.)
+// what is on screen stays until the new answer is there. (This check is on the page's side, where the cost was: a new
+// object per poll.)
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { withKey } from "./lib";
 

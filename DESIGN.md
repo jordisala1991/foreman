@@ -15,7 +15,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
       sources → answers → agents → queue → health → launch
               │
    claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
-      defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
+      planning agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
       responsible agent (cwd: its worktree, branch)  → subagents, fm ask, fm done / fm block
       hunter, then reviewer (launched by the loop, read only) → hunter file, review file, fm verdict
 ```
@@ -35,7 +35,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
 | `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
-| `fm/briefs/*.md` | ~80 | the defining agent's (it plans), the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
+| `fm/briefs/*.md` | ~80 | the planning agent's, the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
 | `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
 
 Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, built to `panel/dist`.
@@ -52,7 +52,7 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 
 ```
  triage ──go──▶ backlog ──loop──▶ refining ──fm ready──▶ ready ──loop──▶ in progress ──fm done──▶ in review
- (health,        (to define)      (defining agent)                       (responsible agent)      (queue: check,
+ (health,        (to plan)        (planning agent)                       (responsible agent)      (queue: check,
   sources)                                                                      ▲                    risk score)
                                                                                 └──── fm reject ─────┤
                                                                                                      ▼
@@ -61,9 +61,11 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
  any open state ── fm cancel ──▶ canceled          `blocked` (a reason) on any state: the loop leaves it alone
 ```
 
-- `triage`: filed by a health check or a source. Never launched until the owner says «go».
-- `backlog`: to define. `refining`: its defining agent works. It ends with `fm ready --claim --criterion`.
-- `ready`: has a goal and a done criterion. `in progress`: its responsible agent works, in its own worktree and branch.
+- `triage`: filed by a health check, a source, or without acceptance criteria (the only state such a task can be in).
+  Never launched until the owner says «go»; `fm go` refuses a task without acceptance criteria.
+- `backlog`: to plan (it has acceptance criteria, set with the owner). `refining`: its planning agent works. It ends
+  with `fm ready --plan|--no-plan`.
+- `ready`: has acceptance criteria and a plan (or none, if trivial). `in progress`: its responsible agent works, in its own worktree and branch.
 - `in review`: the integration queue. The loop checks the branch; the owner accepts it or sends it back with a note.
 - `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
   nudge). The owner clears it (`fm unblock [--relaunch]`).
@@ -107,7 +109,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
    only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
 7. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
-   agent) or `backlog` issue (its defining agent), by priority then id. If the issue changed while its session
+   agent) or `backlog` issue (its planning agent), by priority then id. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
 
 `fm cancel` stops the agent, closes its open questions and removes its worktree (the branch stays).
@@ -122,9 +124,10 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-de
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
   the agent that owns the task.
 
-**Defining agent** (`fm/briefs/define.md`): reads the repo (read only), settles what the task means, asks the owner
-only what only he can decide (`fm ask`, then ends its turn), asks the owner (`fm ask`) when a task is too big, proposing the split, files nothing, and ends with
-`fm ready --claim --criterion --detail --plan PATH` (or `--no-plan "why trivial"`). It also reads the code and writes a
+**Planning agent** (`fm/briefs/define.md`): the acceptance criteria are product (observable behaviour, never how) and
+are settled with the owner when the task is filed; the planning agent never writes, rewrites or splits them, and `fm ask`s
+the owner if one cannot be met as written. It reads the repo (read only), asks the owner only what only he can decide
+(`fm ask`, then ends its turn), and ends with `fm ready --detail --plan PATH` (or `--no-plan "why trivial"`). It writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
 risk); the issue gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
 
@@ -138,13 +141,12 @@ plan launch as before. The issue view carries a computed `plan_pending`.
 Every brief starts by pointing the agent at the project's `LESSONS.md`: what misled earlier agents, in their words
 (each `--misled` text that is not «none» is appended; the owner prunes it).
 
-**Defining agent** also: a criterion checkable by an agent alone (a table input → expected when there are cases),
-scope claims cite their search, questions stand alone (context, options, recommendation and why).
+**Planning agent** also: scope claims cite their search, questions stand alone (context, options, recommendation and why).
 
 **Responsible agent** (`fm/briefs/work.md`, from foreman's dev agent and agent procedure): owns the whole task in its
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
-(`<home>/reports/ID.md`: the task's description, each criterion line with its evidence; fm sets it as the PR body
+(`<home>/reports/ID.md`: the task's description, each acceptance criterion with its evidence; fm sets it as the PR body
 inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
 section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when the agent launches) and ends with
@@ -153,7 +155,7 @@ conversation: each finding gets the smallest change that settles it, or a one-li
 
 **Review in two passes** (`fm/briefs/hunter.md`, `fm/briefs/reviewer.md`): launched by the loop, not by the agent, each as
 its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail
-and the owner's notes. The **hunter** lists everything it suspects (with a confidence each, plus the criterion table and an
+and the owner's notes. The **hunter** lists everything it suspects (with a confidence each, plus the acceptance criteria table and an
 inventory of what the diff adds) in `<home>/reviews/ID-rN-<tip>-hunter.md`. When that file exists and the hunter has ended,
 the **reviewer** starts; it sees only the file, never the hunter's reasoning. It checks each Wrong or Missing finding
 (confirmed, refuted, or neither) and each Too much item; a finding leaves only with a cited line or output that refutes it,

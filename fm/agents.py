@@ -55,9 +55,9 @@ def plan_section(i: dict[str, Any]) -> str:
         return (
             f"# The plan\nThe task has a plan: `{i['plan_file']}`. Read it whole and follow it. If it does not hold "
             "on a detail (a name, a line, the order of steps), decide, and list it in your report under «Off the plan» with why; "
-            "if it would change the goal, the criterion, a decision or the out of scope, `fm ask` and end your turn."
+            "if it would change the goal, the acceptance criteria, a decision or the out of scope, `fm ask` and end your turn."
         )
-    return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and criterion."
+    return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and acceptance criteria."
 
 
 def owner_notes_section(p: Project, iid: str) -> str:
@@ -68,7 +68,7 @@ def owner_notes_section(p: Project, iid: str) -> str:
     lines = "\n".join(f"- {q.get('at') or q.get('resolved', '')}: {q.get('answer', '')}" for q in notes)
     return (
         f"\n# The owner's notes on this task\n{lines}\n"
-        "A note overrides the plan and the criterion where they differ; the latest note wins. A departure backed by a note "
+        "A note overrides the plan and the acceptance criteria where they differ; the latest note wins. A departure backed by a note "
         "is not a finding, and the report's «Off the plan» should cite it.\n"
     )
 
@@ -81,7 +81,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "title": i["title"],
         "detail": i.get("detail", ""),
         "claim": a.get("claim") or i["title"],
-        "criterion": a.get("criterion", ""),
+        "criteria": a.get("criteria", ""),
         "repo": str(p.repo),
         "worktree": i.get("worktree", ""),
         "branch": i.get("branch", ""),

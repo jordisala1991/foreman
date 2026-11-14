@@ -59,14 +59,12 @@ def cmd_ready(a: argparse.Namespace) -> None:
         if a.plan:
             i["plan_file"] = str(Path(a.plan).resolve())
         else:
-            i.pop("plan_file", None)  # a relaunched definer that now says «trivial» leaves no stale plan
-        acceptance: backlog.Acceptance = i.get("acceptance") or {}
-        i["acceptance"] = {**acceptance, "claim": a.claim, "criterion": a.criterion}
+            i.pop("plan_file", None)  # a relaunched planner that now says «trivial» leaves no stale plan
         if a.detail:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
         i["status"], i["blocked"] = "ready", ""
         i.pop("plan_approved", None)  # a re-defined plan needs a new approval
-    backlog.event(p, iid, f"→ ready: {a.criterion}" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
+    backlog.event(p, iid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
     backlog.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)
     print(f"{iid} is ready; the loop will launch its responsible agent. End your turn.")
 
