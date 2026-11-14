@@ -114,7 +114,7 @@ class Token(unittest.TestCase):
         self.set_login(False)
         with mock.patch.object(token, "keychain", lambda: ""):
             out = fm(self.p.home, "health")
-        self.assertIn("no fallback token", out)
+        self.assertIn("no token in the environment", out)
 
     def test_unreadable_keychain_is_not_no_token_and_files_nothing(self):
         def locked() -> str:

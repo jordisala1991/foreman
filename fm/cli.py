@@ -189,7 +189,7 @@ def cmd_health(a: argparse.Namespace) -> None:
     p = home(a)
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
-        print(f"! {f['title']}: {f['detail'].splitlines()[0] if f['detail'] else ''}")
+        print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
 
 
 def cmd_metrics(a: argparse.Namespace) -> None:

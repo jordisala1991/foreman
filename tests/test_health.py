@@ -139,9 +139,6 @@ class Lessons(unittest.TestCase):
         self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.issue(iid), "work"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class Evidence(unittest.TestCase):
     def commit(self, e, name, text="x"):
@@ -239,3 +236,18 @@ class Evidence(unittest.TestCase):
         health.run(e.p, {})
         self.assertEqual(len(self.triage(e)), 2)  # one orphan, one error: each filed once
         self.assertEqual(sorted(i["source"] for i in self.triage(e)), ["health:error:s:bad", "health:orphan:ghost"])
+
+
+
+class Upgrade(unittest.TestCase):
+    def test_an_open_ci_task_from_before_since_is_not_duplicated(self):
+        e = Env(test="false")
+        head = integrate.git(e.repo, "rev-parse", "main").out.strip()
+        util.write_json(e.p.state / "ci.json", {"head": head, "at": "2020-01-01 00:00:00", "result": "fail"})
+        backlog.add(e.p, "Tests fail on main", status="triage", source=f"health:ci:{head[:12]}")
+        health.run(e.p, {})
+        self.assertEqual(len(backlog.issues(backlog.load(e.p))), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
