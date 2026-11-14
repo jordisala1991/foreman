@@ -108,6 +108,7 @@ class Token(unittest.TestCase):
 
     def test_init_explains_the_setup(self):
         out = fm(self.p.home, "init", "--prefix", "ZZ", "--repo", "r")
+        self.assertIn("claude setup-token", out)
 
     def test_fm_health_cli_shows_what_no_token_means(self):
         self.set_login(False)
