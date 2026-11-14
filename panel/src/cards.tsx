@@ -233,11 +233,11 @@ export function TriageCard({ i, p, reload }: { i: Issue; p: string; reload: () =
         <button type="button" className="btn" disabled={w.busy} onClick={() => void w.run(`/api/cancel?${base}`, t("not_wanted"))}>
           {t("cancel_task")}
         </button>
-        <button type="button" className="btn primary" disabled={w.busy} onClick={() => void w.run(`/api/go?${base}`)}>
+        <button type="button" className="btn primary" disabled={w.busy || !i.acceptance?.criteria} onClick={() => void w.run(`/api/go?${base}`)}>
           {t("go")}
         </button>
       </div>
-      <p className="note">{t(i.acceptance?.criterion ? "go_ready" : "go_define")}</p>
+      <p className="note">{t(i.acceptance?.criteria ? "go_ready" : "go_define")}</p>
       <Err text={w.error} />
     </article>
   );

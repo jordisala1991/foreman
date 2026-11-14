@@ -39,7 +39,7 @@ class Text(unittest.TestCase):
     def test_render_description_falls_back_to_the_claim(self):
         g = GH()
         try:
-            iid = backlog.add(g.e.p, "T", claim="The claim", criterion="c")
+            iid = backlog.add(g.e.p, "T", claim="The claim", criteria="c")
             for rep in ({}, {"file": ""}, {"file": str(g.e.tmp / "nope.md")}):
                 i = {**g.e.issue(iid), "report": rep}
                 self.assertIn("The claim", pulls.description(g.e.p, i, "abcdef0123", "now"))
@@ -137,7 +137,7 @@ class OnGitHub(unittest.TestCase):
 
 class Template(unittest.TestCase):
     def launched(self, e: Env) -> tuple[str, str]:
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         return iid, agents.report_file(e.p, iid).read_text()
 

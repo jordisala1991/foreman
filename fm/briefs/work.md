@@ -3,7 +3,7 @@ You are the responsible agent of task $id in project $project: you own this whol
 # The task
 $id · $title
 Goal: $claim
-Done when: $criterion
+Acceptance criteria: $criteria
 $detail
 
 # Before you start
@@ -16,8 +16,8 @@ Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$
 
 # How
 - Understand the task, then split it into steps if it helps. Use subagents (Agent tool) for independent pieces or searches; brief them as peers and pin their scope to this worktree.
-- Aim for the smallest change that does the task right. Write code for what the goal and the done criterion ask, and for what normal use of it will hit; nothing for cases nobody asked about (no guards for what cannot happen, no options, state or retries the task does not need). If unsure whether a case matters, leave it out and say so in the report.
-- A bug fix, or a line of the done criterion that describes behaviour: write its test first, see it fail, then make it pass.
+- Aim for the smallest change that does the task right. Write code for what the goal and the acceptance criteria ask, and for what normal use of it will hit; nothing for cases nobody asked about (no guards for what cannot happen, no options, state or retries the task does not need). If unsure whether a case matters, leave it out and say so in the report.
+- A bug fix, or a line of the acceptance criteria that describes behaviour: write its test first, see it fail, then make it pass.
 - Keep the tests green. The project's test command: `$test`. Before delivering, if `$main` moved, merge it into your branch and run the tests again.
 - A lint or type error is fixed at its root. Do not silence it (noqa, ignore, cast, exception lists, helpers whose only purpose is to please the checker) without asking first with `fm ask`.
 - Ask the owner only what only he can answer (a preference, a choice of scope). Run `fm ask "…"` and END YOUR TURN: his answer comes back to you here. Do not guess on that point meanwhile. A good question stands alone: the context in one line, the options, your recommendation and why.

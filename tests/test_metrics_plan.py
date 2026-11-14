@@ -21,7 +21,7 @@ class PlanVsWork(unittest.TestCase):
             return next(r for r in metrics.per_issue(self.e.p) if r["id"] == iid)
 
     def make(self, **keys):
-        iid = backlog.add(self.e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(self.e.p, "x", status="ready", criteria="y")
         backlog.update(self.e.p, iid, **keys)
         return iid
 
@@ -53,7 +53,7 @@ class Cost(unittest.TestCase):
         import json
 
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, iid, sessions=["s1", "s2"], session_kinds={"s1": "define", "s2": "work"})
         d = e.tmp / "transcripts/proj"
         d.mkdir(parents=True)
@@ -77,8 +77,8 @@ class Cost(unittest.TestCase):
 class Recording(unittest.TestCase):
     def test_launch_and_reviewer_record_kinds(self):
         e = Env()
-        d = backlog.add(e.p, "vague")
-        w = backlog.add(e.p, "clear", status="ready", criterion="y")
+        d = backlog.add(e.p, "vague", criteria="c")
+        w = backlog.add(e.p, "clear", status="ready", criteria="y")
         loop.tick(e.p)
         self.assertEqual(list(e.issue(d)["session_kinds"].values()), ["define"])
         self.assertEqual(list(e.issue(w)["session_kinds"].values()), ["work"])
@@ -90,7 +90,7 @@ class Recording(unittest.TestCase):
 
     def test_fill_sessions_stores_agent_kind_and_review(self):
         e = Env()
-        iid = backlog.add(e.p, "clear", status="ready", criterion="y")
+        iid = backlog.add(e.p, "clear", status="ready", criteria="y")
         backlog.update(e.p, iid, agent={"short": "aa", "kind": "work"}, reviewer={"short": "rr"})
         agents.fill_sessions(e.p, {"aa-full": {"id": "aa"}, "rr-full": {"id": "rr"}})
         i = e.issue(iid)

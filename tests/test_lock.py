@@ -85,7 +85,7 @@ class Lock(unittest.TestCase):
         from fm.config import Project
 
         p = Project.load(self.e.home)
-        iid = backlog.add(p, "x", status="ready", criterion="y")
+        iid = backlog.add(p, "x", status="ready", criteria="y")
         text = agents.brief(p, backlog.get(backlog.load(p), iid), "work")
         self.assertIn("`gpu`, `sim` (2 slots)", text)
         self.assertIn("fm lock NAME run", text)
