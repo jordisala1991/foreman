@@ -63,7 +63,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
         if a.detail:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
         for k in ("model", "effort"):
-            if v := getattr(a, k):
+            if (v := getattr(a, k)) and not i.get(k):
                 i[k] = v
         i["status"], i["blocked"] = "ready", ""
     backlog.event(p, tid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
