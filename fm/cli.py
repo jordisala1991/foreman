@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, backlog, blockers, delivery, editing, guard, health, lock, loop, metrics, providers, sessions, subtasks, token, util
+from . import agents, backlog, blockers, delivery, editing, guard, health, lock, loop, metrics, providers, sessions, subtasks, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -32,7 +32,6 @@ def cmd_init(a: argparse.Namespace) -> None:
         util.write_json(p.backlog_file, backlog.empty())
     register(h)
     print(f"project {p.name} at {h} (registered)")
-    print(token.SETUP)
 
 
 def cmd_add(a: argparse.Namespace) -> None:

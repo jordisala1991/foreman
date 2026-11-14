@@ -17,7 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, delivery, token, util
+from . import backlog, delivery, login, util
 from .agents import idle_s
 from .config import Project
 
@@ -41,55 +41,20 @@ def loop_dead(p: Project) -> list[Finding]:
     return []
 
 
-KEYCHAIN_MINUTES = 5  # unreadable this long before it is a finding: a transient failure is not
-
-
-def keychain_unreadable(p: Project, reason: str) -> list[Finding]:
-    """Counted by time, so one `fm health` and the panel agree: the first failure is stamped, a later check shows it."""
-    state = util.read_json(p.state / "keychain.json", {})
-    since = state.get("since") or util.now()
-    util.write_json(p.state / "keychain.json", {"since": since})
-    if (util.age_s(since) or 0) < 60 * KEYCHAIN_MINUTES:
+def login_expiring(status: login.Login) -> list[Finding]:
+    if not status.expiring() or status.expires is None:
         return []
-    meaning = "fm cannot read the Claude token from the Keychain; agents launch without one."
-    return [finding("keychain-unreadable", f"Keychain unreadable: {reason}", meaning, f"Unreadable since {since}: {reason}.")]
+    when = status.expires.astimezone().strftime("%Y-%m-%d %H:%M")
+    return [finding("login-expiring", "The Claude login expires soon", "The Claude login will stop working soon: run /login.", f"It expires on {when}.")]
 
 
-def login_expiring(login: token.Login) -> list[Finding]:
-    if not login.expiring() or login.expires is None:
-        return []
-    when = login.expires.astimezone().strftime("%Y-%m-%d %H:%M")
-    return [finding("login-expiring", "The Claude login expires soon", "The Claude login will stop working soon.", f"It expires on {when}.")]
-
-
-def claude_token(
-    p: Project,
-    read: Callable[[], str] | None = None,
-    works: Callable[[str, str], bool] = token.works,
-    probe: bool = True,
-    login: Callable[[str], token.Login] = token.login_status,
-) -> list[Finding]:
-    """The agents' authentication. While the normal login works the token is not used: only a warning when the login
-    is about to expire. When it does not work the agents run on the long-lived token: no token, a token Claude rejects
-    (only with `probe`; the panel does not probe), or a line saying they run on it and do not show in the Claude app.
-    An unreadable Keychain is a finding after KEYCHAIN_MINUTES."""
-    claude = p.get("agents", "claude")
-    status = login(claude)
+def login_check(p: Project, check: Callable[[str], login.Login] = login.login_status) -> list[Finding]:
+    """The agents' authentication is the normal login: a warning when it is about to expire, a finding when it does not work."""
+    status = check(p.get("agents", "claude"))
     if status.ok:
         return login_expiring(status)
-    try:
-        tok = token.get(read)
-    except token.Unreadable as e:
-        return keychain_unreadable(p, str(e))
-    util.write_json(p.state / "keychain.json", {})
-    if not tok:
-        meaning = "The Claude login does not work and there is no fallback token: agents cannot authenticate."
-        return [finding("token-missing", "No token", meaning, "Login check failed; no token in the environment or the Keychain.")]
-    if probe and not works(claude, tok):
-        meaning = "The Claude login does not work and Claude rejects the fallback token."
-        return [finding("token-bad", "Token does not work", meaning, "Login check failed; the probe with the fallback token was refused.")]
-    meaning = "The login does not work, so agents run on the long-lived token and do not show in the Claude app."
-    return [finding("token-fallback", "Agents run on the long-lived token", meaning, "Login check failed; a fallback token is present.")]
+    meaning = "Agents cannot start until the owner runs /login."
+    return [finding("login-failed", "The Claude login does not work", meaning, "`claude auth status` says the login does not work.")]
 
 
 def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
@@ -185,8 +150,8 @@ def loop_errors(p: Project) -> list[Finding]:
     return out
 
 
-def findings(p: Project, rows: dict[str, Any], outside: bool = False, probe: bool = True) -> list[Finding]:
-    out = [*loop_dead(p), *claude_token(p, probe=probe)] if outside else []
+def findings(p: Project, rows: dict[str, Any], outside: bool = False) -> list[Finding]:
+    out = [*loop_dead(p), *login_check(p)] if outside else []
     checks = (
         lambda: agents(p, rows),
         lambda: answers_undelivered(p),

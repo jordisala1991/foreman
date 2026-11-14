@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import backlog, proc, token, util
+from . import backlog, login, proc, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
@@ -79,7 +79,7 @@ def command(p: Project, agent: Agent, prompt: str) -> list[str]:
 
 def _run(cmd: list[str], cwd: Path) -> str:
     try:
-        r = proc.run(cmd, cwd=cwd, timeout=120, env=token.child_env(cmd[0]))
+        r = proc.run(cmd, cwd=cwd, timeout=120, env=login.child_env())
     except proc.ProcError as e:
         raise SessionError(f"claude did not start: {e}") from e
     m = BACKGROUNDED.search(r.out + r.err)
