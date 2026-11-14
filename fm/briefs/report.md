@@ -15,7 +15,7 @@
 **Proof**
 | Acceptance criterion | Evidence |
 |---|---|
-| <each line of the acceptance criteria, short> | <evidence that fits its kind, one line: behaviour → a test by name; UI → before and after screenshots saved in reports/ID/ and shown as `![what it shows](before-home.png)` (bare file name); CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the check command and its result. Only evidence that exists: no figure without the test or command behind it; nothing inferred is written as seen> |
+| <each line of the acceptance criteria, short> | <evidence that fits its kind, one line: behaviour → a test by name; UI → before and after screenshots saved in reports/ID/ and shown as `![what it shows](before-home.png)` (bare file name); CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the check command and its result. Only evidence that exists: no figure without the test or command behind it; a criterion you could not check is marked «(inferred: what it rests on)», never written as seen> |
 
 **Risk**
 <at most 2 lines: what could break, including open review findings, or "none known">
