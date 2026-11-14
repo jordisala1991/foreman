@@ -124,7 +124,7 @@ def _push(args: list[str], sc: Scope) -> str | None:
     refs = [a for a in rest if not a.startswith("-")]
     if {"--delete", "-d"} & set(rest) or any(r.startswith(":") for r in refs[1:]):
         return "delete"
-    if {"-f", "--force", "--force-with-lease", "--mirror", "--all"} & set(rest):
+    if {"-f", "--force", "--force-with-lease", "--mirror", "--all"} & set(rest) or any(r.startswith("+") for r in refs[1:]):
         return "push-main"
     dests = [r.split(":")[-1].removeprefix("refs/heads/") for r in refs[1:]] or [sc.branch]
     if evidence.BRANCH in dests:

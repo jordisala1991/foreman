@@ -38,6 +38,20 @@ class Bash(unittest.TestCase):
         self.assertEqual(self.check("git push", branch="main"), "push-main")
         self.assertEqual(self.check("git push origin --delete other"), "delete")
 
+    def test_push_with_plus(self):
+        for cmd in (
+            "git push origin +main",
+            "git push origin +HEAD:main",
+            "git push origin +refs/heads/main",
+            "git push origin +fm/ty-1",
+            "git push origin +HEAD:fm-evidence",
+            "git push origin fm/ty-1 +main",
+            "git push -o -o origin +main",
+        ):
+            self.assertEqual(self.check(cmd), "push-main", cmd)
+        for cmd in ("git push origin fm/ty-1", "git push origin HEAD:fm/ty-1", "git push -u origin fm/ty-1", "git push"):
+            self.assertIsNone(self.check(cmd), cmd)
+
     def test_delete_what_is_not_yours(self):
         self.assertIsNone(self.check("rm -rf build"))
         self.assertIsNone(self.check("rm -rf /w/ty-1/build"))
