@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from . import agents, backlog, diagnosis, sessions, util
+from . import agents, backlog, diagnosis, proc, sessions, util
 from .agents import idle_s
 from .config import Project
 from .talk import NUDGE_IDLE_S
@@ -13,7 +13,7 @@ TIMEOUT_S = 1800
 def missing_why(m: dict[str, Any], rows: dict[str, Any]) -> str:
     if (util.age_s(m.get("started")) or 0) > TIMEOUT_S:
         return "ran longer than 30 minutes"
-    if m.get("session") and not sessions.busy(rows, m["session"]) and idle_s(m) > NUDGE_IDLE_S:
+    if rows and m.get("session") and not sessions.busy(rows, m["session"]) and idle_s(m) > NUDGE_IDLE_S:
         return "ended without writing a diagnosis"
     return ""
 
@@ -44,7 +44,10 @@ def launch(p: Project, i: dict[str, Any]) -> None:
             if sid:
                 agents.record_session(it, sid, "mechanic")
     if not still:
-        sessions.stop(p, short)
+        try:
+            sessions.stop(p, short)
+        except proc.ProcError as e:
+            backlog.event(p, iid, f"could not stop session {short}: {e}")
         return
     backlog.event(p, iid, f"launched {name} (mechanic, {model}, session {short})")
 
@@ -55,11 +58,12 @@ def run(p: Project, rows: dict[str, Any]) -> None:
             note_missing(p, i["id"], why)
     d = backlog.load(p)
     for i in backlog.issues(d):
-        if i.get("diagnosis") and i.get("mechanic"):
+        if i.get("diagnosis") and i.get("mechanic") and sessions.state(rows, i["mechanic"].get("session")) not in ("stopped", "gone"):
             sessions.stop_live(p, i["id"], i["mechanic"], rows)
     if (p.state / "paused").exists():
         return
     free = int(p.get("agents", "slots")) - agents.running(d)
-    todo = [i for i in backlog.issues(d) if i["status"] == "triage" and str(i.get("source", "")).startswith("health:") and not i.get("mechanic")]
+    health = (i for i in backlog.issues(d) if i["status"] == "triage" and str(i.get("source", "")).startswith("health:"))
+    todo = [i for i in health if not i.get("mechanic") and not i.get("diagnosis")]
     for i in todo[: max(0, free)]:
         launch(p, i)

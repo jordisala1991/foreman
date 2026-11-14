@@ -133,3 +133,17 @@ class Mechanic(unittest.TestCase):
         self.tick()
         fm(self.e.home, "cancel", self.iid)
         self.assertIn(self.e.issue(self.iid)["mechanic"]["short"], self.e.stops())
+
+    def test_unlaunchable_is_not_retried(self):
+        self.e.p.cfg["agents"]["claude"] = "/nonexistent"
+        self.tick()
+        self.tick()
+        self.assertEqual(self.e.issue(self.iid)["detail"].count("Diagnosis missing"), 1)
+
+    def test_gone_session_is_not_stopped_again(self):
+        self.tick()
+        self.diagnose()
+        (self.e.bin / "agents.json").write_text("[]")
+        self.tick()
+        self.tick()
+        self.assertEqual(self.e.stops(), [])
