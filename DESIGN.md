@@ -160,7 +160,7 @@ The tests are in `tests/test_decide.py` and launch no program.
 Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-planning`), started with
 `claude --bg -n NAME --model M --effort E --permission-mode bypassPermissions --settings S PROMPT` in its cwd:
 
-- `M` and `E` are the project's, except for the responsible agent: the task's own `model`/`effort` (optional task keys, chosen by the planning agent with the rubric in `planning.md`) win.
+- `M` and `E` are the project's, except for the responsible agent: the task's own `model`/`effort` (optional task keys, chosen by the planning agent with the rubric in `planning.md`) win; the planner fills only the keys the owner left empty (`fm ready` never overwrites one).
 - `S` sets `FM_HOME`, `FM_TASK`, `FM_AGENT` and `PATH` (so `fm` works), `worktree.bgIsolation: none`, the guard as
   a PreToolUse hook, and the project's extra settings (the demo turns off today's foreman plugin for its agents).
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to

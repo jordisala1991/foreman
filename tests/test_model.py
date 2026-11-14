@@ -65,6 +65,39 @@ class Choice(unittest.TestCase):
         i = self.e.task(tid)
         self.assertEqual((i["status"], i["model"], i["effort"]), ("ready", "opus", "high"))
 
+    def plan_ready(self, tid: str, *flags: str) -> None:
+        backlog.update(self.e.p, tid, status="refining")
+        with mock.patch.dict(os.environ, {"FM_TASK": tid}):
+            fm(self.e.home, "ready", "--no-plan", "x", *flags)
+
+    def launched_with(self, tid: str) -> tuple:
+        loop.tick(self.e.p)
+        got = {tuple(x["argv"][-1].split("\n")[0].strip("[]").split(" ")[1:]): flags(x) for x in self.e.calls()}
+        return got[("responsible", tid)]
+
+    def test_planner_does_not_overwrite_the_owners_choice(self):
+        tid = backlog.add(self.e.p, "t", criteria="c", model="opus", effort="medium")
+        self.plan_ready(tid, "--model", "sonnet", "--effort", "high")
+        i = self.shown(tid)
+        self.assertEqual((i["model"], i["effort"]), ("opus", "medium"))
+        self.assertEqual(self.launched_with(tid), ("opus", "medium"))
+        self.assertIn("(responsible, opus, medium, session", (self.e.p.state / "events.jsonl").read_text())
+
+    def test_planner_fills_only_the_empty_one(self):
+        for filed, want in (({"model": "opus"}, ("opus", "high")), ({"effort": "low"}, ("sonnet", "low"))):
+            tid = backlog.add(self.e.p, "t", criteria="c", **filed)
+            self.plan_ready(tid, "--model", "sonnet", "--effort", "high")
+            i = self.shown(tid)
+            self.assertEqual((i["model"], i["effort"]), want)
+
+    def test_owner_edit_after_the_planner_wins(self):
+        tid = backlog.add(self.e.p, "t", criteria="c")
+        self.plan_ready(tid, "--model", "sonnet", "--effort", "high")
+        fm(self.e.home, "edit", tid, "--model", "opus", "--effort", "medium")
+        i = self.shown(tid)
+        self.assertEqual((i["model"], i["effort"]), ("opus", "medium"))
+        self.assertEqual(self.launched_with(tid), ("opus", "medium"))
+
     def test_responsible_agent_launches_with_the_tasks_choice(self):
         a = backlog.add(self.e.p, "a", status="ready", criteria="c", model="fable", effort="xhigh")
         b = backlog.add(self.e.p, "b", status="backlog", criteria="c", model="opus", effort="max")
