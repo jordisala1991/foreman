@@ -17,7 +17,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - Read the repo at `$repo` (read only: do not edit, commit or create branches) and whatever else you need, with subagents if it helps.
 - Settle how the task is done: what changes, what does not. The acceptance criteria above are product (observable behaviour, never how); the plan holds the execution.
 - If an acceptance criterion cannot be met as written, do not change it: `fm ask` the owner and END YOUR TURN.
-- A statement of scope («only X uses it», «nothing else reads this») cites the search that shows it, or says it was not checked.
+- Every factual claim of the plan cites what you read or ran (`file:line`, command) or is marked «(inferred: what it rests on)». A hypothesis you did not test stays inferred. This includes statements of scope («only X uses it», «nothing else reads this»): cite the search, or mark it inferred.
 - You never split the task, file others or shrink the plan to fit. If the task cannot be one reviewable change, write no plan and run `fm block "…"` with a proposed definition task for the owner to file: the PRs it would split into, one goal line each. Then END YOUR TURN.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
 - If an `fm` command exits non-zero, read its message, fix what it says and run it again. Never end your turn as if it had worked.

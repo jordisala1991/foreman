@@ -1,5 +1,7 @@
 # ID: <imperative title: what this change does, under 10 words>
 
+Proof and Look here first: every claim cites what you ran or read (command, test, `file:line`) or is marked «(inferred: what it rests on)». Nothing inferred is written as seen.
+
 **In one sentence**
 <one sentence: what is different now, for the user or the system>
 
