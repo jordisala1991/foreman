@@ -238,7 +238,7 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
     """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
     session it ever started (a replaced review pass keeps no record but its id in `sessions`)."""
     rows = sessions.listing(p)
-    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer")]
+    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer", "mechanic")]
     every += [{"short": rows.get(sid, {}).get("id"), "session": sid} for sid in i.get("sessions", [])]
     done: set[str] = set()
     for a in every:

@@ -11,6 +11,7 @@
 7. health: broken states become triage issues, deduplicated (health.py)
 8. launch: while there are free slots, a planning agent for a `backlog` issue, the responsible agent for a `ready`
    one. The loop never plans, never reviews, never talks to the owner.
+9. mechanic: a diagnosing helper for each health task in triage, in the slots launch left free (mechanic.py)
 """
 
 import os
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from . import backlog, health, integrate, proc, providers, pulls, risk, sessions, sources, subtasks, util
+from . import backlog, health, integrate, mechanic, proc, providers, pulls, risk, sessions, sources, subtasks, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
 from .talk import NUDGE_IDLE_S, deliver_answers, send_back, watch_agents
@@ -238,6 +239,7 @@ def tick(p: Project) -> None:
         ("queue", lambda: run_queue(p, rows)),
         ("health", lambda: health.run(p, rows)),
         ("launch", lambda: launch_free(p)),
+        ("mechanic", lambda: mechanic.run(p, rows)),
     ]
     for name, step in steps:
         beat(p, name)

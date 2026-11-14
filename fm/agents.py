@@ -160,7 +160,7 @@ def record_session(it: dict[str, Any], sid: str, kind: str) -> None:
 def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
     """A session not listed yet at launch: its full id from the short one, on a later tick."""
     for i in backlog.issues(backlog.load(p)):
-        for role in ("agent", "hunter", "reviewer"):
+        for role in ("agent", "hunter", "reviewer", "mechanic"):
             a: dict[str, Any] = i.get(role) or {}
             if a.get("short") and not a.get("session"):
                 sid = sessions.find(rows, a["short"])
@@ -168,7 +168,7 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        record_session(it, sid, a.get("kind", "") if role == "agent" else "review")
+                        record_session(it, sid, a.get("kind", "") if role in ("agent", "mechanic") else "review")
 
 
 def idle_s(a: backlog.Agent | dict[str, Any]) -> float:
@@ -194,8 +194,13 @@ def review_running(i: dict[str, Any]) -> bool:
     return bool(h) and h["tip"] not in (v.get("tip"), r.get("tip")) and not Path(h["file"]).exists()
 
 
+def diagnosing(i: dict[str, Any]) -> bool:
+    """A mechanic is working on this triage task: it has no diagnosis yet."""
+    return i["status"] == "triage" and bool(i.get("mechanic")) and not i.get("diagnosis")
+
+
 def running(d: dict[str, Any]) -> int:
-    return sum(1 for i in backlog.issues(d) if (i["status"] in backlog.RUNNING and not i.get("blocked")) or reviewer_active(i))
+    return sum(1 for i in backlog.issues(d) if (i["status"] in backlog.RUNNING and not i.get("blocked")) or reviewer_active(i) or diagnosing(i))
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:

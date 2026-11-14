@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from . import agents, backlog, editing, guard, health, integrate, lock, loop, metrics, providers, sessions, subtasks, token, util
-from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_ready, cmd_verdict
+from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
 from .config import Project, register
@@ -254,6 +254,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "verdict": cmd_verdict,
     "ready": cmd_ready,
     "block": cmd_block,
+    "diagnose": cmd_diagnose,
     "answer": cmd_answer,
     "allow": lambda a: cmd_allow(a, True),
     "deny": lambda a: cmd_allow(a, False),
