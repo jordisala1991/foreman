@@ -38,7 +38,7 @@ class PlanRisk(unittest.TestCase):
 class Gate(unittest.TestCase):
     def make(self, autonomy: str, risk: str | None):
         e = Env(autonomy=autonomy)
-        i = backlog.add(e.p, "t", status="ready", criterion="c")
+        i = backlog.add(e.p, "t", status="ready", criteria="c")
         if risk is not None:
             f = e.home / "plan.md"
             f.write_text(plan(risk))
@@ -66,7 +66,7 @@ class Gate(unittest.TestCase):
     def test_no_plan_and_backlog_launch_as_before(self):
         for autonomy in ("manual", "low", "medium"):
             e, i = self.make(autonomy, None)
-            d = backlog.add(e.p, "vague")
+            d = backlog.add(e.p, "vague", criteria="c")
             loop.launch_free(e.p)
             self.assertEqual(e.issue(i)["status"], "in progress")
             self.assertEqual(e.issue(d)["status"], "refining")
@@ -97,7 +97,7 @@ class Gate(unittest.TestCase):
     def test_refused_when_nothing_waits(self):
         e, i = self.make("manual", "size")
         fm(e.home, "approve-plan", i)
-        n = backlog.add(e.p, "no plan", status="ready", criterion="c")
+        n = backlog.add(e.p, "no plan", status="ready", criteria="c")
         for args in (("approve-plan", i), ("reject-plan", i, "--note", "x"), ("approve-plan", n), ("reject-plan", n, "--note", "x")):
             with self.assertRaises(SystemExit) as r:
                 fm(e.home, *args)
@@ -123,7 +123,7 @@ class Gate(unittest.TestCase):
         from unittest import mock
 
         with mock.patch.dict(os.environ, {"FM_ISSUE": i}):
-            fm(e.home, "ready", "--claim", "g", "--criterion", "c", "--plan", str(e.home / "plan.md"))
+            fm(e.home, "ready", "--plan", str(e.home / "plan.md"))
         self.assertNotIn("plan_approved", e.issue(i))
 
 
