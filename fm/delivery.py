@@ -14,7 +14,7 @@ from typing import Any
 from . import backlog, proc, providers, pulls, sessions, subtasks, util
 from .config import Project
 from .providers import registry
-from .risk import Facts, allows, score
+from .risk import Facts, score
 
 
 class DeliveryError(Exception):
@@ -124,16 +124,6 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     backlog.update(p, tid, check=c)
     backlog.event(p, tid, f"checked: tests {tests}, {c['files']} files, {c['lines']} lines, risk {risk}")
     return c
-
-
-def merges_alone(p: Project, c: dict[str, Any]) -> bool:
-    """Autonomy lets this risk in alone; when the provider has CI that must be green, only on a pass; open findings
-    never merge alone (quality is not risk, but unresolved quality waits for the owner)."""
-    if str(c.get("review", "")).startswith("open"):
-        return False
-    if registry.get(p).has_ci and c.get("ci") != "pass":
-        return False
-    return allows(p.get("merge", "autonomy"), c["risk"])
 
 
 def accept(p: Project, tid: str, by: str = "owner") -> str:

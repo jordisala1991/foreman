@@ -4,7 +4,7 @@ import unittest
 
 from helpers import Env, fm, git
 
-from fm import backlog, delivery, loop, proc, providers, risk, util
+from fm import backlog, delivery, loop, proc, providers, util
 
 
 class Launch(unittest.TestCase):
@@ -521,16 +521,6 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         i = e.task(tid)
         self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
-
-    def test_review_step_table(self):
-        rows = [
-            ({"open": 1, "round": 1}, "back"),
-            ({"open": 0, "round": 1}, "queue"),
-            ({"open": 1, "round": 2}, "queue"),
-            ({"open": 1, "round": 1, "returned": True}, "queue"),
-        ]
-        for v, want in rows:
-            self.assertEqual(risk.review_step(v, 2), want, v)
 
 
 if __name__ == "__main__":

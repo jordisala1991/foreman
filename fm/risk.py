@@ -13,14 +13,6 @@ from .config import Project
 AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
 
 
-def review_step(v: Mapping[str, Any], max_rounds: int) -> str:
-    """What the loop does with a verdict: `back` to its agent while findings are open before the last round, else `queue`
-    (what is still open then goes to the owner); a verdict already returned never goes twice."""
-    if not v.get("returned") and v["open"] > 0 and v["round"] < max_rounds:
-        return "back"
-    return "queue"
-
-
 def path_matches(path: str, patterns: list[str]) -> bool:
     for pat in patterns:
         if pat.endswith("/"):
@@ -63,7 +55,7 @@ def _path_reasons(rules: Mapping[str, list[str]], paths: list[str]) -> list[str]
 
 def score(p: Project, f: Facts) -> tuple[str, list[str]]:
     """(risk, reasons): the higher of impact (paths, deletions) and doubt (tests, CI, conflict); a review never lowers it.
-    Open findings add a [review] reason but not a level: they are a gate in delivery.merges_alone. Up to 3 reasons,
+    Open findings add a [review] reason but not a level: they are a gate in decide.after_check. Up to 3 reasons,
     high ones first, each ending with its source in brackets."""
     paths = [x["path"] for x in f.files]
     high = _path_reasons(p.get("risk", "high"), paths)

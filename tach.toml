@@ -107,6 +107,11 @@ layer = "proc"
 [[modules]]
 path = "fm.risk"
 layer = "core"
+# decide: the loop's review and merge decisions; runs no program and touches no file, so it may import only risk.
+[[modules]]
+path = "fm.decide"
+layer = "core"
+depends_on = ["fm.risk"]
 [[modules]]
 path = "fm.diagnosis"
 layer = "core"

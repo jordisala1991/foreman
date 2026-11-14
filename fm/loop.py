@@ -23,9 +23,10 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from . import backlog, blockers, delivery, health, mechanic, proc, providers, pulls, release, risk, sessions, sources, subtasks, util
+from . import backlog, blockers, decide, delivery, health, mechanic, proc, providers, pulls, release, sessions, sources, subtasks, util
 from .agents import fill_sessions, idle_s, launch, launch_reviewer, running
 from .config import Project, registered
+from .providers import registry
 from .talk import NUDGE_IDLE_S, deliver_answers, return_to_agent, watch_agents
 
 PRIORITY = {p: n for n, p in enumerate(backlog.PRIORITIES)}
@@ -75,18 +76,12 @@ def live(a: dict[str, Any], rows: dict[str, Any]) -> bool:
     return sessions.state(rows, a.get("session")) not in ("stopped", "gone")
 
 
-def conflict_note(main: str) -> str:
-    return (
-        f"{main} moved and your branch conflicts with it. Merge {main} into your branch, resolve keeping both changes, run the tests, and run `fm done` again."
-    )
-
-
 def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
     """The merge step of an accepted task; a conflict with main returns it to its agent."""
     try:
         delivery.merge_accepted(p, i["id"])
     except delivery.MergeConflict:
-        return_to_agent(p, i["id"], "conflict", conflict_note(main))
+        return_to_agent(p, i["id"], "conflict", decide.conflict_note(main))
 
 
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
@@ -122,25 +117,33 @@ def run_pulls(p: Project) -> None:
         guarded(p, i["id"], "push it or open its PR", lambda i=i: pulls.sync(p, i))
 
 
-def review_pending(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> bool:
-    """True while this tip has no verdict yet: runs the hunter, then the reviewer, or blocks if one ended without its file."""
+def seen_of(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> decide.Seen:
+    """What the loop sees of this branch's review: tips, a free slot, the hunter's file and the sessions."""
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
-    if v.get("tip") == head:
-        return False
-    role, last = ("reviewer", r) if h.get("tip") == head else ("hunter", h)
-    free = running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists()
-    if last.get("tip") != head:
-        if role == "hunter" and free:
-            launch_reviewer(p, i, head, "hunter")
-        elif role == "reviewer" and Path(h.get("file", "")).exists() and not working(h, rows) and free:
-            launch_reviewer(p, i, head, "reviewer")
-        elif role == "reviewer" and not Path(h.get("file", "")).exists() and ended(h, rows):
-            block_review(p, i["id"], "its hunter ended without its findings file")
-    elif ended(last, rows):
-        block_review(p, i["id"], "its reviewer ended without a verdict (`fm verdict`)")
-    return True
+    return decide.Seen(
+        head=head,
+        verdict_tip=v.get("tip", ""),
+        hunter_tip=h.get("tip", ""),
+        reviewer_tip=r.get("tip", ""),
+        free=running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists(),
+        hunter_file=Path(h.get("file", "")).exists(),
+        hunter_working=working(h, rows),
+        hunter_ended=ended(h, rows),
+        reviewer_ended=ended(r, rows),
+    )
+
+
+def apply_review(p: Project, i: dict[str, Any], head: str, step: decide.Step) -> None:
+    """Does what `decide.review_step` said: launch the hunter or the reviewer, block, or send the findings back once."""
+    if step.do in ("hunt", "review"):
+        launch_reviewer(p, i, head, "hunter" if step.do == "hunt" else "reviewer")
+    elif step.do == "block":
+        block_review(p, i["id"], step.text)
+    elif step.do == "back":
+        return_to_agent(p, i["id"], "review", step.text)
+        backlog.update(p, i["id"], review={**(i.get("review") or {}), "returned": True})
 
 
 def working(a: dict[str, Any], rows: dict[str, Any]) -> bool:
@@ -160,28 +163,16 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
     """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
     head = delivery.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
     main_head = delivery.git(p.repo, "rev-parse", main, check=False).out.strip()
-    if review_pending(p, i, head, rows):  # no verdict on this tip yet: a review first
+    step = decide.review_step(seen_of(p, i, head, rows), i.get("review") or {}, MAX_ROUNDS)
+    if step.do != "go":  # no verdict on this tip yet (a review first), or its findings go back
+        apply_review(p, i, head, step)
         return
-    v: dict[str, Any] = i.get("review") or {}
-    if risk.review_step(v, MAX_ROUNDS) == "back":
-        return_to_agent(
-            p,
-            i["id"],
-            "review",
-            f"The review of your branch (round {v['round']}) leaves {v['open']} open: read {v['file']}. "
-            "For each one, make the smallest change that settles it, or answer it in one line if you think it is wrong; add "
-            "nothing it does not ask for. Add one `### Round N` to the «Review rounds» section of your report, one line per "
-            "finding, and run `fm done` again.",
-        )
-        backlog.update(p, i["id"], review={**v, "returned": True})
-        return
-    step, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
-    if step == "wait":
+    pull, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
+    if pull == "wait":
         return
     c: dict[str, Any] = i.get("check") or {}
-    stale = bool(i.get("pr")) and c.get("ci") != why  # CI moves without head or main moving
-    if c.get("head") != head or c.get("main") != main_head or stale:
-        ci = why if i.get("pr") else None
+    ci = why if i.get("pr") else None  # CI moves without head or main moving
+    if decide.checks_again(c, head, main_head, ci):
         t = util.start_background(check_key(p), p.state / "errors.jsonl", lambda: check_guarded(p, i["id"], ci))
         if t is None:
             return
@@ -189,11 +180,12 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
         c = backlog.get(backlog.load(p), i["id"]).get("check") or {}
         if t.is_alive() or c.get("head") != head:  # still running, or it failed (the task says why)
             return
-    if c.get("conflict"):
-        return_to_agent(p, i["id"], "conflict", conflict_note(main))
+    action = decide.after_check(c, p.get("merge", "autonomy"), registry.get(p).has_ci)
+    if action == "conflict":
+        return_to_agent(p, i["id"], "conflict", decide.conflict_note(main))
         return
     pulls.deliver(p, i, c)
-    if delivery.merges_alone(p, c):
+    if action == "merge":
         try:
             delivery.accept(p, i["id"], by="autonomy " + p.get("merge", "autonomy"))
             delivery.merge_accepted(p, i["id"])

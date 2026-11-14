@@ -34,6 +34,7 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/blockers.py` | ~50 | which tasks a task waits for (`blocked_by`): pending, dead, refusals incl. cycles (pure) |
 | `fm/release.py` | ~25 | the loop's blockers step: marks a task unblocked once, or blocks it when a blocker closed undone |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
+| `fm/decide.py` | ~90 | what the loop does with a branch in review: review steps, send-back notes, check again, merge alone or wait (pure) |
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage tasks, deduplicated |
@@ -134,6 +135,26 @@ on). The heartbeat is written before every step, so a long test run does not loo
 
 `fm cancel` stops its agent, closes its open questions and removes its worktree (the branch stays).
 
+### What the loop does with a task in review
+
+Each tick, for a task in review (not accepted, not blocked), in this order. The decisions are pure functions in
+`fm/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
+
+| Situation | What the loop does | Function | Test |
+|---|---|---|---|
+| No hunter for this tip | launches the hunter if a slot is free (and not paused); else waits | `review_step` → `hunt` / `wait` | `test_no_hunter_launches_it` |
+| The hunter's file is written and the hunter is not working | launches the reviewer if a slot is free; else waits | `review_step` → `review` / `wait` | `test_hunter_file_and_ended_launches_reviewer` |
+| The hunter ended without its findings file | blocks the task | `review_step` → `block` | `test_hunter_without_file_blocks` |
+| The reviewer ended without a verdict | blocks the task | `review_step` → `block` | `test_reviewer_without_verdict_blocks` |
+| Verdict with findings open before the last round | back to its agent for review: its note, once | `review_step` → `back` | `test_open_findings_go_back_once` |
+| CI pending | waits | `waits_for_ci` | `test_pending_ci_waits` |
+| Head, main or CI moved since the last check | checks it again (in the background) | `checks_again` | `test_moved_branch_is_checked_again` |
+| The check says it conflicts with main | back to its agent for a conflict (also when the merge is refused) | `after_check` → `conflict`, `conflict_note` | `test_conflict_goes_back` |
+| Autonomy allows the risk, no open findings, CI green where the provider has CI | merges alone | `after_check` → `merge` | `test_autonomy_merges_alone` |
+| Anything else | waits for the owner (`fm accept` / `fm reject`) | `after_check` → `owner` | `test_everything_else_waits_for_the_owner` |
+
+The tests are in `tests/test_decide.py` and launch no program.
+
 ## The agents
 
 Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-planning`), started with
@@ -176,7 +197,7 @@ the **reviewer** starts; it sees only the file, never the hunter's reasoning. It
 so what it could not refute stays in To fix. What was dropped goes under Noted and is not sent to the responsible agent. It writes
 `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`, N = items under To fix) and runs
 `fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but
-decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`risk.review_step`);
+decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`decide.review_step`);
 round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
 round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
 
@@ -233,7 +254,7 @@ Every delivered branch gets a risk score:
 - Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
   `[ci]`, `[git]`, `[review]`). Size is only the large-change reason; file counts are not a reason.
 - Open review findings are a gate, not a level: they go back to the responsible agent and add a `[review]` reason, but never change the risk.
-  After the last round, an open finding never merges alone, at any autonomy or risk (`delivery.merges_alone`).
+  After the last round, an open finding never merges alone, at any autonomy or risk (`decide.after_check`).
 
 The project's `[merge] autonomy` decides what merges without the owner: `manual` (nothing; the default),
 `low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or rejects it with a note
@@ -290,7 +311,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `subtasks`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+| core | `risk`, `decide`, `subtasks`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
@@ -311,6 +332,8 @@ Rules (enforced by `make check`):
 - An adapter imports neither the loop nor another adapter (tach).
 - Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services
   gather the facts (git, gh, claude) and apply the result. New decisions go there, not into `delivery` or `loop`.
+- `fm/decide.py` runs no program and touches no file: tach lets it import only `risk`, and `tests/test_decide.py` rejects
+  any other import and any `open`/`exec`/`eval` in it.
 - Files stay under 300 lines (`make size`, no exceptions): a module that grows is split along these layers.
 - Suppressions do not work: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments = false`, and `make suppressions` fails on `pyright: ignore` and `pylint: disable`.
 - Loosening a rule (`tach.toml`, the ruff ignores, `pyproject.toml`, the `suppressions` target) is the owner's call.
