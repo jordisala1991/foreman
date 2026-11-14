@@ -115,10 +115,10 @@ The provider's act of putting the branch into main. Accept is not merge.
 _Chat_: merge
 _Avoid_: integrate, land
 
-**Send back**
-Returning a delivered task to its agent with a note.
-_Chat_: devolver
-_Avoid_: reject, bounce
+**Reject**
+The owner's act of returning a delivered task to its agent with a note.
+_Chat_: rechazar
+_Avoid_: send back, devolver, bounce
 
 ## Statuses
 
