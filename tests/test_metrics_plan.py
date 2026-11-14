@@ -52,6 +52,15 @@ class PlanVsWork(unittest.TestCase):
         self.assertIn("rounds", t)
         self.assertIn("total $3.00", t)
 
+    def test_misled_per_agent_in_metrics(self):
+        said = {"planning": ["a"], "responsible": ["b"], "reviewer": ["c"]}
+        r = self.row(self.make(misled=said))
+        self.assertEqual(r["misled"], said)
+        out = metrics.text([r])
+        for line in ("misled (planning): a", "misled (responsible): b", "misled (reviewer): c"):
+            self.assertIn(line, out)
+        self.assertNotIn("misled (", metrics.text([self.row(self.make())]))
+
 
 class Cost(unittest.TestCase):
     def test_each_session_is_read_once_and_shared_message_ids_do_not_double_count(self):

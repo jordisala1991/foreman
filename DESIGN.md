@@ -195,8 +195,8 @@ the owner if one cannot be met as written. It reads the repo (read only), asks t
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
 risk); the task gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
 
-Every brief starts by pointing its agent at the project's `LESSONS.md`: what misled earlier agents, in their words
-(each `--misled` text that is not «none» is appended; the owner prunes it).
+`fm done`, `fm ready` and `fm verdict` take `--misled`; the text (not «none») is kept on the task under `misled`, per
+agent, once; `fm metrics` shows it.
 
 **Planning agent** also: statements of scope cite their search, questions stand alone (context, options, recommendation and why).
 
@@ -368,8 +368,8 @@ The panel's TypeScript is out of this (a dependency check there can come later).
 ## Watching itself
 
 Metrics per task (`fm metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; planning_usd of planning sessions and responsible_usd of responsible sessions, from `session_kinds`; review rounds), time to review and to
-done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
-misled its agents (their `--confused` words).
+done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (stopped without finishing),
+questions to the owner, guard stops, risk, and what misled its agents (their `--misled` words, per agent).
 
 Health checks (`fm/health.py`), each finding a triage task, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its

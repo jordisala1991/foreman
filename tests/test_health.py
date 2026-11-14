@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from helpers import Env, fm, git
+from helpers import Env, git
 
-from fm import agents, backlog, delivery, health, login, loop, util
+from fm import backlog, delivery, health, login, loop, util
 
 
 class Health(unittest.TestCase):
@@ -117,26 +117,6 @@ class Metrics(unittest.TestCase):
         f.write_text("\n".join(["[1, 2]", '"x"', "null", "not json", json.dumps(good)]) + "\n")
         u = costs.usage([f])
         self.assertEqual(u["tokens"], 1000)
-
-
-class Lessons(unittest.TestCase):
-    def test_what_misled_an_agent_goes_to_the_lessons_and_none_does_not(self):
-        from fm import loop
-
-        e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
-        os.environ.update(FM_TASK=tid, FM_AGENT="ty-1")
-        try:
-            fm(e.home, "done", "--summary", "s", "--misled", "brief: the test command is wrong")
-            fm(e.home, "verdict", "--open", "0", "--file", "r", "--misled", "none")
-        finally:
-            os.environ.pop("FM_TASK")
-            os.environ.pop("FM_AGENT")
-        text = e.p.lessons_file.read_text()
-        self.assertIn("TY-1 (ty-1): brief: the test command is wrong", text)
-        self.assertEqual(text.count("\n- "), 1)
-        self.assertIn(str(e.p.lessons_file), agents.brief(e.p, e.task(tid), "responsible"))
 
 
 class Evidence(unittest.TestCase):

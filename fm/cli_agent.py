@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, diagnosis, lessons, util
+from . import backlog, diagnosis, util
 from .cli_common import home, mine
 
 
@@ -21,7 +21,7 @@ def cmd_done(a: argparse.Namespace) -> None:
     tid = mine(a)
     report = {"summary": a.summary, "file": a.report or "", "confused": a.misled or "", "at": util.now()}
     backlog.set_status(p, tid, "in review", a.summary, report=report, blocked="")
-    lessons.lesson(p, tid, os.environ.get("FM_AGENT", "agent"), a.misled)
+    backlog.record_misled(p, tid, "responsible", a.misled)
     print(f"{tid} is in review: the hunter and the reviewer read it, then the owner. End your turn.")
 
 
@@ -42,7 +42,7 @@ def cmd_verdict(a: argparse.Namespace) -> None:
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
             i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
-    lessons.lesson(p, tid, os.environ.get("FM_AGENT", "reviewer"), a.misled)
+    backlog.record_misled(p, tid, "hunter" if os.environ.get("FM_AGENT", "").endswith("-hunt") else "reviewer", a.misled)
     backlog.event(p, tid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
     print("Verdict recorded. End your turn.")
 
@@ -67,7 +67,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
                 i[k] = v
         i["status"], i["blocked"] = "ready", ""
     backlog.event(p, tid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
-    lessons.lesson(p, tid, os.environ.get("FM_AGENT", "planning agent"), a.misled)
+    backlog.record_misled(p, tid, "planning", a.misled)
     print(f"{tid} is ready; the loop will launch its responsible agent. End your turn.")
 
 
