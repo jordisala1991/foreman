@@ -236,7 +236,7 @@ def forever(homes: list[str] | None = None, once: bool = False) -> None:
 
 def launchd_plist(fm_bin: str, job: str = "loop", args: tuple[str, ...] = ()) -> str:
     """A launchd job (`loop` or `panel`) that starts at login and is restarted if it dies. Only PATH goes in the
-    environment: the Claude token is never written here; the loop reads it from the Keychain (token.py)."""
+    environment."""
     py = proc.run(["/usr/bin/which", "python3"]).out.strip() or "python3"
     argv = "".join(f"<string>{escape(a)}</string>" for a in (py, fm_bin, job, *args))
     log = f"{escape(str(Path.home()))}/Library/Logs/fm-{job}.log"

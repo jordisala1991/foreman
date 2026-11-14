@@ -10,7 +10,7 @@ from unittest import mock
 
 from helpers import Env, fm, git
 
-from fm import agents, backlog, delivery, health, loop, token, util
+from fm import agents, backlog, delivery, health, login, loop, util
 
 
 class Health(unittest.TestCase):
@@ -191,27 +191,16 @@ class Evidence(unittest.TestCase):
         (e.p.state / "errors.jsonl").write_text(json.dumps({"step": "s", "error": "bad", "time": util.now()}) + "\n")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, tid, blocked="its agent stopped: x")
-        env = {k: v for k, v in os.environ.items() if k != token.ENV}
-
-        def no(c):
-            return token.Login(False)
-
-        with mock.patch.dict(os.environ, env, clear=True):
-            tokens = [
-                *health.claude_token(e.p, read=lambda: "", login=no),
-                *health.claude_token(e.p, read=lambda: "t", works=lambda c, t: False, login=no),
-                *health.claude_token(e.p, read=lambda: "t", works=lambda c, t: True, login=no),
-            ]
         found = [
             *health.loop_dead(Env().p),
             *health.orphan_worktrees(e.p),
             *health.loop_errors(e.p),
             *health.agents(e.p, {}),
             *health.main_tests(Env(test="false").p),
-            *tokens,
-            *health.login_expiring(token.Login(True, datetime.now(UTC) + timedelta(hours=1))),
+            *health.login_check(e.p, check=lambda c: login.Login(False)),
+            *health.login_expiring(login.Login(True, datetime.now(UTC) + timedelta(hours=1))),
         ]
-        self.assertGreaterEqual(len(found), 9)
+        self.assertGreaterEqual(len(found), 7)
         for f in found:
             self.assertTrue(f["meaning"] and f["evidence"], f["key"])
             self.assertEqual(f["hypothesis"], "pending")

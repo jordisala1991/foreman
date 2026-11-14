@@ -77,7 +77,7 @@ layer = "services"
 path = "fm.lock"
 layer = "services"
 [[modules]]
-path = "fm.token"
+path = "fm.login"
 layer = "services"
 
 # registry: the one place that knows the provider adapters.
