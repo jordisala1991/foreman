@@ -41,8 +41,7 @@ FAKE_GH = textwrap.dedent("""\
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
     if a[:2] == ["repo", "view"]:
-        print("o/r")
-        sys.exit(0)
+        sys.exit(print("o/r"))
     if a[:2] == ["api", "graphql"]:
         import subprocess
         def node(n, pr):
