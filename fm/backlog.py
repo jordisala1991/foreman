@@ -148,6 +148,7 @@ class NewIssue(TypedDict, total=False):
     source: str | None
     priority: str
     parent: str
+    blocked_by: list[str]
     model: str
     effort: str
 
@@ -183,6 +184,8 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue
             issue["source"] = source
         if parent := f.get("parent"):
             issue["parent"] = parent
+        if ids := f.get("blocked_by"):
+            issue["blocked_by"] = ids
         for k in ("model", "effort"):
             if v := f.get(k):
                 issue[k] = v
