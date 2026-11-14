@@ -10,6 +10,9 @@ from typing import Any, Self
 
 from . import util
 
+MODELS = ("haiku", "sonnet", "opus", "fable")
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
 DEFAULTS: dict[str, dict[str, Any]] = {
     "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees", "branch_prefix": "fm/"},
     # slots: how many agents of this project run at once (defining and responsible agents alike)

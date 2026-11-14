@@ -35,26 +35,32 @@ def git(repo: Path, *args: str, check: bool = True) -> proc.Result:
     return r
 
 
-def run_tests(p: Project, cwd: Path) -> str:
-    """pass | fail | none (no test command); the tail of a failure goes to the events."""
+TAIL_LINES = 20
+
+
+def run_tests(p: Project, cwd: Path) -> tuple[str, str]:
+    """(pass | fail | none (no test command), the last TAIL_LINES lines of the output of a failure)."""
     cmd = p.get("integrate", "test")
     if not cmd:
-        return "none"
+        return "none", ""
     try:
         r = proc.run(["sh", "-c", cmd], cwd=cwd, timeout=900)
-    except proc.ProcError:
-        return "fail"
-    return "pass" if r.code == 0 else "fail"
+    except proc.ProcError as e:
+        return "fail", str(e)
+    if r.code == 0:
+        return "pass", ""
+    return "fail", "\n".join(f"{r.out}\n{r.err}".strip().splitlines()[-TAIL_LINES:])
 
 
-def tests_at(p: Project, commit: str, name: str) -> str:
+def tests_at(p: Project, commit: str, name: str) -> tuple[str, str]:
     """The test command on exactly `commit` (a fresh detached worktree in state/), never on uncommitted files."""
     if not p.get("integrate", "test"):
-        return "none"
+        return "none", ""
     tmp = p.state / "trees" / name
     git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
-    if git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=False).code != 0:
-        return "fail"
+    added = git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=False)
+    if added.code != 0:
+        return "fail", added.err.strip()
     try:
         return run_tests(p, tmp)
     finally:
@@ -89,7 +95,7 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     main = p.get("project", "main")
     commits = pulls.commits_of(p, branch)
     head = pulls.head_of(p, branch)
-    tests = tests_at(p, head, iid.lower())
+    tests, _ = tests_at(p, head, iid.lower())
     if ci is None:
         ci = registry.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
     if tests == "none" and ci in ("pass", "fail"):  # no test command: the PR's CI stands in for it
@@ -232,7 +238,7 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
     """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
     session it ever started (a replaced review pass keeps no record but its id in `sessions`)."""
     rows = sessions.listing(p)
-    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer")]
+    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer", "mechanic")]
     every += [{"short": rows.get(sid, {}).get("id"), "session": sid} for sid in i.get("sessions", [])]
     done: set[str] = set()
     for a in every:

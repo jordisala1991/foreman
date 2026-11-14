@@ -31,12 +31,16 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
         per = {s: costs.of_sessions([s], seen) for s in dict.fromkeys(sids)}  # each transcript is read once
         by_kind = {k: round(sum(c["usd"] for s, c in per.items() if kinds.get(s) == k), 4) for k in ("define", "work")}
         usd = round(sum(x["usd"] for x in per.values()), 4)
+        agent: dict[str, Any] = i.get("agent") or {}
+        ran = agent if agent.get("kind") == "work" else i
         out.append(
             {
                 "id": i["id"],
                 "title": i["title"],
                 "status": i["status"],
                 "usd": usd,
+                "model": ran.get("model"),
+                "effort": ran.get("effort"),
                 "plan_usd": by_kind["define"],
                 "work_usd": by_kind["work"],
                 "rounds": len(i.get("reviews") or []),
@@ -59,13 +63,14 @@ def per_issue(p: Project) -> list[dict[str, Any]]:
 
 def text(rows: list[dict[str, Any]]) -> str:
     head = (
-        f"{'id':8} {'status':12} {'$':>7} {'plan$':>6} {'work$':>6} {'rounds':>6} {'min':>6} {'rework':>6} "
+        f"{'id':8} {'status':12} {'$':>7} {'model':7} {'effort':6} {'plan$':>6} {'work$':>6} {'rounds':>6} {'min':>6} {'rework':>6} "
         f"{'confl':>5} {'nudge':>5} {'ask':>3} {'stop':>4} {'risk':6}"
     )
     lines = [head]
     for r in rows:
         lines.append(
-            f"{r['id']:8} {r['status']:12} {r['usd']:7.2f} {r['plan_usd']:6.2f} {r['work_usd']:6.2f} {r['rounds']:6} "
+            f"{r['id']:8} {r['status']:12} {r['usd']:7.2f} {r['model'] or '-':7} {r['effort'] or '-':6} "
+            f"{r['plan_usd']:6.2f} {r['work_usd']:6.2f} {r['rounds']:6} "
             f"{r['to_review_min'] or 0:6.0f} {r['rework']:6} {r['conflicts']:5} "
             f"{r['nudges']:5} {r['questions']:3} {r['guard_stops']:4} {r['risk'] or '':6}"
         )

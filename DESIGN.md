@@ -34,6 +34,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
+| `fm/diagnosis.py`, `fm/mechanic.py` | ~100 | the mechanic: required sections of a diagnosis and how it is stored; the tick step that launches, times out and stops mechanics |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
 | `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
@@ -74,7 +75,7 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 - `blocked_by` (`fm add/edit --blocked-by FN-n …`; `none` clears): the task is never planned or launched until every
   blocker is `done`, then the loop marks it unblocked in the history. A canceled or duplicate blocker blocks the task
   with a reason: the owner edits `--blocked-by` or cancels, then `fm unblock`.
-- `fm edit` changes title, claim, criteria, detail or blockers of a task in triage, backlog or ready (never one with an agent,
+- `fm edit` changes title, claim, criteria, detail, model, effort or blockers of a task in triage, backlog or ready (never one with an agent,
   nor a closed one); criteria or detail on a backlog or ready task drops its plan and sends it back to backlog.
 - A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only the owner, only while the parent is
   in triage or backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent; the
@@ -124,14 +125,18 @@ on). The heartbeat is written before every step, so a long test run does not loo
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
    agent) or `backlog` issue (its planning agent), by priority then id, skipping any with a blocker not `done`. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
+8. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
+   slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
+   that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.
 
 `fm cancel` stops the agent, closes its open questions and removes its worktree (the branch stays).
 
 ## The agents
 
 Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-define`), started with
-`claude --bg -n NAME --model M --permission-mode bypassPermissions --settings S PROMPT` in its cwd:
+`claude --bg -n NAME --model M --effort E --permission-mode bypassPermissions --settings S PROMPT` in its cwd:
 
+- `M` and `E` are the project's, except for the responsible agent: the task's own `model`/`effort` (optional issue keys, chosen by the definer with the rubric in `define.md`) win.
 - `S` sets `FM_HOME`, `FM_ISSUE`, `FM_AGENT` and `PATH` (so `fm` works), `worktree.bgIsolation: none`, the guard as
   a PreToolUse hook, and the project's extra settings (the demo turns off today's foreman plugin for its agents).
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
@@ -171,6 +176,10 @@ so what it could not refute stays in To fix. What was dropped goes under Noted a
 decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`risk.review_step`);
 round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
 round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
+
+The **mechanic** (`mechanic` kind, `issue.mechanic`) diagnoses a health task and changes nothing else: read-only by its
+brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/diagnosis.py`)
+and appends the diagnosis to the task's `detail`, so `fm show` has it. The task stays in triage; the owner decides next.
 
 What was dropped because it only served a coordinator: memory renewal, session marking, interface mods and band,
 catch-up summaries, the pass as a message, plans written by someone else, sub-issues assigned from outside, the
@@ -269,12 +278,12 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 |---|---|---|
 | ui | `cli*`, `panel*` | the owner's and the agents' entry points; call the loop and below |
 | loop | `loop` | the process that ticks: does the I/O, calls the core |
-| steps | `sources`, `talk`, `health`, `metrics` | one step of a tick, or a view over several pieces |
+| steps | `sources`, `talk`, `mechanic`, `health`, `metrics` | one step of a tick, or a view over several pieces |
 | services | `agents`, `integrate`, `pulls`, `sessions`, `lock` | the outside world: git, gh, claude, processes |
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `subtasks`, `blockers`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+| core | `risk`, `subtasks`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
@@ -303,11 +312,13 @@ The panel's TypeScript is out of this (a dependency check there can come later).
 
 ## Watching itself
 
-Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices; plan_usd of define sessions and work_usd of work sessions, from `session_kinds`; review rounds), time to the queue and to
+Metrics per task (`fm metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; plan_usd of define sessions and work_usd of work sessions, from `session_kinds`; review rounds), time to the queue and to
 done, rework (sent back), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
 misled its agents (their `--confused` words).
 
 Health checks (`fm/health.py`), each finding a triage issue, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its
 transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
-tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`), loop step errors.
+tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing
+episode, from the first failing run until a pass, with the commit, the failing step and the output tail), loop step errors.
+Every finding has three parts: what it means, the evidence fm gathered, and a hypothesis marked pending; none proposes a fix.

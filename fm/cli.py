@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import agents, backlog, blockers, editing, guard, health, integrate, lock, loop, metrics, providers, sessions, subtasks, token, util
-from .cli_agent import cmd_ask, cmd_block, cmd_done, cmd_ready, cmd_verdict
+from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
 from .config import Project, register
@@ -38,13 +38,11 @@ def cmd_init(a: argparse.Namespace) -> None:
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
     status = "triage" if a.triage else "backlog"
-    if a.parent:
-        if os.environ.get("FM_ISSUE"):
-            sys.exit("fm: subtasks are filed by the owner, not from an agent's session")
-        if why := subtasks.refusal(backlog.issues(backlog.load(p)), a.parent):
-            sys.exit(f"fm: {why}")
+    if a.parent and os.environ.get("FM_ISSUE"):
+        sys.exit("fm: subtasks are filed by the owner, not from an agent's session")
+    issues = backlog.issues(backlog.load(p))
     ids = blockers.ids(a.blocked_by or [])
-    if why := blockers.refusal(backlog.issues(backlog.load(p)), "", ids):
+    if why := (a.parent and subtasks.refusal(issues, a.parent)) or blockers.refusal(issues, "", ids):
         sys.exit(f"fm: {why}")
     iid = backlog.add(
         p,
@@ -56,6 +54,8 @@ def cmd_add(a: argparse.Namespace) -> None:
         priority=a.priority,
         parent=a.parent or "",
         blocked_by=ids,
+        model=a.model or "",
+        effort=a.effort or "",
     )
     print(iid)
 
@@ -91,8 +91,7 @@ def cmd_list(a: argparse.Namespace) -> None:
             continue
         agent: backlog.Agent = i.get("agent") or {}
         ag = agent.get("name", "")
-        shown = i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED)
-        title = ("  " if shown else "") + i["title"]
+        title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
         note = (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
         print(f"{i['id']:8} {i['status']:12} {ag:14} {title}{note}")
     for q in backlog.open_questions(d):
@@ -207,7 +206,7 @@ def cmd_health(a: argparse.Namespace) -> None:
     p = home(a)
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
-        print(f"! {f['title']}: {f['detail'].splitlines()[0] if f['detail'] else ''}")
+        print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
 
 
 def cmd_metrics(a: argparse.Namespace) -> None:
@@ -272,6 +271,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "verdict": cmd_verdict,
     "ready": cmd_ready,
     "block": cmd_block,
+    "diagnose": cmd_diagnose,
     "answer": cmd_answer,
     "allow": lambda a: cmd_allow(a, True),
     "deny": lambda a: cmd_allow(a, False),

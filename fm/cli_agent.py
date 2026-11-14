@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, lessons, util
+from . import backlog, diagnosis, lessons, util
 from .cli_common import home, mine
 
 
@@ -62,6 +62,9 @@ def cmd_ready(a: argparse.Namespace) -> None:
             i.pop("plan_file", None)  # a relaunched planner that now says «trivial» leaves no stale plan
         if a.detail:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
+        for k in ("model", "effort"):
+            if v := getattr(a, k):
+                i[k] = v
         i["status"], i["blocked"] = "ready", ""
     backlog.event(p, iid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
     lessons.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)
@@ -73,3 +76,17 @@ def cmd_block(a: argparse.Namespace) -> None:
     backlog.update(p, mine(a), blocked=a.text)
     backlog.event(p, mine(a), f"blocked by its agent: {a.text}")
     print("Blocked: the owner sees it in the panel. End your turn.")
+
+
+def cmd_diagnose(a: argparse.Namespace) -> None:
+    p = home(a)
+    iid = mine(a)
+    f = Path(a.file)
+    text = f.read_text(encoding="utf-8") if f.is_file() else ""
+    if not text.strip():
+        sys.exit(f"fm: the diagnosis file {a.file} is missing or empty")
+    if missing := diagnosis.missing_sections(text):
+        sys.exit("fm: the diagnosis lacks: " + ", ".join(missing) + ". Add those sections and run fm diagnose again.")
+    if not diagnosis.record(p, iid, "Diagnosis (mechanic)", text, file=str(f)):
+        sys.exit(f"fm: {iid} already has a diagnosis")
+    print(f"Diagnosis recorded in {iid}. Remove your scratch folder and end your turn.")

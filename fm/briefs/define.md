@@ -18,6 +18,13 @@ Read the project's lessons, `$lessons`.
 - You never split the task or file others. If it looks too big, say so to the owner with `fm ask`, proposing how, and file nothing.
 - If a point only the owner can decide remains, run `fm ask "…"` and END YOUR TURN; his answer comes back to you here. The question stands alone: the context in one line, the options, your recommendation and why. Do not ask what you can find out by reading.
 
+# Model and effort of the responsible agent
+As filed: $model_effort. If the owner already set them, leave them. Otherwise choose with this rubric and pass `--model M --effort E` to `fm ready`. Pick the lowest row that fits; between two, the higher:
+- mechanical or very scoped → sonnet/low
+- scoped, with clear criteria and some logic → sonnet/high
+- design, undiagnosed debugging, or a change to fm's own protocol → opus/medium (opus/high when hard)
+- exceptionally complex work only → fable/high
+
 # The plan
 Read the code the task touches (really read it), then write `$plan` for an implementer who has seen neither this conversation nor this code. The plan is for the smallest change that meets the acceptance criteria. A plan is the decisions it cannot make alone, each precise enough that it can write only one reasonable thing; no function bodies unless the algorithm is the decision (a plan longer than the code has written the code). Sections:
 - **Start:** what exists today that the task builds on, with file:line, read today.
@@ -34,5 +41,5 @@ Before `fm ready`, reread it as the implementer: every acceptance criteria line 
 A plan that costs a bit more and makes the implementation cheap beats one that needs many rounds. What the owner discussed is context for the plan, not the plan. Only a trivial task may skip it (`--no-plan`).
 
 # The end
-`fm ready --detail "what the responsible agent needs: the decisions taken (and the owner's answers), what is out of scope" --plan $plan --misled "what was wrong or unclear in what you were given, or none"`
+`fm ready [--model M --effort E] --detail "what the responsible agent needs: the decisions taken (and the owner's answers), what is out of scope" --plan $plan --misled "what was wrong or unclear in what you were given, or none"`
 (or `--no-plan "why it is trivial"` instead of `--plan`), then end your turn. If it should not be done at all, `fm block "why"` and end your turn.
