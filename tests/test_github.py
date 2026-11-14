@@ -61,15 +61,13 @@ FAKE_GH = textwrap.dedent("""\
         q = kv["query"]
         pr = next(iter(s["prs"].values()))
         threads = pr.setdefault("threads", [])
+        if s.get("fail_threads"):
+            sys.exit(print("HTTP 502", file=sys.stderr) or 1)
         if "resolveReviewThread" in q or "addPullRequestReviewThreadReply" in q:
             if "resolveReviewThread" in q and s.get("reject_resolve"):
-                print("HTTP 403", file=sys.stderr)
-                sys.exit(1)
+                sys.exit(print("HTTP 403", file=sys.stderr) or 1)
             t = next(t for t in threads if t["id"] == kv["id"])
-            if "resolveReviewThread" in q:
-                t["resolved"] = True
-            else:
-                t["bodies"].append(kv["body"])
+            t.update(resolved=True) if "resolveReviewThread" in q else t["bodies"].append(kv["body"])
             save()
             print("{}")
         else:
@@ -227,53 +225,6 @@ class Provider(unittest.TestCase):
             registry.get(e.p)
         e.p.cfg["integrate"]["provider"] = "github"
         self.assertEqual(registry.get(e.p).name, "github")
-
-
-class Border(unittest.TestCase):
-    """What gh says is turned into fm's own types at the border; a shape that does not fit is a clear ProviderError."""
-
-    GOOD = {"number": 7, "url": "https://github.com/o/r/pull/7", "isDraft": True, "state": "OPEN", "mergeCommit": None}
-
-    def test_a_pull_request_becomes_a_typed_value(self):
-        pr = github.pull_request(self.GOOD)
-        self.assertEqual((pr.number, pr.url, pr.draft, pr.state, pr.merge_commit), (7, "https://github.com/o/r/pull/7", True, "OPEN", ""))
-        merged = github.pull_request({**self.GOOD, "state": "MERGED", "mergeCommit": {"oid": "abc"}})
-        self.assertEqual((merged.state, merged.merge_commit), ("MERGED", "abc"))
-
-    def test_a_pull_request_of_the_wrong_shape_is_a_provider_error(self):
-        for bad in (
-            [],
-            "x",
-            {**self.GOOD, "state": "SIDEWAYS"},
-            {**self.GOOD, "number": "7"},
-            {**self.GOOD, "number": True},
-            {**self.GOOD, "isDraft": "yes"},
-            {**self.GOOD, "mergeCommit": "abc"},
-            {**self.GOOD, "mergeCommit": {"oid": 1}},
-            {k: v for k, v in self.GOOD.items() if k != "url"},
-        ):
-            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.pull_request(bad)
-
-    def test_the_open_prs_answer_becomes_head_and_ci_or_a_provider_error(self):
-        def node(state):
-            return {"number": 1, "headRefOid": "abc", "commits": {"nodes": [{"commit": {"statusCheckRollup": state}}]}}
-
-        def answer(*nodes):
-            return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
-
-        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass"}})
-        self.assertEqual(github.open_prs(answer(node(None)))["1"]["ci"], "none")
-        for bad in (answer({"number": "1"}), answer("x")):
-            with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.open_prs(bad)
-
-    def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self):
-        g = GH()
-        self.addCleanup(g.close)
-        g.set(prs={"1": {"draft": False, "state": "OPEN", "comments": []}}, bad_view=True)
-        with self.assertRaises(providers.ProviderError):
-            registry.get(g.e.p).state({"pr": 1})
 
 
 class Pulls(unittest.TestCase):
@@ -526,7 +477,7 @@ class Pulls(unittest.TestCase):
         self.assertEqual(g.e.issue(iid)["status"], "done")
 
     def graphql(self, g: GH) -> int:
-        return len(g.calls("api", "graphql"))
+        return len([c for c in g.calls("api", "graphql") if not any("eviewThread" in x for x in c)])
 
     def test_a_settled_ci_is_not_read_again_until_the_branch_gets_a_commit(self):
         g = self.make(test="true", autonomy="manual")

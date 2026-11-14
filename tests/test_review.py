@@ -241,7 +241,7 @@ class Review_(unittest.TestCase):
 
     def test_a_failed_thread_read_still_posts_the_review_once(self):
         g, iid = self.make()
-        g.set(fail_always=["api", "graphql"])
+        g.set(fail_threads=True)
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", (0, 1, 0))
         loop.tick(g.e.p)
         (r,) = self.pr(g)["reviews"]

@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
-from ..inline import LineComment, Review, Thread, resolve_links
-from . import Conflict, Permanent, Provider, ProviderError, Transient, gh_threads
+from ..inline import Review, Thread, resolve_links
+from . import Conflict, Permanent, Provider, ProviderError, Transient, gh_review, gh_threads
+from .gh_review import marker
 
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -108,10 +109,6 @@ def open_prs(raw: object) -> dict[str, dict[str, str]]:
     return dict(_pull(n) for n in util.json_list(_at(util.json_object(raw), "data", "repository", "pullRequests").get("nodes")))
 
 
-def _marker(key: str) -> str:
-    return f"<!-- fm:{key} -->"
-
-
 class GitHub(Provider):
     has_ci = True
     name = "github"
@@ -188,20 +185,20 @@ class GitHub(Provider):
         return set(r.out.split("\n")) - {""}
 
     def review(self, change: dict[str, Any], review: Review) -> int:
-        if _marker(review.key) in self.markers(change, "reviews"):
+        if marker(review.key) in self.markers(change, "reviews"):
             return 0
         known = self.markers(change, "comments")
-        new = [c for c in review.comments if _marker(c.key) not in known]
+        new = [c for c in review.comments if marker(c.key) not in known]
         base = self.run("gh", "repo", "view", "--json", "url", "-q", ".url").out.strip()
         payload = {
             "commit_id": change["head"],
             "event": "COMMENT",
-            "body": resolve_links(f"{review.body}\n\n{_marker(review.key)}", base, change["head"], {}),
-            "comments": [{"path": c.path, "line": c.line, "side": "RIGHT", "body": f"{c.body}\n\n{_marker(c.key)}"} for c in new],
+            "body": resolve_links(f"{review.body}\n\n{marker(review.key)}", base, change["head"], {}),
+            "comments": [{"path": c.path, "line": c.line, "side": "RIGHT", "body": f"{c.body}\n\n{marker(c.key)}"} for c in new],
         }
         url = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews"
         posted = self.run("gh", "api", "-X", "POST", url, "--input", "-", input=json.dumps(payload))
-        self.link_comments(change, review, new, (base, posted.out))
+        gh_review.link_comments(self.run, change, review, new, (base, posted.out))
         return len(new)
 
     def threads(self, change: dict[str, Any]) -> list[Thread]:
@@ -214,26 +211,6 @@ class GitHub(Provider):
         except (Transient, Permanent):
             body = gh_threads.fixed_text(thread.key, sha)
             self.run("gh", "api", "graphql", "-f", f"query={gh_threads.REPLY}", "-f", f"id={thread.id}", "-f", f"body={body}")
-
-    def link_comments(self, change: dict[str, Any], review: Review, new: list[LineComment], posted: tuple[str, str]) -> None:
-        """Best effort: the body's links to findings that got an inline comment point at that comment instead of the
-        file. A failure leaves the file links, which are right too."""
-        base, out = posted
-        if not new or "fm-link:" not in review.body:
-            return
-        try:
-            rid = json.loads(out)["id"]
-            listing = f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}/comments"
-            r = self.run("gh", "api", listing, "--jq", r'.[] | "\(.id) \(.body | scan("<!-- fm:[a-z0-9-]+ -->"))"')
-            ids: dict[str, str] = {}
-            for line in r.out.splitlines():
-                num, _, mark = line.partition(" ")
-                ids[mark] = num
-            urls = {c.place: f"{base}/pull/{change['pr']}#discussion_r{ids[_marker(c.key)]}" for c in new if _marker(c.key) in ids}
-            body = resolve_links(review.body, base, change["head"], urls) + f"\n\n{_marker(review.key)}"
-            self.run("gh", "api", "-X", "PUT", f"repos/{{owner}}/{{repo}}/pulls/{change['pr']}/reviews/{rid}", "--input", "-", input=json.dumps({"body": body}))
-        except (ValueError, KeyError, TypeError, ProviderError, Transient, Permanent):
-            return
 
     def is_open(self, change: dict[str, Any]) -> bool:
         return self.view(change).state == "OPEN"
