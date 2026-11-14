@@ -264,27 +264,29 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
     return q
 
 
+def message(d: dict[str, Any], i: dict[str, Any], tag: str, kinds: tuple[str, ...], **fields: Any) -> None:
+    """Files a message for the issue's agent among the resolved decisions, id `<issue> <tag><n>` (n counts the issue's
+    entries of `kinds`); the loop delivers it (loop.deliver_answers)."""
+    n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == i["id"] and q.get("kind") in kinds)
+    agent: Agent = i.get("agent") or {}
+    d["decisions_resolved"].append(
+        {
+            "id": f"{i['id']} {tag}{n + 1}",
+            "issue": i["id"],
+            "agent": agent.get("name"),
+            "resolved": util.now()[:10],
+            "delivered": False,
+            "answered_at": util.now(),
+            "title": i["title"],
+            **fields,
+        }
+    )
+
+
 def note(p: Project, iid: str, text: str, source: str) -> None:
     """A note from outside fm for the issue's agent: delivered like an owner's answer (loop.deliver_answers)."""
     with edit(p) as d:
-        i = get(d, iid)
-        agent: Agent = i.get("agent") or {}
-        n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == iid and q.get("kind") == "note")
-        d["decisions_resolved"].append(
-            {
-                "id": f"{iid} N{n + 1}",
-                "issue": iid,
-                "kind": "note",
-                "agent": agent.get("name"),
-                "text": "signal",
-                "answer": text,
-                "source": source,
-                "resolved": util.now()[:10],
-                "delivered": False,
-                "answered_at": util.now(),
-                "title": i["title"],
-            }
-        )
+        message(d, get(d, iid), "N", ("note",), kind="note", text="signal", answer=text, source=source)
     event(p, iid, f"note from {source}: {text}")
 
 

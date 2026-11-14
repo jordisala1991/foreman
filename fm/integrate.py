@@ -87,8 +87,8 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     i = backlog.get(d, iid)
     branch = i.get("branch", "")
     main = p.get("project", "main")
-    commits = int(git(p.repo, "rev-list", "--count", f"{main}..{branch}", check=False).out.strip() or 0)
-    head = git(p.repo, "rev-parse", branch).out.strip()
+    commits = pulls.commits_of(p, branch)
+    head = pulls.head_of(p, branch)
     tests = tests_at(p, head, iid.lower())
     if ci is None:
         ci = registry.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
@@ -98,7 +98,8 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
     deleted = deleted_files(p, branch)
     v: backlog.Review | None = i.get("review")
     review = "" if not v else "clean" if backlog.open_findings(v) == 0 else f"open after round {v['round']}: {backlog.open_findings(v)}"
-    risk, reasons = score(p, Facts(tests, review, files, deleted, conflicts(p, branch), commits, ci))
+    conflict = conflicts(p, branch)
+    risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci))
     c = {
         "tests": tests,
         "ci": ci,
@@ -109,9 +110,9 @@ def check(p: Project, iid: str, ci: str | None = None) -> dict[str, Any]:
         "risk": risk,
         "review": review,
         "reasons": reasons,
-        "head": git(p.repo, "rev-parse", branch).out.strip(),
+        "head": head,
         "main": git(p.repo, "rev-parse", main).out.strip(),
-        "conflict": conflicts(p, branch),
+        "conflict": conflict,
         "at": util.now(),
     }
     backlog.update(p, iid, check=c)
