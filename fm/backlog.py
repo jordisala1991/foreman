@@ -14,8 +14,7 @@ Keys added to an issue: `agent` {name, session, short, kind: define|work, starte
 `sessions` (every session id), `session_kinds` (sid → define|work|review), `report` {summary, review, confused, at},
 `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `source`
 (dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask).
-A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text, kind:
-question|permission, action?}; its answer goes back to that agent.
+A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text, kind, action?}.
 """
 
 import contextlib
@@ -193,8 +192,9 @@ def set_status(p: Project, iid: str, status: str, why: str = "", **keys: Any) ->
         raise BacklogError(f"bad status {status!r}")
     with edit(p) as d:
         i = get(d, iid)
-        i["status"] = status
-        i.update(keys)
+        if status == "canceled" and i["status"] in CLOSED:  # closed meanwhile (merged): keep it
+            return i
+        i.update(keys, status=status)
         if status in CLOSED:
             i["closed"] = date.today().isoformat()
     event(p, iid, f"→ {status}" + (f": {why}" if why else ""))

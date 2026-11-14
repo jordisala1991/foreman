@@ -177,3 +177,18 @@ class Closing(unittest.TestCase):
         fm(g.e.home, "cancel", P)
         self.assertEqual(g.state["prs"]["1"]["state"], "CLOSED")
         self.assertEqual((g.e.issue(iid)["status"], g.e.issue(P)["status"]), ("canceled", "canceled"))
+
+
+class Race(unittest.TestCase):
+    def test_cancel_of_a_parent_does_not_overwrite_a_subtask_that_closed_meanwhile(self):
+        owner(self)
+        e = Env()
+        P = backlog.add(e.p, "parent", status="triage")
+        S = fm(e.home, "add", "s", "--parent", P, "--criteria", "c").strip()
+
+        def merged(p, i):  # the loop merges the subtask while the cascade closes it
+            backlog.set_status(p, S, "done")
+
+        with mock.patch.object(integrate, "stop_all", side_effect=merged):
+            integrate.close(e.p, P, "canceled", "x")
+        self.assertEqual((e.issue(S)["status"], e.issue(P)["status"]), ("done", "canceled"))
