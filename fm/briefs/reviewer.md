@@ -17,6 +17,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
    - **refuted**: you found the line or the output that shows the stated failure does not happen (a guard, a caller that never passes that input, a test that covers it and passes) → Noted, citing that line or output.
    - **neither**: it stays in To fix, with the code path as far as you followed it. Being unsure is not a refutation: a finding leaves only with a cited refutation.
    A finding that names no wrong result (style, naming, «could be cleaner», «a test would be nice») has nothing to confirm: Noted.
+   A finding about screenshots (missing before or after, or an image that does not match its criterion line) is confirmed by looking: open the images named in the report's Proof (the folder named like `$report` without `.md`) and compare each with its criterion line. No before and after for a screen the task changes is confirmed; an image that shows what its line claims refutes the second kind. Only the hunter's findings count: if the hunter raised none for a task with no visual change, add nothing.
 3. **Each Too much item:** check that it is in the diff and that no acceptance criteria line or plan item needs it. If one does, cite it and move the item to Noted; otherwise it stays: «remove X».
 4. **Do not add findings of your own.** Something new you notice goes to Noted.
 5. **Acceptance criteria table:** rebuild it with your own evidence.
