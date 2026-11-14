@@ -122,6 +122,9 @@ layer = "core"
 [[modules]]
 path = "fm.subtasks"
 layer = "core"
+[[modules]]
+path = "fm.editing"
+layer = "core"
 
 [[modules]]
 path = "fm.lessons"
