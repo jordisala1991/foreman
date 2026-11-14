@@ -15,7 +15,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
       sources → answers → agents → queue → health → launch
               │
    claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
-      defining agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
+      planning agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
       responsible agent (cwd: its worktree, branch)  → subagents, fm ask, fm done / fm block
       hunter, then reviewer (launched by the loop, read only) → hunter file, review file, fm verdict
 ```
@@ -34,7 +34,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
 | `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
-| `fm/briefs/*.md` | ~80 | the defining agent's (it plans), the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
+| `fm/briefs/*.md` | ~80 | the planning agent's, the responsible agent's and the reviewer's briefs (from foreman's planner, dev and reviewer) |
 | `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
 
 Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, built to `panel/dist`.
@@ -51,7 +51,7 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 
 ```
  triage ──go──▶ backlog ──loop──▶ refining ──fm ready──▶ ready ──loop──▶ in progress ──fm done──▶ in review
- (health,        (to define)      (defining agent)                       (responsible agent)      (queue: check,
+ (health,        (to plan)        (planning agent)                       (responsible agent)      (queue: check,
   sources)                                                                      ▲                    risk score)
                                                                                 └──── fm reject ─────┤
                                                                                                      ▼
@@ -108,7 +108,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
    only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
 7. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
-   agent) or `backlog` issue (its defining agent), by priority then id. If the issue changed while its session
+   agent) or `backlog` issue (its planning agent), by priority then id. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
 
 `fm cancel` stops the agent, closes its open questions and removes its worktree (the branch stays).

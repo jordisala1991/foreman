@@ -2,8 +2,8 @@
 
 One responsible agent per task, a loop without a model, a short guard, and a system that watches itself.
 
-- **Backlog**: tasks are *to define* or *ready* (`backlog.json`, today's schema 5 plus the new states).
-- **Loop** (`fm loop`, a plain process launchd can keep alive): for a task to define it launches a defining agent; for
+- **Backlog**: tasks are *to plan* or *ready* (`backlog.json`, today's schema 5 plus the new states).
+- **Loop** (`fm loop`, a plain process launchd can keep alive): for a task to plan it launches a planning agent; for
   a ready one, its responsible agent. Each is a Claude Code session of its own (`claude --bg -n NAME`), so the owner
   can open it and talk to it.
 - **Responsible agent**: does the whole task in its own worktree, asks the owner only what only he can answer

@@ -9,7 +9,7 @@
    the background, one at a time, and the autonomy level may merge it. A check slower than util.BACKGROUND_WAIT_S does not hold
    the tick up: it finishes on its own and the next ticks go on.
 7. health: broken states become triage issues, deduplicated (health.py)
-8. launch: while there are free slots, a defining agent for a `backlog` issue, the responsible agent for a `ready`
+8. launch: while there are free slots, a planning agent for a `backlog` issue, the responsible agent for a `ready`
    one. The loop never plans, never reviews, never talks to the owner.
 """
 

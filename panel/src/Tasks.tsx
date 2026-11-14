@@ -1,5 +1,5 @@
 // The tasks: the backlog grouped by where each task is (what waits for the owner first), each card with its agent and
-// how to open its conversation, and a form to add a task (with a done criterion it starts ready, else to define).
+// how to open its conversation, and a form to add a task (with acceptance criteria it goes to be planned, else it waits in triage).
 import { useState } from "react";
 import { AgentLine, Attach, LoadFailed, Risk, useWrite } from "./cards";
 import { useFeed } from "./feed";
