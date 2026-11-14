@@ -5,14 +5,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import backlog, costs, integrate, lock, sessions, util
+from . import backlog, costs, delivery, lessons, lock, sessions, util
 from .config import Project
 
 BRIEFS = Path(__file__).parent / "briefs"
 
 
-def agent_name(p: Project, iid: str, kind: str) -> str:
-    return f"{iid.lower()}-define" if kind == "define" else iid.lower()
+def agent_name(p: Project, tid: str, kind: str) -> str:
+    return f"{tid.lower()}-planning" if kind == "planning" else tid.lower()
 
 
 ROUND2 = (
@@ -28,26 +28,26 @@ HUNTER_ROUND2 = (
 )
 
 
-def report_file(p: Project, iid: str) -> Path:
-    return p.home / "reports" / f"{iid}.md"
+def report_file(p: Project, tid: str) -> Path:
+    return p.home / "reports" / f"{tid}.md"
 
 
-def seed_report(p: Project, iid: str, worktree: Path) -> None:
-    """Gives a work agent its report as a template to fill: the repo's PR template (plus a Review rounds section) or
-    fm's own. An existing report is never overwritten (a relaunch keeps the agent's work)."""
-    f = report_file(p, iid)
+def seed_report(p: Project, tid: str, worktree: Path) -> None:
+    """Gives a responsible agent its report as a template to fill: the repo's PR template (plus a Review rounds section) or
+    fm's own. An existing report is never overwritten (a relaunch keeps its agent's work)."""
+    f = report_file(p, tid)
     if f.exists():
         return
     theirs = worktree / ".github" / "pull_request_template.md"
-    text = (BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", iid)
+    text = (BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", tid)
     if theirs.is_file():
         text = theirs.read_text(encoding="utf-8").rstrip() + "\n\n## Review rounds\n"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(text, encoding="utf-8")
 
 
-def plan_file(p: Project, iid: str) -> Path:
-    return p.home / "plans" / f"{iid}.md"
+def plan_file(p: Project, tid: str) -> Path:
+    return p.home / "plans" / f"{tid}.md"
 
 
 def plan_section(i: dict[str, Any]) -> str:
@@ -60,9 +60,9 @@ def plan_section(i: dict[str, Any]) -> str:
     return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and acceptance criteria."
 
 
-def owner_notes_section(p: Project, iid: str) -> str:
+def owner_notes_section(p: Project, tid: str) -> str:
     """The owner's corrections on this task (rejection notes), oldest first; empty when there are none."""
-    notes = [q for q in backlog.load(p)["decisions_resolved"] if q.get("issue") == iid and q.get("kind") == "rejection"]
+    notes = [q for q in backlog.load(p)["decisions_resolved"] if q.get("task") == tid and q.get("kind") == "rejection"]
     if not notes:
         return ""
     lines = "\n".join(f"- {q.get('at') or q.get('resolved', '')}: {q.get('answer', '')}" for q in notes)
@@ -80,17 +80,18 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "project": p.name,
         "title": i["title"],
         "detail": i.get("detail", ""),
-        "claim": a.get("claim") or i["title"],
+        "goal": a.get("goal") or i["title"],
         "criteria": a.get("criteria", ""),
         "repo": str(p.repo),
         "worktree": i.get("worktree", ""),
         "branch": i.get("branch", ""),
         "main": p.get("project", "main"),
-        "test": p.get("integrate", "test") or "(none configured)",
-        "lessons": str(backlog.ensure_lessons(p)),
+        "test": p.get("merge", "test") or "(none configured)",
+        "lessons": str(lessons.ensure_lessons(p)),
         "report": str(report_file(p, i["id"])),
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
+        "model_effort": f"{i.get('model') or 'project default'} / {i.get('effort') or 'project default'}",
         "round2": "",
         "owner_notes": owner_notes_section(p, i["id"]) if kind in ("reviewer", "hunter") else "",
         "resources": lock.describe(p.cfg),
@@ -107,19 +108,20 @@ def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
     wt = p.path("worktrees") / i["id"].lower()
     if not wt.exists():
         wt.parent.mkdir(parents=True, exist_ok=True)
-        exists = integrate.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).code == 0
+        exists = delivery.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).code == 0
         args = ["worktree", "add", str(wt), branch] if exists else ["worktree", "add", "-b", branch, str(wt), p.get("project", "main")]
-        integrate.git(p.repo, *args)
+        delivery.git(p.repo, *args)
     return wt, branch
 
 
 def launch(p: Project, i: dict[str, Any]) -> None:
-    kind = "define" if i["status"] == "backlog" else "work"
+    kind = "planning" if i["status"] == "backlog" else "responsible"
     name = agent_name(p, i["id"], kind)
-    model = p.get("agents", "define_model" if kind == "define" else "model")
-    effort = p.get("agents", "define_effort" if kind == "define" else "effort")
+    own = i if kind == "responsible" else {}  # the task's choice is for its responsible agent only
+    model = own.get("model") or p.get("agents", "planning_model" if kind == "planning" else "model")
+    effort = own.get("effort") or p.get("agents", "planning_effort" if kind == "planning" else "effort")
     keys: dict[str, Any] = {}
-    if kind == "work":
+    if kind == "responsible":
         wt, branch = worktree(p, i)
         i = {**i, "worktree": str(wt), "branch": branch}
         keys = {"worktree": str(wt), "branch": branch}
@@ -140,27 +142,27 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         it = backlog.get(d, i["id"])
         still = it["status"] == i["status"] and not it.get("blocked")
         if still:
-            it["status"] = "refining" if kind == "define" else "in progress"
+            it["status"] = "refining" if kind == "planning" else "in progress"
             it["agent"] = agent
             if sid:
                 record_session(it, sid, kind)
     if not still:  # the owner cancelled or changed it while the session started
         sessions.stop(p, short)
-        backlog.event(p, i["id"], f"launch of {name} undone: the issue changed meanwhile")
+        backlog.event(p, i["id"], f"launch of {name} undone: the task changed meanwhile")
         return
-    backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, session {short})")
+    backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, {effort}, session {short})")
 
 
 def record_session(it: dict[str, Any], sid: str, kind: str) -> None:
-    """Stores a session id in the issue's `sessions` and its kind (define|work|review) in `session_kinds`."""
+    """Stores a session id in the task's `sessions` and its kind (planning|responsible|review) in `session_kinds`."""
     it["sessions"] = [*it.get("sessions", []), sid]
     it["session_kinds"] = {**it.get("session_kinds", {}), sid: kind}
 
 
 def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
     """A session not listed yet at launch: its full id from the short one, on a later tick."""
-    for i in backlog.issues(backlog.load(p)):
-        for role in ("agent", "hunter", "reviewer"):
+    for i in backlog.tasks(backlog.load(p)):
+        for role in ("agent", "hunter", "reviewer", "mechanic"):
             a: dict[str, Any] = i.get(role) or {}
             if a.get("short") and not a.get("session"):
                 sid = sessions.find(rows, a["short"])
@@ -168,11 +170,11 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        record_session(it, sid, a.get("kind", "") if role == "agent" else "review")
+                        record_session(it, sid, a.get("kind", "") if role in ("agent", "mechanic") else "review")
 
 
 def idle_s(a: backlog.Agent | dict[str, Any]) -> float:
-    """Seconds since the agent's transcript last changed (or since it was started/resumed, if later)."""
+    """Seconds since an agent's transcript last changed (or since it was started/resumed, if later)."""
     files = costs.files_of(a.get("session") or "")
     last = max((f.stat().st_mtime for f in files), default=0.0)
     since = util.age_s(a.get("started"))
@@ -180,12 +182,12 @@ def idle_s(a: backlog.Agent | dict[str, Any]) -> float:
 
 
 def reviewer_active(i: dict[str, Any]) -> bool:
-    """A review pass works on the current tip: the reviewer without a verdict, or the hunter before its file exists."""
+    """A review works on the current tip: the reviewer without a verdict, or the hunter before its file exists."""
     return i["status"] == "in review" and not i.get("blocked") and review_running(i)
 
 
 def review_running(i: dict[str, Any]) -> bool:
-    """A review pass has no result yet on its tip, blocked task or not."""
+    """A review has no verdict yet on its tip, blocked task or not."""
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
@@ -194,19 +196,24 @@ def review_running(i: dict[str, Any]) -> bool:
     return bool(h) and h["tip"] not in (v.get("tip"), r.get("tip")) and not Path(h["file"]).exists()
 
 
+def diagnosing(i: dict[str, Any]) -> bool:
+    """A mechanic is working on this triage task: it has no diagnosis yet."""
+    return i["status"] == "triage" and bool(i.get("mechanic")) and not i.get("diagnosis")
+
+
 def running(d: dict[str, Any]) -> int:
-    return sum(1 for i in backlog.issues(d) if (i["status"] in backlog.RUNNING and not i.get("blocked")) or reviewer_active(i))
+    return sum(1 for i in backlog.tasks(d) if (i["status"] in backlog.RUNNING and not i.get("blocked")) or reviewer_active(i) or diagnosing(i))
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
-    """The hunter's findings file or the verifier's review of this round and tip."""
+    """The hunter's findings file or the reviewer's review of this round and tip."""
     rnd = len(i.get("reviews", [])) + 1
     suffix = "-hunter" if role == "hunter" else ""
     return p.home / "reviews" / f"{i['id']}-r{rnd}-{tip[:9]}{suffix}.md"
 
 
 def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "reviewer") -> None:
-    """One of the two review passes: the `hunter` lists what it suspects, then the `reviewer` checks each finding."""
+    """One of the two review sessions: the `hunter` lists what it suspects, then the `reviewer` checks each finding."""
     rnd = backlog.review_round(i)
     all_reviews: list[dict[str, Any]] = i.get("reviews") or []
     reviews = all_reviews[int(i.get("review_from", 0)) :]
@@ -252,15 +259,15 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
     backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {short})")
 
 
-def update_agent(p: Project, iid: str, **fields: Any) -> None:
-    """Merges fields into the issue's agent, from the current backlog (not from a read made earlier)."""
+def update_agent(p: Project, tid: str, **fields: Any) -> None:
+    """Merges fields into the task's agent, from the current backlog (not from a read made earlier)."""
     with backlog.edit(p) as d:
-        it = backlog.get(d, iid)
+        it = backlog.get(d, tid)
         it["agent"] = {**(it.get("agent") or {}), **fields}
 
 
 def send(p: Project, i: dict[str, Any], message: str) -> bool:
-    """Resumes the issue's agent with a message; False when it has no session to resume."""
+    """Resumes the task's agent with a message; False when it has no session to resume."""
     a: dict[str, Any] = i.get("agent") or {}
     if not a.get("session"):
         return False

@@ -1,4 +1,4 @@
-"""The panel's read side: what each JSON view shows (projects, state, issue, system)."""
+"""The panel's read side: what each JSON view shows (projects, state, task, system)."""
 
 from datetime import date, timedelta
 from typing import Any
@@ -7,7 +7,7 @@ from urllib.parse import quote
 from . import backlog, costs, evidence, health, lock, metrics, pulls, sessions, util
 from .config import Project, registered
 
-RECENT_DAYS = 7  # closed issues the tasks screen still shows
+RECENT_DAYS = 7  # closed tasks the tasks screen still shows
 Obj = dict[str, Any]
 
 
@@ -44,8 +44,8 @@ def paused(p: Project) -> str | None:
 
 
 def needs(d: Obj) -> int:
-    """What waits for the owner: open questions, the queue, triage, blocked issues."""
-    waiting = [i for i in backlog.issues(d) if i["status"] in ("in review", "triage") or (i.get("blocked") and i["status"] not in backlog.CLOSED)]
+    """What waits for the owner: open questions, the queue, triage, blocked tasks."""
+    waiting = [i for i in backlog.tasks(d) if i["status"] in ("in review", "triage") or (i.get("blocked") and i["status"] not in backlog.CLOSED)]
     return len(d["decisions"]) + len(waiting)
 
 
@@ -57,7 +57,7 @@ def summary(p: Project) -> Obj:
             "paused": paused(p),
             "loop": loop_beat(p),
             "needs": needs(d),
-            "running": sum(1 for i in backlog.issues(d) if i["status"] in backlog.RUNNING),
+            "running": sum(1 for i in backlog.tasks(d) if i["status"] in backlog.RUNNING),
         }
     except Exception as e:
         return {"name": p.name, "broken": str(e)}
@@ -72,33 +72,33 @@ def state(p: Project) -> Obj:
     d = backlog.load(p)
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     rows = sessions.listing(p)
-    shown = [with_session(p, i, rows) for i in backlog.issues(d) if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
+    shown = [with_session(p, i, rows) for i in backlog.tasks(d) if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
-    return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "issues": shown, "questions": d["decisions"], "events": events}
+    return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "tasks": shown, "questions": d["decisions"], "events": events}
 
 
-def issue(p: Project, iid: str) -> Obj:
+def task(p: Project, tid: str) -> Obj:
     d = backlog.load(p)
-    i = backlog.get(d, iid)
+    i = backlog.get(d, tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
     shown = with_session(p, i, sessions.listing(p))
     if i.get("report"):
         check: Obj = i.get("check") or {}
         text = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
-        urls = {n: f"/evidence?p={quote(p.name)}&id={quote(iid)}&name={quote(n)}" for n in pulls.evidence_files(p, iid, text)}
+        urls = {n: f"/evidence?p={quote(p.name)}&id={quote(tid)}&name={quote(n)}" for n in pulls.evidence_files(p, tid, text)}
         shown["description"] = evidence.relink(text, urls)
     return {
-        "issue": shown,
-        "events": [e for e in util.read_jsonl(p.state / "events.jsonl") if e.get("issue") == iid][::-1],
-        "questions": [q for q in d["decisions"] + d["decisions_resolved"] if q.get("issue") == iid],
+        "task": shown,
+        "events": [e for e in util.read_jsonl(p.state / "events.jsonl") if e.get("task") == tid][::-1],
+        "questions": [q for q in d["decisions"] + d["decisions_resolved"] if q.get("task") == tid],
         "cost": {"usd": c["usd"], "minutes": c["minutes"]},
     }
 
 
 def system(p: Project) -> Obj:
     found = health.findings(p, sessions.listing(p), outside=True, probe=False)
-    rows = metrics.per_issue(p)
+    rows = metrics.per_task(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     return {
         "name": p.name,

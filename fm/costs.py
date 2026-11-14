@@ -12,6 +12,7 @@ from . import util
 
 # $ per million tokens: input, cache write (5 min), cache write (1 h), cache read, output. As in foreman's costs.py.
 PRICES = {
+    "fable": (8.0, 10.0, 16.0, 0.20, 40.0),
     "opus": (4.0, 5.0, 8.0, 0.20, 20.0),
     "sonnet": (2.0, 2.5, 4.0, 0.10, 10.0),
     "haiku": (0.10, 0.125, 0.20, 0.01, 0.50),

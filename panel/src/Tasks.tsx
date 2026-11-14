@@ -4,23 +4,23 @@ import { useState } from "react";
 import { AgentLine, Attach, LoadFailed, Risk, useWrite } from "./cards";
 import { useFeed } from "./feed";
 import { ScreenHead } from "./head";
-import { blocked, enc, stateUrl, t, when, type Issue, type Key, type Product, type State } from "./lib";
+import { blocked, enc, stateUrl, t, when, type Task, type Key, type Project, type State } from "./lib";
 
 const GROUPS = ["waiting", "in progress", "refining", "in review", "ready", "backlog", "triage", "closed"] as const;
 type Group = (typeof GROUPS)[number];
 
-function groupOf(i: Issue, asking: Set<string>): Group {
+function groupOf(i: Task, asking: Set<string>): Group {
   if (["done", "canceled", "duplicate"].includes(i.status)) return "closed";
   if ((blocked(i) || asking.has(i.id)) && i.status !== "in review" && i.status !== "triage") return "waiting";
   return i.status as Group;
 }
 
-function TaskCard({ i, asking }: { i: Issue; asking: boolean }) {
+function TaskCard({ i, asking }: { i: Task; asking: boolean }) {
   const closed = ["done", "canceled", "duplicate"].includes(i.status);
   return (
     <article className="card task">
       <div className="line1">
-        <a href={`#/issue/${i.id}`}>
+        <a href={`#/task/${i.id}`}>
           <span className="mono id">{i.id}</span> <span className="tt">{i.title}</span>
         </a>
         {i.check && i.status === "in review" ? <Risk risk={i.check.risk} /> : null}
@@ -42,12 +42,12 @@ function TaskCard({ i, asking }: { i: Issue; asking: boolean }) {
 
 function AddTask({ p, done }: { p: string; done: () => void }) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ title: "", detail: "", claim: "", criteria: "" });
+  const [f, setF] = useState({ title: "", detail: "", goal: "", criteria: "" });
   const w = useWrite(done);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const add = async () => {
     if (await w.run(`/api/add?p=${enc(p)}`, JSON.stringify(f))) {
-      setF({ title: "", detail: "", claim: "", criteria: "" });
+      setF({ title: "", detail: "", goal: "", criteria: "" });
       setOpen(false);
     }
   };
@@ -61,7 +61,7 @@ function AddTask({ p, done }: { p: string; done: () => void }) {
     <form className="card addform" onSubmit={(e) => { e.preventDefault(); void add(); }}>
       <label>{t("f_title")}<input value={f.title} onChange={set("title")} required autoFocus /></label>
       <label>{t("f_detail")}<textarea rows={4} value={f.detail} onChange={set("detail")} /></label>
-      <label>{t("f_claim")}<input value={f.claim} onChange={set("claim")} /></label>
+      <label>{t("f_goal")}<input value={f.goal} onChange={set("goal")} /></label>
       <label>{t("f_criteria")}<textarea rows={2} value={f.criteria} onChange={set("criteria")} /></label>
       <p className="note">{t(f.criteria.trim() ? "f_goes_ready" : "f_goes_define")}</p>
       {w.error ? <p className="error" role="alert">{w.error}</p> : null}
@@ -73,24 +73,24 @@ function AddTask({ p, done }: { p: string; done: () => void }) {
   );
 }
 
-export function Tasks({ product }: { product: Product }) {
-  const s = useFeed<State>(stateUrl(product.name), 10_000);
+export function Tasks({ project }: { project: Project }) {
+  const s = useFeed<State>(stateUrl(project.name), 10_000);
   const d = s.data;
-  const asking = new Set((d?.questions ?? []).map((q) => q.issue));
-  const by = new Map<Group, Issue[]>();
-  for (const i of d?.issues ?? []) {
+  const asking = new Set((d?.questions ?? []).map((q) => q.task));
+  const by = new Map<Group, Task[]>();
+  for (const i of d?.tasks ?? []) {
     const g = groupOf(i, asking);
     by.set(g, [...(by.get(g) ?? []), i]);
   }
-  const open = (d?.issues ?? []).filter((i) => !["done", "canceled", "duplicate"].includes(i.status)).length;
+  const open = (d?.tasks ?? []).filter((i) => !["done", "canceled", "duplicate"].includes(i.status)).length;
   return (
     <div className="screen tasks">
-      <ScreenHead title={t("tab_tasks")} product={product} sub={d ? t("n_open", { n: open }) : ""}>
-        <AddTask p={product.name} done={s.reload} />
+      <ScreenHead title={t("tab_tasks")} project={project} sub={d ? t("n_open", { n: open }) : ""}>
+        <AddTask p={project.name} done={s.reload} />
       </ScreenHead>
       {!d && !s.failed ? <div className="card quiet">{t("loading")}</div> : null}
       {s.failed && !d ? <LoadFailed retry={s.reload} /> : null}
-      {d && !d.issues.length ? <div className="card quiet">{t("no_tasks")}</div> : null}
+      {d && !d.tasks.length ? <div className="card quiet">{t("no_tasks")}</div> : null}
       <div className="groups">
         {GROUPS.filter((g) => by.get(g)?.length).map((g) => (
           <section key={g} className={`group g-${g.replace(" ", "-")}`} aria-label={t(`g_${g.replace(" ", "_")}` as Key)}>
@@ -112,7 +112,7 @@ export function Tasks({ product }: { product: Product }) {
             {d.events.slice(0, 8).map((e, n) => (
               <li key={n}>
                 <span className="time">{when(e.time)}</span>
-                <span className="text">{e.issue ? <a href={`#/issue/${e.issue}`}><strong>{e.issue}</strong></a> : null} {e.text}</span>
+                <span className="text">{e.task ? <a href={`#/task/${e.task}`}><strong>{e.task}</strong></a> : null} {e.text}</span>
               </li>
             ))}
           </ul>

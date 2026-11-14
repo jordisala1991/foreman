@@ -8,9 +8,8 @@ One responsible agent per task, a loop without a model, a short guard, and a sys
   can open it and talk to it.
 - **Responsible agent**: does the whole task in its own worktree, asks the owner only what only he can answer
   (`fm ask`), and delivers with `fm done`.
-- **Review and integration**: the loop has every delivered branch reviewed by an independent reviewer session, scores
-  its merge risk, and puts it in the integration queue. The owner accepts in the panel; the project's autonomy level
-  may let low risks in alone.
+- **Review and merge**: the loop has every delivered branch reviewed (the hunter, then the reviewer), scores its merge
+  risk, and leaves it in review. The owner accepts in the panel; the project's autonomy may let low risks merge alone.
 - **Guard**: a short reminder in agent sessions; publishing, pushing to the main branch, deleting what is not yours and
   changing `fm.toml` ask the owner first.
 - **Shared resources**: `fm lock NAME run "what" command…`.

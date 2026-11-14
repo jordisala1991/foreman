@@ -69,17 +69,17 @@ class OnGitHub(unittest.TestCase):
         g = self.g
         iid = self.deliver()
         repo = g.e.repo
-        before = (git(repo, "rev-parse", g.e.issue(iid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
+        before = (git(repo, "rev-parse", g.e.task(iid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
         self.ticks()
         self.assertIn("fm-evidence", self.body())
-        after = (git(repo, "rev-parse", g.e.issue(iid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
+        after = (git(repo, "rev-parse", g.e.task(iid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
         self.assertEqual(before, after)
-        self.assertNotIn(b"fm-evidence", self.remote("branch", "--list", g.e.issue(iid)["branch"]))
+        self.assertNotIn(b"fm-evidence", self.remote("branch", "--list", g.e.task(iid)["branch"]))
 
     def test_evidence_twice_pushes_once(self):
         iid = self.deliver()
         self.ticks()
-        i = self.g.e.issue(iid)
+        i = self.g.e.task(iid)
         backlog.update(self.g.e.p, iid, pr={**i["pr"], "described": ""})
         self.ticks()
         self.assertEqual(self.remote("rev-list", "--count", "fm-evidence").strip(), b"1")
@@ -89,7 +89,7 @@ class OnGitHub(unittest.TestCase):
         iid = self.deliver()
         self.ticks()
         (self.g.e.home / "reports" / iid / "x.png").write_bytes(PNG + b"2")
-        i = self.g.e.issue(iid)
+        i = self.g.e.task(iid)
         backlog.update(self.g.e.p, iid, pr={**i["pr"], "described": ""})
         self.ticks()
         self.assertEqual(self.remote("show", f"fm-evidence:{iid}/x.png"), PNG + b"2")
@@ -152,11 +152,11 @@ class OnGitHub(unittest.TestCase):
             reg.evidence({"id": iid}, {"x.png": g.e.home / "reports" / iid / "x.png"})
         self.ticks(2)
         self.assertIn("![the home](x.png)", self.body())  # written, unlinked
-        self.assertFalse(g.e.issue(iid)["pr"].get("described"))
+        self.assertFalse(g.e.task(iid)["pr"].get("described"))
         hook.unlink()
         self.ticks(2)
         self.assertIn("?raw=true", self.body())
-        self.assertTrue(g.e.issue(iid)["pr"].get("described"))
+        self.assertTrue(g.e.task(iid)["pr"].get("described"))
 
     def test_local_has_no_evidence_push(self):
         e = Env()
@@ -209,6 +209,6 @@ class Panel(unittest.TestCase):
 
     def test_panel_description_links_existing_images(self):
         t = self.t
-        status, _, body = self.get(f"/api/issue?p=demo&id={t.work}")
-        desc = json.loads(body)["issue"]["description"]
+        status, _, body = self.get(f"/api/task?p=demo&id={t.work}")
+        desc = json.loads(body)["task"]["description"]
         self.assertIn(f"![the home](/evidence?p=demo&id={t.work}&name=x.png)", desc)

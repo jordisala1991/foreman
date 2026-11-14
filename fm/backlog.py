@@ -1,20 +1,21 @@
-"""The backlog: one `backlog.json` in today's foreman format (schema 5: issues with id XX-n, title, status, detail,
-acceptance {claim, criteria, verdict}, result, priority; decisions), plus new keys. Its only writer, under the file lock.
+"""The backlog: one `backlog.json` in today's foreman format (schema 5: tasks with id XX-n, title, status, detail,
+acceptance {goal, criteria, verdict}, result, priority; decisions), plus new keys. Its only writer, under the file lock.
 
-Statuses, and who moves an issue between them (DESIGN.md has the picture):
+Statuses, and who moves a task between them (DESIGN.md has the picture):
   triage       filed by a health check or a source; waits for the owner's «go» (→ backlog or ready)
   backlog      to plan (it has acceptance criteria): the loop launches a planning agent
   refining     a planning agent works on it; it ends with `fm ready` (the plan, or «trivial»)
   ready        the loop launches the task's responsible agent
   in progress  the responsible agent works on it; it ends with `fm done`
-  in review    in the integration queue: checked (tests, diff, risk); the owner accepts, or the autonomy level does
+  in review    checked (tests, diff, risk) and reviewed; the owner accepts, or the autonomy does
   done | canceled | duplicate
 
-Keys added to an issue: `agent` {name, session, short, kind: define|work, started, nudged}, `branch`, `worktree`,
-`sessions` (every session id), `session_kinds` (sid → define|work|review), `report` {summary, review, confused, at},
+Keys added to a task: `agent` {name, session, short, kind: planning|responsible, started, nudged}, `branch`, `worktree`,
+`sessions` (every session id), `session_kinds` (sid → planning|responsible|review), `report` {summary, review, confused, at},
 `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `source`
 (dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask).
-A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text, kind, action?}."""
+A question to the owner is a decision tied to its task and agent: {id: "XX-1 Q1", task, agent, title, text, kind, action?}.
+"""
 
 import contextlib
 import re
@@ -29,7 +30,7 @@ STATUSES = ("triage", "backlog", "refining", "ready", "in progress", "in review"
 CLOSED = ("done", "canceled", "duplicate")
 RUNNING = ("refining", "in progress")
 PRIORITIES = ("urgent", "high", "medium", "low", "none")
-Issue = dict[str, Any]
+Task = dict[str, Any]
 Data = dict[str, Any]
 
 
@@ -38,7 +39,7 @@ class BacklogError(Exception):
 
 
 class Agent(TypedDict, total=False):
-    """An issue's `agent`: the session working on it."""
+    """A task's `agent`: the session working on it."""
 
     name: str
     short: str
@@ -47,7 +48,7 @@ class Agent(TypedDict, total=False):
 
 
 class Acceptance(TypedDict, total=False):
-    claim: str
+    goal: str
     criteria: str
     verdict: str
 
@@ -59,24 +60,19 @@ class Report(TypedDict, total=False):
 
 
 class Reviewer(TypedDict, total=False):
-    """An issue's `reviewer`: the newest review launched (`reviewers` keeps every launch, same shape)."""
+    """A task's `reviewer`: the newest review launched (`reviewers` keeps every launch, same shape)."""
 
     round: int
     tip: str
 
 
 class Review(TypedDict):
-    """An issue's `review`: a reviewer's verdict."""
+    """A task's `review`: a reviewer's verdict."""
 
     round: int
     tip: str
-    open: NotRequired[int]  # verdicts from before it carry high/medium/low instead: see open_findings
-    sent_back: NotRequired[bool]
-
-
-def open_findings(v: Mapping[str, Any]) -> int:
-    """Findings to fix. Verdicts from before the single count carried H/M/L: their H and M were the ones to fix."""
-    return int(v["open"]) if "open" in v else int(v.get("high", 0)) + int(v.get("medium", 0))
+    open: int
+    returned: NotRequired[bool]
 
 
 def review_round(i: Mapping[str, Any]) -> int:
@@ -90,7 +86,7 @@ class Check(TypedDict, total=False):
 
 
 def empty() -> Data:
-    return {"schema_version": 5, "updated": "", "issues": [], "decisions": [], "decisions_resolved": []}
+    return {"schema_version": 5, "updated": "", "tasks": [], "decisions": [], "decisions_resolved": []}
 
 
 def load(p: Project) -> Data:
@@ -99,10 +95,6 @@ def load(p: Project) -> Data:
         raise BacklogError(f"{p.backlog_file}: schema {d.get('schema_version')!r}, expected 5")
     for k, v in empty().items():
         d.setdefault(k, v)
-    for i in d["issues"]:  # tasks stored before the rename carry `criterion`
-        acceptance = i.get("acceptance")
-        if acceptance and "criterion" in acceptance:
-            acceptance.setdefault("criteria", acceptance.pop("criterion"))
     return d
 
 
@@ -115,38 +107,41 @@ def edit(p: Project) -> Generator[Data, None, None]:
         util.write_json(p.backlog_file, d)
 
 
-def issues(d: Data) -> list[Issue]:
-    """Every issue."""
-    return list(d["issues"])
+def tasks(d: Data) -> list[Task]:
+    """Every task."""
+    return list(d["tasks"])
 
 
-def get(d: Data, iid: str) -> Issue:
-    for i in issues(d):
-        if i["id"] == iid:
+def get(d: Data, tid: str) -> Task:
+    for i in tasks(d):
+        if i["id"] == tid:
             return i
-    raise BacklogError(f"no issue {iid}")
+    raise BacklogError(f"no task {tid}")
 
 
 def new_id(p: Project, d: Data) -> str:
     prefix = p.get("project", "prefix")
     pat = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
-    nums = [int(m.group(1)) for i in issues(d) if (m := pat.match(i["id"]))]
+    nums = [int(m.group(1)) for i in tasks(d) if (m := pat.match(i["id"]))]
     return f"{prefix}-{max(nums, default=0) + 1}"
 
 
-def event(p: Project, iid: str | None, text: str) -> None:
-    util.append_jsonl(p.state / "events.jsonl", {"time": util.now(), "issue": iid, "text": text})
+def event(p: Project, tid: str | None, text: str) -> None:
+    util.append_jsonl(p.state / "events.jsonl", {"time": util.now(), "task": tid, "text": text})
 
 
-class NewIssue(TypedDict, total=False):
-    """The optional fields of a new issue."""
+class NewTask(TypedDict, total=False):
+    """The optional fields of a new task."""
 
     detail: str
     criteria: str
-    claim: str
+    goal: str
     source: str | None
     priority: str
     parent: str
+    blocked_by: list[str]
+    model: str
+    effort: str
 
 
 class Question(TypedDict, total=False):
@@ -154,19 +149,19 @@ class Question(TypedDict, total=False):
     action: str
 
 
-def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue]) -> str:
-    detail, criteria, claim = f.get("detail", ""), f.get("criteria", ""), f.get("claim", "")
+def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewTask]) -> str:
+    detail, criteria, goal = f.get("detail", ""), f.get("criteria", ""), f.get("goal", "")
     source, priority = f.get("source"), f.get("priority", "none")
     if status not in ("triage", "backlog", "ready"):
-        raise BacklogError("a new issue starts in triage, backlog or ready")
+        raise BacklogError("a new task starts in triage, backlog or ready")
     if not criteria:
         status = "triage"  # only a task with acceptance criteria can be let in
     with edit(p) as d:
-        if source and any(i.get("source") == source and i["status"] not in CLOSED for i in issues(d)):
+        if source and any(i.get("source") == source and i["status"] not in CLOSED for i in tasks(d)):
             return ""
-        iid = new_id(p, d)
-        issue: Issue = {
-            "id": iid,
+        tid = new_id(p, d)
+        task: Task = {
+            "id": tid,
             "title": title,
             "status": status,
             "blocked": "",
@@ -174,69 +169,56 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue
             "priority": priority,
             "created": util.now(),
         }
-        if criteria or claim:
-            issue["acceptance"] = {"claim": claim, "criteria": criteria}
+        if criteria or goal:
+            task["acceptance"] = {"goal": goal, "criteria": criteria}
         if source:
-            issue["source"] = source
+            task["source"] = source
         if parent := f.get("parent"):
-            issue["parent"] = parent
-        d["issues"].append(issue)
-    event(p, iid, f"filed ({status}): {title}")
-    return iid
+            task["parent"] = parent
+        if ids := f.get("blocked_by"):
+            task["blocked_by"] = ids
+        for k in ("model", "effort"):
+            if v := f.get(k):
+                task[k] = v
+        d["tasks"].append(task)
+    event(p, tid, f"filed ({status}): {title}")
+    return tid
 
 
-def set_status(p: Project, iid: str, status: str, why: str = "", **keys: Any) -> Issue:
+def set_status(p: Project, tid: str, status: str, why: str = "", **keys: Any) -> Task:
     if status not in STATUSES:
         raise BacklogError(f"bad status {status!r}")
     with edit(p) as d:
-        i = get(d, iid)
+        i = get(d, tid)
         if status == "canceled" and i["status"] in CLOSED:  # closed meanwhile (merged): keep it
             return i
         i.update(keys, status=status)
         if status in CLOSED:
             i["closed"] = date.today().isoformat()
-    event(p, iid, f"→ {status}" + (f": {why}" if why else ""))
+    event(p, tid, f"→ {status}" + (f": {why}" if why else ""))
     return i
 
 
-def update(p: Project, iid: str, **keys: Any) -> Issue:
+def update(p: Project, tid: str, **keys: Any) -> Task:
     with edit(p) as d:
-        i = get(d, iid)
+        i = get(d, tid)
         i.update(keys)
     return i
 
 
-def lesson(p: Project, iid: str, who: str, text: str) -> None:
-    """What misled an agent, kept in the project's LESSONS.md for the next agents (the owner prunes it)."""
-    t = " ".join((text or "").split())
-    if not t or re.match(r"(?i)(none|nothing|n/a|-)\b", t):
-        return
-    f = ensure_lessons(p)
-    with util.file_lock(f):
-        util.write_text_atomic(f, f.read_text(encoding="utf-8") + f"- {date.today().isoformat()} {iid} ({who}): {t}\n")
+def open_questions(d: Data, tid: str | None = None) -> list[dict[str, Any]]:
+    return [q for q in d["decisions"] if q.get("task") and (tid is None or q["task"] == tid)]
 
 
-def ensure_lessons(p: Project) -> Any:
-    if not p.lessons_file.exists():
-        util.write_text_atomic(
-            p.lessons_file, "# Lessons\n\nWhat misled earlier agents in this project, in their words. The owner prunes it; agents read it before starting.\n\n"
-        )
-    return p.lessons_file
-
-
-def open_questions(d: Data, iid: str | None = None) -> list[dict[str, Any]]:
-    return [q for q in d["decisions"] if q.get("issue") and (iid is None or q["issue"] == iid)]
-
-
-def ask(p: Project, iid: str, agent: str, text: str, **f: Unpack[Question]) -> str:
+def ask(p: Project, tid: str, agent: str, text: str, **f: Unpack[Question]) -> str:
     kind, action = f.get("kind", "question"), f.get("action", "")
     with edit(p) as d:
-        i = get(d, iid)
-        n = sum(1 for q in d["decisions"] + d["decisions_resolved"] if q.get("issue") == iid) + 1
-        qid = f"{iid} Q{n}"
+        i = get(d, tid)
+        n = sum(1 for q in d["decisions"] + d["decisions_resolved"] if q.get("task") == tid) + 1
+        qid = f"{tid} Q{n}"
         q: dict[str, Any] = {
             "id": qid,
-            "issue": iid,
+            "task": tid,
             "agent": agent,
             "title": i["title"],
             "text": text,
@@ -246,7 +228,7 @@ def ask(p: Project, iid: str, agent: str, text: str, **f: Unpack[Question]) -> s
         if action:
             q["action"] = action
         d["decisions"].append(q)
-    event(p, iid, f"asks the owner ({kind}): {text}")
+    event(p, tid, f"asks the owner ({kind}): {text}")
     return qid
 
 
@@ -259,19 +241,19 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
         q.update({"answer": text, "resolved": date.today().isoformat(), "by": f"{by}, {util.now()}", "delivered": False})
         q["answered_at"] = util.now()
         d["decisions_resolved"].append(q)
-    event(p, q["issue"], f"owner answered {qid}: {text}")
+    event(p, q["task"], f"owner answered {qid}: {text}")
     return q
 
 
 def message(d: dict[str, Any], i: dict[str, Any], tag: str, kinds: tuple[str, ...], **fields: Any) -> None:
-    """Files a message for the issue's agent among the resolved decisions, id `<issue> <tag><n>` (n counts the issue's
+    """Files a message for the task's agent among the resolved decisions, id `<task> <tag><n>` (n counts the task's
     entries of `kinds`); the loop delivers it (loop.deliver_answers)."""
-    n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == i["id"] and q.get("kind") in kinds)
+    n = sum(1 for q in d["decisions_resolved"] if q.get("task") == i["id"] and q.get("kind") in kinds)
     agent: Agent = i.get("agent") or {}
     d["decisions_resolved"].append(
         {
             "id": f"{i['id']} {tag}{n + 1}",
-            "issue": i["id"],
+            "task": i["id"],
             "agent": agent.get("name"),
             "resolved": util.now()[:10],
             "delivered": False,
@@ -282,11 +264,11 @@ def message(d: dict[str, Any], i: dict[str, Any], tag: str, kinds: tuple[str, ..
     )
 
 
-def note(p: Project, iid: str, text: str, source: str) -> None:
-    """A note from outside fm for the issue's agent: delivered like an owner's answer (loop.deliver_answers)."""
+def note(p: Project, tid: str, text: str, source: str) -> None:
+    """A note from outside fm for the task's agent: delivered like an owner's answer (loop.deliver_answers)."""
     with edit(p) as d:
-        message(d, get(d, iid), "N", ("note",), kind="note", text="signal", answer=text, source=source)
-    event(p, iid, f"note from {source}: {text}")
+        message(d, get(d, tid), "N", ("note",), kind="note", text="signal", answer=text, source=source)
+    event(p, tid, f"note from {source}: {text}")
 
 
 def undelivered(d: Data) -> list[dict[str, Any]]:

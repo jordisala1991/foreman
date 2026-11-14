@@ -1,10 +1,10 @@
 """The guard: a short reminder, not a cage. A PreToolUse hook in every agent session that stops a handful of actions,
-recognised by the name of the program run (never by a word inside a string or a message), and tells the agent to ask
+recognised by the name of the program run (never by a word inside a string or a message), and tells its agent to ask
 the owner with `fm ask`. The owner allows it once from the panel (`fm allow QID`).
 
 The list (DESIGN.md): publish · push to main · delete what is not yours · change the project's config · the owner's
 own rules (`[guard] ask` in fm.toml). Agents work for the owner: a way around this list is not a hole to close, the
-review before integrating is the safety net. Do not grow this file for a new trick.
+review before the merge is the safety net. Do not grow this file for a new trick.
 """
 
 import json
@@ -38,7 +38,7 @@ OPERATORS = {";", "&&", "||", "|", "&", ";;", "|&"}
 REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
 WHY = {
     "publish": "publishing goes outside this machine",
-    "push-main": "pushing to the main branch (or forcing a push) skips the owner's integration",
+    "push-main": "pushing to the main branch (or forcing a push) skips the owner's review and accept",
     "delete": "it deletes something that is not this task's (outside its worktree, or another branch)",
     "push-evidence": "the evidence branch is written by the loop, not by agents",
     "config": "it changes the project's config (fm.toml)",
@@ -97,7 +97,7 @@ def _mine(path: str, cwd: str, own: list[Path]) -> bool:
 
 @dataclass
 class Scope:
-    """Where a command runs and what it may touch: its folder, the agent's own folders and branch, fm.toml, the owner's rules."""
+    """Where a command runs and what it may touch: its folder, its agent's own folders and branch, fm.toml, the owner's rules."""
 
     cwd: str
     own: list[Path]
@@ -178,9 +178,9 @@ def check_bash(cmd: str, sc: Scope) -> str | None:
     return None
 
 
-def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, issue: dict[str, Any] | None) -> str | None:
-    own = [Path(issue["worktree"]).resolve()] if issue and issue.get("worktree") else []
-    branch = (issue or {}).get("branch", "")
+def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, task: dict[str, Any] | None) -> str | None:
+    own = [Path(task["worktree"]).resolve()] if task and task.get("worktree") else []
+    branch = (task or {}).get("branch", "")
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         f = inp.get("file_path") or inp.get("notebook_path") or ""
         if f and Path(cwd, f).resolve() == p.config_file.resolve():
@@ -192,39 +192,39 @@ def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, issue: dict[str,
     return None
 
 
-def granted(p: Project, iid: str, action: str) -> bool:
-    """Spends the owner's one-time allowance for this issue and action, if there is one."""
+def granted(p: Project, tid: str, action: str) -> bool:
+    """Spends the owner's one-time allowance for this task and action, if there is one."""
     with util.locked_json(p.state / "grants.json", []) as grants:
         for g in grants:
-            if g["issue"] == iid and g["action"] == action and not g.get("used"):
+            if g["task"] == tid and g["action"] == action and not g.get("used"):
                 g["used"] = util.now()
                 return True
     return False
 
 
-def grant(p: Project, iid: str, action: str) -> None:
+def grant(p: Project, tid: str, action: str) -> None:
     with util.locked_json(p.state / "grants.json", []) as grants:
-        grants.append({"issue": iid, "action": action, "at": util.now()})
+        grants.append({"task": tid, "action": action, "at": util.now()})
 
 
 def hook(stdin: str) -> str:
     """The PreToolUse hook: the JSON to print (empty: let it run). Never raises: a guard error lets the call run."""
     try:
-        home, iid = os.environ.get("FM_HOME"), os.environ.get("FM_ISSUE", "")
+        home, tid = os.environ.get("FM_HOME"), os.environ.get("FM_TASK", "")
         if not home:
             return ""
         d = json.loads(stdin or "{}")
         p = Project.load(home)
         try:
-            issue = backlog.get(backlog.load(p), iid)
+            task = backlog.get(backlog.load(p), tid)
         except backlog.BacklogError:
-            issue = None
+            task = None
         tool_input: dict[str, Any] = d.get("tool_input") or {}
-        action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), issue)
-        if not action or granted(p, iid, action):
+        action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), task)
+        if not action or granted(p, tid, action):
             return ""
         util.append_jsonl(
-            p.state / "guard.jsonl", {"time": util.now(), "issue": iid, "action": action, "tool": d.get("tool_name"), "input": d.get("tool_input")}
+            p.state / "guard.jsonl", {"time": util.now(), "task": tid, "action": action, "tool": d.get("tool_name"), "input": d.get("tool_input")}
         )
         why = WHY.get(action, "the owner asked to be asked first")
         msg = (

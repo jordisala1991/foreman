@@ -1,12 +1,12 @@
-// The page of a task: what waits on it (its questions, the queue, triage, a block), what it is for (claim and done
-// criterion), its detail, its agent's report and the queue's check, what was asked, its events, its data and cost.
+// The page of a task: what waits on it (its questions, review, triage, a block), what it is for (goal and done
+// criterion), its detail, its agent's report and its check, what was asked, its events, its data and cost.
 import type { ReactNode } from "react";
 import {
-  AgentLine, Attach, BlockedCard, CheckView, LoadFailed, PermissionCard, QueueCard, QuestionCard, ReportView, TriageCard,
+  AgentLine, Attach, BlockedCard, CheckView, LoadFailed, PermissionCard, ReviewCard, QuestionCard, ReportView, TriageCard,
   useWrite,
 } from "./cards";
 import { useFeed } from "./feed";
-import { enc, stateUrl, t, usd2, when, type IssueAnswer, type Key, type Product } from "./lib";
+import { enc, stateUrl, t, usd2, when, type TaskAnswer, type Key, type Project } from "./lib";
 import { reloadAll } from "./feed";
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
@@ -46,10 +46,10 @@ function Described({ text }: { text: string }) {
   return <>{out}</>;
 }
 
-export function Issue({ product, id }: { product: Product; id: string }) {
-  const path = `/api/issue?p=${enc(product.name)}&id=${enc(id)}`;
-  const a = useFeed<IssueAnswer>(path, 10_000);
-  const reload = () => reloadAll([path, stateUrl(product.name)]);
+export function Task({ project, id }: { project: Project; id: string }) {
+  const path = `/api/task?p=${enc(project.name)}&id=${enc(id)}`;
+  const a = useFeed<TaskAnswer>(path, 10_000);
+  const reload = () => reloadAll([path, stateUrl(project.name)]);
   const crumbs = (
     <div className="crumbs">
       <a href="#/tasks">‹ {t("tab_tasks")}</a>
@@ -64,23 +64,23 @@ export function Issue({ product, id }: { product: Product; id: string }) {
         {a.failed ? <LoadFailed retry={a.reload} /> : <div className="card quiet">{t("loading")}</div>}
       </div>
     );
-  const { issue: i, events, questions, cost } = a.data;
-  const p = product.name;
+  const { task: i, events, questions, cost } = a.data;
+  const p = project.name;
   const open = questions.filter((q) => q.answer === undefined && q.kind !== "rejection");
   const past = questions.filter((q) => q.answer !== undefined);
   const closed = ["done", "canceled", "duplicate"].includes(i.status);
   const rows: [string, ReactNode][] = [
-    [t("isu_status"), t(`st_${i.status.replace(" ", "_")}` as Key)],
-    ...(i.agent?.name ? [[t("isu_agent"), <AgentLine key="a" i={i} />] as [string, ReactNode]] : []),
-    ...(i.agent?.model ? [[t("isu_model"), i.agent.model] as [string, ReactNode]] : []),
-    ...(i.branch ? [[t("isu_branch"), <code key="b">{i.branch}</code>] as [string, ReactNode]] : []),
-    [t("isu_created"), when(i.created)],
-    ...(i.closed ? [[t("isu_closed"), when(i.closed)] as [string, ReactNode]] : []),
-    [t("isu_cost"), t("isu_cost_v", { usd: usd2(cost.usd), min: Math.round(cost.minutes) })],
-    ...(i.rework ? [[t("isu_rework"), String(i.rework)] as [string, ReactNode]] : []),
-    ...(i.nudges ? [[t("isu_nudges"), String(i.nudges)] as [string, ReactNode]] : []),
-    ...(i.commit ? [[t("isu_commit"), <code key="c">{i.commit.slice(0, 9)}</code>] as [string, ReactNode]] : []),
-    ...(i.source ? [[t("isu_source"), i.source] as [string, ReactNode]] : []),
+    [t("task_status"), t(`st_${i.status.replace(" ", "_")}` as Key)],
+    ...(i.agent?.name ? [[t("task_agent"), <AgentLine key="a" i={i} />] as [string, ReactNode]] : []),
+    ...(i.agent?.model ? [[t("task_model"), i.agent.model] as [string, ReactNode]] : []),
+    ...(i.branch ? [[t("task_branch"), <code key="b">{i.branch}</code>] as [string, ReactNode]] : []),
+    [t("task_created"), when(i.created)],
+    ...(i.closed ? [[t("task_closed"), when(i.closed)] as [string, ReactNode]] : []),
+    [t("task_cost"), t("task_cost_v", { usd: usd2(cost.usd), min: Math.round(cost.minutes) })],
+    ...(i.rework ? [[t("task_rework"), String(i.rework)] as [string, ReactNode]] : []),
+    ...(i.nudges ? [[t("task_nudges"), String(i.nudges)] as [string, ReactNode]] : []),
+    ...(i.commit ? [[t("task_commit"), <code key="c">{i.commit.slice(0, 9)}</code>] as [string, ReactNode]] : []),
+    ...(i.source ? [[t("task_source"), i.source] as [string, ReactNode]] : []),
   ];
   return (
     <div className="screen">
@@ -98,41 +98,41 @@ export function Issue({ product, id }: { product: Product; id: string }) {
             q.kind === "permission" ? <PermissionCard key={q.id} q={q} p={p} reload={reload} /> : <QuestionCard key={q.id} q={q} p={p} reload={reload} />,
           )}
           {i.status === "triage" ? <TriageCard i={i} p={p} reload={reload} /> : null}
-          {i.status === "in review" ? <QueueCard i={i} p={p} reload={reload} /> : null}
+          {i.status === "in review" ? <ReviewCard i={i} p={p} reload={reload} /> : null}
           {i.status !== "triage" && i.status !== "in review" ? <BlockedCard i={i} p={p} reload={reload} /> : null}
-          <Section title={t("isu_purpose")}>
-            {i.acceptance?.claim || i.acceptance?.criteria ? (
+          <Section title={t("task_purpose")}>
+            {i.acceptance?.goal || i.acceptance?.criteria ? (
               <div className="card purpose">
-                {i.acceptance.claim ? (<><div className="lbl">{t("isu_goal")}</div><p>{i.acceptance.claim}</p></>) : null}
-                {i.acceptance.criteria ? (<><div className="lbl">{t("isu_criteria")}</div><p>{i.acceptance.criteria}</p></>) : null}
-                {i.acceptance.verdict ? (<><div className="lbl">{t("isu_verdict")}</div><p>{i.acceptance.verdict}</p></>) : null}
+                {i.acceptance.goal ? (<><div className="lbl">{t("task_goal")}</div><p>{i.acceptance.goal}</p></>) : null}
+                {i.acceptance.criteria ? (<><div className="lbl">{t("task_criteria")}</div><p>{i.acceptance.criteria}</p></>) : null}
+                {i.acceptance.verdict ? (<><div className="lbl">{t("task_verdict")}</div><p>{i.acceptance.verdict}</p></>) : null}
               </div>
             ) : (
-              <div className="card quiet">{t("isu_no_goal")}</div>
+              <div className="card quiet">{t("task_no_goal")}</div>
             )}
           </Section>
           {i.detail ? (
-            <Section title={t("isu_detail")}>
+            <Section title={t("task_detail")}>
               <div className="card pre">{i.detail}</div>
             </Section>
           ) : null}
           {i.description ? (
-            <Section title={t("isu_description")}>
+            <Section title={t("task_description")}>
               <div className="card pre"><Described text={i.description} /></div>
             </Section>
           ) : null}
           {i.report && i.status !== "in review" ? (
-            <Section title={t("isu_report")}>
+            <Section title={t("task_report")}>
               <div className="card"><ReportView r={i.report} /></div>
             </Section>
           ) : null}
           {i.check && i.status !== "in review" ? (
-            <Section title={t("isu_check")}>
+            <Section title={t("task_check")}>
               <div className="card"><CheckView c={i.check} /></div>
             </Section>
           ) : null}
           {past.length ? (
-            <Section title={t("isu_asked")}>
+            <Section title={t("task_asked")}>
               <div className="card journal">
                 {past.map((q) => (
                   <div key={q.id} className="entry">
@@ -145,7 +145,7 @@ export function Issue({ product, id }: { product: Product; id: string }) {
             </Section>
           ) : null}
           {events.length ? (
-            <Section title={t("isu_events")}>
+            <Section title={t("task_events")}>
               <div className="card list plain">
                 {events.map((e, n) => (
                   <div key={n} className="moveline"><span className="when">{when(e.time)}</span><span className="pre">{e.text}</span></div>
@@ -155,7 +155,7 @@ export function Issue({ product, id }: { product: Product; id: string }) {
           ) : null}
         </div>
         <aside className="datos">
-          <h2>{t("isu_data")}</h2>
+          <h2>{t("task_data")}</h2>
           <dl>
             {rows.map(([k, v]) => (<span key={k} className="kv"><dt>{k}</dt><dd>{v}</dd></span>))}
           </dl>

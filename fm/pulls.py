@@ -1,5 +1,5 @@
 """Pull requests (the loop's side: the loop pushes the task branches, the agents never do).
-`running` and `sync` push a running task's new commits and, once it has some, gives it a draft PR (`[integrate] pr = draft`);
+`running` and `sync` push a running task's new commits and, once it has some, gives it a draft PR (`[merge] pr = draft`);
 `prepare` pushes a delivered branch if needed and makes sure it has its PR; `deliver` marks it ready and comments the risk and the review's verdict.
 Every function calls the provider's operations whatever the platform; the local provider answers each as a no-op, and
 a task with no PR (`publish` returned nothing) has nothing to deliver to."""
@@ -21,7 +21,7 @@ def change_of(i: dict[str, Any], head: str) -> dict[str, Any]:
         "title": i["title"],
         "branch": i["branch"],
         "head": head,
-        "claim": acceptance.get("claim", ""),
+        "goal": acceptance.get("goal", ""),
         "body": "",
         "pr": pr.get("number"),
         "merge": i.get("merge", ""),
@@ -39,7 +39,7 @@ def commits_of(p: Project, branch: str) -> int:
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:
     change = change_of(i, head)
-    change["body"] = describe.wrap(change["claim"] or change["title"])
+    change["body"] = describe.wrap(change["goal"] or change["title"])
     ref = provider.publish(change, draft)
     if not ref:  # a provider with no pull requests
         return
@@ -49,7 +49,7 @@ def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: b
 
 def running(p: Project) -> list[dict[str, Any]]:
     """The tasks whose branch the loop keeps on the platform: in progress, with a branch, not blocked."""
-    return [i for i in backlog.issues(backlog.load(p)) if i["status"] == "in progress" and i.get("branch") and not i.get("blocked")]
+    return [i for i in backlog.tasks(backlog.load(p)) if i["status"] == "in progress" and i.get("branch") and not i.get("blocked")]
 
 
 def sync(p: Project, i: dict[str, Any]) -> None:
@@ -79,7 +79,7 @@ def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
 
 
 def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
-    """The task's report as its description, with fm's footer; the claim (or title) when there is no usable report."""
+    """The task's report as its description, with fm's footer; the goal (or title) when there is no usable report."""
     report: dict[str, Any] = i.get("report") or {}
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
     path: str = report.get("file") or ""
@@ -90,13 +90,13 @@ def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
         except OSError:
             text = ""
     if not text.strip():
-        text = acceptance.get("claim") or i["title"]
+        text = acceptance.get("goal") or i["title"]
     return describe.render(text, describe.footer(head, describe.review_line(i.get("review")), at))
 
 
 def verdict_text(i: dict[str, Any], c: dict[str, Any]) -> str:
     v: dict[str, Any] = i.get("review") or {}
-    review = "no review" if not v else f"round {v['round']}: {backlog.open_findings(v)} open" + (f" ({v['file']})" if v.get("file") else "")
+    review = "no review" if not v else f"round {v['round']}: {v['open']} open" + (f" ({v['file']})" if v.get("file") else "")
     reasons = "\n".join(f"- {r}" for r in c.get("reasons", []))
     return f"**fm: merge risk {c['risk']}**\n\n{reasons}\n\nTests: {c['tests']} · CI: {c.get('ci') or 'none'}\nIndependent review, {review}\n"
 
