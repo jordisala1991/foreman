@@ -212,6 +212,7 @@ owner allows it once from the panel (`fm allow QID`); the loop tells its agent; 
 |---|---|
 | `publish` | `npm/pnpm/yarn/cargo/uv/poetry publish`, `twine upload`, `docker push`, `gh release/pr/repo create|merge|edit|delete|upload` |
 | `push-main` | `git push` to the main branch (named, `HEAD` while on it, or bare while on it), or with `--force`/`--mirror`/`--all` |
+| `push-evidence` | `git push` to the `fm-evidence` branch (only the loop writes it) |
 | `delete` | `rm`/`rmdir`/`unlink`/`find -delete` of a path outside its worktree and temp dirs; `git branch -d/-D` of another branch; `git worktree remove`; `git push --delete` |
 | `config` | Edit/Write of the project's `fm.toml`; a shell command that writes it (`>`, `tee`, `sed -i`, `mv`, `cp`, `rm`) |
 | owner's own | `[guard] ask = [{name, pattern}]` in fm.toml: a regex on a shell segment |
@@ -263,7 +264,10 @@ with no `[merge] test` the PR's CI **replaces the local test**. Then the draft i
 carries the risk, its reasons and the review's verdict. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
-origin when it is clean on main (fetch only, never a push). Conflicts with main go back to the responsible agent as before, also when the merge itself is refused for a conflict after acceptance: the acceptance is dropped and the new tip is checked and accepted again. Out of
+origin when it is clean on main (fetch only, never a push). The images a report names (`![what](x.png)`, bare file
+names saved in `reports/ID/`) go, by git plumbing and never forced, to `ID/` on the orphan branch `fm-evidence`, the
+only push fm makes besides the task branch (agents may not: guard `push-evidence`); the PR body links them with
+`?raw=true` blob URLs and the panel serves them at `/evidence`. Conflicts with main go back to the responsible agent as before, also when the merge itself is refused for a conflict after acceptance: the acceptance is dropped and the new tip is checked and accepted again. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Architecture
