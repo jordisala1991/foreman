@@ -172,7 +172,7 @@ class GH:
     def work(self, push: bool = True) -> str:
         """A running task with one commit, pushed or not."""
         e = self.e
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         wt = e.repo.parent / e.issue(iid)["worktree"]
         with open(wt / "app.py", "a") as f:
@@ -241,7 +241,7 @@ class Pulls(unittest.TestCase):
 
     def test_nothing_is_pushed_before_the_task_has_commits_and_main_never(self):
         g = self.make(test="true")
-        iid = backlog.add(g.e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(g.e.p, "x", status="ready", criteria="y")
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         self.assertEqual(self.origin_tip(g, iid), "")

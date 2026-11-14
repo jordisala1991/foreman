@@ -34,7 +34,7 @@ class GuardFalsePositives(unittest.TestCase):
 class TestsRunOnTheCommit(unittest.TestCase):
     def test_an_uncommitted_file_cannot_make_the_tests_pass(self):
         e = Env(test="python3 -c 'import helper'", autonomy="low")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         wt = Path(e.issue(iid)["worktree"])
         (wt / "app.py").write_text("import helper\n")
@@ -49,7 +49,7 @@ class TestsRunOnTheCommit(unittest.TestCase):
 class Sessions(unittest.TestCase):
     def test_a_session_not_listed_at_launch_gets_its_id_later_and_is_not_blocked(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         a = e.issue(iid)["agent"]
         backlog.update(e.p, iid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"}, sessions=[])
@@ -61,7 +61,7 @@ class Sessions(unittest.TestCase):
 class Isolation(unittest.TestCase):
     def test_one_broken_queued_issue_does_not_stop_the_others(self):
         e = Env(test="true", autonomy="low")
-        ids = [backlog.add(e.p, f"x{n}", status="ready", criterion="y") for n in range(2)]
+        ids = [backlog.add(e.p, f"x{n}", status="ready", criteria="y") for n in range(2)]
         loop.tick(e.p)
         for iid in ids:
             wt = Path(e.issue(iid)["worktree"])
@@ -86,7 +86,7 @@ class Isolation(unittest.TestCase):
 class Closed(unittest.TestCase):
     def test_cancel_closes_the_questions_and_no_answer_reaches_the_cancelled_agent(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         backlog.ask(e.p, iid, iid.lower(), "A or B?")
         fm(e.home, "cancel", iid)
@@ -101,7 +101,7 @@ class Closed(unittest.TestCase):
 class Orphans(unittest.TestCase):
     def test_a_ready_task_with_its_worktree_is_not_an_orphan(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         fm(e.home, "pause")
         backlog.set_status(e.p, iid, "ready", "relaunch")
@@ -111,7 +111,7 @@ class Orphans(unittest.TestCase):
 class LaunchRace(unittest.TestCase):
     def test_a_task_cancelled_while_its_session_starts_stays_cancelled(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         real = loop.sessions.start
 
         def start_and_cancel(*a, **k):
@@ -157,8 +157,8 @@ class ReviewerSeesOwnerNotes(unittest.TestCase):
 
     def test_every_owner_note_of_the_task_reaches_the_reviewer_oldest_first_with_its_time(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
-        other = backlog.add(e.p, "z", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
+        other = backlog.add(e.p, "z", status="ready", criteria="y")
         loop.tick(e.p)
         loop.send_back(e.p, iid, "rejection", "FIRSTNOTE use B")
         loop.send_back(e.p, iid, "review", "REVIEWFIX")
@@ -174,7 +174,7 @@ class ReviewerSeesOwnerNotes(unittest.TestCase):
 
     def test_no_owner_notes_no_section(self):
         e = Env()
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         loop.send_back(e.p, iid, "review", "REVIEWFIX")
         self.assertEqual(agents.owner_notes_section(e.p, iid), "")

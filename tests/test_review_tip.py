@@ -19,7 +19,7 @@ def commit(e: Env, iid: str) -> str:
 
 
 def start(e: Env) -> tuple[str, str]:
-    iid = backlog.add(e.p, "x", status="ready", criterion="y")
+    iid = backlog.add(e.p, "x", status="ready", criteria="y")
     loop.tick(e.p)
     commit(e, iid)
     backlog.set_status(e.p, iid, "in review", report={"summary": "s", "confused": ""})
@@ -176,7 +176,7 @@ class FreshReview(unittest.TestCase):
 
     def test_fm_review_refuses_a_task_not_in_review(self):
         e = Env(test="true")
-        iid = backlog.add(e.p, "x", status="ready", criterion="y")
+        iid = backlog.add(e.p, "x", status="ready", criteria="y")
         with self.assertRaises(SystemExit):
             fm(e.home, "review", iid)
 
