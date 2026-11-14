@@ -1,13 +1,47 @@
 """A GitHub rate limit pauses the loop's gh calls until the reset; it never blocks a task."""
 
+import textwrap
 import time
 import unittest
 from unittest import mock
 
-from test_github import GH
+from test_github import GH as BaseGH
 
 from fm import backlog, loop, util
 from fm.providers import gh_quota
+
+# In front of the fake gh of test_github: it answers `gh api rate_limit` and, while `limited` is set, rate-limits the CI
+# read (`gh api graphql`); every other call goes on to the fake.
+SHIM = textwrap.dedent("""\
+    #!/usr/bin/env python3
+    import json, os, sys
+    d = os.path.dirname(os.path.abspath(__file__))
+    a = sys.argv[1:]
+    f = os.path.join(d, "gh.json")
+    s = json.load(open(f)) if os.path.exists(f) else {}
+    def say(text, code):
+        open(os.path.join(d, "gh.log"), "a").write(json.dumps(a) + "\\n")
+        print(text, file=sys.stderr if code else sys.stdout)
+        sys.exit(code)
+    if a[:2] == ["api", "rate_limit"]:
+        r = {"limit": 5000, "reset": s.get("reset")}
+        resources = {"core": {**r, "remaining": 4000}, "graphql": {**r, "remaining": 0}} if "reset" in s else {}
+        say("HTTP 500" if s.get("quota_fail") else json.dumps({"resources": resources}), 1 if s.get("quota_fail") else 0)
+    if s.get("limited") and a[:2] == ["api", "graphql"]:
+        say("GraphQL: API rate limit already exceeded for user ID 1.", 1)
+    if s.get("limited_body") and a[:2] == ["pr", "view"] and "body" in a:
+        say("API rate limit exceeded for user ID 1.", 1)
+    os.execv(os.path.join(d, "gh_fake"), ["gh_fake", *a])
+""")
+
+
+class GH(BaseGH):
+    def __init__(self, extra: str = "", **kw) -> None:
+        super().__init__(extra, **kw)
+        gh = self.e.bin / "gh"
+        gh.rename(self.e.bin / "gh_fake")
+        gh.write_text(SHIM)
+        gh.chmod(0o755)
 
 
 class Quota(unittest.TestCase):
@@ -39,7 +73,7 @@ class Limited(unittest.TestCase):
 
     def clean(self, g: GH, *ids: str) -> None:
         for iid in ids:
-            i = g.e.issue(iid)
+            i = g.e.task(iid)
             self.assertFalse(i.get("blocked"), iid)
             self.assertEqual(i.get("retry_count") or 0, 0, iid)
 
@@ -52,7 +86,7 @@ class Limited(unittest.TestCase):
         for _ in range(4):  # a tick launches at most one hunter or reviewer
             loop.tick(g.e.p)
             for iid in (first, second):
-                if g.e.issue(iid).get("hunter") and not g.e.issue(iid).get("review"):
+                if g.e.task(iid).get("hunter") and not g.e.task(iid).get("review"):
                     g.e.hunter_done(iid)
         for iid in (first, second):
             g.e.verdict(iid)
@@ -77,7 +111,7 @@ class Limited(unittest.TestCase):
         offset[0] = 660
         loop.tick(g.e.p)
         self.assertGreater(len(g.calls()), n)
-        self.assertEqual(g.e.issue(first)["check"]["ci"], "pass")
+        self.assertEqual(g.e.task(first)["check"]["ci"], "pass")
 
     def test_a_rate_limit_whose_reset_cannot_be_read_pauses_for_a_minute(self):
         offset = self.clock()
@@ -102,7 +136,7 @@ class Limited(unittest.TestCase):
         g.deliver(iid)
         (g.e.p.state / "github_quota.json").write_text("not json")
         loop.tick(g.e.p)
-        self.assertEqual(g.e.issue(iid)["check"]["ci"], "pass")
+        self.assertEqual(g.e.task(iid)["check"]["ci"], "pass")
 
     def test_a_rate_limit_on_merge_pauses_without_blocking(self):
         g = self.make(test="true", autonomy="medium")
@@ -113,7 +147,7 @@ class Limited(unittest.TestCase):
         merges = len(g.calls("pr", "merge"))
         loop.tick(g.e.p)
         self.assertEqual(len(g.calls("pr", "merge")), merges)
-        self.assertNotEqual(g.e.issue(iid)["status"], "done")
+        self.assertNotEqual(g.e.task(iid)["status"], "done")
         self.clean(g, iid)
         self.assertTrue((g.e.p.state / "github_quota.json").exists())
 
@@ -125,7 +159,7 @@ class Limited(unittest.TestCase):
         loop.tick(g.e.p)
         loop.tick(g.e.p)
         self.assertTrue((g.e.p.state / "github_quota.json").exists())
-        self.assertFalse(g.e.issue(iid).get("pr_error"))
+        self.assertFalse(g.e.task(iid).get("pr_error"))
         events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "PR description" in e["text"]]
         self.assertEqual(events, [])
         self.clean(g, iid)

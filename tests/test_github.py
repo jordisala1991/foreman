@@ -40,16 +40,6 @@ FAKE_GH = textwrap.dedent("""\
     if a[:2] == ["pr", "create"] and flag("--head") == s.get("flaky"):
         print("HTTP 502", file=sys.stderr)
         sys.exit(1)
-    if a[:2] == ["api", "rate_limit"]:
-        if s.get("quota_fail"):
-            print("HTTP 500", file=sys.stderr)
-            sys.exit(1)
-        r = {"limit": 5000, "reset": s.get("reset")}
-        print(json.dumps({"resources": {"core": {**r, "remaining": 4000}, "graphql": {**r, "remaining": 0}} if "reset" in s else {}}))
-        sys.exit(0)
-    if s.get("limited") and a[:2] == ["api", "graphql"]:
-        print("GraphQL: API rate limit already exceeded for user ID 1.", file=sys.stderr)
-        sys.exit(1)
     if a[:2] == ["api", "graphql"]:
         import subprocess
         def node(n, pr):
@@ -74,9 +64,6 @@ FAKE_GH = textwrap.dedent("""\
         sys.exit(0)
     if s.get("refuse_merge") and a[:2] == ["pr", "merge"]:
         print(s["refuse_merge"], file=sys.stderr)
-        sys.exit(1)
-    if s.get("limited_body") and a[:2] == ["pr", "view"] and "body" in a:
-        print("API rate limit exceeded for user ID 1.", file=sys.stderr)
         sys.exit(1)
     pr = s["prs"][a[2]]
     if a[:2] == ["pr", "merge"] and pr["draft"]:
