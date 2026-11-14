@@ -54,7 +54,8 @@ def login_check(p: Project, check: Callable[[str], login.Login] = login.login_st
     if status.ok:
         return login_expiring(status)
     meaning = "Agents cannot start until the owner runs /login."
-    return [finding("login-failed", "The Claude login does not work", meaning, "`claude auth status` says the login does not work.")]
+    evidence = "`claude auth status` shows no working login: not logged in, or the login has expired."
+    return [finding("login-failed", "The Claude login does not work", meaning, evidence)]
 
 
 def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:

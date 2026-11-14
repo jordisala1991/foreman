@@ -128,7 +128,7 @@ def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
 def listing(p: Project) -> dict[str, dict[str, Any]]:
     """Every background session Claude Code knows (done ones included), by full session id; {} when unreadable."""
     try:
-        rows = util.json_list(proc.run_json([p.get("agents", "claude"), "agents", "--json", "--all"], timeout=30))
+        rows = util.json_list(proc.run_json([p.get("agents", "claude"), "agents", "--json", "--all"], timeout=30, env=login.child_env()))
     except proc.ProcError:
         return {}
     found: dict[str, dict[str, Any]] = {}
@@ -164,7 +164,7 @@ def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
 
 
 def stop(p: Project, short: str) -> None:
-    proc.run([p.get("agents", "claude"), "stop", short], timeout=30)
+    proc.run([p.get("agents", "claude"), "stop", short], timeout=30, env=login.child_env())
 
 
 def stop_live(p: Project, tid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:

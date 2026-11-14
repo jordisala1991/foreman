@@ -7,7 +7,7 @@ from unittest import mock
 
 from helpers import Env, fm
 
-from fm import backlog, health, login, loop, proc
+from fm import backlog, health, login, loop, proc, sessions
 
 
 class Login(unittest.TestCase):
@@ -51,6 +51,16 @@ class Login(unittest.TestCase):
             self.launch()
             health.login_check(self.p)
         self.assertFalse([c for c in run.call_args_list if c.args[0][0] == "security"])
+
+    def test_no_claude_command_gets_the_token(self):
+        os.environ[login.ENV] = "from-env"
+        with mock.patch("fm.proc.run", wraps=proc.run) as run:
+            sessions.listing(self.p)
+            sessions.stop(self.p, "abc")
+            login.login_status(self.p.get("agents", "claude"))
+        self.assertEqual(len(run.call_args_list), 3)
+        for c in run.call_args_list:
+            self.assertNotIn(login.ENV, c.kwargs["env"])
 
     def test_health_is_quiet_while_the_login_works(self):
         self.assertEqual(health.login_check(self.p, check=lambda c: login.Login(True, datetime.now(UTC) + timedelta(days=30))), [])
