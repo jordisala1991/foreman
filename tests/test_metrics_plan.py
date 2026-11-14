@@ -34,7 +34,7 @@ class PlanVsWork(unittest.TestCase):
         tid = self.make(sessions=["B1", "B2"], session_kinds={"B1": "responsible", "B2": "responsible"})
         self.assertEqual(self.row(tid)["responsible_usd"], 5.0)
 
-    def test_legacy_task_keeps_total(self):
+    def test_task_without_session_kinds_keeps_total(self):
         tid = self.make(sessions=["L"])
         r = self.row(tid)
         self.assertEqual((r["planning_usd"], r["responsible_usd"], r["usd"], r["rounds"]), (0, 0, 4.0, 0))
@@ -85,7 +85,7 @@ class Recording(unittest.TestCase):
         agents.launch_reviewer(e.p, e.task(w), "abc123", "hunter")
         agents.launch_reviewer(e.p, e.task(w), "abc123")
         i = e.task(w)
-        self.assertEqual(sorted(i["session_kinds"].values()), ["review", "review", "responsible"])
+        self.assertEqual(sorted(i["session_kinds"].values()), ["responsible", "review", "review"])
         self.assertEqual(sorted(i["sessions"]), sorted(i["session_kinds"]))
 
     def test_fill_sessions_stores_agent_kind_and_review(self):

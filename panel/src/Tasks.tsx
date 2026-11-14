@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AgentLine, Attach, LoadFailed, Risk, useWrite } from "./cards";
 import { useFeed } from "./feed";
 import { ScreenHead } from "./head";
-import { blocked, enc, stateUrl, t, when, type Task, type Key, type Product, type State } from "./lib";
+import { blocked, enc, stateUrl, t, when, type Task, type Key, type Project, type State } from "./lib";
 
 const GROUPS = ["waiting", "in progress", "refining", "in review", "ready", "backlog", "triage", "closed"] as const;
 type Group = (typeof GROUPS)[number];
@@ -73,8 +73,8 @@ function AddTask({ p, done }: { p: string; done: () => void }) {
   );
 }
 
-export function Tasks({ product }: { product: Product }) {
-  const s = useFeed<State>(stateUrl(product.name), 10_000);
+export function Tasks({ project }: { project: Project }) {
+  const s = useFeed<State>(stateUrl(project.name), 10_000);
   const d = s.data;
   const asking = new Set((d?.questions ?? []).map((q) => q.task));
   const by = new Map<Group, Task[]>();
@@ -85,8 +85,8 @@ export function Tasks({ product }: { product: Product }) {
   const open = (d?.tasks ?? []).filter((i) => !["done", "canceled", "duplicate"].includes(i.status)).length;
   return (
     <div className="screen tasks">
-      <ScreenHead title={t("tab_tasks")} product={product} sub={d ? t("n_open", { n: open }) : ""}>
-        <AddTask p={product.name} done={s.reload} />
+      <ScreenHead title={t("tab_tasks")} project={project} sub={d ? t("n_open", { n: open }) : ""}>
+        <AddTask p={project.name} done={s.reload} />
       </ScreenHead>
       {!d && !s.failed ? <div className="card quiet">{t("loading")}</div> : null}
       {s.failed && !d ? <LoadFailed retry={s.reload} /> : null}

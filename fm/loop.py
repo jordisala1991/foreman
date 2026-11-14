@@ -168,7 +168,7 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
             p,
             i["id"],
             "review",
-            f"The review of your branch (round {v['round']}) leaves {backlog.open_findings(v)} open: read {v['file']}. "
+            f"The review of your branch (round {v['round']}) leaves {v['open']} open: read {v['file']}. "
             "For each one, make the smallest change that settles it, or answer it in one line if you think it is wrong; add "
             "nothing it does not ask for. Add one `### Round N` to the «Review rounds» section of your report, one line per "
             "finding, and run `fm done` again.",

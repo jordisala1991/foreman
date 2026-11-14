@@ -1,6 +1,6 @@
 // The cards that wait for the owner, shared by «Needs you», the tasks and the task page: a question (his own words
-// back to the agent that asked), a permission (allow once or deny), a task in the integration queue (accept or send
-// back with a note), a triage task («Go» or cancel) and a blocked task (unblock). Each writes with the panel's API
+// back to whichever agent asked), a permission (allow once or deny), a task in review (accept or reject with a
+// note), a triage task («Go» or cancel) and a blocked task (unblock). Each writes with the panel's API
 // (the same functions as `fm`) and then asks the screen to read again; what went wrong stays on the card.
 import { useState } from "react";
 import { Small } from "./icons";
@@ -61,7 +61,7 @@ export function Attach({ agent }: { agent: Agent | undefined }) {
   );
 }
 
-// the agent of a task and what its session does
+// a task's agent and what its session does
 export function AgentLine({ i }: { i: Task }) {
   if (!i.agent?.name) return null;
   const st = i.agent_state ?? "gone";
@@ -174,7 +174,7 @@ export function ReportView({ r }: { r: NonNullable<Task["report"]> }) {
   );
 }
 
-export function QueueCard({ i, p, reload }: { i: Task; p: string; reload: () => void }) {
+export function ReviewCard({ i, p, reload }: { i: Task; p: string; reload: () => void }) {
   const w = useWrite(reload);
   const [note, setNote] = useState<string | null>(null);
   const base = `p=${enc(p)}&id=${enc(i.id)}`;
@@ -182,7 +182,7 @@ export function QueueCard({ i, p, reload }: { i: Task; p: string; reload: () => 
     if (note?.trim() && (await w.run(`/api/reject?${base}`, note.trim()))) setNote(null);
   };
   return (
-    <article className="card ask" data-kind="queue">
+    <article className="card ask" data-kind="review">
       <div className="askhead">
         <TaskRef id={i.id} />
         {i.rework ? <span className="kind">{t("rework_n", { n: i.rework })}</span> : null}
@@ -194,7 +194,7 @@ export function QueueCard({ i, p, reload }: { i: Task; p: string; reload: () => 
       {note === null ? (
         <div className="actions">
           <button type="button" className="btn" disabled={w.busy} onClick={() => setNote("")}>
-            {t("send_back")}
+            {t("reject")}
           </button>
           <button type="button" className="btn primary" disabled={w.busy || !i.check} onClick={() => void w.run(`/api/accept?${base}`)}>
             {t("accept")}
@@ -202,12 +202,12 @@ export function QueueCard({ i, p, reload }: { i: Task; p: string; reload: () => 
         </div>
       ) : (
         <div className="free">
-          <label htmlFor={`n-${i.id}`}>{t("send_back_note", { agent: i.agent?.name ?? "?" })}</label>
+          <label htmlFor={`n-${i.id}`}>{t("reject_note", { agent: i.agent?.name ?? "?" })}</label>
           <textarea id={`n-${i.id}`} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="actions end">
             <button type="button" className="btn ghost" onClick={() => setNote(null)}>{t("cancel")}</button>
             <button type="button" className="btn primary" disabled={w.busy || !note.trim()} onClick={() => void back()}>
-              {t("send_back")}
+              {t("reject")}
             </button>
           </div>
         </div>

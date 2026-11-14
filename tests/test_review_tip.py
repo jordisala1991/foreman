@@ -167,7 +167,7 @@ class FreshReview(unittest.TestCase):
         loop.tick(e.p)
         text = e.calls()[-1]["argv"][-1]
         self.assertIn("[fm hunter", text)
-        self.assertIn("before it is integrated, round 1", text)
+        self.assertIn("before it is merged, round 1", text)
         self.assertNotIn("looks at the fixes", text)
         e.hunt_then_review(tid)
         self.assertNotIn("checks the fixes", e.calls()[-1]["argv"][-1])

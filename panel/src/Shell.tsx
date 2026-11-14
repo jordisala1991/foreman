@@ -7,7 +7,7 @@ import { useFeedPart } from "./feed";
 import { StatusPill } from "./head";
 import { Chevron, Icon } from "./icons";
 import { Task } from "./Task";
-import { t, type Key, type Product, type Projects } from "./lib";
+import { t, type Key, type Project, type Projects } from "./lib";
 import { Needs } from "./Needs";
 import { System } from "./System";
 import { Tasks } from "./Tasks";
@@ -20,13 +20,13 @@ const route = (): { tab: Tab; id: string } => {
   return { tab: (TABS as readonly string[]).includes(r) || r === "task" ? (r as Tab) : "tasks", id: decodeURIComponent(id) };
 };
 
-function Picker({ products, product, pick }: { products: Product[]; product: Product; pick: (name: string) => void }) {
+function Picker({ projects, project, pick }: { projects: Project[]; project: Project; pick: (name: string) => void }) {
   return (
     <label className="picker">
-      <span className="name">{product.name}</span>
+      <span className="name">{project.name}</span>
       <Chevron />
-      <select aria-label={t("product")} value={product.name} onChange={(e) => pick(e.target.value)}>
-        {products.map((p) => (
+      <select aria-label={t("project")} value={project.name} onChange={(e) => pick(e.target.value)}>
+        {projects.map((p) => (
           <option key={p.name} value={p.name}>
             {p.name}
           </option>
@@ -48,12 +48,12 @@ export function None() {
   );
 }
 
-const KEPT = "fm-product";
+const KEPT = "fm-project";
 const REFRESH_MS = 10_000;
 
-export function Shell({ all: initial }: { all: Product[] }) {
-  const every = useFeedPart<Projects, Product[]>("/api/projects", REFRESH_MS, (d) => d.projects) ?? initial;
-  const products = every.filter((p) => !p.broken);
+export function Shell({ all: initial }: { all: Project[] }) {
+  const every = useFeedPart<Projects, Project[]>("/api/projects", REFRESH_MS, (d) => d.projects) ?? initial;
+  const projects = every.filter((p) => !p.broken);
   const [r, setRoute] = useState(route);
   const [name, setName] = useState<string | undefined>(() => localStorage.getItem(KEPT) ?? undefined);
   useEffect(() => {
@@ -64,7 +64,7 @@ export function Shell({ all: initial }: { all: Product[] }) {
     addEventListener("hashchange", go);
     return () => removeEventListener("hashchange", go);
   }, []);
-  const p = products.find((x) => x.name === name) ?? products[0];
+  const p = projects.find((x) => x.name === name) ?? projects[0];
   if (!p) return <None />;
   const pick = (n: string) => {
     localStorage.setItem(KEPT, n);
@@ -74,14 +74,14 @@ export function Shell({ all: initial }: { all: Product[] }) {
   const badge: Partial<Record<Tab, number>> = { needs: p.needs ?? 0, tasks: p.running ?? 0 };
   const current = (k: Tab) => (r.tab === k || (k === "tasks" && r.tab === "task") ? "page" : undefined);
   const screen =
-    r.tab === "needs" ? <Needs product={p} />
-    : r.tab === "system" ? <System product={p} />
-    : r.tab === "task" && r.id ? <Task product={p} id={r.id} />
-    : <Tasks product={p} />;
+    r.tab === "needs" ? <Needs project={p} />
+    : r.tab === "system" ? <System project={p} />
+    : r.tab === "task" && r.id ? <Task project={p} id={r.id} />
+    : <Tasks project={p} />;
   return (
     <div className="shell">
       <aside className="side">
-        <Picker products={products} product={p} pick={pick} />
+        <Picker projects={projects} project={p} pick={pick} />
         <nav aria-label={t("sections")} className="navs">
           {TABS.map((k) => (
             <a key={k} className="nav" href={`#/${k}`} aria-current={current(k)}>
@@ -94,8 +94,8 @@ export function Shell({ all: initial }: { all: Product[] }) {
       </aside>
       <main>
         <div className="top">
-          <Picker products={products} product={p} pick={pick} />
-          <StatusPill product={p} />
+          <Picker projects={projects} project={p} pick={pick} />
+          <StatusPill project={p} />
         </div>
         <Boundary key={`${r.tab}/${r.id}/${p.name}`}>{screen}</Boundary>
       </main>

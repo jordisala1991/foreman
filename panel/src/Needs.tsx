@@ -1,12 +1,12 @@
-// «Needs you»: what waits for the owner. Permissions and questions (each tied to its task and the agent that asked;
-// the answer goes back to that agent), the integration queue (accept or send back), triage («Go» or cancel) and the
+// «Needs you»: what waits for the owner. Permissions and questions (each tied to its task and to whichever agent
+// asked; the answer goes back to it), the tasks in review (accept or reject), triage («Go» or cancel) and the
 // blocked tasks (unblock).
 import type { ReactNode } from "react";
-import { BlockedCard, LoadFailed, PermissionCard, QueueCard, QuestionCard, TriageCard } from "./cards";
+import { BlockedCard, LoadFailed, PermissionCard, ReviewCard, QuestionCard, TriageCard } from "./cards";
 import { useFeed } from "./feed";
 import { ScreenHead } from "./head";
 import { Small } from "./icons";
-import { blocked, stateUrl, t, type Key, type Product, type State } from "./lib";
+import { blocked, stateUrl, t, type Key, type Project, type State } from "./lib";
 
 const Part = ({ title, n, children }: { title: Key; n: number; children: ReactNode }) =>
   n ? (
@@ -19,19 +19,19 @@ const Part = ({ title, n, children }: { title: Key; n: number; children: ReactNo
     </section>
   ) : null;
 
-export function Needs({ product }: { product: Product }) {
-  const s = useFeed<State>(stateUrl(product.name), 10_000);
+export function Needs({ project }: { project: Project }) {
+  const s = useFeed<State>(stateUrl(project.name), 10_000);
   const d = s.data;
-  const p = product.name;
+  const p = project.name;
   const perms = (d?.questions ?? []).filter((q) => q.kind === "permission");
   const questions = (d?.questions ?? []).filter((q) => q.kind !== "permission");
-  const queue = (d?.tasks ?? []).filter((i) => i.status === "in review");
+  const inReview = (d?.tasks ?? []).filter((i) => i.status === "in review");
   const triage = (d?.tasks ?? []).filter((i) => i.status === "triage");
   const stuck = (d?.tasks ?? []).filter((i) => blocked(i) && i.status !== "triage" && i.status !== "in review");
-  const total = perms.length + questions.length + queue.length + triage.length + stuck.length;
+  const total = perms.length + questions.length + inReview.length + triage.length + stuck.length;
   return (
     <div className="screen needs">
-      <ScreenHead title={t("tab_needs")} product={product} sub={d && total ? t("n_waiting", { n: total }) : ""} />
+      <ScreenHead title={t("tab_needs")} project={project} sub={d && total ? t("n_waiting", { n: total }) : ""} />
       {!d && !s.failed ? <div className="card quiet">{t("loading")}</div> : null}
       {s.failed && !d ? <LoadFailed retry={s.reload} /> : null}
       {d && !total ? (
@@ -56,8 +56,8 @@ export function Needs({ product }: { product: Product }) {
           </Part>
         </div>
         <div className="col">
-          <Part title="g_in_review" n={queue.length}>
-            {queue.map((i) => <QueueCard key={i.id} i={i} p={p} reload={s.reload} />)}
+          <Part title="g_in_review" n={inReview.length}>
+            {inReview.map((i) => <ReviewCard key={i.id} i={i} p={p} reload={s.reload} />)}
           </Part>
           <Part title="g_triage" n={triage.length}>
             {triage.map((i) => <TriageCard key={i.id} i={i} p={p} reload={s.reload} />)}

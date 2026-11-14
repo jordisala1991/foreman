@@ -334,7 +334,7 @@ class Pulls(unittest.TestCase):
         self.assertEqual(g.calls("api"), [])
 
     def merged(self, strategy: str | None) -> tuple[GH, str]:
-        g = self.make(f'merge = "{strategy}"' if strategy else "", test="true")
+        g = self.make(f'strategy = "{strategy}"' if strategy else "", test="true")
         tid = g.work()
         g.deliver(tid)
         loop.tick(g.e.p)

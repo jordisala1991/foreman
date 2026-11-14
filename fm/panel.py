@@ -8,7 +8,7 @@ cannot disagree.
 GET   /                index.html (sets the cookie)      /app.js, /app.css   the built files
 GET   /api/projects    each project: loop heartbeat, paused, what waits, what runs
 GET   /api/state       one project: its tasks (closed ones of the last week), open questions, latest events
-GET   /api/task       one task: as stored, its events, its questions, its cost, its agent's session state
+GET   /api/task        one task: as stored, its events, its questions, its cost, its agent's session state
 GET   /api/system      loop heartbeat, paused, health findings, metrics per task and their total
 POST  /api/add  /api/answer  /api/allow  /api/deny  /api/accept  /api/reject  /api/go  /api/cancel  /api/unblock
       /api/pause       (id=..., the text in the body; /api/add takes JSON {title, detail, goal, criteria})

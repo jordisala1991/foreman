@@ -1,7 +1,7 @@
 /* The panel's look, copied from foreman's new panel (panel/next-src): the approved mockups' tokens (light and dark,
    chosen by the system: no switch), the system font, tabular figures and 44 px targets. Phone first: the picker and
    the status pill on top, a translucent bottom bar of three tabs; from 900 px a 248 px sidebar. Adapted for
-   foreman-next: the task groups, the queue's cards, the task page and the metrics table (at the end). */
+   foreman-next: the task groups, the cards that wait for the owner, the task page and the metrics table (at the end). */
 :root {
   color-scheme: light dark;
   --bg: #f5f5f7; --side: #fbfbfc; --surface: #ffffff; --surface2: #f4f4f6; --border: #e3e3e8;

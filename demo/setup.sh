@@ -73,11 +73,11 @@ branch_prefix = "next/demo-"
 [agents]
 slots = 2
 model = "sonnet"
-define_model = "sonnet"
+planning_model = "sonnet"
 # the demo agents run without today's foreman plugin: this prototype replaces it
 settings = { enabledPlugins = { "foreman@foreman" = false } }
 
-[integrate]
+[merge]
 autonomy = "manual"
 test = "python3 -m unittest -q"
 

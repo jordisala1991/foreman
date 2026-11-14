@@ -51,7 +51,7 @@ export interface Loop {
   time: string | null;
   alive: boolean;
 }
-export interface Product {
+export interface Project {
   name: string;
   paused?: string | null;
   loop?: Loop;
@@ -60,7 +60,7 @@ export interface Product {
   broken?: string;
 }
 export interface Projects {
-  projects: Product[];
+  projects: Project[];
 }
 export interface Agent {
   name: string;

@@ -76,8 +76,8 @@ class Choice(unittest.TestCase):
         self.assertEqual(got[("responsible", c)], ("sonnet", "medium"))
         self.assertEqual(self.e.task(a)["agent"]["effort"], "xhigh")
         ev = (self.e.p.state / "events.jsonl").read_text()
-        self.assertIn("(work, fable, xhigh, session", ev)
-        self.assertIn("(work, sonnet, medium, session", ev)
+        self.assertIn("(responsible, fable, xhigh, session", ev)
+        self.assertIn("(responsible, sonnet, medium, session", ev)
 
     def test_planning_brief_shows_the_choice(self):
         i = {"id": "TY-1", "title": "t", "model": "opus", "effort": "high"}

@@ -149,9 +149,7 @@ def record_main_tests(p: Project, head: str) -> None:
     """Runs the tests on `head` and writes ci.json. `since` stamps when the current failing episode began."""
     result, tail = delivery.tests_at(p, head, "main")
     before = util.read_json(p.state / "ci.json", {})
-    # an older ci.json has no `since`: its failing key was the commit, so the open task keeps matching
-    carried = before.get("since") or (before.get("head") or "")[:12]
-    since = carried if before.get("result") == "fail" == result and carried else util.now()
+    since = before.get("since") if before.get("result") == "fail" == result and before.get("since") else util.now()
     util.write_json(p.state / "ci.json", {"head": head, "at": util.now(), "result": result, "tail": tail, "since": since})
 
 

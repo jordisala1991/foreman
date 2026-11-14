@@ -12,7 +12,7 @@ Read the project's lessons, `$lessons`: what misled earlier agents in this proje
 $plan_section
 
 # Where
-Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured. Do not touch the main checkout (`$repo`) and do not merge into `$main`: integration is not yours.
+Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured. Do not touch the main checkout (`$repo`) and do not merge into `$main`: the merge is not yours.
 
 # Vocabulary
 Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
@@ -29,9 +29,9 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - Leave no live processes behind.
 
 # The end
-1. Fill the report at `$report`: it already holds a template, with a hint under each heading. Replace every <hint> with your text, keep the headings, and respect each hint's limit. It is the task's description (fm puts it as the PR body and in the panel; the reviewer checks the same text). About 300 words before «Review rounds». No footer: fm writes it. How to run the app and take screenshots is the project's business (its CLAUDE.md).
+1. Fill the report at `$report`: it already holds a template, with a hint under each heading. Replace every <hint> with your text, keep the headings, and respect each hint's limit. It is the task's description (fm puts it on the PR and in the panel; the reviewer checks the same text). About 300 words before «Review rounds». No footer: fm writes it. How to run the app and take screenshots is the project's business (its CLAUDE.md).
 2. Run `fm done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task, the repo or the lessons was wrong, stale or unclear and cost you time; or none"` and end your turn.
 
-The loop then has your branch reviewed by an independent reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), and run `fm done` again. The owner may also send it back with a note: same thing.
+The loop then has your branch reviewed: the hunter, then the reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), and run `fm done` again. The owner may also reject it with a note: same thing.
 
 If the task cannot be done, run `fm block "why, and what would unblock it"` and end your turn.

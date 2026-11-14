@@ -103,14 +103,6 @@ class Plan(unittest.TestCase):
         fm(self.e.home, "go", tid)
         self.assertEqual(self.e.task(tid)["status"], "backlog")
 
-    def test_task_stored_with_the_old_key_still_reads(self):
-        tid = backlog.add(self.p, "old", status="triage", criteria="c")
-        with backlog.edit(self.p) as d:
-            acc = backlog.get(d, tid)["acceptance"]
-            acc["criterion"] = acc.pop("criteria")
-        self.assertEqual(self.e.task(tid)["acceptance"]["criteria"], "c")
-        self.assertIn("c", agents.brief(self.p, self.e.task(tid), "responsible"))
-
 
 class ReviewerPlan(unittest.TestCase):
     def brief_of_reviewer(self, **keys):

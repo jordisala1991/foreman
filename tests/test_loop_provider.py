@@ -45,7 +45,7 @@ class Provider(unittest.TestCase):
         for strategy, parents in (("", 1), ("merge", 2)):
             e = Env(test="true", autonomy="low")
             if strategy:
-                e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[merge]", f'[merge]\nmerge = "{strategy}"'))
+                e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[merge]", f'[merge]\nstrategy = "{strategy}"'))
                 e.p = type(e.p).load(e.home)
             tid = self.delivered(e)
             loop.tick(e.p)
@@ -55,7 +55,7 @@ class Provider(unittest.TestCase):
     def test_unknown_merge_or_provider_is_a_clear_config_error(self):
         from fm import providers
 
-        for key, val in (("merge", "rebase"), ("provider", "gitlab"), ("pr", "never")):
+        for key, val in (("strategy", "rebase"), ("provider", "gitlab"), ("pr", "never")):
             e = Env(test="true")
             e.p.cfg["merge"][key] = val
             with self.assertRaisesRegex(providers.ConfigError, f"{key} = '{val}'"):
@@ -65,15 +65,7 @@ class Provider(unittest.TestCase):
             with self.assertRaises(providers.ConfigError):
                 delivery.accept(e.p, tid)
 
-    def test_the_old_forge_key_is_a_clear_config_error(self):
-        from fm import providers
-
-        e = Env()
-        e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[merge]", '[merge]\nforge = "github"'))
-        with self.assertRaisesRegex(providers.ConfigError, "forge was renamed to provider"):
-            registry.get(type(e.p).load(e.home))
-
-    def test_send_back_forgets_the_merge_of_the_old_tip(self):
+    def test_rejection_forgets_the_merge_of_the_old_tip(self):
         e = Env(test="true")
         tid = self.delivered(e)
         loop.tick(e.p)
@@ -89,7 +81,7 @@ class Provider(unittest.TestCase):
         delivery.accept(e.p, tid)
         base = git(e.repo, "rev-parse", "main").strip()
         git(e.repo, "merge", "--squash", "fm/ty-1")
-        git(e.repo, "commit", "-qm", f"Integrate {tid}: x")  # the merge happened; its ref was never stored
+        git(e.repo, "commit", "-qm", f"Merge {tid}: x")  # the merge happened; its ref was never stored
         backlog.update(e.p, tid, merging=base)
         merged = git(e.repo, "rev-parse", "main").strip()
         loop.tick(e.p)
@@ -176,7 +168,7 @@ class Provider(unittest.TestCase):
         delivery.accept(e.p, tid)
         e.p.cfg["merge"]["strategy"] = "rebase"
         loop.run_queue(e.p, {})
-        self.assertIn("merge = 'rebase'", e.task(tid)["blocked"])
+        self.assertIn("strategy = 'rebase'", e.task(tid)["blocked"])
 
     def test_defaults_and_nothing_is_published(self):
 

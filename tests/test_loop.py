@@ -161,7 +161,7 @@ class Queue(unittest.TestCase):
         self.assertEqual(e.task(tid)["status"], "in review")  # accepting merges nothing
         loop.tick(e.p)
         self.assertEqual(e.task(tid)["status"], "done")
-        self.assertIn("Integrate TY-1", git(e.repo, "log", "--oneline", "-1"))
+        self.assertIn("Merge TY-1", git(e.repo, "log", "--oneline", "-1"))
         self.assertNotIn("fm/ty-1", git(e.repo, "branch"))
 
     def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self):
@@ -528,8 +528,6 @@ class Queue(unittest.TestCase):
             ({"open": 0, "round": 1}, "queue"),
             ({"open": 1, "round": 2}, "queue"),
             ({"open": 1, "round": 1, "returned": True}, "queue"),
-            ({"high": 1, "medium": 0, "low": 2, "round": 1}, "back"),  # a verdict from before the single count
-            ({"high": 0, "medium": 0, "low": 2, "round": 1}, "queue"),
         ]
         for v, want in rows:
             self.assertEqual(risk.review_step(v, 2), want, v)

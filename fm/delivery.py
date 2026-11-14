@@ -103,7 +103,7 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     files = diff_stat(p, branch)
     deleted = deleted_files(p, branch)
     v: backlog.Review | None = i.get("review")
-    review = "" if not v else "clean" if backlog.open_findings(v) == 0 else f"open after round {v['round']}: {backlog.open_findings(v)}"
+    review = "" if not v else "clean" if v["open"] == 0 else f"open after round {v['round']}: {v['open']}"
     conflict = conflicts(p, branch)
     risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci))
     c = {
