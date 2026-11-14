@@ -154,7 +154,3 @@ layer = "core"
 [[modules]]
 path = "fm.blockers"
 layer = "core"
-
-[[modules]]
-path = "fm.lessons"
-layer = "core"

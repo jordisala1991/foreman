@@ -4,9 +4,6 @@ You are the mechanic for task $id in project $project: you diagnose it, you do n
 $id · $title
 $detail
 
-# Before you start
-Read the project's lessons, `$lessons`.
-
 # Rules: you only read
 - Change no code, no repo, no other task and no fm state. The only files you write are `$diagnosis` and a scratch folder made with `mktemp -d`, which you `rm -rf` before ending.
 - Run no `fm` command except `fm show`, `fm list`, `fm metrics`, `fm health` and `fm diagnose`.

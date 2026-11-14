@@ -13,7 +13,8 @@ Statuses, and who moves a task between them (DESIGN.md has the picture):
 Keys added to a task: `agent` {name, session, short, kind: planning|responsible, started, nudged}, `branch`, `worktree`,
 `sessions` (every session id), `session_kinds` (sid → planning|responsible|review), `report` {summary, review, confused, at},
 `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `source`
-(dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask).
+(dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask), `misled` {planning|
+responsible|hunter|reviewer: [what misled that agent]}.
 A question to the owner is a decision tied to its task and agent: {id: "XX-1 Q1", task, agent, title, text, kind, action?}.
 """
 
@@ -111,6 +112,17 @@ def edit(p: Project) -> Generator[Data, None, None]:
         yield d
         d["updated"] = date.today().isoformat()
         util.write_json(p.backlog_file, d)
+
+
+def record_misled(p: Project, tid: str, role: str, text: str) -> None:
+    """What misled an agent (its `--misled` text) is kept on the task under its role, once; «none» is not kept."""
+    t = " ".join(text.split())
+    if t.lower().rstrip(".") in ("", "none", "nothing", "n/a", "-"):
+        return
+    with edit(p) as d:
+        texts = get(d, tid).setdefault("misled", {}).setdefault(role, [])
+        if t not in texts:
+            texts.append(t)
 
 
 def tasks(d: Data) -> list[Task]:
