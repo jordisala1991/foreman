@@ -120,7 +120,7 @@ def _publishes(prog: str, sub: str, args: list[str]) -> bool:
 
 def _push(args: list[str], sc: Scope) -> str | None:
     rest = args[args.index("push") + 1 :]
-    refs = [a for i, a in enumerate(rest) if not a.startswith("-") and rest[i - 1 : i] not in (["-o"], ["--push-option"])]
+    refs = [a for a in rest if not a.startswith("-")]
     if {"--delete", "-d"} & set(rest) or any(r.startswith(":") for r in refs[1:]):
         return "delete"
     if {"-f", "--force", "--force-with-lease", "--mirror", "--all"} & set(rest) or any(r.startswith("+") for r in refs[1:]):

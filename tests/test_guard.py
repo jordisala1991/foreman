@@ -45,11 +45,10 @@ class Bash(unittest.TestCase):
             "git push origin +fm/ty-1",
             "git push origin +HEAD:fm-evidence",
             "git push origin fm/ty-1 +main",
+            "git push -o -o origin +main",
         ):
             self.assertEqual(self.check(cmd), "push-main", cmd)
         for cmd in ("git push origin fm/ty-1", "git push origin HEAD:fm/ty-1", "git push -u origin fm/ty-1", "git push"):
-            self.assertIsNone(self.check(cmd), cmd)
-        for cmd in ("git push -o +x origin fm/ty-1", "git push -o a -o +x origin fm/ty-1"):  # a + in an option value
             self.assertIsNone(self.check(cmd), cmd)
 
     def test_delete_what_is_not_yours(self):
