@@ -91,6 +91,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "report": str(report_file(p, i["id"])),
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
+        "model_effort": f"{i.get('model') or 'project default'} / {i.get('effort') or 'project default'}",
         "round2": "",
         "owner_notes": owner_notes_section(p, i["id"]) if kind in ("reviewer", "hunter") else "",
         "resources": lock.describe(p.cfg),
@@ -116,8 +117,9 @@ def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
 def launch(p: Project, i: dict[str, Any]) -> None:
     kind = "define" if i["status"] == "backlog" else "work"
     name = agent_name(p, i["id"], kind)
-    model = p.get("agents", "define_model" if kind == "define" else "model")
-    effort = p.get("agents", "define_effort" if kind == "define" else "effort")
+    own = i if kind == "work" else {}  # the task's choice is for its responsible agent only
+    model = own.get("model") or p.get("agents", "define_model" if kind == "define" else "model")
+    effort = own.get("effort") or p.get("agents", "define_effort" if kind == "define" else "effort")
     keys: dict[str, Any] = {}
     if kind == "work":
         wt, branch = worktree(p, i)
@@ -148,7 +150,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         sessions.stop(p, short)
         backlog.event(p, i["id"], f"launch of {name} undone: the issue changed meanwhile")
         return
-    backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, session {short})")
+    backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, {effort}, session {short})")
 
 
 def record_session(it: dict[str, Any], sid: str, kind: str) -> None:

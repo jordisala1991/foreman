@@ -3,9 +3,14 @@
 import argparse
 from collections.abc import Callable
 
-from . import backlog
+from . import backlog, config
 
 Command = Callable[[str, str], argparse.ArgumentParser]
+
+
+def _model_effort(s: argparse.ArgumentParser) -> None:
+    s.add_argument("--model", choices=config.MODELS, help="the model of the task's responsible agent (default: the project's)")
+    s.add_argument("--effort", choices=config.EFFORTS, help="the effort of the task's responsible agent (default: the project's)")
 
 
 def _filing(c: Command) -> None:
@@ -21,6 +26,7 @@ def _filing(c: Command) -> None:
     s.add_argument("--ready", action="store_true")
     s.add_argument("--triage", action="store_true")
     s.add_argument("--priority", default="none", choices=backlog.PRIORITIES)
+    _model_effort(s)
     s = c("list", "the backlog and the open questions")
     s.add_argument("--all", action="store_true")
     s = c("show", "one issue, as stored")
@@ -42,6 +48,7 @@ def _agent_side(c: Command) -> None:
     s.add_argument("--misled", default="")
     s = c("ready", "(planning agent) the plan is written")
     s.add_argument("--detail")
+    _model_effort(s)
     g = s.add_mutually_exclusive_group(required=True)
     g.add_argument("--plan", metavar="PATH", help="the written plan (file, not empty)")
     g.add_argument("--no-plan", metavar="WHY", help="no plan, because the task is trivial")
@@ -73,6 +80,7 @@ def _owner_side(c: Command) -> None:
     s.add_argument("--claim")
     s.add_argument("--detail")
     s.add_argument("--criteria", help="one criterion per line, as in fm add")
+    _model_effort(s)
     s = c("cancel", "cancel an issue (stops its agent)")
     s.add_argument("id")
     s.add_argument("why", nargs="?")

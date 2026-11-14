@@ -62,6 +62,9 @@ def cmd_ready(a: argparse.Namespace) -> None:
             i.pop("plan_file", None)  # a relaunched planner that now says «trivial» leaves no stale plan
         if a.detail:
             i["detail"] = (i.get("detail", "") + "\n\n" + a.detail).strip()
+        for k in ("model", "effort"):
+            if v := getattr(a, k):
+                i[k] = v
         i["status"], i["blocked"] = "ready", ""
     backlog.event(p, iid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
     lessons.lesson(p, iid, os.environ.get("FM_AGENT", "definer"), a.misled)

@@ -69,7 +69,7 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
 - `in review`: the integration queue. The loop checks the branch; the owner accepts it or sends it back with a note.
 - `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
   nudge). The owner clears it (`fm unblock [--relaunch]`).
-- `fm edit` changes title, claim, criteria or detail of a task in triage, backlog or ready (never one with an agent,
+- `fm edit` changes title, claim, criteria, detail, model or effort of a task in triage, backlog or ready (never one with an agent,
   nor a closed one); criteria or detail on a backlog or ready task drops its plan and sends it back to backlog.
 - A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only the owner, only while the parent is
   in triage or backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent; the
@@ -123,8 +123,9 @@ on). The heartbeat is written before every step, so a long test run does not loo
 ## The agents
 
 Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-define`), started with
-`claude --bg -n NAME --model M --permission-mode bypassPermissions --settings S PROMPT` in its cwd:
+`claude --bg -n NAME --model M --effort E --permission-mode bypassPermissions --settings S PROMPT` in its cwd:
 
+- `M` and `E` are the project's, except for the responsible agent: the task's own `model`/`effort` (optional issue keys, chosen by the definer with the rubric in `define.md`) win.
 - `S` sets `FM_HOME`, `FM_ISSUE`, `FM_AGENT` and `PATH` (so `fm` works), `worktree.bgIsolation: none`, the guard as
   a PreToolUse hook, and the project's extra settings (the demo turns off today's foreman plugin for its agents).
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
@@ -296,7 +297,7 @@ The panel's TypeScript is out of this (a dependency check there can come later).
 
 ## Watching itself
 
-Metrics per task (`fm metrics`, the panel): cost of its agents (transcripts at list prices; plan_usd of define sessions and work_usd of work sessions, from `session_kinds`; review rounds), time to the queue and to
+Metrics per task (`fm metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; plan_usd of define sessions and work_usd of work sessions, from `session_kinds`; review rounds), time to the queue and to
 done, rework (sent back), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
 misled its agents (their `--confused` words).
 
