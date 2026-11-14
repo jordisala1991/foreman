@@ -44,11 +44,8 @@ FAKE_GH = textwrap.dedent("""\
         if s.get("quota_fail"):
             print("HTTP 500", file=sys.stderr)
             sys.exit(1)
-        if "reset" in s:
-            r = s["reset"]
-            print(json.dumps({"resources": {"core": {"limit": 5000, "remaining": 4000, "reset": r}, "graphql": {"limit": 5000, "remaining": 0, "reset": r}}}))
-        else:
-            print(json.dumps({"resources": {}}))
+        r = {"limit": 5000, "reset": s.get("reset")}
+        print(json.dumps({"resources": {"core": {**r, "remaining": 4000}, "graphql": {**r, "remaining": 0}} if "reset" in s else {}}))
         sys.exit(0)
     if s.get("limited") and a[:2] == ["api", "graphql"]:
         print("GraphQL: API rate limit already exceeded for user ID 1.", file=sys.stderr)

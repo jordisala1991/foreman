@@ -7,7 +7,7 @@ from unittest import mock
 from test_github import GH
 
 from fm import backlog, loop, util
-from fm.providers import github, registry
+from fm.providers import gh_quota
 
 
 class Quota(unittest.TestCase):
@@ -16,10 +16,10 @@ class Quota(unittest.TestCase):
             return {"resources": r}
 
         core, gql = {"remaining": 4000, "reset": 9000}, {"remaining": 0, "reset": 5000}
-        self.assertEqual(github.reset_at(res(core=core, graphql=gql), 1000), 5000)
-        self.assertEqual(github.reset_at(res(a=gql, b={"remaining": 0, "reset": 7000}), 1000), 7000)
+        self.assertEqual(gh_quota.reset_at(res(core=core, graphql=gql), 1000), 5000)
+        self.assertEqual(gh_quota.reset_at(res(a=gql, b={"remaining": 0, "reset": 7000}), 1000), 7000)
         for raw in (res(core=core), res(g={"remaining": 0, "reset": 900}), {}, [], "x", res(g={"remaining": 0, "reset": "soon"})):
-            self.assertEqual(github.reset_at(raw, 1000), 1060, raw)
+            self.assertEqual(gh_quota.reset_at(raw, 1000), 1060, raw)
 
 
 class Limited(unittest.TestCase):
@@ -32,7 +32,7 @@ class Limited(unittest.TestCase):
         """Moves the provider's clock forward by offset[0] seconds."""
         real = time.time
         offset = [0.0]
-        patch = mock.patch("fm.providers.github.time.time", lambda: real() + offset[0])
+        patch = mock.patch("fm.providers.gh_quota.time.time", lambda: real() + offset[0])
         patch.start()
         self.addCleanup(patch.stop)
         return offset
@@ -135,5 +135,4 @@ class Limited(unittest.TestCase):
         iid = g.work()
         g.deliver(iid)
         (g.e.p.state / "github_quota.json").write_text('{"until": 4102444800}')
-        provider = registry.get(g.e.p)
-        self.assertLessEqual(provider.paused_until(), time.time() + github.MAX_PAUSE)
+        self.assertLessEqual(gh_quota.paused_until(g.e.p.state), time.time() + gh_quota.MAX_PAUSE)

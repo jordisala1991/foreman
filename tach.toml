@@ -85,6 +85,10 @@ layer = "ports"
 [[modules]]
 path = "fm.providers.github"
 layer = "adapters"
+depends_on = ["fm.providers", "fm.providers.gh_quota"]
+[[modules]]
+path = "fm.providers.gh_quota"
+layer = "adapters"
 depends_on = ["fm.providers"]
 [[modules]]
 path = "fm.providers.local"
