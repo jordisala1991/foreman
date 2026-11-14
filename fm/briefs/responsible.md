@@ -39,4 +39,4 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 
 The loop then has your branch reviewed: the hunter, then the reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Run `$test` again and update the Proof rows the fixes touched. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), reread as in step 2, and run `fm done` again. The owner may also reject it with a note: same thing.
 
-If the task cannot be done, run `fm block "why, and what would unblock it"` and end your turn.
+If the task cannot be done, or turns out not to be one change, run `fm block "why, and what would unblock it"`; for the second case give the proposed split (the PRs it would split into, one goal line each). Then end your turn. Never leave part of the acceptance criteria undone, and never move code to get under a size or risk limit.
