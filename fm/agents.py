@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import backlog, costs, integrate, lock, sessions, util
+from . import backlog, costs, integrate, lessons, lock, sessions, util
 from .config import Project
 
 BRIEFS = Path(__file__).parent / "briefs"
@@ -87,7 +87,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "branch": i.get("branch", ""),
         "main": p.get("project", "main"),
         "test": p.get("integrate", "test") or "(none configured)",
-        "lessons": str(backlog.ensure_lessons(p)),
+        "lessons": str(lessons.ensure_lessons(p)),
         "report": str(report_file(p, i["id"])),
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
