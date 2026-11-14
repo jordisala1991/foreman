@@ -13,7 +13,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, costs, integrate, token, util
+from . import backlog, integrate, token, util
+from .agents import idle_s
 from .config import Project
 
 Finding = dict[str, str]
@@ -104,8 +105,7 @@ def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
         a: backlog.Agent = i.get("agent") or {}
         row: dict[str, Any] = rows.get(a.get("session") or "") or {}
         if i["status"] in backlog.RUNNING and row.get("state") == "working":
-            files = costs.files_of(a.get("session") or "")
-            quiet = min((time.time() - f.stat().st_mtime for f in files), default=0)
+            quiet = idle_s(a)
             if quiet > stuck_s:
                 out.append(
                     {

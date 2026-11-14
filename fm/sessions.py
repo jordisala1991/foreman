@@ -88,11 +88,15 @@ def _run(cmd: list[str], cwd: Path) -> str:
     return m.group(1)
 
 
+def find(rows: dict[str, Any], short: str) -> str | None:
+    """The full session id of a short one, in a listing."""
+    return next((sid for sid, row in rows.items() if row.get("id") == short or sid.startswith(short)), None)
+
+
 def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | None]:
     """(short id, full session id or None)."""
     short = _run(command(p, agent, prompt), cwd)
-    sid = next((sid for sid, row in listing(p).items() if row.get("id") == short or sid.startswith(short)), None)
-    return short, sid
+    return short, find(listing(p), short)
 
 
 def resume(p: Project, sid: str, message: str, cwd: Path) -> None:

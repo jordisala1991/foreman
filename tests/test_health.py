@@ -79,6 +79,7 @@ class Health(unittest.TestCase):
         (t / f"{sid}.jsonl").write_text("{}\n")
         old = time.time() - 3 * 3600
         os.utime(t / f"{sid}.jsonl", (old, old))
+        backlog.update(self.p, iid, agent={**self.e.issue(iid)["agent"], "started": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old))})
         rows = {sid: {"state": "working"}}
         self.assertEqual(health.agents(self.p, rows)[0]["title"], f"{iid}'s agent looks stuck")
 

@@ -1,6 +1,5 @@
 """The backlog: one `backlog.json` in today's foreman format (schema 5: issues with id XX-n, title, status, detail,
-acceptance {claim, criteria, verdict}, result, priority, relations; decisions for the owner), with the keys the new
-model needs. This module is its only writer; every write is under the file lock and atomic.
+acceptance {claim, criteria, verdict}, result, priority; decisions), plus new keys. Its only writer, under the file lock.
 
 Statuses, and who moves an issue between them (DESIGN.md has the picture):
   triage       filed by a health check or a source; waits for the owner's «go» (→ backlog or ready)
@@ -12,12 +11,10 @@ Statuses, and who moves an issue between them (DESIGN.md has the picture):
   done | canceled | duplicate
 
 Keys added to an issue: `agent` {name, session, short, kind: define|work, started, nudged}, `branch`, `worktree`,
-`sessions` (every session id), `session_kinds` (sid → define|work|review),
-`report` {summary, review, confused, at}, `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went
-back to its agent), `plan_file` (path of the written plan,
-set by `fm ready --plan`; absent when the task had none), `source` (the dedup key of a finding or signal), `blocked` (why the loop leaves it alone).
-A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text,
-kind: question|permission, action?}; its answer goes back to that agent, never to a coordinator.
+`sessions` (every session id), `session_kinds` (sid → define|work|review), `report` {summary, review, confused, at},
+`check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `source`
+(dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask).
+A question to the owner is a decision tied to its issue and agent: {id: "XX-1 Q1", issue, agent, title, text, kind, action?}.
 """
 
 import contextlib
@@ -47,7 +44,6 @@ class Agent(TypedDict, total=False):
     name: str
     short: str
     session: str
-    model: str
     cwd: str
 
 
@@ -151,6 +147,7 @@ class NewIssue(TypedDict, total=False):
     claim: str
     source: str | None
     priority: str
+    parent: str
 
 
 class Question(TypedDict, total=False):
@@ -182,6 +179,8 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewIssue
             issue["acceptance"] = {"claim": claim, "criteria": criteria}
         if source:
             issue["source"] = source
+        if parent := f.get("parent"):
+            issue["parent"] = parent
         d["issues"].append(issue)
     event(p, iid, f"filed ({status}): {title}")
     return iid
@@ -192,8 +191,9 @@ def set_status(p: Project, iid: str, status: str, why: str = "", **keys: Any) ->
         raise BacklogError(f"bad status {status!r}")
     with edit(p) as d:
         i = get(d, iid)
-        i["status"] = status
-        i.update(keys)
+        if status == "canceled" and i["status"] in CLOSED:  # closed meanwhile (merged): keep it
+            return i
+        i.update(keys, status=status)
         if status in CLOSED:
             i["closed"] = date.today().isoformat()
     event(p, iid, f"→ {status}" + (f": {why}" if why else ""))
@@ -264,27 +264,29 @@ def answer(p: Project, qid: str, text: str, by: str = "owner (panel)") -> dict[s
     return q
 
 
+def message(d: dict[str, Any], i: dict[str, Any], tag: str, kinds: tuple[str, ...], **fields: Any) -> None:
+    """Files a message for the issue's agent among the resolved decisions, id `<issue> <tag><n>` (n counts the issue's
+    entries of `kinds`); the loop delivers it (loop.deliver_answers)."""
+    n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == i["id"] and q.get("kind") in kinds)
+    agent: Agent = i.get("agent") or {}
+    d["decisions_resolved"].append(
+        {
+            "id": f"{i['id']} {tag}{n + 1}",
+            "issue": i["id"],
+            "agent": agent.get("name"),
+            "resolved": util.now()[:10],
+            "delivered": False,
+            "answered_at": util.now(),
+            "title": i["title"],
+            **fields,
+        }
+    )
+
+
 def note(p: Project, iid: str, text: str, source: str) -> None:
     """A note from outside fm for the issue's agent: delivered like an owner's answer (loop.deliver_answers)."""
     with edit(p) as d:
-        i = get(d, iid)
-        agent: Agent = i.get("agent") or {}
-        n = sum(1 for q in d["decisions_resolved"] if q.get("issue") == iid and q.get("kind") == "note")
-        d["decisions_resolved"].append(
-            {
-                "id": f"{iid} N{n + 1}",
-                "issue": iid,
-                "kind": "note",
-                "agent": agent.get("name"),
-                "text": "signal",
-                "answer": text,
-                "source": source,
-                "resolved": util.now()[:10],
-                "delivered": False,
-                "answered_at": util.now(),
-                "title": i["title"],
-            }
-        )
+        message(d, get(d, iid), "N", ("note",), kind="note", text="signal", answer=text, source=source)
     event(p, iid, f"note from {source}: {text}")
 
 
