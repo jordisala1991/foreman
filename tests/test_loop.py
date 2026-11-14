@@ -136,7 +136,7 @@ class Stopped(unittest.TestCase):
         e.set_state(iid.lower(), "done")  # the nudge woke it; it ended its turn again
         loop.tick(e.p)
         self.assertIn("stopped without finishing", e.issue(iid)["blocked"])
-        self.assertEqual(len(e.calls()), 2)
+        self.assertEqual(len([c for c in e.calls() if "-mechanic" not in str(c["argv"])]), 2)  # health files the block: a mechanic follows
 
 
 class Queue(unittest.TestCase):

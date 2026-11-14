@@ -45,6 +45,9 @@ layer = "steps"
 path = "fm.talk"
 layer = "steps"
 [[modules]]
+path = "fm.mechanic"
+layer = "steps"
+[[modules]]
 path = "fm.health"
 layer = "steps"
 [[modules]]
@@ -100,6 +103,9 @@ layer = "proc"
 # No subprocess here (ruff, TID251 in pyproject.toml).
 [[modules]]
 path = "fm.risk"
+layer = "core"
+[[modules]]
+path = "fm.diagnosis"
 layer = "core"
 [[modules]]
 path = "fm.guard"

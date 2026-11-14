@@ -32,6 +32,7 @@ Nothing exists to keep a coordinator alive, because there is no coordinator.
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage issues, deduplicated |
+| `fm/diagnosis.py`, `fm/mechanic.py` | ~100 | the mechanic: required sections of a diagnosis and how it is stored; the tick step that launches, times out and stops mechanics |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
 | `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
@@ -117,6 +118,9 @@ on). The heartbeat is written before every step, so a long test run does not loo
 7. **launch**: while running agents < `slots` and launching is not paused, the next `ready` issue (its responsible
    agent) or `backlog` issue (its planning agent), by priority then id. If the issue changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
+8. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
+   slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
+   that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.
 
 `fm cancel` stops the agent, closes its open questions and removes its worktree (the branch stays).
 
@@ -164,6 +168,10 @@ so what it could not refute stays in To fix. What was dropped goes under Noted a
 decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`risk.review_step`);
 round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
 round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
+
+The **mechanic** (`mechanic` kind, `issue.mechanic`) diagnoses a health task and changes nothing else: read-only by its
+brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/diagnosis.py`)
+and appends the diagnosis to the task's `detail`, so `fm show` has it. The task stays in triage; the owner decides next.
 
 What was dropped because it only served a coordinator: memory renewal, session marking, interface mods and band,
 catch-up summaries, the pass as a message, plans written by someone else, sub-issues assigned from outside, the
@@ -262,12 +270,12 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 |---|---|---|
 | ui | `cli*`, `panel*` | the owner's and the agents' entry points; call the loop and below |
 | loop | `loop` | the process that ticks: does the I/O, calls the core |
-| steps | `sources`, `talk`, `health`, `metrics` | one step of a tick, or a view over several pieces |
+| steps | `sources`, `talk`, `mechanic`, `health`, `metrics` | one step of a tick, or a view over several pieces |
 | services | `agents`, `integrate`, `pulls`, `sessions`, `lock` | the outside world: git, gh, claude, processes |
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `subtasks`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
+| core | `risk`, `subtasks`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) has no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,

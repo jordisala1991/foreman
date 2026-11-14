@@ -46,6 +46,8 @@ def _agent_side(c: Command) -> None:
     g.add_argument("--plan", metavar="PATH", help="the written plan (file, not empty)")
     g.add_argument("--no-plan", metavar="WHY", help="no plan, because the task is trivial")
     s.add_argument("--misled", default="")
+    s = c("diagnose", "(mechanic) your diagnosis of the task")
+    s.add_argument("--file", required=True, help="the diagnosis (markdown with the required ## sections)")
     s = c("block", "(agent) it cannot go on without the owner")
     s.add_argument("text")
 

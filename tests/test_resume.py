@@ -99,7 +99,7 @@ class Resume(unittest.TestCase):
         backlog.update(e.p, iid, agent={**e.issue(iid)["agent"], "nudged": "2000-01-01 00:00:00"})
         loop.tick(e.p)
         self.assertIn("even after a nudge", e.issue(iid)["blocked"])
-        self.assertEqual(len(rows(e)), 2)
+        self.assertEqual(len([r for r in rows(e) if "-mechanic" not in r["name"]]), 2)  # health files the block: a mechanic follows
 
     def test_two_answers_go_one_per_tick(self):
         e = Env()
