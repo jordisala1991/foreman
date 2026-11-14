@@ -104,6 +104,9 @@ FAKE_GH = textwrap.dedent("""\
         print(s["refuse_merge"], file=sys.stderr)
         sys.exit(1)
     pr = s["prs"][a[2]]
+    if a[:2] == ["pr", "merge"] and pr["draft"]:
+        print("Pull Request is still a draft", file=sys.stderr)
+        sys.exit(1)
     if a[:2] == ["pr", "ready"]:
         pr["draft"] = False
     elif a[:2] == ["pr", "edit"]:
@@ -381,6 +384,16 @@ class Pulls(unittest.TestCase):
         self.assertIsInstance(github.failure("gh", "Pull Request has merge conflicts"), providers.Conflict)
         for text in ("pull request is closed", "Pull request #3 is not mergeable", "error on branch fix-conflict-ui"):
             self.assertNotIsInstance(github.failure("gh", text), providers.Conflict)
+
+    def test_an_accepted_task_whose_pr_is_still_a_draft_is_readied_then_merged(self):
+        g, iid = self.merged(None)
+        s = g.state
+        s["prs"]["1"]["draft"] = True
+        g.set(prs=s["prs"])
+        backlog.update(g.e.p, iid, pr={**g.e.issue(iid)["pr"], "draft": True})
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.issue(iid)["status"], "done")
+        self.assertEqual(len(g.calls("pr", "ready")), 1)
 
     def test_the_task_closes_only_once_the_pr_is_seen_merged(self):
         g, iid = self.merged(None)
