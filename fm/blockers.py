@@ -13,7 +13,9 @@ def _status(issues: list[backlog.Issue], x: str) -> str:
 
 
 def pending(i: backlog.Issue, issues: list[backlog.Issue]) -> list[str]:
-    """The blockers not done yet (an id with no issue counts as not done)."""
+    """The blockers not done yet (an id with no issue counts as not done); none once the task has started or closed."""
+    if i["status"] not in ("triage", "backlog", "ready"):
+        return []
     return [x for x in i.get("blocked_by", []) if _status(issues, x) != "done"]
 
 

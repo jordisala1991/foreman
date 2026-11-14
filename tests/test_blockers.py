@@ -40,6 +40,11 @@ class Blockers(unittest.TestCase):
         self.assertNotIn(self.X1, line)
         fm(self.e.home, "edit", a, "--blocked-by", "none")
         self.assertEqual(self.ids(a), [])
+        fm(self.e.home, "edit", a, "--blocked-by", self.X2)
+        fm(self.e.home, "cancel", a)
+        line = next(x for x in fm(self.e.home, "list", "--all").splitlines() if x.startswith(a))
+        self.assertNotIn(self.X2, line)
+        self.assertNotIn("waiting_for", json.loads(fm(self.e.home, "show", a)))
 
     def test_not_launched_until_the_last_blocker_is_done(self):
         for status, started in (("backlog", "refining"), ("ready", "in progress")):
