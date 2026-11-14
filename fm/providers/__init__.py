@@ -33,6 +33,14 @@ class Transient(Exception):
     """A platform call that failed in a way worth retrying (network, rate limit, timeout): the loop retries, never blocks."""
 
 
+class RateLimited(Transient):
+    """GitHub's API quota is used up until `until` (epoch seconds): the loop waits, it is never a failure of a task."""
+
+    def __init__(self, message: str, until: float) -> None:
+        super().__init__(message)
+        self.until = until
+
+
 class Permanent(Exception):
     """A platform call that will fail the same way if repeated (the platform rejects it, the branch is not there): the
     task is blocked with the reason instead of retried."""

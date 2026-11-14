@@ -9,7 +9,7 @@ Nothing needs keeping alive but the loop, which has no model.
             owner ──── panel (React, today's /next/ panel adapted) ── fm/panel.py (JSON API, local, key)
               │  └─── claude attach / agent view / Claude app: talks to any agent directly
               │
-   backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, loop heartbeat)
+   backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, github quota, loop heartbeat)
               │
    fm loop (plain process, launchd KeepAlive) ── every N s, per registered project:
       sources → answers → agents → queue → health → blockers → launch
@@ -246,7 +246,7 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). S
 3. **merged**: the task closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
 
-Retry policy, one place (`loop.guarded`, every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both.
+Retry policy, one place (`loop.guarded`, every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both. A GitHub rate limit (`RateLimited`, a `Transient`) is the exception: it is not a failure of the task, nothing is counted, noted or blocked; `GitHub.run` pauses every gh call until the reset kept in `state/github_quota.json` (60 s if the reset cannot be read; never more than an hour).
 
 Config: `[merge] provider = "auto"` (default: `github` if the repo's `origin` is on github.com, else `local`; or force
 `local` | `github`) and `strategy = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An

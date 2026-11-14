@@ -102,6 +102,8 @@ def guarded(p: Project, tid: str, what: str, fn: Callable[[], object], field: st
         i = backlog.get(backlog.load(p), tid)
         if i.get(err) or i.get(cnt):
             backlog.update(p, tid, **{err: "", cnt: 0})
+    except providers.RateLimited:
+        return  # GitHub's quota: gh waits for the reset; not the task's failure
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), tid)
         count = int(i.get(cnt) or 0) + 1

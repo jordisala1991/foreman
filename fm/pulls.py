@@ -106,6 +106,8 @@ def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: 
     try:
         change = change_of(i, head)
         provider.describe(change, describe.merge_body(provider.body(change), description(p, i, head, util.now())))
+    except providers.RateLimited:
+        raise
     except Exception as e:
         if i.get("pr_error") != str(e):
             backlog.update(p, i["id"], pr_error=str(e))

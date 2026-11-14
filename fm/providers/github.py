@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from .. import proc, util
-from . import Conflict, Permanent, Provider, ProviderError, Transient
+from . import Conflict, Permanent, Provider, ProviderError, Transient, gh_quota
 
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
 PUSH_TIMEOUT = 20  # seconds for a push
@@ -112,11 +112,15 @@ class GitHub(Provider):
     name = "github"
 
     def run(self, prog: str, *args: str, check: bool = True) -> proc.Result:
+        if prog == "gh":
+            gh_quota.hold(self.p.state)
         argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
         try:
             r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
+        if prog == "gh" and r.code != 0 and gh_quota.RATE.search(r.err + r.out):
+            raise gh_quota.limited(self.p, r.err or r.out)
         if check and r.code != 0:
             raise failure(f"{prog} {' '.join(args[:3])}", r.err or r.out)
         return r
@@ -159,7 +163,7 @@ class GitHub(Provider):
     def body(self, change: dict[str, Any]) -> str:
         r = self.run("gh", "pr", "view", str(change["pr"]), "--json", "body")
         try:
-            raw = json.loads(r.out)
+            raw: object = json.loads(r.out)
         except ValueError:
             raise ProviderError(f"gh pr view: not JSON: {r.out.strip()[:200]!r}") from None
         o = util.json_object(raw)
