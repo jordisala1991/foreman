@@ -148,7 +148,7 @@ class Provider(unittest.TestCase):
         self.assertIn("accepted", i)
         self.assertNotIn("conflicts", i)
 
-    def test_after_the_fix_the_task_is_accepted_again_and_merges(self):
+    def test_after_the_fix_the_task_merges_without_a_new_accept(self):
         e = Env(test="true")
         tid = self.accepted_then_main_moves(e)
         loop.tick(e.p)
@@ -156,8 +156,6 @@ class Provider(unittest.TestCase):
         git(wt, "merge", "-X", "ours", "main", "-m", "fix")
         backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
         e.review(tid)
-        loop.tick(e.p)
-        delivery.accept(e.p, tid)
         loop.tick(e.p)
         self.assertEqual(e.task(tid)["status"], "done")
 

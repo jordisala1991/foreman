@@ -57,13 +57,17 @@ class Score(unittest.TestCase):
         rows = [
             (facts("a.py", tests="fail"), "[tests]"),
             (facts("a.py", ci="fail"), "[ci]"),
-            (facts("a.py", conflict=True), "[git]"),
             (facts(commits=0), "[diff]"),
         ]
         for f, tag in rows:
             r, why = risk.score(project(), f)
             self.assertEqual(r, "high")
             self.assertTrue(why[0].endswith(tag), why)
+
+    def test_a_conflict_alone_is_low_and_comes_first(self):
+        r, why = risk.score(project(), facts("a.py", conflict=True, review="open after round 2: 1"))
+        self.assertEqual(r, "low")
+        self.assertTrue(why[0].startswith("conflicts with main"), why)
 
     def test_many_hits_give_three_reasons_high_first(self):
         f = facts(".github/x.yml", tests="fail", ci="fail", conflict=True, deleted=["o.py"])

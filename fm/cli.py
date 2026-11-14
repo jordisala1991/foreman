@@ -155,7 +155,7 @@ def cmd_review(a: argparse.Namespace) -> None:
             sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
         if agents.review_running(i):
             sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
-        for k in ("review", "hunter", "reviewer", "check"):
+        for k in ("review", "hunter", "reviewer", "check", "review_for"):
             i.pop(k, None)
         i["blocked"] = ""
         i["review_from"] = len(i.get("reviews", []))

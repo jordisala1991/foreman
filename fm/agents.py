@@ -3,9 +3,9 @@
 import string
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
-from . import backlog, costs, delivery, lessons, lock, sessions, util
+from . import backlog, costs, decide, delivery, lessons, lock, sessions, util
 from .config import Project
 
 BRIEFS = Path(__file__).parent / "briefs"
@@ -26,6 +26,20 @@ HUNTER_ROUND2 = (
     "`git diff $previous_tip..$branch` and the «Review rounds» section of the report. List only earlier findings "
     "that are still open and anything wrong or too much in the fixes themselves."
 )
+
+SCOPE = {  # a review of one fix only (decide.RULES), in the same brief slot as round 2; `$base` is what it compares with
+    "reject": "7. **This review checks only the agent's fix to the owner's note** (in «The owner's notes»): `git diff $base $tip`.",
+    "conflict": "7. **This review checks only the agent's resolution of a conflict with $main**: `git diff $base $tip`, where `$base` is git's "
+    "automatic merge, so the diff is only what the agent changed.",
+}
+
+
+class Scope(NamedTuple):  # why a review is launched (a key of decide.RULES) and what it compares with ("": the whole branch)
+    rule: str
+    base: str = ""
+
+
+ROUNDS = Scope("round")  # the rounds: the whole branch, then the fixes
 
 
 def report_file(p: Project, tid: str) -> Path:
@@ -212,8 +226,9 @@ def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
     return p.home / "reviews" / f"{i['id']}-r{rnd}-{tip[:9]}{suffix}.md"
 
 
-def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "reviewer") -> None:
-    """One of the two review sessions: the `hunter` lists what it suspects, then the `reviewer` checks each finding."""
+def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "reviewer", scope: Scope = ROUNDS) -> None:
+    """One of the two review sessions: the `hunter` lists what it suspects, then the `reviewer` checks each finding. With
+    a `scope.base`, it reviews only what changed from it (an owner reject's fix, a conflict's resolution)."""
     rnd = backlog.review_round(i)
     all_reviews: list[dict[str, Any]] = i.get("reviews") or []
     reviews = all_reviews[int(i.get("review_from", 0)) :]
@@ -232,9 +247,12 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         "hunter_file": hunter_file,
         "review_file": str(out),
         "round2": (HUNTER_ROUND2 if role == "hunter" else ROUND2) if rnd > 1 else "",
+        "base": scope.base,
         "previous": prev.get("file", ""),
         "previous_tip": prev.get("tip", ""),
     }
+    if scope.base:
+        extra["round2"] = SCOPE[scope.rule] + " Nothing outside that diff is a finding."
     cwd = Path(i["worktree"])
     short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, role, extra), cwd)
     with backlog.edit(p) as d:
@@ -256,7 +274,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
             it["reviewers"] = [*it.get("reviewers", []), launch]
         if sid:
             record_session(it, sid, "review")
-    backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {short})")
+    backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {short}); rule: {decide.RULES[scope.rule]}")
 
 
 def update_agent(p: Project, tid: str, **fields: Any) -> None:

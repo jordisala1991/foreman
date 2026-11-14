@@ -34,7 +34,8 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/blockers.py` | ~50 | which tasks a task waits for (`blocked_by`): pending, dead, refusals incl. cycles (pure) |
 | `fm/release.py` | ~25 | the loop's blockers step: marks a task unblocked once, or blocks it when a blocker closed undone |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
-| `fm/decide.py` | ~90 | what the loop does with a branch in review: review steps, send-back notes, check again, merge alone or wait (pure) |
+| `fm/decide.py` | ~110 | what the loop does with a branch in review: review steps, send-back notes, check again, merge alone or wait (pure) |
+| `fm/reviewing.py` | ~60 | the loop's review step: what it sees of a branch's review, and launching, holding, blocking or sending back as `decide` says |
 | `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
 | `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
 | `fm/health.py` | ~150 | checks that find broken states and file triage tasks, deduplicated |
@@ -119,8 +120,9 @@ on). The heartbeat is written before every step, so a long test run does not loo
    flowing; each task is read again just before its turn): tests on exactly its committed head
    (a fresh detached worktree, never uncommitted files), diff, deleted files,
    dependencies, the paths it touches, conflicts with main, the review's verdict → risk `low|medium|high` with
-   reasons. A branch that conflicts with main goes back to its agent with a note to merge main. If the project's
-   autonomy allows the risk, it merges (`git merge --no-ff` into the main checkout),
+   reasons. A branch that conflicts with main waits, shown, until someone wants it merged (the owner's accept or the
+   autonomy): then it goes back to its agent with a note to merge main, and merges once resolved without a new accept.
+   If the project's autonomy allows the risk, it merges (`git merge --no-ff` into the main checkout),
    removes the worktree and branch and closes the task.
 6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
    only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
@@ -140,20 +142,34 @@ on). The heartbeat is written before every step, so a long test run does not loo
 Each tick, for a task in review (not accepted, not blocked), in this order. The decisions are pure functions in
 `fm/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
 
+A review runs only when its result goes somewhere: to the agent (rounds 1-2, an owner reject, a conflict resolution)
+or, once, to the owner when the rounds run out. Each launch event ends with the rule that launched it
+(`rule: rounds 1-2`, `rule: owner reject`, `rule: conflict resolution`: `decide.RULES`).
+
 | Situation | What the loop does | Function | Test |
 |---|---|---|---|
-| No hunter for this tip | launches the hunter if a slot is free (and not paused); else waits | `review_step` → `hunt` / `wait` | `test_no_hunter_launches_it` |
+| A tip with no review, in rounds 1-2 | launches the hunter if a slot is free (and not paused); else waits | `review_step` → `hunt` / `wait` | `test_no_hunter_launches_it` |
 | The hunter's file is written and the hunter is not working | launches the reviewer if a slot is free; else waits | `review_step` → `review` / `wait` | `test_hunter_file_and_ended_launches_reviewer` |
 | The hunter ended without its findings file | blocks the task | `review_step` → `block` | `test_hunter_without_file_blocks` |
 | The reviewer ended without a verdict | blocks the task | `review_step` → `block` | `test_reviewer_without_verdict_blocks` |
 | Verdict with findings open before the last round | back to its agent for review: its note, once | `review_step` → `back` | `test_open_findings_go_back_once` |
+| A new tip that only merges main, with no conflict | no review: the verdict holds (`review.holds`) | `launch_rule` → `hold` | `test_a_clean_merge_or_a_closed_review_holds`, `test_a_clean_merge_of_main_launches_nothing` |
+| A new tip after the loop acted on a verdict of the last round, open or clean (`review_for` none) | no review: the verdict holds; what is open stays for the owner; no round 3 runs by itself (after a round-1 verdict, a new tip gets round 2) | `closes_review`, `launch_rule` → `hold` | `test_a_review_closes_after_the_last_round`, `test_after_two_clean_rounds_a_new_tip_launches_nothing`, `test_a_clean_merge_or_a_closed_review_holds`, `test_after_round_two_later_tips_launch_no_review`, `test_a_new_tip_after_a_clean_verdict_gets_a_review` |
+| The agent's fix after `fm reject` | one review of the fix only (`git diff` reviewed tip..new tip), from round 1; open findings back to its agent | `launch_rule` → `reject`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_reject_gets_a_review_of_the_fix_and_open_findings_go_back` |
+| A new tip that merges main resolving a conflict | one review of the resolution only (`git diff` git's automatic merge..new tip), from round 1; open findings back to its agent | `launch_rule` → `conflict`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
 | CI pending | waits | `waits_for_ci` | `test_pending_ci_waits` |
 | Head, main or CI moved since the last check | checks it again (in the background) | `checks_again` | `test_moved_branch_is_checked_again` |
-| The check says it conflicts with main | back to its agent for a conflict (also when the merge is refused) | `after_check` → `conflict`, `conflict_note` | `test_conflict_goes_back` |
+| It conflicts with main and nobody said it should merge | waits for the owner; `fm show` and the panel say it conflicts and goes back when accepted | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_waiting_task_that_conflicts_stays_and_says_so` |
+| It conflicts and the owner accepted it (also a merge refused for a conflict) or the autonomy would merge it | back to its agent for the conflict, keeping that accept (`resolving`) | `after_check` → `conflict`, `conflict_note` | `test_conflict_goes_back`, `test_conflict_waits_unless_someone_wants_the_merge` |
+| Resolved, no findings open, checks green, with the owner's accept kept | merges without a new accept (an accept the autonomy made is decided again: high never merges alone) | `after_check` → `merge` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
+| The resolution's review leaves findings open, tests fail or CI is not green | the kept accept lapses; waits for the owner | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_resolution_left_open_waits_for_the_owner` |
 | Autonomy allows the risk, no open findings, CI green where the provider has CI | merges alone | `after_check` → `merge` | `test_autonomy_merges_alone` |
 | Anything else | waits for the owner (`fm accept` / `fm reject`) | `after_check` → `owner` | `test_everything_else_waits_for_the_owner` |
 
-The tests are in `tests/test_decide.py` and launch no program.
+The decision tests are in `tests/test_decide.py` and launch no program; the loop's in `tests/test_review_rules.py`. How
+a tip follows the reviewed one is `delivery.merge_of`: a merge of the reviewed tip and a main commit whose tree equals
+git's automatic merge (`git merge-tree`) is clean; any other tree is a resolution; anything else (plain commits, a
+rebase) is neither, and in a conflict episode its whole branch is reviewed.
 
 ## The agents
 
@@ -250,11 +266,13 @@ Every delivered branch gets a risk score:
 
 - **impact**, from what the change touches: high = paths in `[risk.high]`; medium = paths in `[risk.medium]` and deleted
   files; low = the rest. A review never lowers it.
-- **doubt**, from the evidence: high = no changes, tests fail, CI fails, conflicts with main; medium = no test command, or a large change: over `[risk] large_lines` (400) changed lines, not counting tests, generated and lock files; size never makes a change high by itself.
+- **doubt**, from the evidence: high = no changes, tests fail, CI fails; medium = no test command, or a large change: over `[risk] large_lines` (400) changed lines, not counting tests, generated and lock files; size never makes a change high by itself.
 - Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
   `[ci]`, `[git]`, `[review]`). Size is only the large-change reason; file counts are not a reason.
 - Open review findings are a gate, not a level: they go back to the responsible agent and add a `[review]` reason, but never change the risk.
   After the last round, an open finding never merges alone, at any autonomy or risk (`decide.after_check`).
+- A conflict with main is not a level either: it is the first reason (`conflicts with main: it goes back to its agent
+  when accepted [git]`), and it goes back to its agent only when the owner accepts or the autonomy would merge it.
 
 The project's `[merge] autonomy` decides what merges without the owner: `manual` (nothing; the default),
 `low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or rejects it with a note
@@ -291,7 +309,7 @@ green CI** (no CI, pending or failing waits for the owner). After the merge the 
 origin when it is clean on main (fetch only, never a push). The images a report names (`![what](x.png)`, bare file
 names saved in `reports/ID/`) go, by git plumbing and never forced, to `ID/` on the orphan branch `fm-evidence`, the
 only push fm makes besides the task branch (agents may not: guard `push-evidence`); the PR body links them with
-`?raw=true` blob URLs and the panel serves them at `/evidence`. Conflicts with main go back to the responsible agent as before, also when the merge itself is refused for a conflict after acceptance: the acceptance is dropped and the new tip is checked and accepted again. Out of
+`?raw=true` blob URLs and the panel serves them at `/evidence`. Conflicts with main go back to the responsible agent once accepted, also when the merge itself is refused for a conflict after acceptance: the acceptance is carried over as `resolving`, and the resolved tip merges without a new accept unless its review leaves findings open or its checks fail. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Architecture

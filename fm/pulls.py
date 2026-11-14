@@ -90,7 +90,7 @@ def description(p: Project, i: dict[str, Any], head: str, at: str) -> str:
 def findings_of(i: dict[str, Any], head: str) -> list[Finding]:
     """The open findings of the review of this tip (none when there is no review, it is of another tip, or unreadable)."""
     v: dict[str, Any] = i.get("review") or {}
-    if not v.get("file") or v.get("tip") != head:
+    if not v.get("file") or backlog.verdict_tip(v) != head:
         return []
     try:
         return verdict.findings(Path(v["file"]).read_text())
@@ -100,7 +100,7 @@ def findings_of(i: dict[str, Any], head: str) -> list[Finding]:
 
 def case_of(i: dict[str, Any], c: dict[str, Any]) -> Case:
     v: dict[str, Any] = i.get("review") or {}
-    counted = int(v["open"]) if v.get("tip") == c["head"] else None
+    counted = int(v["open"]) if backlog.verdict_tip(v) == c["head"] else None
     report: dict[str, Any] = i.get("report") or {}
     return Case(c["risk"], c.get("reasons", []), c["tests"], c.get("ci", ""), c["head"], report.get("summary") or i["title"], c["files"], c["lines"], counted)
 

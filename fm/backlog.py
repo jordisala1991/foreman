@@ -73,6 +73,12 @@ class Review(TypedDict):
     tip: str
     open: int
     returned: NotRequired[bool]
+    holds: NotRequired[str]  # a later tip this verdict was carried to (a clean merge of main, or no review after it)
+
+
+def verdict_tip(v: Mapping[str, Any]) -> str:
+    """The tip a verdict stands for: the one it was carried to, or the one reviewed."""
+    return v.get("holds") or v.get("tip", "")
 
 
 def review_round(i: Mapping[str, Any]) -> int:
