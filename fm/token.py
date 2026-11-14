@@ -17,7 +17,6 @@ from . import proc, util
 
 ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 ITEM = "claude-oauth-token"
-RENEW_CMD = f"`claude setup-token`, then `security add-generic-password -U -a $USER -s {ITEM} -w`"
 AUTH_ERROR = re.compile(
     r"failed to authenticate|authentication_error|invalid bearer token|invalid api key|oauth token has (expired|been revoked)|please run /login", re.I
 )
