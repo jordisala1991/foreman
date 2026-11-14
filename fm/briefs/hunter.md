@@ -29,7 +29,7 @@ Write `${hunter_file}`:
 Then end your turn.
 
 # Without asking
-- Which suspicions to report (all, with a confidence each), and which tests and read-only commands to run.
+- Which suspicions to report within what this round reviews, with a confidence each, and which tests and read-only commands to run.
 
 # Waits for the owner
 - Nothing: end your turn with your file; the reviewer reads it.
