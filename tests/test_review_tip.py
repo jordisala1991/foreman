@@ -3,8 +3,8 @@ import os
 import pytest
 from helpers import Env, fm, git
 
-from fm import loop
 from fm.core.tasks import backlog
+from fm.loop import tick
 
 
 def head(e: Env, tid: str) -> str:
@@ -21,7 +21,7 @@ def commit(e: Env, tid: str) -> str:
 
 def start(e: Env) -> tuple[str, str]:
     tid = backlog.add(e.p, "x", status="ready", criteria="y")
-    loop.tick(e.p)
+    tick.tick(e.p)
     commit(e, tid)
     backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
     e.hunt_then_review(tid)
@@ -67,7 +67,7 @@ class TestTip:
         verdict(e, tid, a)
         r = e.task(tid)["review"]
         assert (r["tip"], r["round"]) == (a, 1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["check"]["head"] == a
 
     def test_two_reviewers_each_verdict_lands_on_its_own_tip(self):
@@ -84,7 +84,7 @@ class TestTip:
             i = e.task(tid)
             assert [r["tip"] for r in i["reviews"]] == [tips[k] for k in order]
             assert i["review"]["tip"] == b
-            loop.tick(e.p)
+            tick.tick(e.p)
             if order == "ba":
                 assert e.task(tid)["check"]["head"] == b
 
@@ -94,10 +94,10 @@ class TestTip:
         b = commit(e, tid)
         e.hunt_then_review(tid)
         verdict(e, tid, a)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "check" not in e.task(tid)
         verdict(e, tid, b)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["check"]["head"] == b
 
     def test_an_unknown_tip_is_refused(self):
@@ -120,7 +120,7 @@ class TestTip:
         tid, a = start(e)
         b = commit(e, tid)
         n = len(e.calls())
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == n
         verdict(e, tid, a)
         assert e.task(tid)["review"]["tip"] == a
@@ -136,11 +136,11 @@ class TestPasses:
         e = Env(test="true")
         tid, a = start(e)
         b = commit(e, tid)
-        loop.tick(e.p)  # hunter of b, round 1
+        tick.tick(e.p)  # hunter of b, round 1
         hunter_file = e.task(tid)["hunter"]["file"]
         verdict(e, tid, a)  # reviews grows: the round number moves
         e.hunter_done(tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert f"Tip: {b}" in e.calls()[-1]["argv"][-1]
         assert hunter_file in e.calls()[-1]["argv"][-1]
         assert os.path.exists(hunter_file)
@@ -150,7 +150,7 @@ class TestPasses:
         tid, a = start(e)
         verdict(e, tid, a)
         commit(e, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         text = e.calls()[-1]["argv"][-1]
         assert "[fm hunter" in text
         assert "Round 2 looks at the fixes" in text
@@ -165,7 +165,7 @@ class TestFreshReview:
         fm(e.home, "review", tid)
         i = e.task(tid)
         assert len(i["reviews"]) == 1  # history stays
-        loop.tick(e.p)
+        tick.tick(e.p)
         text = e.calls()[-1]["argv"][-1]
         assert "[fm hunter" in text
         assert "before it is merged, round 1" in text
@@ -187,7 +187,7 @@ class TestFreshReview:
         verdict(e, tid, a)
         backlog.update(e.p, tid, blocked="its hunter ended without its findings file")
         fm(e.home, "review", tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "[fm hunter" in e.calls()[-1]["argv"][-1]
 
     def test_fm_review_refuses_an_accepted_task_and_one_with_a_review_running(self):

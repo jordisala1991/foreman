@@ -7,10 +7,12 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, install_fm, version_folder
 
-from fm import health, launcher, loop, proc
+from fm import launcher, proc
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services import launchd
 from fm.services.claude import login, sessions
+from fm.steps.health import checks
 
 
 class TestLogin:
@@ -25,7 +27,7 @@ class TestLogin:
 
     def launch(self):
         backlog.add(self.p, "x", status="ready", criteria="y")
-        loop.tick(self.p)
+        tick.tick(self.p)
         return self.e.calls()[0]["token"]
 
     def set_login(self, logged_in: bool, expires: datetime | None = None) -> None:
@@ -51,7 +53,7 @@ class TestLogin:
         self.set_login(False)
         with mock.patch("fm.proc.run", wraps=proc.run) as run:
             self.launch()
-            health.login_check(self.p)
+            checks.login_check(self.p)
         assert not [c for c in run.call_args_list if c.args[0][0] == "security"]
 
     def test_no_claude_command_gets_the_token(self):
@@ -65,16 +67,16 @@ class TestLogin:
             assert login.ENV not in c.kwargs["env"]
 
     def test_health_is_quiet_while_the_login_works(self):
-        assert health.login_check(self.p, check=lambda c: login.Login(True, datetime.now(UTC) + timedelta(days=30))) == []
+        assert checks.login_check(self.p, check=lambda c: login.Login(True, datetime.now(UTC) + timedelta(days=30))) == []
 
     def test_health_warns_before_the_login_expires(self):
-        f = health.login_check(self.p, check=lambda c: login.Login(True, datetime.now(UTC) + timedelta(days=2)))
+        f = checks.login_check(self.p, check=lambda c: login.Login(True, datetime.now(UTC) + timedelta(days=2)))
         assert [x["key"] for x in f] == ["login-expiring"]
         assert "/login" in f[0]["detail"]
-        assert health.login_check(self.p, check=lambda c: login.Login(True, datetime.now(UTC) + timedelta(days=4))) == []
+        assert checks.login_check(self.p, check=lambda c: login.Login(True, datetime.now(UTC) + timedelta(days=4))) == []
 
     def test_health_says_agents_cannot_start_when_the_login_fails(self):
-        f = health.login_check(self.p, check=lambda c: login.Login(False))
+        f = checks.login_check(self.p, check=lambda c: login.Login(False))
         assert [x["key"] for x in f] == ["login-failed"]
         assert "Agents cannot start until the owner runs /login" in f[0]["detail"]
 

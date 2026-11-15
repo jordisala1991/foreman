@@ -7,8 +7,8 @@ import pytest
 from helpers import Env, fm
 from test_misled import run_as
 
-from fm import loop
 from fm.core.tasks import backlog, questions, subtasks
+from fm.loop import tick
 
 
 def resumes(e: Env, sid: str) -> list[dict]:
@@ -21,10 +21,10 @@ class TestLaunch:
         e = Env()
         P = backlog.add(e.p, "parent", status="triage", criteria="c")
         fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.calls() == []
         fm(e.home, "go", P)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 1
         argv = e.calls()[0]["argv"]
         assert argv[argv.index("-n") + 1] == "TY-1 parent · parent"
@@ -37,16 +37,16 @@ class TestLaunch:
         e = Env()
         P = backlog.add(e.p, "parent", status="backlog", criteria="c")
         fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert (e.task(P)["agent"]["kind"], e.task(P)["status"]) == ("parent", "backlog")
 
     def test_the_parent_agent_takes_no_slot(self):
         e = Env(slots=1)
         P = backlog.add(e.p, "parent", status="backlog", criteria="c")
         s = fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c").strip()
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, s, "ready")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(s)["status"] == "in progress"
         assert len(e.calls()) == 2
 
@@ -60,13 +60,13 @@ class TestNotices:
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--triage", "--criteria", "c").strip()
         self.S2 = fm(self.e.home, "add", "two", "--parent", self.P, "--triage", "--criteria", "c").strip()
         fm(self.e.home, "cancel", self.S0)  # closed before the agent: no notice for the past
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         self.sid = self.e.task(self.P)["agent"]["session"]
         self.e.set_state("ty-1", "done")
 
     def idle_ticks(self, n: int = 2) -> None:
         for _ in range(n):
-            loop.tick(self.e.p)
+            tick.tick(self.e.p)
             self.e.set_state("ty-1", "done")
 
     def test_a_canceled_subtask_is_told_and_nothing_else(self):
@@ -98,7 +98,7 @@ class TestClosing:
         self.P = backlog.add(self.e.p, "parent", status="backlog", criteria="c")
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--triage", "--criteria", "c").strip()
         self.S2 = fm(self.e.home, "add", "two", "--parent", self.P, "--triage", "--criteria", "c").strip()
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
 
     def done(self) -> None:
         run_as(self.e, self.P, "ty-1", "done", "--summary", "s")
@@ -114,7 +114,7 @@ class TestClosing:
         backlog.set_status(self.e.p, self.S2, "canceled")
         self.done()
         assert self.e.task(self.P)["status"] == "done"
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         assert self.e.task(self.P)["agent"]["short"] in self.e.stops()
 
     def test_canceled_when_every_subtask_is(self):
@@ -132,7 +132,7 @@ class TestAuthority:
         self.Q = backlog.add(self.e.p, "other", status="backlog", criteria="c")
         self.S = fm(self.e.home, "add", "s", "--parent", self.P, "--triage", "--criteria", "c").strip()
         self.T = fm(self.e.home, "add", "t", "--parent", self.Q, "--triage", "--criteria", "c").strip()
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
 
     def test_its_own_subtasks_only(self):
         run_as(self.e, self.P, "ty-1", "add", "new", "--parent", self.P, "--triage", "--criteria", "c")
@@ -151,7 +151,7 @@ class TestAuthority:
         for flags in ((), ("--ready",)):
             run_as(self.e, self.P, "ty-1", "add", "new", "--parent", self.P, "--criteria", "c", *flags)
             new = subtasks.of(backlog.tasks(backlog.load(self.e.p)), self.P)[-1]
-            loop.tick(self.e.p)
+            tick.tick(self.e.p)
             assert self.e.task(new["id"])["status"] == "triage"
 
     def test_refused_from_a_planning_agent(self):

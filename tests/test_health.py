@@ -10,12 +10,14 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
-from fm import health, launcher, loop, util
+from fm import launcher, util
 from fm.core.project import registry
 from fm.core.tasks import backlog, questions
+from fm.loop import tick
 from fm.services.claude import login
 from fm.services.delivery import check
 from fm.services.delivery import git as delivery_git
+from fm.steps.health import checks, main_tests, notes
 
 
 class TestHealth:
@@ -29,66 +31,66 @@ class TestHealth:
 
     def test_the_python_note_is_shown_by_health(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"FM_REGISTRY": f"{d}/projects.json"}):
-            assert health.python_note() == []
+            assert notes.python_note() == []
             line = "fm: needs Python 3.12 or newer; the python3 found is 3.9.6 (/usr/bin/python3)"
             registry.python_note_file().write_text(line + "\n")
-            assert health.python_note() == ["! " + line]
+            assert notes.python_note() == ["! " + line]
 
     def test_dead_loop_is_seen_from_outside(self):
-        assert health.loop_dead(self.p)[0]["key"] == "loop-dead"
+        assert checks.loop_dead(self.p)[0]["key"] == "loop-dead"
         util.write_json(self.p.state / "loop.json", {"epoch": time.time(), "time": util.now()})
-        assert health.loop_dead(self.p) == []
+        assert checks.loop_dead(self.p) == []
 
     def test_orphan_worktree_is_filed_once(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
-        health.run(self.p, {})
-        health.run(self.p, {})
+        main_tests.run(self.p, {})
+        main_tests.run(self.p, {})
         t = self.triage()
         assert len(t) == 1
         assert "ghost" in t[0]["title"]
 
     def test_a_finding_that_goes_away_and_returns_is_filed_again_only_once_its_task_closed(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
-        health.run(self.p, {})
+        main_tests.run(self.p, {})
         first = self.triage()[0]["id"]
         backlog.set_status(self.p, first, "done")
-        health.run(self.p, {})  # still there, seen continuously: not again
+        main_tests.run(self.p, {})  # still there, seen continuously: not again
         assert self.triage() == []
         git(self.e.repo, "worktree", "remove", str(self.e.home / "worktrees/ghost"))
-        health.run(self.p, {})
+        main_tests.run(self.p, {})
         git(self.e.repo, "worktree", "add", "-q", str(self.e.home / "worktrees/ghost"), "x")
-        health.run(self.p, {})
+        main_tests.run(self.p, {})
         assert len(self.triage()) == 1
 
     def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
         tid = backlog.add(self.p, "x", status="ready", criteria="y")
         qid = questions.ask(self.p, tid, "a", "A or B?")
         questions.answer(self.p, qid, "B")
-        assert health.answers_undelivered(self.p) == []
+        assert checks.answers_undelivered(self.p) == []
         with backlog.edit(self.p) as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
-        (f,) = health.answers_undelivered(self.p)
+        (f,) = checks.answers_undelivered(self.p)
         assert tid in f["title"]
         assert "«B»" in f["detail"]
         with backlog.edit(self.p) as d:  # an answer made before the stamp existed: its `by` still has the time
             del d["decisions_resolved"][0]["answered_at"]
             d["decisions_resolved"][0]["by"] = "owner (panel), 2020-01-01 00:00:00"
-        assert len(health.answers_undelivered(self.p)) == 1
+        assert len(checks.answers_undelivered(self.p)) == 1
 
     def test_live_worktree_is_not_an_orphan(self):
         backlog.add(self.p, "x", status="ready", criteria="y")
-        loop.tick(self.p)
-        assert health.orphan_worktrees(self.p) == []
+        tick.tick(self.p)
+        assert checks.orphan_worktrees(self.p) == []
 
     def test_failing_tests_on_main(self):
         e = Env(test="false")
-        f = health.main_tests(e.p)
+        f = main_tests.main_tests(e.p)
         assert f[0]["title"] == "Tests fail on main"
         assert json.loads((e.home / "state/ci.json").read_text())["result"] == "fail"
 
     def test_stuck_agent(self):
         tid = backlog.add(self.p, "x", status="ready", criteria="y")
-        loop.tick(self.p)
+        tick.tick(self.p)
         sid = self.e.task(tid)["agent"]["session"]
         t = self.e.tmp / "transcripts/proj"
         t.mkdir(parents=True)
@@ -97,17 +99,17 @@ class TestHealth:
         os.utime(t / f"{sid}.jsonl", (old, old))
         backlog.update(self.p, tid, agent={**self.e.task(tid)["agent"], "started": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old))})
         rows = {sid: {"state": "working"}}
-        assert health.agents(self.p, rows)[0]["title"] == f"{tid}'s agent looks stuck"
+        assert checks.agents(self.p, rows)[0]["title"] == f"{tid}'s agent looks stuck"
 
     def test_loop_step_errors_become_findings(self):
         util.append_jsonl(self.p.state / "errors.jsonl", {"time": util.now(), "step": "queue", "error": "boom"})
-        assert "queue" in health.loop_errors(self.p)[0]["title"]
+        assert "queue" in checks.loop_errors(self.p)[0]["title"]
 
 
 class TestMetrics:
     def test_cost_from_transcripts_counts_each_response_once(self):
-        from fm import metrics
         from fm.core.oversight import costs
+        from fm.steps import metrics
 
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -147,22 +149,22 @@ class TestEvidence:
         stamps = (f"2026-01-01 00:00:{n:02d}" for n in itertools.count(1))
         with mock.patch.object(util, "now", lambda: next(stamps)):
             self.commit(e, "broken")
-            health.run(e.p, {})
+            main_tests.run(e.p, {})
             assert len(self.triage(e)) == 1
             self.commit(e, "other")
-            health.run(e.p, {})
+            main_tests.run(e.p, {})
             assert len(self.triage(e)) == 1
             git(e.repo, "rm", "-q", "broken")
             git(e.repo, "commit", "-qm", "fix")
-            health.run(e.p, {})
+            main_tests.run(e.p, {})
             assert len(self.triage(e)) == 1
             self.commit(e, "broken")
-            health.run(e.p, {})
+            main_tests.run(e.p, {})
         assert len(self.triage(e)) == 2
 
     def test_failing_tests_task_names_commit_step_and_tail(self):
         e = Env(test="echo lint ok; echo boom 1>&2; exit 1")
-        health.run(e.p, {})
+        main_tests.run(e.p, {})
         (i,) = self.triage(e)
         head = delivery_git.git(e.repo, "rev-parse", "main").out.strip()[:12]
         for text in (head, "echo lint ok", "boom"):
@@ -174,9 +176,9 @@ class TestEvidence:
 
     def test_failing_step_is_the_make_target(self):
         out = "lint ok\nFAIL line\nmake[1]: *** [test] Error 1\nmake: *** [check] Error 2\n"
-        assert health.failing_step(out, "make check") == "test"
-        assert health.failing_step("make[1]: *** [Makefile:25: lint] Error 1", "make check") == "lint"
-        assert health.failing_step("boom", "make check") == "make check"
+        assert main_tests.failing_step(out, "make check") == "test"
+        assert main_tests.failing_step("make[1]: *** [Makefile:25: lint] Error 1", "make check") == "lint"
+        assert main_tests.failing_step("boom", "make check") == "make check"
 
     def test_every_finding_has_meaning_evidence_and_a_pending_hypothesis(self):
         e = Env()
@@ -186,13 +188,13 @@ class TestEvidence:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, tid, blocked="its agent stopped: x")
         found = [
-            *health.loop_dead(Env().p),
-            *health.orphan_worktrees(e.p),
-            *health.loop_errors(e.p),
-            *health.agents(e.p, {}),
-            *health.main_tests(Env(test="false").p),
-            *health.login_check(e.p, check=lambda c: login.Login(False)),
-            *health.login_expiring(login.Login(True, datetime.now(UTC) + timedelta(hours=1))),
+            *checks.loop_dead(Env().p),
+            *checks.orphan_worktrees(e.p),
+            *checks.loop_errors(e.p),
+            *checks.agents(e.p, {}),
+            *main_tests.main_tests(Env(test="false").p),
+            *checks.login_check(e.p, check=lambda c: login.Login(False)),
+            *checks.login_expiring(login.Login(True, datetime.now(UTC) + timedelta(hours=1))),
         ]
         assert len(found) >= 7
         for f in found:
@@ -209,13 +211,13 @@ class TestEvidence:
         line = json.dumps({"step": "s", "error": "bad", "time": util.now()}) + "\n"
         git(e.repo, "worktree", "add", "-q", "-b", "x", str(wt), "main")
         errors.write_text(line)
-        health.run(e.p, {})
+        main_tests.run(e.p, {})
         git(e.repo, "worktree", "remove", str(wt))
         errors.write_text("")
-        health.run(e.p, {})
+        main_tests.run(e.p, {})
         git(e.repo, "worktree", "add", "-q", str(wt), "x")
         errors.write_text(line)
-        health.run(e.p, {})
+        main_tests.run(e.p, {})
         assert len(self.triage(e)) == 2  # one orphan, one error: each filed once
         assert sorted(i["source"] for i in self.triage(e)) == ["health:error:s:bad", "health:orphan:ghost"]
 
@@ -237,8 +239,8 @@ class TestVersions:
             (self.p.state / "loop.json").unlink(missing_ok=True)
             if hb is not None:
                 util.write_json(self.p.state / "loop.json", hb)
-            lines = health.versions(self.p)
+            lines = notes.versions(self.p)
             assert lines[0].endswith("installed none")
             assert lines[1].startswith("! fm@fm cannot start the loop and the panel: fm@fm is not installed"), lines
         install_fm(request, version_folder(self.e.tmp / "cache", "ccc"))
-        assert len(health.versions(self.p)) == 1
+        assert len(notes.versions(self.p)) == 1

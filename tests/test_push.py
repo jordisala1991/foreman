@@ -7,8 +7,8 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import loop
 from fm.core.tasks import backlog
+from fm.loop import tick
 
 
 class TestPushes:
@@ -38,11 +38,11 @@ class TestPushes:
     def test_fm_done_on_an_unpushed_branch_is_pushed_and_goes_to_review(self):
         g = self.make(test="true")
         tid = g.work()
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         self.more_commits(g, tid)
         g.deliver(tid)
         assert self.origin_tip(g, tid) != self.local_tip(g, tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.origin_tip(g, tid) == self.local_tip(g, tid)
         assert g.e.task(tid)["status"] == "in review"
         assert not g.e.task(tid).get("blocked")
@@ -51,7 +51,7 @@ class TestPushes:
     def test_a_failing_push_blocks_the_task_with_git_s_error(self):
         g = self.make(test="true")
         tid = g.work()
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         self.more_commits(g, tid)
         g.deliver(tid)
         hook = g.bare / "hooks" / "pre-receive"
@@ -83,16 +83,16 @@ class TestPushes:
 
     def ticks(self, g: GH, times: int) -> None:
         for _ in range(times):
-            loop.tick(g.e.p)
+            tick.tick(g.e.p)
 
     def test_a_push_that_fails_once_with_a_connection_error_is_retried_and_never_blocks(self):
         g = self.make(test="true")
         tid = g.work(push=False)
         self.flaky_push(g, 1)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert not g.e.task(tid).get("blocked")
         assert self.origin_tip(g, tid) == ""
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert not g.e.task(tid).get("blocked")
         assert self.origin_tip(g, tid) == self.local_tip(g, tid)
 
@@ -101,10 +101,10 @@ class TestPushes:
         tid = g.work(push=False)
         g.deliver(tid)
         self.flaky_push(g, 1)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert not g.e.task(tid).get("blocked")
         assert g.e.task(tid)["status"] == "in review"
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.origin_tip(g, tid) == self.local_tip(g, tid)
         assert not g.e.task(tid).get("blocked")
 
@@ -112,12 +112,12 @@ class TestPushes:
         e = Env(test="true")
         git(e.repo, "remote", "add", "origin", str(e.tmp / "never.git"))
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         wt = e.repo.parent / e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# change\n")
         git(wt, "commit", "-qam", "change")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert not (e.tmp / "never.git").exists()
         assert not e.task(tid).get("blocked")
         assert not e.task(tid).get("retry_count")

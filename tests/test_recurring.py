@@ -7,9 +7,11 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import loop, panel_views, schedule, sources, util
+from fm import panel_views, util
 from fm.core.project.config import Project, ProjectError
 from fm.core.tasks import backlog
+from fm.loop import tick
+from fm.steps import schedule, sources
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
 SEEN = "2026-11-15 00:00:00"
@@ -235,7 +237,7 @@ class TestRecurring:
         src.parent.mkdir()
         src.write_text('#!/bin/sh\necho \'{"key": "k", "title": "from a source"}\'\n')
         src.chmod(0o755)
-        with mock.patch("fm.schedule.run", side_effect=OverflowError("boom")):
+        with mock.patch("fm.steps.schedule.run", side_effect=OverflowError("boom")):
             sources.run(self.p)
         assert [i["title"] for i in backlog.tasks(backlog.load(self.p))] == ["from a source"]
         assert [e["step"] for e in util.read_jsonl(self.p.state / "errors.jsonl")] == ["recurring"]
@@ -250,5 +252,5 @@ class TestRecurring:
         self.entries(CLEANUP.replace("every_merges = 2", "every_merges = 1"))
         self.seen("2000-01-01 00:00:00")
         self.merged("one", "2026-11-15 01:00:00")
-        loop.tick(self.p)
+        tick.tick(self.p)
         assert len(self.mine()) == 1

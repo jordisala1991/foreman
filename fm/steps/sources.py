@@ -18,10 +18,11 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from . import proc, schedule, util
-from .core.project.config import Project
-from .core.tasks import backlog, questions
-from .services.delivery import merge
+from .. import proc, util
+from ..core.project.config import Project
+from ..core.tasks import backlog, questions
+from ..services.delivery import merge
+from . import schedule
 from .talk import return_to_agent
 
 

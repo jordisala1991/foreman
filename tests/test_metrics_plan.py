@@ -3,9 +3,10 @@ from unittest import mock
 import pytest
 from helpers import Env
 
-from fm import loop, metrics
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.agents import launch
+from fm.steps import metrics
 
 USD = {"A": 1.0, "B": 2.0, "B1": 2.0, "B2": 3.0, "C": 0.5, "L": 4.0}
 
@@ -96,7 +97,7 @@ class TestRecording:
         e = Env()
         d = backlog.add(e.p, "vague", criteria="c")
         w = backlog.add(e.p, "clear", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert list(e.task(d)["session_kinds"].values()) == ["planning"]
         assert list(e.task(w)["session_kinds"].values()) == ["responsible"]
         launch.launch_reviewer(e.p, e.task(w), "abc123", "hunter")

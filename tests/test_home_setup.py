@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 from helpers import fm
 
-from fm import health
 from fm.core.project import plugin
 from fm.core.project.config import Project
+from fm.steps.health import notes
 
 SHARED_FILES = (plugin.SHARED / "instructions.md", plugin.SHARED / "skills/define-task/SKILL.md")
 
@@ -51,22 +51,22 @@ class TestHomeSetup:
         h = self.home()
         self.init(h)
         p = Project.load(h)
-        assert health.old_links(p) == []
+        assert notes.old_links(p) == []
         (h / ".claude/skills").mkdir(parents=True)
         (h / ".claude/fm.md").write_text("a copy, not a link\n")
-        assert health.old_links(p) == []
+        assert notes.old_links(p) == []
         (h / ".claude/fm.md").unlink()
         (h / ".claude/fm.md").symlink_to(SHARED_FILES[0])
         (h / ".claude/skills/define-task").symlink_to(SHARED_FILES[1].parent)
-        assert health.old_links(p) == [
+        assert notes.old_links(p) == [
             "! the home still has the old link .claude/fm.md (FN-143): the plugin replaces it; delete it",
             "! the home still has the old link .claude/skills/define-task (FN-143): the plugin replaces it; delete it",
         ]
         (h / "CLAUDE.md").write_text("# x\n\n@.claude/fm.md\n")
-        assert health.old_links(p)[0].endswith("delete it, and remove the line @.claude/fm.md from CLAUDE.md")
+        assert notes.old_links(p)[0].endswith("delete it, and remove the line @.claude/fm.md from CLAUDE.md")
         assert ".claude/skills/define-task (FN-143)" in fm(h, "health")
         (h / "CLAUDE.md").write_bytes(b"\xff\xfe\x00bad")
-        assert len(health.old_links(p)) == 2
+        assert len(notes.old_links(p)) == 2
 
     def test_health_names_old_links_in_a_repo(self) -> None:
         h = self.home()
@@ -74,11 +74,11 @@ class TestHomeSetup:
         (h / "fm.toml").write_text(f'[project]\nrepo = "{code}"\n')
         p = Project.load(h)
         code.mkdir()
-        assert health.old_links(p) == []
+        assert notes.old_links(p) == []
         (code / ".claude/skills").mkdir(parents=True)
         (code / ".claude/fm.md").write_text("a copy, not a link\n")
         (code / ".claude/skills/define-task").mkdir()
-        assert health.old_links(p) == []
+        assert notes.old_links(p) == []
         (code / ".claude/fm.md").unlink()
         (code / ".claude/skills/define-task").rmdir()
         (code / ".claude/fm.md").symlink_to(SHARED_FILES[0])
@@ -86,7 +86,7 @@ class TestHomeSetup:
         (code / "CLAUDE.md").write_text("@.claude/fm.md\n")
         (h / ".claude/skills").mkdir(parents=True)
         (h / ".claude/fm.md").symlink_to(SHARED_FILES[0])
-        assert health.old_links(p) == [
+        assert notes.old_links(p) == [
             "! the home still has the old link .claude/fm.md (FN-143): the plugin replaces it; delete it",
             f"! {code} still has the old link .claude/fm.md (FN-143): the plugin replaces it; delete it",
             f"! {code} still has the old link .claude/skills/define-task (FN-143): the plugin replaces it; delete it",

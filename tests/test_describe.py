@@ -4,9 +4,9 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import loop
 from fm.core.review import describe
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.agents import brief
 from fm.services.delivery import pulls
 
@@ -74,7 +74,7 @@ class TestOnGitHub:
 
     def run_ticks(self, n=2):
         for _ in range(n):
-            loop.tick(self.g.e.p)
+            tick.tick(self.g.e.p)
 
     def test_github_pr_body_is_the_report(self):
         tid = self.deliver()
@@ -142,7 +142,7 @@ class TestOnGitHub:
 class TestTemplate:
     def launched(self, e: Env) -> tuple[str, str]:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         return tid, brief.report_file(e.p, tid).read_text()
 
     def test_a_launched_work_agent_finds_the_template_at_its_report(self):

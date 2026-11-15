@@ -5,13 +5,13 @@ from helpers import Env
 from test_github import GH
 from test_review_rules import commit, head, launched, take_note
 
-from fm import loop
 from fm.core.tasks import backlog
+from fm.loop import tick
 
 
 def deliver(e: Env, name: str = "app.py") -> str:
     tid = backlog.add(e.p, "x", status="ready", criteria="y")
-    loop.tick(e.p)
+    tick.tick(e.p)
     commit(e.task(tid)["worktree"], name, "# change\n")
     backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
     e.review(tid)
@@ -30,7 +30,7 @@ class TestFailing:
     def test_failing_tests_go_back_with_the_output(self):
         e = Env(test="echo BOOM-LINE; exit 1")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["failures"]) == ("in progress", 1)
         assert "tests fail [tests]" in i["check"]["reasons"]  # kept for the panel while it is back
@@ -40,7 +40,7 @@ class TestFailing:
     def test_only_the_last_lines_of_the_output_go_back(self):
         e = Env(test="for n in $(seq 1 30); do echo L$n; done; exit 1")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         take_note(e, tid)
         note = e.calls()[-1]["argv"][-1]
         assert "L30" in note
@@ -49,7 +49,7 @@ class TestFailing:
     def test_the_fix_gets_a_review_of_only_that_fix(self):
         e = Env(test="echo BOOM-LINE; exit 1")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         old = head(e, tid)
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# fix\n")
@@ -58,7 +58,7 @@ class TestFailing:
         assert launched(e, tid)[-1].endswith("rule: failing tests or CI"), launched(e, tid)
         assert f"git diff {old} {head(e, tid)}" in e.calls()[-1]["argv"][-1]
         e.verdict(tid, 1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["failures"]) == ("in progress", 1)  # open findings go back: not a failure
 
@@ -66,11 +66,11 @@ class TestFailing:
         e = Env(test="echo BOOM-LINE; exit 1")
         tid = deliver(e)
         for n in (1, 2):
-            loop.tick(e.p)
+            tick.tick(e.p)
             assert (e.task(tid)["status"], e.task(tid)["failures"]) == ("in progress", n)
             fix(e, tid)
         before = len(e.calls())
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["failures"]) == ("in review", 2)
         assert "tests fail [tests]" in i["check"]["reasons"]
@@ -84,14 +84,14 @@ class TestFailing:
         g.set(ci="fail")
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["failure_streak"] == 1
         take_note(g.e, tid)
         commit(g.e.task(tid)["worktree"], "app.py", "# fix\n")
         g.set(ci="pass")
         backlog.set_status(g.e.p, tid, "in review")
         g.e.review(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         i = g.e.task(tid)
         assert (i["status"], i["failure_streak"], i["failures"]) == ("in review", 0, 1)
 
@@ -101,7 +101,7 @@ class TestFailing:
         g.set(ci="fail", failed=[["lint", "https://ci/lint"], ["unit", "https://ci/unit"]])
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["status"] == "in progress"
         take_note(g.e, tid)
         note = g.e.calls()[-1]["argv"][-1]

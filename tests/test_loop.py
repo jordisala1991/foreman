@@ -7,9 +7,10 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
-from fm import launcher, loop, proc, providers, util
+from fm import launcher, proc, providers, util
 from fm.core.tasks import backlog, questions
-from fm.services.delivery import check, merge
+from fm.loop import queue, tick
+from fm.services.delivery import check, merge, pulls
 from fm.services.delivery.git import DeliveryError
 
 
@@ -24,7 +25,7 @@ class TestLaunch:
         b = backlog.add(self.p, "clear one", status="ready", criteria="tests pass")
         c = backlog.add(self.p, "another", status="ready", criteria="x")
         t = backlog.add(self.p, "a finding", status="triage")
-        loop.tick(self.p)
+        tick.tick(self.p)
         assert self.e.task(b)["status"] == "in progress"
         assert self.e.task(c)["status"] == "in progress"  # ready before backlog, both slots used
         assert self.e.task(a)["status"] == "backlog"
@@ -45,7 +46,7 @@ class TestLaunch:
         e = Env()
         tid = backlog.add(e.p, "old title", status="ready", criteria="c")
         fm(e.home, "edit", tid, "--title", "new title")
-        loop.tick(e.p)
+        tick.tick(e.p)
         argv = e.calls()[0]["argv"]
         assert argv[argv.index("-n") + 1] == "TY-1 responsible · new title"
 
@@ -60,7 +61,7 @@ class TestLaunch:
     def run_all_kinds(self, e: Env) -> dict[str, tuple[str, str]]:
         backlog.add(e.p, "vague idea", criteria="c")
         w = backlog.add(e.p, "clear one", status="ready", criteria="x")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, w, "in review", report={"summary": "s"})
         e.hunt_then_review(w)
         return self.flags(e)
@@ -90,7 +91,7 @@ class TestLaunch:
 
     def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self):
         a = backlog.add(self.p, "vague idea", criteria="c")
-        loop.tick(self.p)
+        tick.tick(self.p)
         assert self.e.task(a)["status"] == "refining"
         assert os.path.realpath(self.e.calls()[0]["cwd"]) == str(self.e.repo)
         assert "[fm planning TY-1]" in self.e.calls()[0]["argv"][-1]
@@ -100,7 +101,7 @@ class TestLaunch:
         backlog.add(self.p, "x", status="ready", criteria="y")
         (self.p.state).mkdir(parents=True, exist_ok=True)
         (self.p.state / "paused").write_text("now")
-        loop.tick(self.p)
+        tick.tick(self.p)
         assert self.e.calls() == []
 
 
@@ -108,17 +109,17 @@ class TestAnswers:
     def test_the_answer_goes_back_to_the_agent_that_asked(self):
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         qid = questions.ask(e.p, tid, tid.lower(), "A or B?")
         questions.answer(e.p, qid, "B")
-        loop.tick(e.p)  # its session is still working: wait
+        tick.tick(e.p)  # its session is still working: wait
         assert len(e.calls()) == 1
         e.set_state(tid.lower(), "blocked")
         e.set_status(tid.lower(), "active")
-        loop.tick(e.p)  # nor while blocked: resuming it would start a copy
+        tick.tick(e.p)  # nor while blocked: resuming it would start a copy
         assert len(e.calls()) == 1
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         resume = e.calls()[-1]["argv"]
         assert "--resume" in resume
         assert resume[resume.index("--resume") + 1] == e.task(tid)["agent"]["session"]
@@ -132,12 +133,12 @@ class TestAnswers:
     def delivered_to_idle(self, state, status):
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         qid = questions.ask(e.p, tid, tid.lower(), "A or B?")
         questions.answer(e.p, qid, "B")
         e.set_state(tid.lower(), state)
         e.set_status(tid.lower(), status) if status else e.drop_pid(tid.lower())  # no status: its process is gone too
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "--resume" in e.calls()[-1]["argv"]
         assert questions.undelivered(backlog.load(e.p)) == []
 
@@ -146,15 +147,15 @@ class TestStopped:
     def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self):
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "not finished" in e.calls()[-1]["argv"][-1]
         assert e.task(tid)["nudges"] == 1
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")  # the nudge woke it; it ended its turn again
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "stopped without finishing" in e.task(tid)["blocked"]
         assert len([c for c in e.calls() if "-mechanic" not in str(c["argv"])]) == 2  # health files the block: a mechanic follows
 
@@ -162,7 +163,7 @@ class TestStopped:
 class TestQueue:
     def deliver(self, e: Env, lines: int = 1, open_findings: int = 0) -> str:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         wt = e.task(tid)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
             f.write("".join(f"# {n}\n" for n in range(lines)))
@@ -174,12 +175,12 @@ class TestQueue:
     def test_manual_waits_for_the_owner_who_accepts(self):
         e = Env(test="true")
         tid = self.deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"], i["check"]["tests"]) == ("in review", "low", "pass")
         merge.accept(e.p, tid)
         assert e.task(tid)["status"] == "in review"  # accepting merges nothing
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "done"
         assert "Merge TY-1" in git(e.repo, "log", "--oneline", "-1")
         assert "fm/ty-1" not in git(e.repo, "branch")
@@ -187,7 +188,7 @@ class TestQueue:
     def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self, request):
         e = Env(test="true")
         ids = [self.deliver(e) for _ in range(3)]
-        loop.tick(e.p)
+        tick.tick(e.p)
         merge.accept(e.p, ids[0])
         (e.repo / "other.py").write_text("x = 1\n")
         git(e.repo, "add", "other.py")
@@ -197,9 +198,9 @@ class TestQueue:
         check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
         request.addfinalizer(functools.partial(setattr, check, "check", real))
         try:
-            loop.tick(e.p)
+            tick.tick(e.p)
             assert (e.task(ids[0])["status"], checks) == ("done", [ids[1]])
-            loop.tick(e.p)
+            tick.tick(e.p)
             assert checks == [ids[1], ids[2]]
         finally:
             check.check = real
@@ -211,16 +212,16 @@ class TestQueue:
         git(e.repo, "add", "other.py")
         git(e.repo, "commit", "-qm", "main moves")
         checks: list[str] = []
-        real, deliver = check.check, loop.pulls.deliver
+        real, deliver = check.check, pulls.deliver
         check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
 
         def boom(*a):
             raise RuntimeError("boom")
 
-        loop.pulls.deliver = boom
+        pulls.deliver = boom
         request.addfinalizer(functools.partial(setattr, check, "check", real))
-        request.addfinalizer(functools.partial(setattr, loop.pulls, "deliver", deliver))
-        loop.tick(e.p)
+        request.addfinalizer(functools.partial(setattr, pulls, "deliver", deliver))
+        tick.tick(e.p)
         assert len(checks) == 1
         assert len(ids) == 3
 
@@ -233,7 +234,7 @@ class TestQueue:
         ready = backlog.add(e.p, "later", status="ready", criteria="z")
         util.BACKGROUND_WAIT_S = 0.2
         request.addfinalizer(functools.partial(setattr, util, "BACKGROUND_WAIT_S", 20))
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(ready)["status"] == "in progress"  # launched while the check still runs
         assert (e.task(a).get("check") or {}).get("main") != git(e.repo, "rev-parse", "main").strip()
         for t in list(util.BACKGROUND.values()):
@@ -257,7 +258,7 @@ class TestQueue:
         util.BACKGROUND_WAIT_S = 0.05
         request.addfinalizer(functools.partial(setattr, util, "BACKGROUND_WAIT_S", 20))
         for _ in range(3):
-            loop.tick(e.p)
+            tick.tick(e.p)
             for t in list(util.BACKGROUND.values()):
                 t.join()
         assert "net down" in e.task(a)["blocked"]
@@ -265,8 +266,8 @@ class TestQueue:
     def test_transient_failures_of_the_queue_step_that_are_not_in_a_row_do_not_block(self, request):
         e = Env(test="true")
         a = self.deliver(e)
-        loop.tick(e.p)  # checked: up to date, no check runs from now on
-        real = loop.pulls.prepare
+        tick.tick(e.p)  # checked: up to date, no check runs from now on
+        real = pulls.prepare
         calls: list[int] = []
 
         def flaky(*args):
@@ -275,10 +276,10 @@ class TestQueue:
                 raise providers.Transient("gh 502")
             return real(*args)
 
-        loop.pulls.prepare = flaky
-        request.addfinalizer(functools.partial(setattr, loop.pulls, "prepare", real))
+        pulls.prepare = flaky
+        request.addfinalizer(functools.partial(setattr, pulls, "prepare", real))
         for _ in range(4):
-            loop.tick(e.p)
+            tick.tick(e.p)
         assert (len(calls), e.task(a).get("blocked", "")) == (4, "")
 
     def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self, request):
@@ -290,7 +291,7 @@ class TestQueue:
         real = check.tests_at
         check.tests_at = boom
         request.addfinalizer(functools.partial(setattr, check, "tests_at", real))
-        loop.tick(e.p)
+        tick.tick(e.p)
         for t in list(util.BACKGROUND.values()):
             t.join()
         assert "git timed out" in util.read_jsonl(e.p.state / "errors.jsonl")[-1]["error"]
@@ -298,36 +299,36 @@ class TestQueue:
     def test_a_task_canceled_while_the_queue_runs_is_not_checked(self):
         e = Env(test="true")
         a, b = self.deliver(e), self.deliver(e)
-        real = loop.queue_one
+        real = queue.queue_one
 
         def cancel_b_first(p, i, main, rows):
             if i["id"] == a:
                 merge.close(p, b, "canceled", "x")
             real(p, i, main, rows)
 
-        loop.queue_one = cancel_b_first
+        queue.queue_one = cancel_b_first
         try:
-            loop.tick(e.p)
+            tick.tick(e.p)
         finally:
-            loop.queue_one = real
+            queue.queue_one = real
         assert not e.task(b).get("check")
 
     def test_autonomy_low_merges_low_risk_alone(self):
         e = Env(test="true", autonomy="low")
         tid = self.deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "done"
 
     def test_a_big_diff_alone_does_not_raise_risk(self):
         e = Env(test="true", autonomy="low")
         big = self.deliver(e, lines=400)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert (e.task(big)["status"], e.task(big)["check"]["risk"]) == ("done", "low")
 
     def test_failing_tests_are_high(self):
         e = Env(test="false", autonomy="medium")
         tid = self.deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         c = e.task(tid)["check"]
         assert (e.task(tid)["status"], c["risk"]) == ("in progress", "high")  # returned to its agent (FN-67)
         assert any("tests fail" in r for r in c["reasons"])
@@ -335,9 +336,9 @@ class TestQueue:
     def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y", detail="DETAIL-OF-THE-TASK")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
-        loop.tick(e.p)
+        tick.tick(e.p)
         call = e.calls()[-1]
         assert call["argv"][call["argv"].index("-n") + 1] == "TY-1 hunter · x"
         hunter = call["argv"][-1]
@@ -345,10 +346,10 @@ class TestQueue:
         assert call["cwd"] == e.task(tid)["worktree"]
         hunter_file = e.task(tid)["hunter"]["file"]
         assert hunter_file in hunter
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 2  # no reviewer while the hunter has no file
         e.hunter_done(tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         call = e.calls()[-1]
         assert call["argv"][call["argv"].index("-n") + 1] == "TY-1 review · x"
         reviewer = call["argv"][-1]
@@ -360,26 +361,26 @@ class TestQueue:
         assert "a finding leaves only with a cited refutation" in reviewer  # no cited refutation: it stays in To fix
         assert call["cwd"] == e.task(tid)["worktree"]
         assert "check" not in e.task(tid)  # no check before the verdict
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 3  # not launched twice
 
     def test_a_finished_hunter_and_a_reviewer_with_a_verdict_are_stopped(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.hunt_then_review(tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
         assert e.state_of(e.task(tid)["reviewer"]["name"]) == "working"
         e.verdict(tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.state_of(e.task(tid)["reviewer"]["name"]) == "stopped"
 
     def test_cancelling_a_task_in_review_stops_every_session_of_it(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.hunt_then_review(tid)
         i = e.task(tid)
@@ -392,9 +393,9 @@ class TestQueue:
         tid = self.deliver(e)
         e.review(tid)
         i = e.task(tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         merge.accept(e.p, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "done"
         for role in ("agent", "hunter", "reviewer"):
             assert e.state_of(i[role]["name"]) == "stopped", role
@@ -402,12 +403,12 @@ class TestQueue:
     def test_a_blocked_task_still_has_its_finished_hunter_stopped(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
-        loop.tick(e.p)
+        tick.tick(e.p)
         e.hunter_done(tid)
         backlog.update(e.p, tid, blocked="why")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
 
     def test_a_failing_stop_does_not_stop_the_cancel(self):
@@ -415,7 +416,7 @@ class TestQueue:
 
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         with mock.patch("fm.services.claude.sessions.stop", side_effect=proc.ProcError("timed out")):
             merge.close(e.p, tid, "canceled", "no")
         assert e.task(tid)["status"] == "canceled"
@@ -423,7 +424,7 @@ class TestQueue:
     def test_cancel_stops_a_session_the_listing_does_not_show(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: its agent still runs
         merge.close(e.p, tid, "canceled", "no")
         assert e.stops() == [e.task(tid)["agent"]["short"]]
@@ -431,19 +432,19 @@ class TestQueue:
     def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
-        loop.tick(e.p)
+        tick.tick(e.p)
         e.hunter_done(tid)
         (e.bin / "agents.json").write_text("[]")  # gone, or an unreadable listing
         for _ in range(3):
-            loop.tick(e.p)
+            tick.tick(e.p)
         assert e.stops() == []
 
     def test_a_cancel_stops_each_session_once(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         name = e.task(tid)["agent"]["name"]
         merge.close(e.p, tid, "canceled", "no")
         assert e.stops() == [e.task(tid)["agent"]["short"]]  # once, though its id is also in `sessions`
@@ -452,22 +453,22 @@ class TestQueue:
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
-        loop.tick(e.p)
+        tick.tick(e.p)
         e.set_state(e.task(tid)["hunter"]["name"], "done")
         backlog.update(e.p, tid, hunter={**e.task(tid)["hunter"], "started": "2000-01-01 00:00:00"})
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "hunter ended without its findings file" in e.task(tid)["blocked"]
         assert len(e.calls()) == 2
 
     def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self):
         e = Env(test="true", autonomy="medium")
         tid = self.deliver(e, open_findings=1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "in progress"
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "leaves 1 open" in e.calls()[-1]["argv"][-1]
         wt = e.task(tid)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
@@ -476,7 +477,7 @@ class TestQueue:
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)  # round 2 still open: to the owner, whatever the autonomy
         assert "Round: 2" in e.calls()[-1]["argv"][-1]
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"]) == ("in review", "low")
         assert any("open after round 2" in r for r in i["check"]["reasons"])
@@ -484,17 +485,17 @@ class TestQueue:
     def test_a_branch_that_conflicts_after_main_moved_goes_back_to_its_agent_once_accepted(self):
         e = Env(test="true")
         tid = self.deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         (e.repo / "app.py").write_text("changed on main\n")
         git(e.repo, "commit", "-qam", "main moves")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "in review"  # nobody wants it merged yet: it waits
         merge.accept(e.p, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["conflicts"]) == ("in progress", 1)
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "conflicts" in e.calls()[-1]["argv"][-1]
 
     def test_reject_sends_the_note_back_to_the_agent(self):
@@ -503,12 +504,12 @@ class TestQueue:
         fm(e.home, "reject", tid, "name it better")
         assert (e.task(tid)["status"], e.task(tid)["rework"]) == ("in progress", 1)
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "name it better" in e.calls()[-1]["argv"][-1]
 
     def fix_and_resubmit(self, e: Env, tid: str) -> None:
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         wt = e.task(tid)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
             f.write("# fixed\n")
@@ -518,16 +519,16 @@ class TestQueue:
     def test_open_findings_send_the_review_back(self):
         e = Env(test="true")
         tid = self.deliver(e, open_findings=1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "in progress"
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert f"reviews/{tid}.md" in e.calls()[-1]["argv"][-1]
 
     def test_clean_review_sends_nothing(self):
         e = Env(test="true")
         tid = self.deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert i["status"] == "in review"
         assert "check" in i
@@ -537,11 +538,11 @@ class TestQueue:
     def test_refuted_without_commit_is_not_returned_twice(self):
         e = Env(test="true")
         tid = self.deliver(e, open_findings=1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review")
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"]) == ("in review", "low")
 
@@ -562,12 +563,12 @@ class TestVersion:
     def test_a_new_install_stops_the_loop_before_its_tick(self, request):
         install_fm(request, self.b)
         with pytest.raises(SystemExit) as e:
-            loop.forever([str(self.p.home)], once=True)
+            tick.forever([str(self.p.home)], once=True)
         assert str(e.value) == "fm: fm@fm bbb is installed now; this runs aaa"
         assert not (self.p.state / "loop.json").exists()
 
     def test_the_same_install_ticks_and_the_heartbeat_names_the_version(self, request):
         install_fm(request, self.a)
-        loop.forever([str(self.p.home)], once=True)
+        tick.forever([str(self.p.home)], once=True)
         hb = util.read_json(self.p.state / "loop.json", {})
         assert hb["version"] == launcher.ROOT.name

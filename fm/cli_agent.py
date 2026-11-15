@@ -5,11 +5,12 @@ import os
 import sys
 from pathlib import Path
 
-from . import parents, util
+from . import util
 from .cli_common import home, mine
 from .core.oversight import diagnosis
 from .core.review import reviews
 from .core.tasks import backlog, questions
+from .steps import parents
 
 
 def cmd_ask(a: argparse.Namespace) -> None:

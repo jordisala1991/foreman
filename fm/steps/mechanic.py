@@ -2,14 +2,14 @@
 
 from typing import Any
 
-from . import proc, util
-from .core.oversight import diagnosis
-from .core.project.config import Project
-from .core.tasks import backlog
-from .services.agents.brief import brief
-from .services.agents.launch import record_session
-from .services.agents.running import diagnosing, idle_s, running
-from .services.claude import sessions
+from .. import proc, util
+from ..core.oversight import diagnosis
+from ..core.project.config import Project
+from ..core.tasks import backlog
+from ..services.agents.brief import brief
+from ..services.agents.launch import record_session
+from ..services.agents.running import diagnosing, idle_s, running
+from ..services.claude import sessions
 from .talk import NUDGE_IDLE_S
 
 TIMEOUT_S = 1800

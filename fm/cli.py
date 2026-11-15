@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import health, homesetup, loop, metrics, providers, schedule, util
+from . import homesetup, providers, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -19,11 +19,14 @@ from .core.project import config, registry
 from .core.project.config import Project
 from .core.project.registry import register
 from .core.tasks import backlog, blockers, editing, questions, subtasks
+from .loop import tick
 from .services import lock
 from .services.agents.running import review_running
 from .services.claude import sessions
 from .services.delivery import merge
 from .services.delivery.git import DeliveryError
+from .steps import metrics, schedule, talk
+from .steps.health import main_tests, notes
 
 
 def cmd_init(a: argparse.Namespace) -> None:
@@ -113,7 +116,7 @@ def cmd_reject(a: argparse.Namespace) -> None:
     p = home(a)
     if backlog.get(backlog.load(p), a.id)["status"] != "in review":
         sys.exit(f"fm: {a.id} is not in review")
-    loop.return_to_agent(p, a.id, "rejection", a.note)
+    talk.return_to_agent(p, a.id, "rejection", a.note)
 
 
 def cmd_review(a: argparse.Namespace) -> None:
@@ -172,21 +175,21 @@ def cmd_pause(a: argparse.Namespace) -> None:
 
 
 def cmd_loop(a: argparse.Namespace) -> None:
-    loop.forever([a.home] if a.home else None, once=a.once)
+    tick.forever([a.home] if a.home else None, once=a.once)
 
 
 def cmd_health(a: argparse.Namespace) -> None:
-    for line in [*health.python_note(), *health.shared_folders(registry.loaded())]:
+    for line in [*notes.python_note(), *notes.shared_folders(registry.loaded())]:
         print(line)
     p = home(a)
-    if note := health.repos_note(p):
+    if note := notes.repos_note(p):
         print(note)
     for r in schedule.rows(p):
         print(schedule.line(r))
-    for line in [*health.versions(p), *health.old_links(p)]:
+    for line in [*notes.versions(p), *notes.old_links(p)]:
         print(line)
     rows = sessions.listing(p)
-    for f in health.findings(p, rows, outside=True):
+    for f in main_tests.findings(p, rows, outside=True):
         print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
 
 
