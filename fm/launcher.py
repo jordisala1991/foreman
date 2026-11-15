@@ -45,7 +45,10 @@ def installed() -> Installed:
     if _get(data, "version") != 2:
         raise LauncherError(f"{f} has format version {_get(data, 'version')}, fm reads 2: update fm")
     entries: Any = _get(_get(data, "plugins"), PLUGIN) or []
-    users = [u for u in entries if _get(u, "scope") == "user"]
+    try:
+        users = [u for u in entries if u["scope"] == "user"]
+    except (TypeError, KeyError):
+        raise LauncherError(f"{f}: unexpected format for {PLUGIN} (not a list of installs with a scope)") from None
     if not users:
         raise LauncherError(f"{PLUGIN} is not installed in Claude Code: run claude plugin install {PLUGIN}")
     if len(users) > 1:

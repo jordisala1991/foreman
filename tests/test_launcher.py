@@ -12,7 +12,7 @@ from unittest import mock
 
 from helpers import install_fm, version_folder
 
-from fm import launchd, launcher
+from fm import launchd, launcher, util
 
 
 class Launcher(unittest.TestCase):
@@ -50,6 +50,9 @@ class Launcher(unittest.TestCase):
         self.fails("no installPath or version")
         install_fm(self, {**self.a, "installPath": str(self.cache / "gone")})
         self.fails(f"its folder {self.cache / 'gone'} is missing")
+        for odd in (5, self.a, ["aaa"], [{"version": "aaa"}]):  # not a list of installs, each with its scope
+            util.write_json(launcher.record(), {"version": 2, "plugins": {"fm@fm": odd}})
+            self.fails("unexpected format for fm@fm")
 
     def test_only_a_pinned_job_goes_stale(self) -> None:
         install_fm(self, self.b)
