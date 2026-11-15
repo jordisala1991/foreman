@@ -10,13 +10,14 @@ from . import util
 
 TEXTS = ("name", "title", "goal", "criteria", "detail", "model", "effort", "type", "every")
 SETTINGS = (*TEXTS, "every_merges", "triage")
+MAX_SPAN = timedelta(days=36500)  # so that a due date always fits in a date
 UNITS = {"h": timedelta(hours=1), "d": timedelta(days=1), "w": timedelta(weeks=1)}
 
 
 def interval(text: object) -> timedelta | None:
-    """`12h`, `7d` or `2w` as a duration; None for anything else."""
-    m = re.fullmatch(r"([1-9]\d*)([hdw])", text) if isinstance(text, str) else None
-    return int(m[1]) * UNITS[m[2]] if m else None
+    """`12h`, `7d` or `2w` as a duration; None for anything else, or for more than 100 years."""
+    m = re.fullmatch(r"([1-9]\d{0,5})([hdw])", text) if isinstance(text, str) else None
+    return int(m[1]) * UNITS[m[2]] if m and int(m[1]) * UNITS[m[2]] <= MAX_SPAN else None
 
 
 def parse(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:

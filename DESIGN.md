@@ -368,7 +368,7 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 ## Recurring tasks
 
 `[[recurring]]` tables in `fm.toml` (strict: `fm/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `fm add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
-- Trigger: `every_merges = N` (N merged tasks) or `every = "12h" | "7d" | "2w"` (plain durations: h, d, w; no cron).
+- Trigger: `every_merges = N` (N merged tasks) or `every = "12h" | "7d" | "2w"` (plain durations: h, d, w, at most 100 years; no cron).
 - Each tick (the `sources` step, which calls `fm/schedule.py` over the pure rules of `fm/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
 - Anchor: the count or period starts when the entry's last task closed (done, canceled or duplicate), else when fm first saw the entry (`state/recurring.json`, the one store). A time trigger that fell due while fm was off files once. Merges are `done` tasks not filed by an entry and not parents; their closing time is that of the `→ done` event.
 - `fm list`, `fm show` and the panel's data mark an entry's task (`recurring`: the name); `fm health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it.

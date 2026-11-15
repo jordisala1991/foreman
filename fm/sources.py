@@ -14,6 +14,7 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
 
 import json
 import os
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -24,13 +25,22 @@ from .talk import return_to_agent
 
 def run(p: Project) -> list[str]:
     folder = p.home / "sources"
-    filed: list[str] = schedule.run(p)  # the recurring entries that fell due (DESIGN.md `## Recurring tasks`)
+    filed = _recurring(p)
     if not folder.is_dir():
         return filed
     for exe in sorted(folder.iterdir()):
         if exe.is_file() and os.access(exe, os.X_OK):
             filed += _poll(p, exe)
     return filed
+
+
+def _recurring(p: Project) -> list[str]:
+    """The recurring entries that fell due (schedule.py); a failure there is logged and does not stop the plug-ins."""
+    try:
+        return schedule.run(p)
+    except Exception as e:
+        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": "recurring", "error": repr(e), "trace": traceback.format_exc()[-2000:]})
+        return []
 
 
 def _poll(p: Project, exe: Path) -> list[str]:

@@ -8,7 +8,7 @@ from unittest import mock
 from helpers import Env, fm
 from test_subtasks import owner
 
-from fm import backlog, loop, panel_views, schedule, util
+from fm import backlog, loop, panel_views, schedule, sources, util
 from fm.config import Project, ProjectError
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
@@ -69,7 +69,7 @@ class Recurring(unittest.TestCase):
         self.refused(head + "every_merges = 1\nbogus = 1\n", '"cleanup"', "bogus")
         self.refused(head + 'every_merges = 1\nevery = "1d"\n', '"cleanup"', "every_merges", "every")
         self.refused(head, '"cleanup"', "every_merges or every")
-        for bad in ("7", "1m", "0d", "d", "-1h", ""):
+        for bad in ("7", "1m", "0d", "d", "-1h", "", "600000w", "999999600000w"):
             with self.subTest(every=bad):
                 self.refused(head + f'every = "{bad}"\n', '"cleanup"', "every:")
         for bad in ("0", '"10"', "true", "1.5"):
@@ -229,9 +229,20 @@ class Recurring(unittest.TestCase):
         self.seen("2026-01-01 00:00:00")
         self.entries("")
         self.assertEqual(schedule.run(self.p, datetime(2026, 11, 15)), [])
+        self.assertFalse((self.p.state / "recurring.json").exists())  # the project is back to seeing nothing
         self.entries(daily)
         self.assertEqual(schedule.run(self.p, datetime(2026, 11, 15)), [])
         self.assertEqual(util.read_json(self.p.state / "recurring.json", {}), {"cleanup": SEEN})
+
+    def test_a_failing_recurring_job_does_not_stop_the_plug_in_sources(self) -> None:
+        src = self.e.home / "sources" / "src"
+        src.parent.mkdir()
+        src.write_text('#!/bin/sh\necho \'{"key": "k", "title": "from a source"}\'\n')
+        src.chmod(0o755)
+        with mock.patch("fm.schedule.run", side_effect=OverflowError("boom")):
+            sources.run(self.p)
+        self.assertEqual([i["title"] for i in backlog.tasks(backlog.load(self.p))], ["from a source"])
+        self.assertEqual([e["step"] for e in util.read_jsonl(self.p.state / "errors.jsonl")], ["recurring"])
 
     def test_no_recurring_sees_nothing(self) -> None:
         self.assertEqual(schedule.run(self.p, T0), [])
