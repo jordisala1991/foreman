@@ -36,7 +36,7 @@ class Seen:
     verdict_tip: str
     hunter_tip: str
     reviewer_tip: str
-    free: bool  # a slot is free and the project is not paused
+    free: bool  # a slot is free
     hunter_file: bool  # the hunter's findings file exists
     hunter_working: bool
     hunter_ended: bool

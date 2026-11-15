@@ -139,6 +139,7 @@
   "loop_last": "Última pasada {when}",
   "loop_never": "Nunca ha pasado",
   "versions": "Bucle {loop} · panel {panel}",
+  "in_flight": "Tareas aún en marcha o en la cola de integración: {n}",
   "paused_since": "Lanzar en pausa desde {when}",
   "pause": "Pausar lanzamientos",
   "resume": "Reanudar lanzamientos",

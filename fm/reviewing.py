@@ -23,7 +23,7 @@ def seen_of(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> d
         verdict_tip=tip,
         hunter_tip=h.get("tip", ""),
         reviewer_tip=r.get("tip", ""),
-        free=running(backlog.load(p)) < int(p.get("agents", "slots")) and not (p.state / "paused").exists(),
+        free=running(backlog.load(p)) < int(p.get("agents", "slots")),
         hunter_file=Path(h.get("file", "")).exists(),
         hunter_working=working(h, rows),
         hunter_ended=ended(h, rows),
