@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, backlog, blockers, delivery, editing, guard, health, lock, loop, metrics, providers, sessions, subtasks, util
+from . import agents, backlog, blockers, delivery, editing, guard, health, homesetup, lock, loop, metrics, providers, sessions, subtasks, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -18,20 +18,10 @@ from .config import Project, register
 
 def cmd_init(a: argparse.Namespace) -> None:
     h = Path(a.home or ".").resolve()
-    h.mkdir(parents=True, exist_ok=True)
-    if not (h / "fm.toml").exists():
-        (h / "fm.toml").write_text(
-            f'[project]\nname = "{h.name}"\nprefix = "{a.prefix}"\nrepo = "{a.repo}"\nmain = "main"\n\n'
-            '[agents]\nslots = 2\nmodel = "sonnet"\neffort = "medium"\n'
-            'planning_model = "sonnet"\nplanning_effort = "high"\nreview_model = "sonnet"\nreview_effort = "high"\n\n'
-            '[merge]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nstrategy = "squash"  # squash | merge\ntest = ""\n',
-            encoding="utf-8",
-        )
-    p = Project.load(h)
-    if not p.backlog_file.exists():
-        util.write_json(p.backlog_file, backlog.empty())
+    for line in homesetup.init(h, a.prefix, a.repo):
+        print(line)
     register(h)
-    print(f"project {p.name} at {h} (registered)")
+    print(f"project {Project.load(h).name} at {h} (registered)")
 
 
 def cmd_add(a: argparse.Namespace) -> None:
@@ -245,7 +235,7 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
-    fm_bin = str(Path(__file__).resolve().parent.parent / "bin/fm")
+    fm_bin = str(homesetup.FM_BIN)
     jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
     for job, args in jobs.items():
         text = loop.launchd_plist(fm_bin, job, args)
