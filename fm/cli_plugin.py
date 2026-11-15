@@ -18,13 +18,17 @@ def cmd_session_context(a: argparse.Namespace) -> None:
     try:
         projects, broken = config.load_all()
         out = plugin.session_context(sys.stdin.read(), os.environ, [*projects, *broken])
-        if out and (env_file := os.environ.get("CLAUDE_ENV_FILE")):
-            with Path(env_file).open("a", encoding="utf-8") as f:
-                f.write(f'export PATH="{BIN}:$PATH"\n')
     except Exception:  # see the docstring: the hook stays silent
         return
-    if out:
-        print(out)
+    if not out:
+        return
+    print(out)
+    try:
+        if env_file := os.environ.get("CLAUDE_ENV_FILE"):
+            with Path(env_file).open("a", encoding="utf-8") as f:
+                f.write(f'export PATH="{BIN}:$PATH"\n')
+    except OSError:  # the instructions are out; fm stays reachable by its full path
+        pass
 
 
 def cmd_project(a: argparse.Namespace) -> None:

@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from helpers import ROOT
+from helpers import ROOT, fm
 
 from fm import backlog, cli, cli_plugin, config, plugin, sessions, util
 from fm.config import Project
@@ -111,6 +111,17 @@ class PluginTest(unittest.TestCase):
         env_file.unlink()
         self.assertEqual(self.hook(self.root, env_file), "")
         self.assertFalse(env_file.exists())
+
+    def test_a_failing_path_write_still_gives_the_instructions(self) -> None:
+        self.alpha(f'repo = "{self.repo}"')
+        out = self.hook(self.repo, self.root / "no/such/dir/env.sh")
+        self.assertIn("# fm: the project alpha", json.loads(out)["hookSpecificOutput"]["additionalContext"])
+
+    def test_a_new_home_adds_no_rules_until_the_owner_writes_them(self) -> None:
+        self.home.mkdir(parents=True)
+        fm(self.home, "init", "--prefix", "AL", "--repo", str(self.repo))
+        self.assertTrue((self.home / "instructions.md").is_file())
+        self.assertNotIn("Rules of this project", plugin.instructions(Project.load(self.home)))
 
     def test_project_prints_the_values(self) -> None:
         a, b = self.root / "a", self.root / "b"

@@ -62,6 +62,8 @@ class HomeSetup(unittest.TestCase):
         (h / "CLAUDE.md").write_text("# x\n\n@.claude/fm.md\n")
         self.assertTrue(health.old_links(p)[0].endswith("delete it, and remove the line @.claude/fm.md from CLAUDE.md"))
         self.assertIn(".claude/skills/define-task (FN-143)", fm(h, "health"))
+        (h / "CLAUDE.md").write_bytes(b"\xff\xfe\x00bad")
+        self.assertEqual(len(health.old_links(p)), 2)
 
     def test_shared_files_are_generic(self) -> None:
         for f in SHARED_FILES:
