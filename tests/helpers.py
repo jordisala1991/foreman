@@ -104,12 +104,12 @@ def git(repo: Path, *args: str) -> str:
 def fm(home: Path, *args: str) -> str:
     """Run an `fm` command in-process with its output captured and returned, so the test run stays quiet.
     If the command fails, its output is printed with the error: a failure is never buried."""
-    from fm import cli
+    from fm.ui.cli import main
 
     out = io.StringIO()
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-            cli.main(["--home", str(home), *args])
+            main.main(["--home", str(home), *args])
     except BaseException:
         print(out.getvalue(), file=sys.stderr)
         raise

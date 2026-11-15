@@ -3,9 +3,9 @@
 import argparse
 import json
 
-from .cli_common import home
-from .core.rules import decide
-from .core.tasks import backlog, blockers, questions, recurring, subtasks, tasktypes
+from ...core.rules import decide
+from ...core.tasks import backlog, blockers, questions, recurring, subtasks, tasktypes
+from .common import home
 
 
 def cmd_list(a: argparse.Namespace) -> None:

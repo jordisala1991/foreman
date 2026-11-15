@@ -6,36 +6,12 @@ exact = false  # layers carry most rules; an unused depends_on is not an error
 forbid_circular_dependencies = true
 source_roots = ["."]
 root_module = "ignore"
-exclude = ["tests", "panel", "demo", ".venv", "**/__pycache__"]
+exclude = ["tests", "panel/**", "demo", ".venv", "**/__pycache__"]
 layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
 
-# ui: the owner's and the agents' entry points; they call the loop and everything below.
+# ui: the owner's and the agents' entry points; they call the loop and everything below. One module: cli and panel import each other.
 [[modules]]
-path = "fm.cli"
-layer = "ui"
-[[modules]]
-path = "fm.cli_agent"
-layer = "ui"
-[[modules]]
-path = "fm.cli_common"
-layer = "ui"
-[[modules]]
-path = "fm.cli_parser"
-layer = "ui"
-[[modules]]
-path = "fm.cli_plugin"
-layer = "ui"
-[[modules]]
-path = "fm.cli_view"
-layer = "ui"
-[[modules]]
-path = "fm.panel"
-layer = "ui"
-[[modules]]
-path = "fm.panel_actions"
-layer = "ui"
-[[modules]]
-path = "fm.panel_views"
+path = "fm.ui"
 layer = "ui"
 
 # loop: the process that ticks; does the I/O and calls the core.
@@ -122,9 +98,6 @@ layer = "core"
 depends_on = ["fm.core.project", "fm.core.tasks", "fm.core.review", "fm.util"]
 [[modules]]
 path = "fm.util"
-layer = "core"
-[[modules]]
-path = "fm.homesetup"
 layer = "core"
 # launcher: which fm version runs; stdlib only, as the launchd jobs run it alone (python3 -c).
 [[modules]]

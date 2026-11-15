@@ -1,10 +1,10 @@
-"""fm's command line: the arguments of each command (the handlers are in cli.py, which sets them per command)."""
+"""fm's command line: the arguments of each command (the handlers are in main.py, which sets them per command)."""
 
 import argparse
 from collections.abc import Callable
 
-from .core.project import config
-from .core.tasks import backlog, tasktypes
+from ...core.project import config
+from ...core.tasks import backlog, tasktypes
 
 Command = Callable[[str, str], argparse.ArgumentParser]
 

@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import panel_actions
 from fm.core.tasks import backlog
 from fm.services.agents import brief, launch
+from fm.ui.panel import actions
 
 READY = ("ready",)
 
@@ -91,7 +91,7 @@ class TestPlan:
         assert i["status"] == "triage"
 
     def test_panel_filed_without_criteria_stays_in_triage(self):
-        new = panel_actions.add(self.p, '{"title": "p"}')["id"]
+        new = actions.add(self.p, '{"title": "p"}')["id"]
         assert self.e.task(new)["status"] == "triage"
 
     def test_go_refuses_without_criteria(self):

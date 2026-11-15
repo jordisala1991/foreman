@@ -1,0 +1,86 @@
+"""The operator's commands: loop, health, metrics, guard, lock, panel, launchd."""
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+from ...core.oversight import guard
+from ...core.project import registry
+from ...loop import tick
+from ...services import lock
+from ...services.claude import sessions
+from ...steps import metrics, schedule
+from ...steps.health import main_tests, notes
+from .common import home
+
+
+def cmd_loop(a: argparse.Namespace) -> None:
+    tick.forever([a.home] if a.home else None, once=a.once)
+
+
+def cmd_health(a: argparse.Namespace) -> None:
+    for line in [*notes.python_note(), *notes.shared_folders(registry.loaded())]:
+        print(line)
+    p = home(a)
+    if note := notes.repos_note(p):
+        print(note)
+    for r in schedule.rows(p):
+        print(schedule.line(r))
+    for line in [*notes.versions(p), *notes.old_links(p)]:
+        print(line)
+    rows = sessions.listing(p)
+    for f in main_tests.findings(p, rows, outside=True):
+        print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
+
+
+def cmd_metrics(a: argparse.Namespace) -> None:
+    rows = metrics.per_task(home(a))
+    print(metrics.text(rows))
+
+
+def cmd_guard(a: argparse.Namespace) -> None:
+    out = guard.hook(sys.stdin.read())
+    if out:
+        print(out)
+
+
+def cmd_lock(a: argparse.Namespace) -> None:
+    p = home(a)
+    res = lock.declared(p.cfg)
+    if a.name not in res:
+        sys.exit(f"fm: unknown resource {a.name!r} (declared: {', '.join(res) or 'none'}; [resources.NAME] in fm.toml)")
+    r = res[a.name]
+    if a.action == "status":
+        s = r.status()
+        for slot, h in s["held"].items():
+            print(f"{slot}: {h['who']} ({h['task'] or '-'}): {h['what']} since {h['since']}")
+        for t in s["queue"]:
+            print(f"queued: {t['who']} ({t['task'] or '-'}): {t['what']} since {t['since']}")
+        if not s["held"] and not s["queue"]:
+            print("free")
+        return
+    if not a.command:
+        sys.exit('fm: fm lock NAME run "what" command…')
+    who = os.environ.get("FM_AGENT") or "owner"
+    sys.exit(r.run(who, a.what, a.command, os.environ.get("FM_TASK", ""), say=lambda m: print(m, file=sys.stderr)))
+
+
+def cmd_panel(a: argparse.Namespace) -> None:
+    from ..panel import server
+
+    server.serve(a.port, a.host)
+
+
+def cmd_launchd(a: argparse.Namespace) -> None:
+    from ...services import launchd
+
+    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
+    for job, args in jobs.items():
+        text = launchd.plist(job, args)
+        if a.dir:
+            out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
+            out.write_text(text, encoding="utf-8")
+            print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
+        else:
+            print(f"<!-- dev.fm.{job}.plist -->\n{text}")

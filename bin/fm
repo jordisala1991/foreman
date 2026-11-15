@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fm: foreman-next's one command (see fm/cli.py)."""
+"""fm: foreman-next's one command (see fm/ui/cli/main.py)."""
 import os
 import re
 import sys
@@ -62,6 +62,6 @@ if _min and sys.version_info[:2] < _min:
     _ensure_python(_min)
 
 sys.path.insert(0, str(ROOT))
-from fm.cli import main
+from fm.ui.cli.main import main
 
 main()

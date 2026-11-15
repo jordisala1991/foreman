@@ -505,13 +505,12 @@ Hexagonal-lite: a small core, ports only where something external varies, everyt
 nor full DDD; what is shared is a vocabulary: *task* (a unit of work in the backlog), *review round* (one review of a tip), *risk* (low,
 medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act). The whole vocabulary is in `GLOSSARY.md`; it changes only by the owner's decision.
 
-### Layers and packages (target; moves in FN-160)
+### Layers and packages
 
 Layer = folder: the package says the layer, its sub-packages (areas) say which part of fm. Outside in; a module imports
 its own layer and the ones below, never above. Three leaf files stay at `fm/`'s root, for everyone to import: `proc.py`
 (layer proc), `util.py` and `launcher.py` (layer core; `launcher` imports nothing of fm, as it runs alone under
-`python3 -c`). Until FN-160's moves land the files stay flat in `fm/` (`tach.toml` lists each one): place new code by
-the questions below, in the flat module that will move there.
+`python3 -c`).
 
 | Layer | Package | Areas → modules | Responsibility |
 |---|---|---|---|
@@ -532,7 +531,7 @@ inline comments, the description, evidence) → `rules` (`risk` on `project`; `d
 
 ### tach rules
 
-`tach.toml` after the moves (the settings above `layers` stay; `layers` is unchanged). A package path gives all its files
+`tach.toml` (the settings above `layers` stay; `layers` is unchanged). A package path gives all its files
 its layer. A module with `depends_on` may import, in its own layer, only what it lists (lower layers stay open): that
 fixes the order of the core areas, so no cycle can form among them, as tach does not see a cycle inside one layer
 otherwise. `ui` is one module on purpose: `cli` and `panel` import each other (`cmd_panel`; the panel's actions run
