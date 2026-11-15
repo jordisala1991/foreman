@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents_running, delivery, health, homesetup, lock, loop, metrics, providers, schedule, sessions, util
+from . import health, homesetup, loop, metrics, providers, schedule, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -19,6 +19,11 @@ from .core.project import config, registry
 from .core.project.config import Project
 from .core.project.registry import register
 from .core.tasks import backlog, blockers, editing, questions, subtasks
+from .services import lock
+from .services.agents.running import review_running
+from .services.claude import sessions
+from .services.delivery import merge
+from .services.delivery.git import DeliveryError
 
 
 def cmd_init(a: argparse.Namespace) -> None:
@@ -98,9 +103,9 @@ def cmd_allow(a: argparse.Namespace, allowed: bool = True) -> None:
 def cmd_accept(a: argparse.Namespace) -> None:
     p = home(a)
     try:
-        delivery.accept(p, a.id)
+        merge.accept(p, a.id)
         print(f"{a.id} accepted: the loop merges it next")
-    except (delivery.DeliveryError, providers.ConfigError) as e:
+    except (DeliveryError, providers.ConfigError) as e:
         sys.exit(f"fm: {e}")
 
 
@@ -119,7 +124,7 @@ def cmd_review(a: argparse.Namespace) -> None:
             sys.exit(f"fm: {a.id} is not in review")
         if i.get("accepted"):
             sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
-        if agents_running.review_running(i):
+        if review_running(i):
             sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
         for k in ("review", "hunter", "reviewer", "check", "review_for"):
             i.pop(k, None)
@@ -140,8 +145,8 @@ def cmd_go(a: argparse.Namespace) -> None:
 
 def cmd_cancel(a: argparse.Namespace) -> None:
     try:
-        delivery.close(home(a), a.id, "canceled", a.why or "by the owner")
-    except delivery.DeliveryError as e:
+        merge.close(home(a), a.id, "canceled", a.why or "by the owner")
+    except DeliveryError as e:
         sys.exit(f"fm: {e}")
 
 
@@ -224,7 +229,7 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
-    from . import launchd
+    from .services import launchd
 
     jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
     for job, args in jobs.items():

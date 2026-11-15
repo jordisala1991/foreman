@@ -7,8 +7,9 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import delivery, loop, util
+from fm import loop, util
 from fm.core.tasks import backlog
+from fm.services.delivery import git as delivery_git
 
 
 def commit(wt: str, name: str, text: str, msg: str = "change") -> None:
@@ -75,23 +76,23 @@ class TestMergeOf:
         main_moves(e)
         git(r, "checkout", "-q", "b")
         git(r, "merge", "-q", "--no-edit", "main")
-        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("clean", "")
+        assert delivery_git.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("clean", "")
         tip = git(r, "rev-parse", "HEAD").strip()
         git(r, "checkout", "-q", "main")
         main_conflicts(e)
         git(r, "checkout", "-q", "b")
         git(r, "merge", "-q", "--no-edit", "-X", "ours", "main")
         auto = auto_tree(r, tip)
-        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("resolved", auto)
+        assert delivery_git.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("resolved", auto)
         tip = git(r, "rev-parse", "HEAD").strip()
         commit(str(r), "app.py", "# plain\n")
-        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("", "")
+        assert delivery_git.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("", "")
         tip = git(r, "rev-parse", "HEAD").strip()
         git(r, "checkout", "-qb", "c", "main")
         commit(str(r), "c.py", "c = 1\n")
         git(r, "checkout", "-q", "b")
         git(r, "merge", "-q", "--no-edit", "c")
-        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("", "")
+        assert delivery_git.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("", "")
 
 
 class TestRules:

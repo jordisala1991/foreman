@@ -6,10 +6,11 @@ import re
 import statistics
 from typing import Any
 
-from . import lock, util
+from . import util
 from .core.oversight import costs
 from .core.project.config import Project
 from .core.tasks import backlog
+from .services import lock
 
 
 def _minutes(a: str | None, b: str | None) -> float | None:

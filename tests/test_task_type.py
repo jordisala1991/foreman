@@ -10,8 +10,9 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import agents, cli_parser, panel_views
+from fm import cli_parser, panel_views
 from fm.core.tasks import backlog, tasktypes
+from fm.services.agents import brief
 
 KINDS = ("responsible", "planning", "reviewer", "hunter")
 BUG = ("reproduce the bug with a test that fails", "name its cause in the report")
@@ -86,7 +87,7 @@ class TestAgentsInstructions:
         self.tid = backlog.add(self.e.p, "t", criteria="a")
 
     def brief(self, kind: str, **extra: str) -> str:
-        return agents.brief(self.e.p, {**self.e.task(self.tid), **extra}, kind, {"round": 1})
+        return brief.brief(self.e.p, {**self.e.task(self.tid), **extra}, kind, {"round": 1})
 
     @pytest.mark.parametrize(("t", "words"), (("bug", BUG), ("mechanical", MECHANICAL), ("definition", DEFINITION)))
     def test_each_type_has_its_paragraph_for_every_agent_of_the_task(self, t, words):
@@ -103,8 +104,8 @@ class TestAgentsInstructions:
             assert plain == self.brief(kind, type="change")
             assert not [w for w in every if w in plain]
             with tempfile.TemporaryDirectory() as tmp:
-                src = (agents.BRIEFS / f"{kind}.md").read_text(encoding="utf-8")
+                src = (brief.BRIEFS / f"{kind}.md").read_text(encoding="utf-8")
                 assert "$type_section" in src
                 (Path(tmp) / f"{kind}.md").write_text(src.replace("$type_section", ""), encoding="utf-8")
-                with mock.patch.object(agents, "BRIEFS", Path(tmp)):
+                with mock.patch.object(brief, "BRIEFS", Path(tmp)):
                     assert plain == self.brief(kind)

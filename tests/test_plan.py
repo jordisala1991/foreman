@@ -4,8 +4,9 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import agents, panel_actions
+from fm import panel_actions
 from fm.core.tasks import backlog
+from fm.services.agents import brief, launch
 
 READY = ("ready",)
 
@@ -56,9 +57,9 @@ class TestPlan:
 
     def test_work_brief_with_and_without_plan(self):
         with_plan = {"id": "TY-1", "title": "t", "plan_file": "/x/plans/TY-1.md"}
-        text = agents.brief(self.p, with_plan, "responsible")
+        text = brief.brief(self.p, with_plan, "responsible")
         assert "/x/plans/TY-1.md" in text
-        without = agents.brief(self.p, {"id": "TY-2", "title": "t"}, "responsible")
+        without = brief.brief(self.p, {"id": "TY-2", "title": "t"}, "responsible")
         assert "/plans/" not in without
 
     def test_plan_and_no_plan_together_fail(self):
@@ -77,7 +78,7 @@ class TestPlan:
         self.ready("--no-plan", "trivial after all")
         i = self.e.task(self.tid)
         assert "plan_file" not in i
-        assert str(self.plan) not in agents.brief(self.p, i, "responsible")
+        assert str(self.plan) not in brief.brief(self.p, i, "responsible")
 
     def test_fm_add_with_criteria_goes_to_planning(self):
         fm(self.e.home, "add", "t", "--criteria", "c", "--ready")
@@ -111,8 +112,8 @@ class TestReviewerPlan:
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, tid, status="in review", worktree=str(e.repo), **keys)
-        agents.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
-        agents.launch_reviewer(e.p, e.task(tid), "abc123")
+        launch.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
+        launch.launch_reviewer(e.p, e.task(tid), "abc123")
         return e, e.calls()[-1]["argv"][-1]
 
     def test_reviewer_gets_the_registered_plan_file(self):

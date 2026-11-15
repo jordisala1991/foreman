@@ -8,8 +8,9 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm import delivery, loop
+from fm import loop
 from fm.core.tasks import backlog, subtasks
+from fm.services.delivery import merge
 
 
 def count(e: Env) -> int:
@@ -74,7 +75,7 @@ class TestShowing:
         e = Env()
         a = backlog.add(e.p, "a", status="triage")
         s = fm(e.home, "add", "s", "--parent", a).strip()
-        delivery.close(e.p, a, "done", "x")
+        merge.close(e.p, a, "done", "x")
         line = fm(e.home, "list").rstrip("\n")
         assert line == f"{s:8} {'triage':12} {'change':10} {'':14} s"
 
@@ -122,7 +123,7 @@ class TestClosing:
         return self.e.task(tid)["status"]
 
     def test_parent_done_when_every_subtask_is_closed_and_one_is_done(self):
-        delivery.close(self.e.p, self.S1, "done", "x")
+        merge.close(self.e.p, self.S1, "done", "x")
         assert self.status(self.P) == "triage"
         fm(self.e.home, "cancel", self.S2)
         assert self.status(self.P) == "done"
@@ -140,7 +141,7 @@ class TestClosing:
         backlog.set_status(e.p, s, "in review", report={"summary": "s", "confused": ""})
         e.review(s, 0)
         loop.tick(e.p)
-        delivery.accept(e.p, s)
+        merge.accept(e.p, s)
         loop.tick(e.p)
         assert (e.task(s)["status"], e.task(P)["status"]) == ("done", "done")
 
@@ -152,7 +153,7 @@ class TestClosing:
 
     def test_cancel_of_a_parent_cancels_its_open_subtasks(self):
         S3 = fm(self.e.home, "add", "three", "--parent", self.P, "--criteria", "c").strip()
-        delivery.close(self.e.p, S3, "done", "x")
+        merge.close(self.e.p, S3, "done", "x")
         fm(self.e.home, "cancel", self.P)
         assert [self.status(i) for i in (self.S1, self.S2, S3, self.P)] == ["canceled", "canceled", "done", "canceled"]
 
@@ -177,6 +178,6 @@ class TestRace:
         def merged(p, i):  # the loop merges the subtask while the cascade closes it
             backlog.set_status(p, S, "done")
 
-        with mock.patch.object(delivery, "stop_all", side_effect=merged):
-            delivery.close(e.p, P, "canceled", "x")
+        with mock.patch.object(merge, "stop_all", side_effect=merged):
+            merge.close(e.p, P, "canceled", "x")
         assert (e.task(S)["status"], e.task(P)["status"]) == ("done", "canceled")

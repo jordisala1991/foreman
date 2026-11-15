@@ -18,9 +18,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from . import delivery, proc, schedule, util
+from . import proc, schedule, util
 from .core.project.config import Project
 from .core.tasks import backlog, questions
+from .services.delivery import merge
 from .talk import return_to_agent
 
 
@@ -128,8 +129,8 @@ def apply(p: Project, source: str, s: dict[str, Any]) -> None:
         if action == "reject":
             return_to_agent(p, tid, "rejection", text)
         else:
-            delivery.accept(p, tid, by=source)
+            merge.accept(p, tid, by=source)
     elif action == "done":
-        delivery.close(p, tid, "done", text or f"merged outside fm ({source})")
+        merge.close(p, tid, "done", text or f"merged outside fm ({source})")
     else:
-        delivery.close(p, tid, "canceled", text or f"by {source}")
+        merge.close(p, tid, "canceled", text or f"by {source}")

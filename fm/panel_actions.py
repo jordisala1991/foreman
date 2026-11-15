@@ -9,10 +9,12 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from . import cli, delivery, providers
+from . import cli, providers
 from .core.project.config import Project
 from .core.tasks import backlog
 from .panel_views import Obj, project
+from .services.delivery import merge
+from .services.delivery.git import DeliveryError
 
 Query = dict[str, list[str]]
 OK: Obj = {"ok": True}
@@ -70,8 +72,8 @@ def permission(allowed: bool) -> Callable[[Project, str, str, Query], Obj]:
 
 def accept(p: Project, tid: str, text: str, q: Query) -> Obj:
     try:
-        return {"accepted": delivery.accept(p, tid, by="owner (panel)")}
-    except (delivery.DeliveryError, providers.ConfigError) as e:
+        return {"accepted": merge.accept(p, tid, by="owner (panel)")}
+    except (DeliveryError, providers.ConfigError) as e:
         raise Refused(str(e)) from None
 
 

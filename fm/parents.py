@@ -4,18 +4,21 @@ already told), and closes only by its own `fm done` after the owner's yes."""
 
 from typing import Any
 
-from . import agents, sessions, util
+from . import util
 from .core.project.config import Project
 from .core.tasks import backlog, blockers, questions, subtasks
+from .services.agents.brief import agent_name, brief
+from .services.agents.launch import record_session
+from .services.claude import sessions
 
 
 def launch(p: Project, i: dict[str, Any]) -> None:
     tid = i["id"]
-    name = agents.agent_name(p, tid, "parent")
+    name = agent_name(p, tid, "parent")
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
     try:
         title = util.session_title(tid, "parent", i["title"])
-        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, title), agents.brief(p, i, "parent"), p.repo)
+        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, title), brief(p, i, "parent"), p.repo)
     except sessions.SessionError as e:
         backlog.update(p, tid, blocked=f"could not launch its agent: {e}")
         backlog.event(p, tid, f"launch failed: {e}")
@@ -28,7 +31,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
             it["agent"] = agent
             it["notified"] = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]
             if sid:
-                agents.record_session(it, sid, "parent")
+                record_session(it, sid, "parent")
     if not still:  # the owner cancelled or changed it while the session started
         sessions.stop(p, short)
         backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")

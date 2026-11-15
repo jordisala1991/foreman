@@ -9,10 +9,11 @@ import textwrap
 import pytest
 from helpers import Env, fm, git
 
-from fm import cli, delivery, loop, providers, util
+from fm import cli, loop, providers, util
 from fm.core.tasks import backlog
 from fm.providers import registry
 from fm.providers.github import provider, types
+from fm.services.delivery import merge
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -340,7 +341,7 @@ class TestPulls:
         tid = g.work()
         g.deliver(tid)
         loop.tick(g.e.p)
-        delivery.accept(g.e.p, tid)
+        merge.accept(g.e.p, tid)
         return g, tid
 
     def test_the_configured_merge_type_is_used(self):

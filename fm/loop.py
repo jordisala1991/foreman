@@ -24,15 +24,18 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import delivery, health, launcher, mechanic, mergecheck, parents, providers, pulls, release, sessions, sources, util
-from .agents import fill_sessions, launch
-from .agents_running import running
+from . import health, launcher, mechanic, parents, providers, release, sources, util
 from .core.project.config import Project
 from .core.project.registry import registered
 from .core.rules import decide
 from .core.tasks import backlog, blockers, subtasks
 from .providers import registry
 from .reviewing import apply_review, seen_of, sweep_scratch, working
+from .services.agents.launch import fill_sessions, launch
+from .services.agents.running import running
+from .services.claude import sessions
+from .services.delivery import check, git, merge, mergecheck, pulls
+from .services.delivery.git import DeliveryError, MergeConflict
 from .talk import deliver_answers, return_to_agent, watch_agents
 
 PRIORITY = {p: n for n, p in enumerate(backlog.PRIORITIES)}
@@ -87,8 +90,8 @@ def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
     acc: dict[str, Any] = i.get("accepted") or {}
     try:
         if gate_merge(p, i):
-            delivery.merge_accepted(p, i["id"])
-    except delivery.MergeConflict:
+            merge.merge_accepted(p, i["id"])
+    except MergeConflict:
         return_to_agent(p, i["id"], "conflict", decide.conflict_note(main), by=acc.get("by", ""))
 
 
@@ -99,8 +102,8 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
     for first in (True, False):
         i = backlog.get(backlog.load(p), tid)
         c: dict[str, Any] = i.get("check") or {}
-        head, main_head = (delivery.git(p.repo, "rev-parse", r).out.strip() for r in (i["branch"], p.get("project", "main")))
-        as_today = not p.get("merge", "test") or delivery.conflicts(p, i["branch"])
+        head, main_head = (git.git(p.repo, "rev-parse", r).out.strip() for r in (i["branch"], p.get("project", "main")))
+        as_today = not p.get("merge", "test") or git.conflicts(p, i["branch"])
         step = decide.merge_gate(c, head, main_head, int(i.get("failure_streak") or 0), as_today)
         if step != "check" or not first:
             break
@@ -158,8 +161,8 @@ def run_pulls(p: Project) -> None:
 
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
     """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
-    head = delivery.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
-    main_head = delivery.git(p.repo, "rev-parse", main, check=False).out.strip()
+    head = git.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
+    main_head = git.git(p.repo, "rev-parse", main, check=False).out.strip()
     step = decide.review_step(seen_of(p, i, head, rows), i.get("review") or {}, MAX_ROUNDS)
     if step.do != "go":  # no verdict on this tip yet (a review first, or the last one holds), or its findings go back
         apply_review(p, i, head, step)
@@ -201,11 +204,11 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
     pulls.deliver(p, i, c)
     if action == "merge":
         try:
-            delivery.accept(p, i["id"], by=by)
+            merge.accept(p, i["id"], by=by)
             backlog.update(p, i["id"], resolving="")
             if gate_merge(p, backlog.get(backlog.load(p), i["id"])):
-                delivery.merge_accepted(p, i["id"])
-        except delivery.DeliveryError as e:
+                merge.merge_accepted(p, i["id"])
+        except DeliveryError as e:
             backlog.event(p, i["id"], f"automatic merge failed: {e}")
     elif i.get("resolving"):
         backlog.update(p, i["id"], resolving="")
@@ -214,7 +217,7 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
 
 def check_guarded(p: Project, tid: str, ci: str | None) -> None:
     """The check, in its thread: its own retry count (the tick's belongs to the queue step), 3 Transient in a row block."""
-    guarded(p, tid, "check it", lambda: delivery.check(p, tid, ci), "check_retry")
+    guarded(p, tid, "check it", lambda: check.check(p, tid, ci), "check_retry")
 
 
 def sort_key(i: dict[str, Any]) -> tuple[int, int, int]:

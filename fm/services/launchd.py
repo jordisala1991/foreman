@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from . import launcher, proc
+from .. import launcher, proc
 
 
 def program() -> tuple[str, ...]:

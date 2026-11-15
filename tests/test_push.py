@@ -65,7 +65,7 @@ class TestPushes:
         """Patches the push so its first `failures` calls fail with `error`; returns the list of push calls."""
         from unittest import mock
 
-        from fm import pulls
+        from fm.services.delivery import pulls
 
         real, calls = pulls.proc.run, []
 

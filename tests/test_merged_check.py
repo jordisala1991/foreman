@@ -11,8 +11,10 @@ from helpers import Env, fm, git
 from test_failing import fix
 from test_review_rules import commit, events, take_note
 
-from fm import delivery, loop, mergecheck
+from fm import loop
 from fm.core.tasks import backlog
+from fm.services.delivery import check, merge, mergecheck
+from fm.services.delivery.git import DeliveryError
 
 TOGETHER_FAIL = "test ! -e a.py -o ! -e b.py"
 
@@ -48,7 +50,7 @@ class TestMerged:
     def test_passes_alone_and_merged_merges(self):
         e = self.env("true")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         before = self.main(e)
         loop.tick(e.p)
         i = e.task(tid)
@@ -61,8 +63,8 @@ class TestMerged:
         assert self.runs() == 2  # one per branch, alone: nothing is about to merge yet
         assert "merged_with" not in e.task(a)["check"]
         assert "merged_with" not in e.task(b)["check"]
-        delivery.accept(e.p, a)
-        delivery.accept(e.p, b)
+        merge.accept(e.p, a)
+        merge.accept(e.p, b)
         loop.tick(e.p)
         assert e.task(a)["status"] == "done"
         i = e.task(b)
@@ -91,7 +93,7 @@ class TestMerged:
         mergecheck.merged_check(e.p, tid)
         assert self.runs() == 2
         commit(str(e.repo), "other.py", "o\n")
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         moved = self.main(e)
         loop.tick(e.p)
         assert self.runs() == 3
@@ -102,7 +104,7 @@ class TestMerged:
         e = self.env("true")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
         mergecheck.merged_check(e.p, tid)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         runs = self.runs()
         loop.tick(e.p)
         assert (e.task(tid)["status"], self.runs()) == ("done", runs)
@@ -114,8 +116,8 @@ class TestMerged:
         backlog.set_status(e.p, b, "in review")
         e.review(b)
         loop.tick(e.p)
-        delivery.accept(e.p, a)
-        delivery.accept(e.p, b)
+        merge.accept(e.p, a)
+        merge.accept(e.p, b)
         runs = self.runs()
         loop.tick(e.p)
         assert e.task(a)["status"] == "done"
@@ -127,7 +129,7 @@ class TestMerged:
     def test_without_a_test_command_it_merges_as_today(self):
         e = self.env("")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         loop.tick(e.p)
         i = e.task(tid)
         assert i["status"] == "done"
@@ -136,18 +138,18 @@ class TestMerged:
     def test_third_merged_failure_waits_for_the_owner(self):
         e = self.env()
         a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
-        delivery.accept(e.p, a)
+        merge.accept(e.p, a)
         loop.tick(e.p)
         assert e.task(a)["status"] == "done"
         for n in (1, 2):
-            delivery.accept(e.p, b)
+            merge.accept(e.p, b)
             loop.tick(e.p)
             i = e.task(b)
             assert (i["status"], i["failures"], i["failure_streak"]) == ("in progress", n, n)
             fix(e, b)
             loop.tick(e.p)  # its branch alone passes: the row goes on
             assert e.task(b)["failure_streak"] == n
-        delivery.accept(e.p, b)
+        merge.accept(e.p, b)
         before = len(e.calls())
         loop.tick(e.p)
         i = e.task(b)
@@ -158,14 +160,14 @@ class TestMerged:
 
     def test_a_git_failure_at_the_merge_is_not_a_test_failure(self):
         e = self.env("true")
-        with pytest.raises(delivery.DeliveryError):
-            delivery.tests_at(e.p, self.main(e), "x", merge="no-such-commit")
+        with pytest.raises(DeliveryError):
+            check.tests_at(e.p, self.main(e), "x", merge="no-such-commit")
 
     def test_a_failed_worktree_add_in_the_merged_check_raises(self):
         e = self.env("true")
-        with pytest.raises(delivery.DeliveryError):
-            delivery.tests_at(e.p, "no-such-commit", "x", merge=self.main(e))
-        assert delivery.tests_at(e.p, "no-such-commit", "x")[0] == "fail"  # without merge: as before
+        with pytest.raises(DeliveryError):
+            check.tests_at(e.p, "no-such-commit", "x", merge=self.main(e))
+        assert check.tests_at(e.p, "no-such-commit", "x")[0] == "fail"  # without merge: as before
 
     def test_show_says_what_the_check_ran_on(self):
         e = self.env("true")

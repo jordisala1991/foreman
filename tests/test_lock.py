@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from fm import lock, util
+from fm import util
+from fm.services import lock
+from fm.services.agents import brief
 
 FM = str(Path(__file__).resolve().parent.parent / "bin/fm")
 
@@ -82,12 +84,11 @@ class TestLock:
         assert r.stdout.strip() == "free"
 
     def test_the_brief_names_the_resources(self):
-        from fm import agents
         from fm.core.project.config import Project
         from fm.core.tasks import backlog
 
         p = Project.load(self.e.home)
         tid = backlog.add(p, "x", status="ready", criteria="y")
-        text = agents.brief(p, backlog.get(backlog.load(p), tid), "responsible")
+        text = brief.brief(p, backlog.get(backlog.load(p), tid), "responsible")
         assert "`gpu`, `sim` (2 slots)" in text
         assert "fm lock NAME run" in text

@@ -10,9 +10,12 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
-from fm import delivery, health, launcher, login, loop, util
+from fm import health, launcher, loop, util
 from fm.core.project import registry
 from fm.core.tasks import backlog, questions
+from fm.services.claude import login
+from fm.services.delivery import check
+from fm.services.delivery import git as delivery_git
 
 
 class TestHealth:
@@ -161,13 +164,13 @@ class TestEvidence:
         e = Env(test="echo lint ok; echo boom 1>&2; exit 1")
         health.run(e.p, {})
         (i,) = self.triage(e)
-        head = delivery.git(e.repo, "rev-parse", "main").out.strip()[:12]
+        head = delivery_git.git(e.repo, "rev-parse", "main").out.strip()[:12]
         for text in (head, "echo lint ok", "boom"):
             assert text in i["detail"]
 
     def test_run_tests_keeps_the_last_twenty_lines(self):
         e = Env(test="seq 1 30; exit 1")
-        assert delivery.run_tests(e.p, e.repo) == ("fail", "\n".join(map(str, range(11, 31))))
+        assert check.run_tests(e.p, e.repo) == ("fail", "\n".join(map(str, range(11, 31))))
 
     def test_failing_step_is_the_make_target(self):
         out = "lint ok\nFAIL line\nmake[1]: *** [test] Error 1\nmake: *** [check] Error 2\n"

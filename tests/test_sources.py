@@ -7,6 +7,7 @@ from helpers import git
 
 from fm import loop, sources, util
 from fm.core.tasks import backlog
+from fm.services.delivery import check
 
 
 class TestSignals:
@@ -69,9 +70,8 @@ class TestSignals:
 
     def test_accept_is_fm_accept(self):
         tid, branch = self.queued()
-        from fm import delivery
 
-        delivery.check(self.p, tid)
+        check.check(self.p, tid)
         self.emit({"key": "a1", "task": tid, "action": "accept"})
         assert self.e.task(tid)["accepted"]  # as `fm accept`: the decision; the loop merges
         loop.tick(self.p)
@@ -109,14 +109,13 @@ class TestSignals:
     # the findings of review 1 (F1-F7)
 
     def test_failed_accept_is_logged_and_retried_then_applied_once(self):  # F1, F4
-        from fm import delivery
 
         tid, _ = self.queued()
         sig = {"key": "a1", "task": tid, "action": "accept"}
         self.emit(sig)  # no check yet: "moved since it was checked"
         assert self.e.task(tid)["status"] == "in review"
         assert len(self.errors()) == 1
-        delivery.check(self.p, tid)
+        check.check(self.p, tid)
         self.emit(sig)
         assert self.e.task(tid)["accepted"]
         loop.tick(self.p)  # the loop's merge step closes it
@@ -138,7 +137,7 @@ class TestSignals:
 
         a, b = self.running(), backlog.add(self.p, "second", status="triage")
         backlog.set_status(self.p, b, "in progress")
-        with mock.patch("fm.sessions.stop", side_effect=OSError("hung")):
+        with mock.patch("fm.services.claude.sessions.stop", side_effect=OSError("hung")):
             self.emit({"key": "x1", "task": a, "action": "cancel"}, {"key": "x2", "task": b, "action": "done"})
         assert self.e.task(b)["status"] == "done"
         assert self.e.task(a)["status"] == "in progress"

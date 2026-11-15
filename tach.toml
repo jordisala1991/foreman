@@ -69,39 +69,27 @@ layer = "steps"
 path = "fm.metrics"
 layer = "steps"
 [[modules]]
-path = "fm.launchd"
-layer = "steps"
-[[modules]]
 path = "fm.schedule"
 layer = "steps"
 
 # services: git, claude and the lock: the outside world, called by the steps.
 [[modules]]
-path = "fm.agents"
+path = "fm.services.agents"
 layer = "services"
 [[modules]]
-path = "fm.agents_running"
+path = "fm.services.claude"
 layer = "services"
 [[modules]]
-path = "fm.scratch"
+path = "fm.services.delivery"
 layer = "services"
 [[modules]]
-path = "fm.delivery"
+path = "fm.services.lock"
 layer = "services"
 [[modules]]
-path = "fm.mergecheck"
+path = "fm.services.launchd"
 layer = "services"
 [[modules]]
-path = "fm.pulls"
-layer = "services"
-[[modules]]
-path = "fm.sessions"
-layer = "services"
-[[modules]]
-path = "fm.lock"
-layer = "services"
-[[modules]]
-path = "fm.login"
+path = "fm.services.scratch"
 layer = "services"
 
 # registry: the one place that knows the provider adapters.

@@ -4,13 +4,15 @@ what that step said (`apply_review`). The decisions themselves are in fm/core/ru
 from pathlib import Path
 from typing import Any
 
-from . import delivery, scratch, sessions
-from .agents import Scope, launch_reviewer
-from .agents_running import idle_s, running
 from .core.project.config import Project
 from .core.review import reviews
 from .core.rules import decide
 from .core.tasks import backlog
+from .services import scratch
+from .services.agents.launch import Scope, launch_reviewer
+from .services.agents.running import idle_s, running
+from .services.claude import sessions
+from .services.delivery import git
 from .talk import NUDGE_IDLE_S, return_to_agent
 
 
@@ -21,7 +23,7 @@ def seen_of(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> d
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
     tip = reviews.verdict_tip(v)
-    merge, auto = delivery.merge_of(p, tip, head) if tip and tip != head else ("", "")
+    merge, auto = git.merge_of(p, tip, head) if tip and tip != head else ("", "")
     return decide.Seen(
         head=head,
         verdict_tip=tip,

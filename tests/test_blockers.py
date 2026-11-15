@@ -5,8 +5,9 @@ import json
 import pytest
 from helpers import Env, fm
 
-from fm import delivery, loop, util
+from fm import loop, util
 from fm.core.tasks import backlog, blockers
+from fm.services.delivery import merge
 
 
 def events(e: Env, tid: str) -> list[str]:
@@ -39,7 +40,7 @@ class TestBlockers:
         assert json.loads(fm(self.e.home, "show", a))["waiting_for"] == [self.X1]
         line = next(x for x in fm(self.e.home, "list").splitlines() if x.startswith(a))
         assert self.X1 in line
-        delivery.close(self.e.p, self.X1, "done", "x")
+        merge.close(self.e.p, self.X1, "done", "x")
         line = next(x for x in fm(self.e.home, "list").splitlines() if x.startswith(a))
         assert self.X1 not in line
         fm(self.e.home, "edit", a, "--blocked-by", "none")
@@ -56,10 +57,10 @@ class TestBlockers:
         backlog.set_status(self.e.p, y, status)
         loop.tick(self.e.p)
         assert (self.e.calls(), self.e.task(y)["status"]) == ([], status)
-        delivery.close(self.e.p, self.X1, "done", "x")
+        merge.close(self.e.p, self.X1, "done", "x")
         loop.tick(self.e.p)
         assert self.e.calls() == []
-        delivery.close(self.e.p, self.X2, "done", "x")
+        merge.close(self.e.p, self.X2, "done", "x")
         loop.tick(self.e.p)
         assert (len(self.e.calls()), self.e.task(y)["status"]) == (1, started)
         assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
@@ -67,7 +68,7 @@ class TestBlockers:
         assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
 
     def test_a_task_filed_with_a_done_blocker_launches_at_once(self):
-        delivery.close(self.e.p, self.X1, "done", "x")
+        merge.close(self.e.p, self.X1, "done", "x")
         y = self.y("--blocked-by", self.X1)
         loop.tick(self.e.p)
         assert len(self.e.calls()) == 1

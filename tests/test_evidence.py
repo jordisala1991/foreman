@@ -12,12 +12,13 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import loop, pulls
+from fm import loop
 from fm.core.oversight import guard
 from fm.core.review import evidence
 from fm.core.tasks import backlog
 from fm.providers import Change, registry
 from fm.providers.github import types
+from fm.services.delivery import pulls
 
 PNG = b"\x89PNG\r\n\x1a\n-evidence"
 BODY = "Did X\n\n![the home](x.png)\n"

@@ -4,9 +4,10 @@ import pytest
 import test_loop
 from helpers import Env, git
 
-from fm import delivery, loop
+from fm import loop
 from fm.core.tasks import backlog
 from fm.providers import ChangeState, registry
+from fm.services.delivery import merge
 
 
 class TestProvider:
@@ -20,7 +21,7 @@ class TestProvider:
         tid = self.delivered(e)
         loop.tick(e.p)
         before = git(e.repo, "rev-parse", "main").strip()
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         i = e.task(tid)
         assert (i["status"], i["accepted"]["by"]) == ("in review", "owner")
         assert git(e.repo, "rev-parse", "main").strip() == before
@@ -64,7 +65,7 @@ class TestProvider:
             tid = self.delivered(e)
             loop.tick(e.p)
             with pytest.raises(providers.ConfigError):
-                delivery.accept(e.p, tid)
+                merge.accept(e.p, tid)
 
     def test_rejection_forgets_the_merge_of_the_old_tip(self):
         e = Env(test="true")
@@ -79,7 +80,7 @@ class TestProvider:
         e = Env(test="true")
         tid = self.delivered(e)
         loop.tick(e.p)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         base = git(e.repo, "rev-parse", "main").strip()
         git(e.repo, "merge", "--squash", "fm/ty-1")
         git(e.repo, "commit", "-qm", f"Merge {tid}: x")  # the merge happened; its ref was never stored
@@ -93,7 +94,7 @@ class TestProvider:
         e = Env(test="true")
         tid = self.delivered(e)
         loop.tick(e.p)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         (e.repo / "app.py").write_text("dirty\n")  # the main checkout has uncommitted changes
         loop.tick(e.p)
         i = e.task(tid)
@@ -105,7 +106,7 @@ class TestProvider:
         e = Env(test="true")
         tid = self.delivered(e)
         loop.tick(e.p)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         git(e.repo, "checkout", "-q", "-b", "elsewhere")
         loop.tick(e.p)
         assert "is not on main" in e.task(tid)["blocked"]
@@ -114,7 +115,7 @@ class TestProvider:
     def accepted_then_main_moves(self, e):
         tid = self.delivered(e)
         loop.tick(e.p)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         (e.repo / "app.py").write_text("changed on main\n")
         git(e.repo, "commit", "-qam", "main moved")
         return tid
@@ -140,7 +141,7 @@ class TestProvider:
         e = Env(test="true")
         tid = self.delivered(e)
         loop.tick(e.p)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         (e.repo / "app.py").write_text("dirty\n")
         loop.tick(e.p)
         i = e.task(tid)
@@ -164,7 +165,7 @@ class TestProvider:
         e = Env(test="true")
         tid = self.delivered(e)
         loop.tick(e.p)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         e.p.cfg["merge"]["strategy"] = "rebase"
         loop.run_queue(e.p, {})
         assert "strategy = 'rebase'" in e.task(tid)["blocked"]

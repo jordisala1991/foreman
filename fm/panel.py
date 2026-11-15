@@ -28,11 +28,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import launcher, pulls
+from . import launcher
 from .core.review import evidence
 from .core.tasks import backlog
 from .panel_actions import Refused, act
 from .panel_views import Obj, project, projects, state, summary, system, task
+from .services.delivery import pulls
 
 DIST = Path(__file__).resolve().parent.parent / "panel" / "dist"
 STATIC = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8")}

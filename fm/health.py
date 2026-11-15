@@ -17,11 +17,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import delivery, launcher, login, util
-from .agents_running import idle_s
+from . import launcher, util
 from .core.project import registry
 from .core.project.config import Project
 from .core.tasks import backlog, questions
+from .services.agents.running import idle_s
+from .services.claude import login
+from .services.delivery import check, git
 
 Finding = dict[str, str]
 
@@ -97,7 +99,7 @@ def orphan_worktrees(p: Project) -> list[Finding]:
     root = p.path("worktrees").resolve()
     live = {str(Path(i["worktree"]).resolve()) for i in backlog.tasks(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
     out: list[Finding] = []
-    listing = delivery.git(p.repo, "worktree", "list", "--porcelain", check=False).out
+    listing = git.git(p.repo, "worktree", "list", "--porcelain", check=False).out
     for ln in listing.splitlines():
         if ln.startswith("worktree "):
             wt = Path(ln.split(" ", 1)[1]).resolve()
@@ -115,7 +117,7 @@ def failing_step(tail: str, command: str) -> str:
 
 def record_main_tests(p: Project, head: str) -> None:
     """Runs the tests on `head` and writes ci.json. `since` stamps when the current failing episode began."""
-    result, tail = delivery.tests_at(p, head, "main")
+    result, tail = check.tests_at(p, head, "main")
     before = util.read_json(p.state / "ci.json", {})
     since = before.get("since") if before.get("result") == "fail" == result and before.get("since") else util.now()
     util.write_json(p.state / "ci.json", {"head": head, "at": util.now(), "result": result, "tail": tail, "since": since})
@@ -126,7 +128,7 @@ def main_tests(p: Project, run: bool = True) -> list[Finding]:
     cmd = p.get("merge", "test")
     if not cmd:
         return []
-    head = delivery.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
+    head = git.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
     ci = util.read_json(p.state / "ci.json", {})
     due = ci.get("head") != head or (util.age_s(ci.get("at")) or 1e9) > 60 * int(p.get("health", "ci_every_minutes"))
     if due and run:  # slow: in the background, the tick waits a little and goes on; the result lands in ci.json
@@ -162,9 +164,9 @@ def findings(p: Project, rows: dict[str, Any], outside: bool = False) -> list[Fi
         lambda: main_tests(p, run=not outside),
         lambda: loop_errors(p),
     )
-    for check in checks:
+    for step in checks:
         try:
-            out += check()
+            out += step()
         except Exception as e:
             meaning = "A health check raised an exception, so its findings are missing."
             out.append(finding(f"health:{e!r}"[:80], "A health check fails", meaning, repr(e)))

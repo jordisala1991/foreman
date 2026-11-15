@@ -1,14 +1,15 @@
 import re
 
-from fm import agents, loop
+from fm import loop
 from fm.core.tasks import backlog
+from fm.services.agents import launch
 from tests.helpers import Env, fm
 
 
 def launched(e: Env, tid: str) -> str:
     backlog.update(e.p, tid, status="in review", worktree=str(e.repo))
-    agents.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
-    agents.launch_reviewer(e.p, e.task(tid), "abc123")
+    launch.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
+    launch.launch_reviewer(e.p, e.task(tid), "abc123")
     return tid
 
 
@@ -57,8 +58,8 @@ class TestScratch:
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, tid, status="in review", worktree=str(e.repo))
-        agents.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
-        agents.launch_reviewer(e.p, e.task(tid), "abc123")
+        launch.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
+        launch.launch_reviewer(e.p, e.task(tid), "abc123")
         mine = e.home / "scratch" / f"{tid}-r1-abc123-reviewer"
         loop.tick(e.p)
         assert mine.exists()  # round 1 is not over
