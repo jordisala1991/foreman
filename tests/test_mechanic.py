@@ -46,6 +46,11 @@ class Mechanic(unittest.TestCase):
         self.assertEqual(self.e.calls()[0]["cwd"], str(self.e.repo))
         self.assertEqual(self.e.task(self.tid)["status"], "triage")
 
+    def test_session_shows_id_role_and_title(self):
+        self.tick()
+        argv = self.e.calls()[0]["argv"]
+        self.assertEqual(argv[argv.index("-n") + 1], "TY-1 mechanic · t")
+
     def test_non_health_triage_gets_none(self):
         e = Env()
         backlog.add(e.p, "t", status="triage")

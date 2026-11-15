@@ -1,4 +1,4 @@
-"""Agents are Claude Code sessions of their own (`claude --bg -n NAME …`), so the owner can open any of them and talk
+"""Agents are Claude Code sessions of their own (`claude --bg -n TITLE …`), so the owner can open any of them and talk
 to it (`claude attach SHORT`, Claude Code's agent view, or the Claude app). Adapted from foreman's sessionlaunch.py: the same
 measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the guard hook and our environment in
 `--settings`.
@@ -57,6 +57,7 @@ class Agent:
     name: str
     model: str
     effort: str
+    title: str  # display only («ID role · title», util.session_title): `name` stays the identity
 
 
 def command(p: Project, agent: Agent, prompt: str) -> list[str]:
@@ -64,7 +65,7 @@ def command(p: Project, agent: Agent, prompt: str) -> list[str]:
         p.get("agents", "claude"),
         "--bg",
         "-n",
-        agent.name,
+        agent.title,
         "--model",
         agent.model,
         "--effort",

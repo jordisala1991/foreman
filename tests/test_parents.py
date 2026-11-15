@@ -29,7 +29,7 @@ class Launch(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(len(e.calls()), 1)
         argv = e.calls()[0]["argv"]
-        self.assertEqual(argv[argv.index("-n") + 1], "ty-1")
+        self.assertEqual(argv[argv.index("-n") + 1], "TY-1 parent · parent")
         t = e.task(P)
         self.assertEqual((t["agent"]["kind"], t["status"], t["agent"]["cwd"]), ("parent", "backlog", str(e.repo)))
         self.assertNotIn("worktree", t)
