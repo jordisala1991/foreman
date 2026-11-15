@@ -55,12 +55,12 @@ def run_tests(p: Project, cwd: Path) -> tuple[str, str]:
 
 def tests_at(p: Project, commit: str, name: str, merge: str = "") -> tuple[str, str]:
     """The test command on exactly `commit` (a fresh detached worktree in state/), never on uncommitted files; with
-    `merge`, on `commit` with that commit merged in (a merge git refuses raises DeliveryError)."""
+    `merge`, on `commit` with that commit merged in (git refusing the worktree or the merge raises DeliveryError)."""
     if not p.get("merge", "test"):
         return "none", ""
     tmp = p.state / "trees" / name
     git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
-    added = git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=False)
+    added = git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=bool(merge))  # merged check: git's fault, it raises
     if added.code != 0:
         return "fail", added.err.strip()
     try:

@@ -160,6 +160,12 @@ class Merged(unittest.TestCase):
         with self.assertRaises(delivery.DeliveryError):
             delivery.tests_at(e.p, self.main(e), "x", merge="no-such-commit")
 
+    def test_a_failed_worktree_add_in_the_merged_check_raises(self):
+        e = self.env("true")
+        with self.assertRaises(delivery.DeliveryError):
+            delivery.tests_at(e.p, "no-such-commit", "x", merge=self.main(e))
+        self.assertEqual(delivery.tests_at(e.p, "no-such-commit", "x")[0], "fail")  # without merge: as before
+
     def test_show_says_what_the_check_ran_on(self):
         e = self.env("true")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
