@@ -63,18 +63,12 @@ def block_review(p: Project, tid: str, why: str) -> None:
     backlog.event(p, tid, f"blocked: {why}")
 
 
-def sweep_scratch(p: Project, rows: dict[str, Any]) -> None:
-    """Removes the scratch folders no live review owns; an unreadable session listing (no rows) removes nothing."""
-    if not rows:
-        return
+def sweep_scratch(p: Project) -> None:
+    """Removes every scratch folder but those of the hunter and reviewer of the round a task in review is in."""
     keep: set[Path] = set()
     for i in backlog.tasks(backlog.load(p)):
-        launches = [(i.get("hunter"), "hunter"), (i.get("reviewer"), "reviewer"), *((a, "reviewer") for a in i.get("reviewers", []))]
-        for a, role in launches:
-            if not a:
-                continue
-            sid = a.get("session") or sessions.find(rows, a.get("short", ""))  # a `reviewers` copy is never filled in
-            live = sid and sessions.state(rows, sid) not in ("stopped", "gone") and not ended({**a, "session": sid}, rows)
-            if not sid or live:
+        for role in ("hunter", "reviewer"):
+            a: dict[str, Any] = i.get(role) or {}
+            if i["status"] == "in review" and a.get("round") == reviews.review_round(i):
                 keep.add(scratch.folder(p, i["id"], a["round"], a["tip"], role))
     scratch.sweep(p, keep)

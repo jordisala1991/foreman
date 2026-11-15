@@ -13,7 +13,7 @@
    one; a task whose blockers are not all done waits. The loop never plans, never reviews, never talks to the owner.
    Before it, a let-in parent gets its parent agent outside the slots, told of each subtask merged or canceled (parents.py).
 9. mechanic: a diagnosing helper for each health finding in triage, in the slots launch left free (mechanic.py)
-10. scratch: first in the tick (`rows` predate a session started in it), removes a review's scratch folder once no live session owns it
+10. scratch: first in the tick, removes the scratch folder of every review round that is over (reviewing.py)
 """
 
 import os
@@ -240,7 +240,7 @@ def tick(p: Project) -> None:
     rows = sessions.listing(p)
     steps = [
         ("sessions", lambda: fill_sessions(p, rows)),
-        ("scratch", lambda: sweep_scratch(p, rows)),
+        ("scratch", lambda: sweep_scratch(p)),
         ("sources", lambda: sources.run(p)),
         ("answers", lambda: deliver_answers(p, rows)),
         ("agents", lambda: watch_agents(p, rows)),

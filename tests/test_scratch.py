@@ -35,18 +35,6 @@ class Scratch(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(list((e.home / "scratch").iterdir()), [])
 
-    def test_stopped_goes_working_stays(self):
-        e = Env(test="true")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
-        e.hunt_then_review(tid)
-        loop.tick(e.p)
-        self.assertEqual(len(list((e.home / "scratch").iterdir())), 1)  # hunter stopped, reviewer working
-        e.set_state(e.task(tid)["reviewer"]["name"], "stopped")
-        loop.tick(e.p)
-        self.assertEqual(list((e.home / "scratch").iterdir()), [])
-
     def test_gone_when_canceled(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -58,25 +46,23 @@ class Scratch(unittest.TestCase):
         loop.tick(e.p)
         self.assertEqual(list((e.home / "scratch").iterdir()), [])
 
-    def test_a_died_review_is_swept_unless_the_listing_is_empty(self):
+    def test_a_folder_no_review_owns_is_swept(self):
         e = Env(test="true")
         dead = e.home / "scratch" / "TY-9-r1-abc123-reviewer"
         dead.mkdir(parents=True)
         loop.tick(e.p)
-        self.assertTrue(dead.exists())  # no sessions: nothing known
-        backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)  # launches an agent: the listing has rows
-        loop.tick(e.p)
         self.assertFalse(dead.exists())
 
-    def test_a_session_unlisted_at_launch_is_swept_once_it_stops(self):
+    def test_a_session_unlisted_at_launch_is_swept_with_its_round(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, tid, status="in review", worktree=str(e.repo))
         agents.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
         with patch("fm.sessions.find", return_value=None):
             agents.launch_reviewer(e.p, e.task(tid), "abc123")
-        name = e.task(tid)["reviewer"]["name"]
-        e.set_state(name, "stopped")
+        mine = e.home / "scratch" / f"{tid}-r1-abc123-reviewer"
         loop.tick(e.p)
-        self.assertEqual(sorted(f.name for f in (e.home / "scratch").iterdir() if "abc123" in f.name), [f"{tid}-r1-abc123-hunter"])
+        self.assertTrue(mine.exists())  # round 1 is not over
+        backlog.update(e.p, tid, reviews=[{"tip": "abc123"}])
+        loop.tick(e.p)
+        self.assertFalse(mine.exists())
