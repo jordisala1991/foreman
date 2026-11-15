@@ -106,8 +106,8 @@ class TestSignals:
         assert json.dumps(backlog.load(self.p), sort_keys=True) == before
         assert len(self.errors()) == len(bad)
 
+    # the findings of review 1 (F1-F7)
 
-class TestReview1(TestSignals):
     def test_failed_accept_is_logged_and_retried_then_applied_once(self):  # F1, F4
         from fm import delivery
 
