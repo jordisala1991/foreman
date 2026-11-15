@@ -392,8 +392,9 @@ path = "~/src/shop/api"
 [repos.api.merge]
 strategy = "merge"                   # no test: the PR's CI stands in
 
-[repos.api.risk.high]
+[repos.api.risk.high]                # replaces the default high table: list again what stays high
 schema = ["migrations/"]
+config = ["fm.toml", ".github/", "*secret*", "*.env"]
 
 [repos.site]
 path = "~/src/shop/site"
@@ -442,19 +443,19 @@ test = "make build"
 
 ### One task, one PR, one repo
 
-- A task's repo is its `repo` key (a `[repos.K]` key). The project hands every step a **view** of itself for that
-  repo: `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`remote`/`worktrees`, `[merge]` and
-  `[risk]` are the repo's, merged by the rule above; home, state, agents, guard, resources and backlog are the
-  project's. The code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls
-  `for_task` once per task step. A task with no repo (a parent, a loop finding) gets the project as it is, that is
-  the first repo.
-- Choosing: `fm add TITLE --repo KEY`; `fm edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops
-  the plan and returns to backlog, as criteria do, because a plan is about one repo). With several repos, `fm add` of
-  a task with criteria and `fm go` refuse one without repo: `fm: FN-3: choose its repo first (fm edit FN-3 --repo
-  app|api|site|emails)`; in triage it may have none. A parent needs no repo (each subtask has its own): `fm go` lets
-  it in without one, and it shows `-` as its repo. An unknown key is refused, naming the keys. A health finding
-  about one repo carries it (main's tests, an orphan worktree); the loop's own findings carry none and are never let
-  in as they are (the mechanic diagnoses, the owner files the real task).
+- A task's repo is its `repo` key (a `[repos.K]` key). The project hands every step a **view** of itself for that repo:
+  `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`remote`/`worktrees`, `[merge]` and `[risk]`
+  are the repo's, merged by the rule above; home, state, agents, guard, resources and backlog are the project's. The
+  code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls `for_task` once per
+  task step. A task with no repo (a task that has subtasks, a loop finding) gets the project as it is, that is the first
+  repo.
+- Choosing: `fm add TITLE --repo KEY`; `fm edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops the
+  plan and returns to backlog, as criteria do, because a plan is about one repo). With several repos, `fm add` of a task
+  with criteria and `fm go` refuse one without repo: `fm: FN-3: choose its repo first (fm edit FN-3 --repo
+  app|api|site|emails)`; in triage it may have none. A task that has subtasks needs no repo (each subtask has its own):
+  `fm go` lets it in without one, and it shows `-` as its repo. An unknown key is refused, naming the keys. A health
+  finding about one repo carries it (main's tests, an orphan worktree); the loop's own findings carry none and are never
+  let in as they are (the mechanic diagnoses, the owner files the real task).
 - Showing: `fm show` prints `repo`; `fm list` adds a repo column between status and agent; the panel's `state` and
   `task` data carry `repo` per task, and `state` carries `repos` (the keys).
 - **Only with more than one repo.** With one repo the key is never stored, asked, listed or sent, and `--repo` is
@@ -529,7 +530,7 @@ test = "make build"
 | the folder of repos found by rule, with the home inside it | the umbrella is explicit and the home stays outside it |
 | the backlog's projects with `repos` lists, `launch --repo` | a task has one repo and `fm go` launches it |
 | `import-gh` and `Closes #n` | fm imports nothing from GitHub |
-| `remote = "none"` merging by fast-forward after the local CI | the local provider merges with the repo's `strategy`, as today; the merged check has already run the tests on the branch merged with main |
+| `remote = "none"` merging by fast-forward after the local CI | the local provider merges with the repo's `strategy`, as today; when the repo has a test command, the merged check has already run the tests on the branch merged with main |
 
 ## Architecture
 
