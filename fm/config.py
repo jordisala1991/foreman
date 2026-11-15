@@ -1,6 +1,8 @@
 """A project: a home folder holding `fm.toml` (the owner's settings), `backlog.json` and `state/`; the code lives in
-the repo `fm.toml` points to. The registry (`~/.config/fm/projects.json`, or $FM_REGISTRY) lists the homes the loop
-and the panel serve."""
+the repo `fm.toml` points to (`[project] repo`, or several `[repos.<key>]` tables: tasks run in the first). The
+registry (`~/.config/fm/projects.json`, or $FM_REGISTRY) lists the homes the loop and the panel serve. A project owns
+its home, its repos, its worktrees folder and the umbrella folder set in `[project] umbrella`: `fm` run in any of
+them works on it (the deepest folder wins)."""
 
 import os
 import tomllib
@@ -14,7 +16,7 @@ MODELS = ("haiku", "sonnet", "opus", "fable")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 DEFAULTS: dict[str, dict[str, Any]] = {
-    "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees", "branch_prefix": "fm/"},
+    "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees", "branch_prefix": "fm/", "umbrella": ""},
     # slots: how many agents of this project run at once (planning and responsible agents alike)
     # every agent kind gets an explicit model and effort (claude --effort), never the machine's Claude settings
     "agents": {
@@ -56,6 +58,10 @@ def registered() -> list[Path]:
     return [Path(p) for p in util.read_json(registry_file(), [])]
 
 
+class ProjectError(Exception):
+    """An fm.toml that cannot be read as a project."""
+
+
 def register(home: Path) -> None:
     with util.locked_json(registry_file(), []) as homes:
         if str(home.resolve()) not in homes:
@@ -76,6 +82,10 @@ class Project:
             raw = tomllib.loads(f.read_text(encoding="utf-8"))
         cfg: dict[str, dict[str, Any]] = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
         cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: fm/lock.py
+        cfg["repos"] = _repos(raw)
+        if cfg["repos"]:  # several repos: tasks run in the first one listed
+            first = next(iter(cfg["repos"].values()))
+            cfg["project"]["repo"], cfg["project"]["main"] = first["path"], first["main"]
         if not cfg["project"]["name"]:
             cfg["project"]["name"] = home.name
         return cls(home, cfg)
@@ -84,7 +94,10 @@ class Project:
         return self.cfg[section][key]
 
     def path(self, key: str) -> Path:
-        p = Path(self.get("project", key)).expanduser()
+        return self._abs(self.get("project", key))
+
+    def _abs(self, s: str) -> Path:
+        p = Path(s).expanduser()
         return p if p.is_absolute() else self.home / p
 
     @property
@@ -94,6 +107,16 @@ class Project:
     @property
     def repo(self) -> Path:
         return self.path("repo")
+
+    @property
+    def repos(self) -> list[Path]:
+        return [self._abs(r["path"]) for r in self.cfg["repos"].values()] or [self.repo]
+
+    @property
+    def folders(self) -> list[Path]:
+        """The folders this project owns, resolved: home, repos, worktrees folder, umbrella."""
+        umbrella = [self.path("umbrella")] if self.get("project", "umbrella") else []
+        return list(dict.fromkeys(f.resolve() for f in [self.home, *self.repos, self.path("worktrees"), *umbrella]))
 
     @property
     def state(self) -> Path:
@@ -106,3 +129,48 @@ class Project:
     @property
     def backlog_file(self) -> Path:
         return self.home / "backlog.json"
+
+
+def _repos(raw: dict[str, Any]) -> dict[str, dict[str, str]]:
+    tables: dict[str, dict[str, Any]] = raw.get("repos", {})
+    if tables and "repo" in raw.get("project", {}):
+        raise ProjectError("fm.toml has both [project] repo and [repos.<key>] tables: use one of the two forms")
+    out: dict[str, dict[str, str]] = {}
+    for key, t in tables.items():
+        if not isinstance(t.get("path"), str):
+            raise ProjectError(f"[repos.{key}] needs a path")
+        out[key] = {"path": t["path"], "main": str(t.get("main", "main"))}
+    return out
+
+
+def loaded() -> list[Project]:
+    """Every registered project; one whose fm.toml cannot be read is left out so the others are served."""
+    out: list[Project] = []
+    for home in registered():
+        try:
+            out.append(Project.load(home))
+        except Exception:  # a broken fm.toml leaves the others served
+            continue
+    return out
+
+
+def owners(projects: list[Project], here: Path) -> list[tuple[Project, Path]]:
+    """The projects owning `here` through their deepest folder, only the deepest of all: none, one, or several
+    claiming the same folder."""
+    here = here.resolve()
+    found: list[tuple[Project, Path]] = []
+    for p in projects:
+        mine = [f for f in p.folders if f == here or f in here.parents]
+        if mine:
+            found.append((p, max(mine, key=lambda f: len(f.parts))))
+    depth = max((len(f.parts) for _, f in found), default=0)
+    return [(p, f) for p, f in found if len(f.parts) == depth]
+
+
+def shared(projects: list[Project]) -> dict[Path, list[str]]:
+    """Folders claimed by two or more projects, with their names."""
+    claims: dict[Path, list[str]] = {}
+    for p in projects:
+        for f in p.folders:
+            claims.setdefault(f, []).append(p.name)
+    return {f: names for f, names in claims.items() if len(names) > 1}

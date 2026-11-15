@@ -4,8 +4,8 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import backlog, costs, evidence, health, lock, metrics, pulls, sessions, util
-from .config import Project, registered
+from . import backlog, config, costs, evidence, health, lock, metrics, pulls, sessions, util
+from .config import Project
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
 Obj = dict[str, Any]
@@ -15,13 +15,7 @@ Obj = dict[str, Any]
 
 
 def projects() -> list[Project]:
-    out: list[Project] = []
-    for home in registered():
-        try:
-            out.append(Project.load(home))
-        except Exception:  # a broken fm.toml leaves the others served
-            continue
-    return out
+    return config.loaded()
 
 
 def project(q: dict[str, list[str]]) -> Project:

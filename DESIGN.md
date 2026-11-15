@@ -54,7 +54,12 @@ Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, b
 
 A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `worktrees/`, optional `sources/`.
 `fm.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
-(`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Every setting is per
+(`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Several repos are
+`[repos.<key>]` tables (`path`, `main`) instead of `[project] repo` (both forms: fm refuses); tasks run in the first
+one listed. A project owns its home, every repo, its worktrees folder and the umbrella folder set in
+`[project] umbrella` (explicit, never guessed). A command finds its project by `--project NAME`, `--home`, `FM_HOME`,
+`FM_PROJECT`, then the registered project owning the current folder (paths resolved, the deepest folder wins; two
+projects claiming it: fm refuses and `fm health` names them), then the nearest `fm.toml` above it. Every setting is per
 project: `[agents] slots` (how many at once), models, extra session settings; `[merge] autonomy`, `provider`, `strategy`, `test`,
 `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`; `[health]` timings.
 `fm init` links `.claude/fm.md` and `.claude/skills/define-task` to `fm/shared/` of the checkout it runs from, adds

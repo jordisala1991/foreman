@@ -17,7 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, delivery, login, util
+from . import backlog, config, delivery, login, util
 from .agents import idle_s
 from .config import Project
 
@@ -183,3 +183,13 @@ def run(p: Project, rows: dict[str, Any], outside: bool = False) -> list[str]:
         for key in [k for k in seen if k not in found]:
             del seen[key]
     return filed
+
+
+def shared_folders(projects: list[Project]) -> list[str]:
+    """A folder two projects claim: `fm` refuses to pick one there."""
+    return [f"! {f} is claimed by two projects: {' and '.join(names)}" for f, names in config.shared(projects).items()]
+
+
+def repos_note(p: Project) -> str:
+    n = len(p.repos)
+    return f"note: {p.name} has {n} repos; its tasks run in the first one, {p.repo}" if n > 1 else ""

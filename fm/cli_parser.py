@@ -122,7 +122,8 @@ def blocked_by(s: argparse.ArgumentParser) -> None:
 
 def parser(description: str | None) -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="fm", description=description)
-    ap.add_argument("--home", help="the project's home (else FM_HOME, else the folder with fm.toml)")
+    ap.add_argument("--project", metavar="NAME", help="the project's name (else FM_PROJECT, else the project that owns the current folder)")
+    ap.add_argument("--home", help="the project's home (else FM_HOME)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def c(name: str, help_: str) -> argparse.ArgumentParser:
