@@ -48,5 +48,5 @@ Then run `fm verdict --tip $tip --open N --file $review_file --misled "…or non
 - Nothing: the verdict goes to the loop; what stays open reaches him with the PR.
 
 # Never
-- Edit, commit or build in the repo, or write anywhere but `$review_file` and a folder `scratch/` next to it (for any temporary file).
+- Edit, commit or build in the repo, or write anywhere but `$review_file` and your scratch folder `$scratch` (for every temporary file: copies of the repo, fake registries, throwaway configs). It is yours alone and the loop removes it when you end: do not delete it or write anywhere else.
 - Add findings of your own, or describe output you did not see.
