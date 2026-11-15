@@ -441,7 +441,7 @@ class TestPulls:
         assert g.e.task(tid)["status"] == "in progress"  # returned to its agent (FN-67)
 
     def test_ci_replaces_the_local_test_without_a_test_command(self):
-        for ci, tests in (("pass", "pass"), ("fail", "fail"), ("none", "none")):
+        for ci, tests in (("fail", "fail"),):  # the wiring; every case is test_decide TestTestsOrCi
             g = self.make()
             g.set(ci=ci)
             tid = g.work()

@@ -1,12 +1,15 @@
-"""The loop's review and merge decisions (fm/core/rules/decide.py): one test per row of DESIGN.md's table "What the loop does with a
-task in review", none launches a program. `Pure` keeps the module free of programs and files."""
+"""The loop's decisions (fm/core/rules/decide.py): one test per row of DESIGN.md's table "What the loop does with a task in
+review", then the queue, the retry, the provider's config and main's tests; none launches a program. `Pure` keeps the module free of programs and files."""
 
 import ast
 from typing import Any
 
 from helpers import ROOT
 
+from fm.core.rules import decide
 from fm.core.rules.decide import (
+    MergeConfig,
+    Retry,
     Seen,
     Step,
     after_check,
@@ -14,8 +17,14 @@ from fm.core.rules.decide import (
     closes_review,
     conflict_note,
     failing_note,
+    main_tests_due,
     merge_gate,
+    provider_error,
+    queue_full,
+    queue_order,
+    queue_turn,
     ran_on,
+    retry_step,
     review_step,
     waits_for_ci,
 )
@@ -182,6 +191,87 @@ class TestMergeGate:
         for s in ("abcdef123", "not on its branch alone", "L9"):
             assert s in note
         assert "not on its branch alone" not in failing_note(check(tests="fail", tests_output="L9"), "")
+
+
+class TestQueue:
+    def test_accepted_merge_first_then_checks_in_order(self):
+        tasks = [
+            {"id": "FN-1", "status": "in review"},
+            {"id": "FN-2", "status": "in review", "accepted": {"by": "o"}},
+            {"id": "FN-3", "status": "in review", "blocked": "why"},
+            {"id": "FN-4", "status": "in progress"},
+            {"id": "FN-5", "status": "in review"},
+        ]
+        assert queue_order(tasks) == [("FN-2", "merge"), ("FN-1", "check"), ("FN-5", "check")]
+
+    def test_blocked_or_not_in_review_has_no_turn(self):
+        assert queue_turn({"id": "FN-1", "status": "in review", "accepted": {"by": "o"}, "blocked": "why"}) == ""
+        assert queue_turn({"id": "FN-1", "status": "done"}) == ""
+
+    def test_one_check_per_tick(self):
+        assert (queue_full(0), queue_full(1)) == (False, True)
+
+
+class TestRetry:
+    def test_retries_twice_saying_each_new_error_once(self):
+        assert retry_step(0, "", "e") == Retry(False, 1, True)
+        assert retry_step(1, "e", "e") == Retry(False, 2, False)
+        assert retry_step(1, "e", "f") == Retry(False, 2, True)
+        assert retry_step(0, None, "") == Retry(False, 1, True)  # an empty message with none stored is noted too
+
+    def test_the_third_in_a_row_blocks(self):
+        assert retry_step(2, "e", "e") == Retry(True, 0, False)
+        assert retry_step(2, "", "e").block
+
+
+class TestTestsOrCi:
+    def test_ci_stands_in_only_without_a_test_command_and_with_a_result(self):
+        rows = [
+            (("none", "pass"), "pass"),
+            (("none", "fail"), "fail"),
+            (("none", "none"), "none"),
+            (("none", "pending"), "none"),
+            (("pass", "fail"), "pass"),
+            (("fail", "pass"), "fail"),
+        ]
+        for args, out in rows:
+            assert decide.tests_or_ci(*args) == out, args
+
+
+class TestAsToday:
+    def test_without_tests_or_with_a_conflict(self):
+        assert decide.as_today(False, False) and decide.as_today(False, True) and decide.as_today(True, True)
+        assert not decide.as_today(True, False)
+
+
+class TestProviderError:
+    MERGES = {"local": ("squash", "merge"), "github": ("squash", "merge", "rebase")}
+
+    def error(self, provider: str, strategy: str, pr: str) -> str:
+        return provider_error(MergeConfig(provider, strategy, pr), self.MERGES, ("squash", "merge", "rebase"), ("draft", "done"))
+
+    def test_valid(self):
+        assert self.error("local", "squash", "draft") == ""
+        assert self.error("github", "rebase", "draft") == ""
+
+    def test_each_bad_value_is_named(self):
+        rows = [
+            (("gitlab", "squash", "draft"), "provider = 'gitlab'"),
+            (("local", "squash", "never"), "pr = 'never'"),
+            (("local", "bogus", "draft"), "strategy = 'bogus'"),
+            (("local", "rebase", "draft"), "strategy = 'rebase'"),
+        ]
+        for args, named in rows:
+            assert named in self.error(*args), args
+
+
+class TestMainTestsDue:
+    def test_due_when_main_moved_or_the_last_run_is_old(self):
+        assert main_tests_due(None, "h", None, 30)
+        assert not main_tests_due("h", "h", 600, 30)
+        assert main_tests_due("h", "h", 1801, 30)
+        assert main_tests_due("h", "h", None, 30)
+        assert main_tests_due("h2", "h", 1, 30)
 
 
 ALLOWED = {"collections.abc", "dataclasses", "typing", ".risk"}

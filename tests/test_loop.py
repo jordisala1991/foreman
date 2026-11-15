@@ -205,6 +205,23 @@ class TestQueue:
         finally:
             check.check = real
 
+    def test_the_merged_check_of_a_merge_does_not_count_as_the_ticks_branch_check(self, request):
+        e = Env(test="true")
+        ids = [self.deliver(e) for _ in range(3)]
+        tick.tick(e.p)
+        merge.accept(e.p, ids[0])  # its merged check starts in the tick
+        (e.repo / "other.py").write_text("x = 1\n")
+        git(e.repo, "add", "other.py")
+        git(e.repo, "commit", "-qm", "main moves")
+        checks: list[str] = []
+        real, step = check.check, queue.queue_one
+        check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
+        queue.queue_one = lambda p, i, *a: None if i["id"] == ids[1] else step(p, i, *a)  # its turn starts nothing
+        request.addfinalizer(functools.partial(setattr, check, "check", real))
+        request.addfinalizer(functools.partial(setattr, queue, "queue_one", step))
+        tick.tick(e.p)
+        assert (e.task(ids[0])["status"], checks) == ("done", [ids[2]])
+
     def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self, request):
         e = Env(test="true")
         ids = [self.deliver(e) for _ in range(3)]

@@ -2,10 +2,9 @@ from collections.abc import Callable
 
 from .. import providers
 from ..core.project.config import Project
+from ..core.rules import decide
 from ..core.tasks import backlog
 from ..services.delivery import check, mergecheck
-
-TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
 
 
 def guarded(p: Project, tid: str, what: str, fn: Callable[[], object], field: str = "retry") -> None:
@@ -20,13 +19,13 @@ def guarded(p: Project, tid: str, what: str, fn: Callable[[], object], field: st
             backlog.update(p, tid, **{err: "", cnt: 0})
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), tid)
-        count = int(i.get(cnt) or 0) + 1
-        if count >= TRANSIENT_ATTEMPTS:
-            backlog.update(p, tid, blocked=f"the loop could not {what}: {e}"[:300], **{err: "", cnt: 0})
-            backlog.event(p, tid, f"blocked: could not {what} {TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])
+        r = decide.retry_step(int(i.get(cnt) or 0), i.get(err), str(e))
+        if r.block:
+            backlog.update(p, tid, blocked=f"the loop could not {what}: {e}"[:300], **{err: "", cnt: r.count})
+            backlog.event(p, tid, f"blocked: could not {what} {decide.TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])
             return
-        backlog.update(p, tid, **{cnt: count, err: str(e)})
-        if i.get(err) != str(e):  # the platform hiccuped: stay as is, try again next tick, say it once
+        backlog.update(p, tid, **{cnt: r.count, err: str(e)})
+        if r.say:  # the platform hiccuped: stay as is, try again next tick, say it once
             backlog.event(p, tid, f"could not {what}, will retry: {e}"[:300])
     except Exception as e:
         backlog.update(p, tid, blocked=f"the loop could not {what}: {e}"[:300])
