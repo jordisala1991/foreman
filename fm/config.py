@@ -167,13 +167,27 @@ class Unreadable:
 
 def _named_folders(home: Path) -> list[Path]:
     try:
-        raw = tomllib.loads((home / "fm.toml").read_text(encoding="utf-8"))
-        named = [raw.get("project", {}).get(k) for k in ("repo", "umbrella")]
-        named += [t.get("path") for t in raw.get("repos", {}).values()]
+        raw: dict[str, Any] = tomllib.loads((home / "fm.toml").read_text(encoding="utf-8"))
     except Exception:  # an fm.toml that cannot be read names no folder
         return [home]
-    paths = [Path(n).expanduser() for n in named if isinstance(n, str) and n]
-    return list(dict.fromkeys([home, *((p if p.is_absolute() else home / p).resolve() for p in paths)]))
+    try:
+        keys: list[Any] = list(raw["repos"])
+    except Exception:  # no [repos], or not a table
+        keys = []
+    named = [("project", "repo"), ("project", "umbrella"), *(("repos", k, "path") for k in keys)]
+    return list(dict.fromkeys([home, *(f for at in named for f in _folder_at(home, raw, at))]))
+
+
+def _folder_at(home: Path, raw: dict[str, Any], at: tuple[Any, ...]) -> list[Path]:
+    """The folder at that place of fm.toml, or none when it is missing or cannot be read as a path."""
+    try:
+        v: Any = raw
+        for k in at:
+            v = v[k]
+        p = Path(v).expanduser()
+        return [(p if p.is_absolute() else home / p).resolve()]
+    except Exception:  # a bad entry is skipped; the others are kept
+        return []
 
 
 def load_all() -> tuple[list[Project], list[Unreadable]]:

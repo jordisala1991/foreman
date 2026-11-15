@@ -129,6 +129,16 @@ class FindProjectTest(unittest.TestCase):
         self.assertIn("Other work", self.run_fm(other, "list"))
         self.assertNotIn("no registered project", self.refused(self.elsewhere, "list"))
 
+    def test_unreadable_project_keeps_its_good_folders(self) -> None:
+        self.project("other")
+        inner = self.dir("other/sub")
+        home = self.project("alpha", 'repo = "../other/sub"\numbrella = "~nosuchuser_zz/x"\n', repo=False)
+        with (home / "fm.toml").open("a", encoding="utf-8") as f:
+            f.write("\n[repos]\nx = 3\n")
+        msg = self.refused(inner, "list")
+        self.assertIn(str(home), msg)
+        self.assertIn("Other work", self.run_fm(self.elsewhere, "--project", "other", "list"))
+
     def test_repos_entry_not_a_table_refused(self) -> None:
         for tail in ("\n[repos]\nx = 3\n", 'repos = "x"\n'):
             home = self.project("alpha", repo=False)
