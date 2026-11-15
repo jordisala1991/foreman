@@ -375,14 +375,14 @@ autonomy = "manual"
 
 [repos.app]
 path = "~/src/shop/app"
-post_create = ["cp -c -R {main}/node_modules {wt}/", "cp {main}/.env {wt}/"]
+post_create = ["cp -c -R {main}/deps {wt}/", "cp {main}/.env {wt}/"]   # copy dependencies
 
 [repos.app.merge]
 strategy = "squash"
-test = "npm run lint && npm test"
+test = "make lint test"
 
 [repos.app.risk.high]
-release = ["app.config.ts", ".github/workflows/"]
+release = ["app.config", ".github/workflows/"]
 
 [repos.api]
 path = "~/src/shop/api"
@@ -399,14 +399,14 @@ publish_on_merge = true              # its host deploys main
 
 [repos.site.merge]
 strategy = "merge"
-test = "npm run build"
+test = "make build"
 
 [repos.emails]
 path = "~/src/shop/emails"
 remote = "none"                      # no remote: the local provider
 
 [repos.emails.merge]
-test = "npm run build"
+test = "make build"
 ```
 
 | Key | Level | Default | Meaning |
