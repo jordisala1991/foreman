@@ -24,26 +24,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import (
-    backlog,
-    blockers,
-    decide,
-    delivery,
-    health,
-    launcher,
-    mechanic,
-    mergecheck,
-    parents,
-    providers,
-    pulls,
-    release,
-    sessions,
-    sources,
-    subtasks,
-    util,
-)
-from .agents import fill_sessions, launch, running
-from .config import Project, registered
+from . import delivery, health, launcher, mechanic, mergecheck, parents, providers, pulls, release, sessions, sources, util
+from .agents import fill_sessions, launch
+from .agents_running import running
+from .core.project.config import Project
+from .core.project.registry import registered
+from .core.rules import decide
+from .core.tasks import backlog, blockers, subtasks
 from .providers import registry
 from .reviewing import apply_review, seen_of, sweep_scratch, working
 from .talk import deliver_answers, return_to_agent, watch_agents
@@ -282,7 +269,7 @@ def tick(p: Project) -> None:
 def forever(homes: list[str] | None = None, once: bool = False) -> None:
     import fcntl
 
-    from .config import registry_file
+    from .core.project.registry import registry_file
 
     with open(str(registry_file()) + ".loop.lock", "a") as held:  # the lock lasts as long as the loop
         try:

@@ -1,12 +1,16 @@
 """The loop's review step of a branch in review: what it sees (`seen_of`, the facts decide.review_step needs) and doing
-what that step said (`apply_review`). The decisions themselves are in fm/decide.py."""
+what that step said (`apply_review`). The decisions themselves are in fm/core/rules/decide.py."""
 
 from pathlib import Path
 from typing import Any
 
-from . import backlog, decide, delivery, reviews, scratch, sessions
-from .agents import Scope, idle_s, launch_reviewer, running
-from .config import Project
+from . import delivery, scratch, sessions
+from .agents import Scope, launch_reviewer
+from .agents_running import idle_s, running
+from .core.project.config import Project
+from .core.review import reviews
+from .core.rules import decide
+from .core.tasks import backlog
 from .talk import NUDGE_IDLE_S, return_to_agent
 
 

@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 from helpers import fm
 
-from fm import health, plugin
-from fm.config import Project
+from fm import health
+from fm.core.project import plugin
+from fm.core.project.config import Project
 
 SHARED_FILES = (plugin.SHARED / "instructions.md", plugin.SHARED / "skills/define-task/SKILL.md")
 

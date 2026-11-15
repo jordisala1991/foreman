@@ -4,8 +4,9 @@ holds when fm first saw each entry, where its count or period starts until a tas
 from datetime import datetime
 from typing import Any
 
-from . import backlog, recurring, util
-from .config import Project
+from . import util
+from .core.project.config import Project
+from .core.tasks import backlog, recurring
 
 
 def _context(p: Project) -> tuple[list[backlog.Task], dict[str, str]]:

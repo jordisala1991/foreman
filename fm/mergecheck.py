@@ -4,8 +4,9 @@ main is at that moment, so two branches that pass alone cannot break main togeth
 
 from typing import Any
 
-from . import backlog, delivery, pulls, util
-from .config import Project
+from . import delivery, pulls, util
+from .core.project.config import Project
+from .core.tasks import backlog
 
 
 def merged_check(p: Project, tid: str) -> None:

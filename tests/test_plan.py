@@ -4,7 +4,8 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import agents, backlog, panel_actions
+from fm import agents, panel_actions
+from fm.core.tasks import backlog
 
 READY = ("ready",)
 

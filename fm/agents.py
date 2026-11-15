@@ -1,13 +1,14 @@
 """The agents' side of the loop: the brief, the worktree, launching a task's agent and its reviewer, messaging an agent."""
 
 import string
-import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from . import backlog, costs, decide, delivery, lock, scratch, sessions, tasktypes, util
-from .config import Project
-from .reviews import review_round
+from . import delivery, lock, scratch, sessions, util
+from .core.project.config import Project
+from .core.review.reviews import review_round
+from .core.rules import decide
+from .core.tasks import backlog, tasktypes
 
 BRIEFS = Path(__file__).parent / "briefs"
 
@@ -187,38 +188,6 @@ def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
                         record_session(it, sid, a.get("kind", "") if role in ("agent", "mechanic") else "review")
-
-
-def idle_s(a: backlog.Agent | dict[str, Any]) -> float:
-    """Seconds since an agent's transcript last changed (or since it was started/resumed, if later)."""
-    files = costs.files_of(a.get("session") or "")
-    last = max((f.stat().st_mtime for f in files), default=0.0)
-    since = util.age_s(a.get("started"))
-    return min(time.time() - last if last else 1e9, since if since is not None else 1e9)
-
-
-def reviewer_active(i: dict[str, Any]) -> bool:
-    """A review works on the current tip: the reviewer without a verdict, or the hunter before its file exists."""
-    return i["status"] == "in review" and not i.get("blocked") and review_running(i)
-
-
-def review_running(i: dict[str, Any]) -> bool:
-    """A review has no verdict yet on its tip, blocked task or not."""
-    v: dict[str, Any] = i.get("review") or {}
-    h: dict[str, Any] = i.get("hunter") or {}
-    r: dict[str, Any] = i.get("reviewer") or {}
-    if r and r["tip"] != v.get("tip"):
-        return True
-    return bool(h) and h["tip"] not in (v.get("tip"), r.get("tip")) and not Path(h["file"]).exists()
-
-
-def diagnosing(i: dict[str, Any]) -> bool:
-    """A mechanic is working on this triage task: it has no diagnosis yet."""
-    return i["status"] == "triage" and bool(i.get("mechanic")) and not i.get("diagnosis")
-
-
-def running(d: dict[str, Any]) -> int:
-    return sum(1 for i in backlog.tasks(d) if backlog.holds_slot(d, i) or reviewer_active(i) or diagnosing(i))
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:

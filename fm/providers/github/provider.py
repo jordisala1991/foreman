@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ... import evidence, proc, util
-from ...inline import Review
+from ... import proc, util
+from ...core.review import evidence
+from ...core.review.inline import Review
 from .. import Change, ChangeState, FailedCheck, Provider, ProviderError, Published
 from . import review as ghreview
 from .checks import down, open_prs, pull

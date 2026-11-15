@@ -1,8 +1,8 @@
 import tempfile
 from pathlib import Path
 
-from fm import risk
-from fm.config import Project
+from fm.core.project.config import Project
+from fm.core.rules import risk
 
 
 def project(toml: str = "") -> Project:

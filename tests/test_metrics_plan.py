@@ -3,7 +3,8 @@ from unittest import mock
 import pytest
 from helpers import Env
 
-from fm import agents, backlog, loop, metrics
+from fm import agents, loop, metrics
+from fm.core.tasks import backlog
 
 USD = {"A": 1.0, "B": 2.0, "B1": 2.0, "B2": 3.0, "C": 0.5, "L": 4.0}
 
@@ -18,7 +19,7 @@ class TestPlanVsWork:
         self.e = env
 
     def row(self, tid):
-        with mock.patch("fm.costs.of_sessions", stub):
+        with mock.patch("fm.core.oversight.costs.of_sessions", stub):
             return next(r for r in metrics.per_task(self.e.p) if r["id"] == tid)
 
     def make(self, **keys):
@@ -81,7 +82,7 @@ class TestCost:
             (d / f"{s}.jsonl").write_text(json.dumps(rec) + "\n")
         calls = []
         real = metrics.costs.of_sessions
-        with mock.patch("fm.costs.of_sessions", lambda s, seen=None: calls.append(s) or real(s, seen)):
+        with mock.patch("fm.core.oversight.costs.of_sessions", lambda s, seen=None: calls.append(s) or real(s, seen)):
             r = metrics.per_task(e.p)[0]
         assert sorted(calls) == [["s1"], ["s2"]]
         assert r["usd"] == 2.0  # m1 once, as the old single pass counted it

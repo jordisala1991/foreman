@@ -18,8 +18,9 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from . import backlog, delivery, proc, schedule, util
-from .config import Project
+from . import delivery, proc, schedule, util
+from .core.project.config import Project
+from .core.tasks import backlog, questions
 from .talk import return_to_agent
 
 
@@ -120,7 +121,7 @@ def apply(p: Project, source: str, s: dict[str, Any]) -> None:
     if action == "note":
         if status not in (*backlog.RUNNING, "in review"):
             raise ValueError(f"{tid} is {status}: no agent to tell")
-        backlog.note(p, tid, text, source)
+        questions.note(p, tid, text, source)
     elif action in ("reject", "accept"):
         if status != "in review":
             raise ValueError(f"{tid} is {status}, not in review")

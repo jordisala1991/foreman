@@ -7,7 +7,8 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, install_fm, version_folder
 
-from fm import backlog, health, launchd, launcher, login, loop, proc, sessions
+from fm import health, launchd, launcher, login, loop, proc, sessions
+from fm.core.tasks import backlog
 
 
 class TestLogin:

@@ -3,7 +3,8 @@ from unittest import mock
 
 from helpers import Env
 
-from fm import backlog, metrics, util
+from fm import metrics, util
+from fm.core.tasks import backlog
 
 
 def ev(*pairs):
@@ -97,7 +98,7 @@ class TestText:
         (e.p.state / "events.jsonl").unlink(missing_ok=True)  # the add wrote its own events, stamped now
         for x in ev(*SKIPPED):
             util.append_jsonl(e.p.state / "events.jsonl", {**x, "task": tid})
-        with mock.patch("fm.costs.of_sessions", lambda s, seen=None: {"usd": 0, "minutes": 0}):
+        with mock.patch("fm.core.oversight.costs.of_sessions", lambda s, seen=None: {"usd": 0, "minutes": 0}):
             return metrics.per_task(e.p)
 
     def test_cycle_section(self):

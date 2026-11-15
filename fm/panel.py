@@ -2,7 +2,7 @@
 panel/src) and a JSON API over every registered project (`p=NAME` picks one; the first by default).
 
 Adapted from foreman's lib/foreman/panel.py: the key (`?key=` or the `fm_key` cookie the page sets), the routing by path. What only served the
-old foreman is gone. The owner's actions call what the CLI calls (fm.cli's functions, fm.delivery.accept, fm.backlog.add), so the panel and `fm`
+old foreman is gone. The owner's actions call what the CLI calls (fm.cli's functions, fm.delivery.accept, fm.core.tasks.backlog.add), so the panel and `fm`
 cannot disagree.
 
 GET   /                index.html (sets the cookie)      /app.js, /app.css   the built files
@@ -28,7 +28,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import backlog, evidence, launcher, pulls
+from . import launcher, pulls
+from .core.review import evidence
+from .core.tasks import backlog
 from .panel_actions import Refused, act
 from .panel_views import Obj, project, projects, state, summary, system, task
 

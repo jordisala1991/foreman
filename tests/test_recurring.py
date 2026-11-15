@@ -7,8 +7,9 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import backlog, loop, panel_views, schedule, sources, util
-from fm.config import Project, ProjectError
+from fm import loop, panel_views, schedule, sources, util
+from fm.core.project.config import Project, ProjectError
+from fm.core.tasks import backlog
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
 SEEN = "2026-11-15 00:00:00"

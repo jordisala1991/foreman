@@ -12,10 +12,12 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
-from . import backlog, proc, providers, pulls, reviews, sessions, subtasks, util
-from .config import Project
+from . import proc, providers, pulls, sessions, util
+from .core.project.config import Project
+from .core.review import reviews
+from .core.rules.risk import Facts, score
+from .core.tasks import backlog, questions, subtasks
 from .providers import Change, registry
-from .risk import Facts, score
 
 
 class DeliveryError(Exception):
@@ -282,9 +284,9 @@ def close(p: Project, tid: str, status: str, why: str, *, settle: bool = True) -
     if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
         close_pull(p, i, why)
     stop_all(p, i)
-    for q in backlog.open_questions(backlog.load(p), tid):
-        backlog.answer(p, q["id"], f"(the task was {status})")
-        backlog.mark_delivered(p, q["id"])
+    for q in questions.open_questions(backlog.load(p), tid):
+        questions.answer(p, q["id"], f"(the task was {status})")
+        questions.mark_delivered(p, q["id"])
     if i.get("worktree"):
         git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
     backlog.set_status(p, tid, status, why)

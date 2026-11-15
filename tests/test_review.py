@@ -4,8 +4,9 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm import backlog, loop, pulls
-from fm.inline import Review
+from fm import loop, pulls
+from fm.core.review.inline import Review
+from fm.core.tasks import backlog
 from fm.providers import Change, registry
 
 DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @@\n a\n+b\n+c\n d\n"

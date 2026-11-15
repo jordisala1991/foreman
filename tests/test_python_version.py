@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 from helpers import ROOT
 
-from fm import config
+from fm.core.project import registry
 
 
 def fake(d: Path, version: str, body: str) -> None:
@@ -76,7 +76,7 @@ class TestPythonVersion:
         r = self.run_fm(f"{self.t}/old", "session-context", stdin='{"cwd": "/"}')
         assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
         with mock.patch.dict(os.environ, {"FM_REGISTRY": str(self.reg)}):
-            text = config.python_note_file().read_text()
+            text = registry.python_note_file().read_text()
         assert "3.99" in text
         assert "3.9.6" in text
 

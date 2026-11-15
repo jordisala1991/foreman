@@ -1,8 +1,8 @@
 """The loop's step «blockers» (before launch): a task whose blockers are all done is released once, and one whose blocker
 closed without being done is blocked with a reason, for the owner to decide."""
 
-from . import backlog, blockers
-from .config import Project
+from .core.project.config import Project
+from .core.tasks import backlog, blockers
 
 
 def run(p: Project) -> None:

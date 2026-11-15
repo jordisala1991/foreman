@@ -10,7 +10,8 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import agents, backlog, cli_parser, panel_views, tasktypes
+from fm import agents, cli_parser, panel_views
+from fm.core.tasks import backlog, tasktypes
 
 KINDS = ("responsible", "planning", "reviewer", "hunter")
 BUG = ("reproduce the bug with a test that fails", "name its cause in the report")

@@ -6,8 +6,9 @@ import os
 import sys
 from pathlib import Path
 
-from . import config, launcher, plugin
+from . import launcher
 from .cli_common import home
+from .core.project import plugin, registry
 
 
 def cmd_session_context(a: argparse.Namespace) -> None:
@@ -15,9 +16,9 @@ def cmd_session_context(a: argparse.Namespace) -> None:
     after macOS's own /usr/bin/fm). Whatever fails prints nothing: a hook's error would be a message in a session that
     should get none."""
     with contextlib.suppress(OSError):
-        config.python_note_file().unlink(missing_ok=True)
+        registry.python_note_file().unlink(missing_ok=True)
     try:
-        projects, broken = config.load_all()
+        projects, broken = registry.load_all()
         out = plugin.session_context(sys.stdin.read(), os.environ, [*projects, *broken])
     except Exception:  # see the docstring: the hook stays silent
         return

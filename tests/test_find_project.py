@@ -11,8 +11,10 @@ from unittest import mock
 
 import pytest
 
-from fm import backlog, cli, config, panel_views, util
-from fm.config import Project
+from fm import cli, panel_views, util
+from fm.core.project import registry
+from fm.core.project.config import Project
+from fm.core.tasks import backlog
 
 
 class TestFindProjectTest:
@@ -44,7 +46,7 @@ class TestFindProjectTest:
         (h / "fm.toml").write_text(f'[project]\n{lines}{project_lines}\n[agents]\nclaude = "/usr/bin/false"\n{tail}', encoding="utf-8")
         util.write_json(h / "backlog.json", backlog.empty())
         backlog.add(Project.load(h), f"{name.capitalize()} work", criteria="x")
-        config.register(h)
+        registry.register(h)
         return h
 
     def run_fm(self, cwd: Path, *argv: str) -> str:
@@ -183,7 +185,7 @@ class TestFindProjectTest:
         home = self.project("alpha", f'repo = "{link}"\n', repo=False)
         assert "Alpha work" in self.run_fm(self.dir("real-repo/sub"), "list")
         p = Project.load(home)
-        assert [q.name for q, _ in config.owners([p], link / "sub")] == ["alpha"]
+        assert [q.name for q, _ in registry.owners([p], link / "sub")] == ["alpha"]
 
     def test_order(self) -> None:
         alpha, beta = self.project("alpha"), self.project("beta")

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from fm.config import Project, ProjectError
+from fm.core.project.config import Project, ProjectError
 
 
 class TestReposTest:

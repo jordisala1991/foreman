@@ -7,7 +7,8 @@ import pytest
 from helpers import Env, fm
 from test_misled import run_as
 
-from fm import backlog, loop, subtasks
+from fm import loop
+from fm.core.tasks import backlog, questions, subtasks
 
 
 def resumes(e: Env, sid: str) -> list[dict]:
@@ -77,7 +78,7 @@ class TestNotices:
         assert len(told) == 1
         assert self.S1 in told[0]["argv"][3]
         assert "canceled" in told[0]["argv"][3]
-        backlog.ask(self.e.p, self.S2, "ty-3", "q?")
+        questions.ask(self.e.p, self.S2, "ty-3", "q?")
         backlog.update(self.e.p, self.S2, blocked="why")
         self.idle_ticks(3)
         assert len(resumes(self.e, self.sid)) == 1
@@ -167,10 +168,10 @@ class TestRealData:
         P = backlog.add(e.p, "parent", status="triage", criteria="c")
         s = fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c").strip()
         backlog.update(e.p, s, pr={"url": "http://x/1"}, reviews=[{}, {}], blocked="why")
-        backlog.ask(e.p, s, "ty-2", "q?")
+        questions.ask(e.p, s, "ty-2", "q?")
         shown = json.loads(fm(e.home, "show", P))["subtasks"][0]
-        questions = [{"id": f"{s} Q1", "text": "q?"}]
-        want = {"id": s, "status": "triage", "title": "s", "pr": "http://x/1", "review_rounds": 2, "questions": questions, "blocked": "why", "waiting_for": []}
+        qs = [{"id": f"{s} Q1", "text": "q?"}]
+        want = {"id": s, "status": "triage", "title": "s", "pr": "http://x/1", "review_rounds": 2, "questions": qs, "blocked": "why", "waiting_for": []}
         assert shown == want
 
 

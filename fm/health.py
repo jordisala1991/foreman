@@ -17,9 +17,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, config, delivery, launcher, login, util
-from .agents import idle_s
-from .config import Project
+from . import delivery, launcher, login, util
+from .agents_running import idle_s
+from .core.project import registry
+from .core.project.config import Project
+from .core.tasks import backlog, questions
 
 Finding = dict[str, str]
 
@@ -82,7 +84,7 @@ UNDELIVERED_MINUTES = 10
 
 def answers_undelivered(p: Project) -> list[Finding]:
     out: list[Finding] = []
-    for q in backlog.undelivered(backlog.load(p)):
+    for q in questions.undelivered(backlog.load(p)):
         since = q.get("answered_at") or q.get("at") or str(q.get("by", "")).rpartition(", ")[2]
         if (util.age_s(since) or 0) > 60 * UNDELIVERED_MINUTES:
             title = f"{q['task']}'s agent has not received a {q.get('kind') or 'question'} message"
@@ -188,7 +190,7 @@ def run(p: Project, rows: dict[str, Any], outside: bool = False) -> list[str]:
 def python_note() -> list[str]:
     """bin/fm's line when the hook found no Python new enough (see bin/fm)."""
     try:
-        text = config.python_note_file().read_text(encoding="utf-8").strip()
+        text = registry.python_note_file().read_text(encoding="utf-8").strip()
     except OSError:
         return []
     return ["! " + text] if text else []
@@ -196,7 +198,7 @@ def python_note() -> list[str]:
 
 def shared_folders(projects: list[Project]) -> list[str]:
     """A folder two projects claim: `fm` refuses to pick one there."""
-    return [f"! {f} is claimed by two projects: {' and '.join(names)}" for f, names in config.shared(projects).items()]
+    return [f"! {f} is claimed by two projects: {' and '.join(names)}" for f, names in registry.shared(projects).items()]
 
 
 def old_links(p: Project) -> list[str]:

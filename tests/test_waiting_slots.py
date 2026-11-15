@@ -3,7 +3,8 @@
 import pytest
 from helpers import Env
 
-from fm import backlog, loop
+from fm import loop
+from fm.core.tasks import backlog, questions
 
 
 def three_ready(e: Env) -> tuple[str, str, str]:
@@ -18,7 +19,7 @@ class TestWaitingSlots:
         e = Env(slots=2)
         a, b, c = three_ready(e)
         assert (e.task(c)["status"], len(e.calls())) == ("ready", 2)
-        backlog.ask(e.p, a, a.lower(), "A or B?", **f)
+        questions.ask(e.p, a, a.lower(), "A or B?", **f)
         loop.tick(e.p)
         assert (e.task(c)["status"], len(e.calls())) == ("in progress", 3)
         assert all(e.task(t).get("agent") for t in (a, b, c))
@@ -26,23 +27,23 @@ class TestWaitingSlots:
     def test_the_answer_reaches_the_agent_over_the_slots(self):
         e = Env(slots=2)
         a, _, c = three_ready(e)
-        qid = backlog.ask(e.p, a, a.lower(), "A or B?")
+        qid = questions.ask(e.p, a, a.lower(), "A or B?")
         loop.tick(e.p)
         assert e.task(c)["status"] == "in progress"
         d = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.answer(e.p, qid, "B")
+        questions.answer(e.p, qid, "B")
         e.set_state(a.lower(), "done")
         loop.tick(e.p)
         resume = e.calls()[-1]["argv"]
         assert resume[resume.index("--resume") + 1] == e.task(a)["agent"]["session"]
         assert "«B»" in resume[-1]
-        assert backlog.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(backlog.load(e.p)) == []
         assert e.task(d)["status"] == "ready"
 
     def test_an_answer_not_delivered_yet_holds_the_slot(self):
         e = Env(slots=2)
         a, _, c = three_ready(e)
-        backlog.answer(e.p, backlog.ask(e.p, a, a.lower(), "A or B?"), "B")
+        questions.answer(e.p, questions.ask(e.p, a, a.lower(), "A or B?"), "B")
         loop.tick(e.p)  # a's session is still working: the answer waits, and a keeps its slot
         assert (e.task(c)["status"], len(e.calls())) == ("ready", 2)
 

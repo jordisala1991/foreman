@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import Project
+from ..project.config import Project
 
 AUTONOMY = {"manual": (), "low": ("low",), "medium": ("low", "medium")}
 

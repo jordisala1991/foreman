@@ -4,8 +4,12 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import backlog, config, costs, evidence, health, launcher, lock, metrics, pulls, recurring, schedule, sessions, tasktypes, util
-from .config import Project
+from . import health, launcher, lock, metrics, pulls, schedule, sessions, util
+from .core.oversight import costs
+from .core.project import registry
+from .core.project.config import Project
+from .core.review import evidence
+from .core.tasks import backlog, recurring, tasktypes
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
 Obj = dict[str, Any]
@@ -15,7 +19,7 @@ Obj = dict[str, Any]
 
 
 def projects() -> list[Project]:
-    return config.loaded()
+    return registry.loaded()
 
 
 def project(q: dict[str, list[str]]) -> Project:

@@ -9,11 +9,14 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
-from . import backlog, decide, describe, evidence, inline, proc, providers, reviews, util, verdict
-from .config import Project
-from .inline import Review
+from . import proc, providers, util
+from .core.project.config import Project
+from .core.review import describe, evidence, inline, reviews, verdict
+from .core.review.inline import Review
+from .core.review.verdict import Case, Finding
+from .core.rules import decide
+from .core.tasks import backlog
 from .providers import Change, Permanent, Provider, ProviderError, Transient, registry
-from .verdict import Case, Finding
 
 
 def change_of(i: dict[str, Any], head: str) -> Change:

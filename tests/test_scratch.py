@@ -1,6 +1,7 @@
 import re
 
-from fm import agents, backlog, loop
+from fm import agents, loop
+from fm.core.tasks import backlog
 from tests.helpers import Env, fm
 
 

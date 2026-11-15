@@ -5,7 +5,8 @@ import json
 import pytest
 from helpers import Env, fm
 
-from fm import backlog, blockers, delivery, loop, util
+from fm import delivery, loop, util
+from fm.core.tasks import backlog, blockers
 
 
 def events(e: Env, tid: str) -> list[str]:

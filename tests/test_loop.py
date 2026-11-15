@@ -7,7 +7,8 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
-from fm import backlog, delivery, launcher, loop, proc, providers, util
+from fm import delivery, launcher, loop, proc, providers, util
+from fm.core.tasks import backlog, questions
 
 
 class TestLaunch:
@@ -106,8 +107,8 @@ class TestAnswers:
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        qid = backlog.ask(e.p, tid, tid.lower(), "A or B?")
-        backlog.answer(e.p, qid, "B")
+        qid = questions.ask(e.p, tid, tid.lower(), "A or B?")
+        questions.answer(e.p, qid, "B")
         loop.tick(e.p)  # its session is still working: wait
         assert len(e.calls()) == 1
         e.set_state(tid.lower(), "blocked")
@@ -120,7 +121,7 @@ class TestAnswers:
         assert "--resume" in resume
         assert resume[resume.index("--resume") + 1] == e.task(tid)["agent"]["session"]
         assert "«B»" in resume[-1]
-        assert backlog.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(backlog.load(e.p)) == []
 
     @pytest.mark.parametrize(("state", "status"), (("blocked", "idle"), ("working", "idle"), ("blocked", None)))
     def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self, state, status):
@@ -130,13 +131,13 @@ class TestAnswers:
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        qid = backlog.ask(e.p, tid, tid.lower(), "A or B?")
-        backlog.answer(e.p, qid, "B")
+        qid = questions.ask(e.p, tid, tid.lower(), "A or B?")
+        questions.answer(e.p, qid, "B")
         e.set_state(tid.lower(), state)
         e.set_status(tid.lower(), status) if status else e.drop_pid(tid.lower())  # no status: its process is gone too
         loop.tick(e.p)
         assert "--resume" in e.calls()[-1]["argv"]
-        assert backlog.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(backlog.load(e.p)) == []
 
 
 class TestStopped:

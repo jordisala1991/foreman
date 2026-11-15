@@ -5,8 +5,8 @@ import os
 import sys
 from pathlib import Path
 
-from . import config
-from .config import Project
+from .core.project import config, registry
+from .core.project.config import Project
 
 
 def home(args: argparse.Namespace) -> Project:
@@ -27,7 +27,7 @@ def _names(projects: list[Project], broken: list[config.Unreadable]) -> str:
 
 
 def named(name: str) -> Project:
-    projects, broken = config.load_all()
+    projects, broken = registry.load_all()
     found = [p for p in projects if p.name == name]
     if not found:
         sys.exit(f"fm: no project named {name!r}; registered: {_names(projects, broken)}")
@@ -37,8 +37,8 @@ def named(name: str) -> Project:
 
 
 def here() -> Project:
-    (projects, broken), cwd = config.load_all(), Path.cwd()
-    found = config.owners([*projects, *broken], cwd)
+    (projects, broken), cwd = registry.load_all(), Path.cwd()
+    found = registry.owners([*projects, *broken], cwd)
     if len(found) == 1:
         p, folder = found[0]
         if isinstance(p, config.Unreadable):
