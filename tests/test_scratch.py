@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 from fm import agents, backlog, loop
 from tests.helpers import Env, fm
@@ -58,8 +57,7 @@ class Scratch(unittest.TestCase):
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, tid, status="in review", worktree=str(e.repo))
         agents.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
-        with patch("fm.sessions.find", return_value=None):
-            agents.launch_reviewer(e.p, e.task(tid), "abc123")
+        agents.launch_reviewer(e.p, e.task(tid), "abc123")
         mine = e.home / "scratch" / f"{tid}-r1-abc123-reviewer"
         loop.tick(e.p)
         self.assertTrue(mine.exists())  # round 1 is not over
