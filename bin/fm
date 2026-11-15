@@ -1,9 +1,61 @@
 #!/usr/bin/env python3
 """fm: foreman-next's one command (see fm/cli.py)."""
+import os
+import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from fm.cli import main  # noqa: E402
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _minimum():
+    try:
+        m = re.search(r'requires-python\s*=\s*">=\s*(\d+)\.(\d+)"', (ROOT / "pyproject.toml").read_text())
+    except OSError:
+        return None
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _probe(cand):
+    import subprocess
+
+    try:
+        out = subprocess.run([cand, "-c", "import sys;print('.'.join(map(str,sys.version_info[:3])))"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+        return out if re.fullmatch(r"\d+\.\d+\.\d+", out) else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _ensure_python(minimum):
+    """Re-exec under the first python3 on PATH that is new enough, or say what is missing in one line."""
+    cands = [str(Path(d) / "python3") for d in os.environ.get("PATH", "").split(os.pathsep) if d]
+    cands = [c for c in cands if os.path.isfile(c) and os.access(c, os.X_OK)]
+    first = None
+    for cand in cands:
+        ver = _probe(cand)
+        first = first or (cand, ver)
+        if ver and tuple(map(int, ver.split(".")[:2])) >= minimum:
+            os.execv(cand, [cand, *sys.argv])
+    need = "fm: needs Python %d.%d or newer; " % minimum
+    line = need + ("the python3 found is %s (%s)" % (first[1] or "?", first[0]) if first else "no python3 found on PATH")
+    if sys.argv[1:2] == ["session-context"]:
+        note = Path(os.environ.get("FM_REGISTRY") or Path.home() / ".config/fm/projects.json")
+        try:
+            note = note.with_name(note.name + ".python")
+            note.parent.mkdir(parents=True, exist_ok=True)
+            note.write_text(line + "\n")
+        except OSError:
+            pass
+        sys.exit(0)
+    sys.exit(line)
+
+
+_min = _minimum()
+if _min and sys.version_info[:2] < _min:
+    _ensure_python(_min)
+
+sys.path.insert(0, str(ROOT))
+from fm.cli import main
 
 main()

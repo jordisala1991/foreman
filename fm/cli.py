@@ -192,6 +192,8 @@ def cmd_loop(a: argparse.Namespace) -> None:
 
 
 def cmd_health(a: argparse.Namespace) -> None:
+    for line in health.python_note():
+        print(line)
     for line in health.shared_folders(config.loaded()):
         print(line)
     p = home(a)

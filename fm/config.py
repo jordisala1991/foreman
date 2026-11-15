@@ -55,6 +55,10 @@ def registry_file() -> Path:
     return Path(os.environ.get("FM_REGISTRY") or Path.home() / ".config/fm/projects.json")
 
 
+def python_note_file() -> Path:
+    return Path(str(registry_file()) + ".python")
+
+
 def registered() -> list[Path]:
     return [Path(p) for p in util.read_json(registry_file(), [])]
 
