@@ -101,7 +101,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    `state/errors.jsonl`, not retried. A transient failure (accept before its check, busy checkout, hung stop) is
    logged and the same key is tried again next tick.
    Cursors in `state/cursors/`. None shipped (the owner's call for now). The same step first files the
-   recurring entries that fell due (`fm/schedule.py`, see `## Recurring tasks`).
+   recurring entries that fell due (`fm/steps/schedule.py`, see `## Recurring tasks`).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
    (`claude --bg --resume SID MESSAGE`, no other flag: a flag or a live process makes claude start a copy), when that
    session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
@@ -125,11 +125,11 @@ on). The heartbeat is written before every step, so a long test run does not loo
 6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
    only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
 7. **blockers**: a task whose blockers are all `done` is marked unblocked once; one whose blocker closed undone is blocked
-   with a reason (`fm/release.py`).
+   with a reason (`fm/steps/release.py`).
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
-   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`fm/parents.py`).
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`fm/steps/parents.py`).
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
@@ -176,7 +176,7 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 
 A branch's own check runs its tests on the branch alone. Just before an accepted branch merges (the owner's accept or
 the autonomy's, `loop.gate_merge` on both paths), the test command runs again on the branch merged with main as main
-is at that moment (`fm/mergecheck.py`, in the background like the check). The result goes in the task's `check`
+is at that moment (`fm/services/delivery/mergecheck.py`, in the background like the check). The result goes in the task's `check`
 (`merged_with` = that main commit); `fm show` (`checked_on`) and the panel say what the last check ran on. A task not
 about to merge (in review, waiting for the owner) never runs it. Accepted tasks merge one at a time, so of two waiting,
 the second is checked with the first already in main.
@@ -256,12 +256,12 @@ round 2 goes to the owner as high risk. A hunter that ends without its file, or 
 Each review session gets its own `<home>/scratch/ID-rN-<tip>-ROLE/`, told in its brief as `$scratch`; the loop removes it on the first tick where no live session owns it.
 
 The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health finding and changes nothing else: read-only by its
-brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/diagnosis.py`)
+brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/core/oversight/diagnosis.py`)
 and appends the diagnosis to the task's `detail`, so `fm show` has it. The task stays in triage; the owner decides next.
 
 ## Shared resources
 
-`fm/lock.py`. A resource is declared in fm.toml (`[resources.NAME]`, optional
+`fm/services/lock.py`. A resource is declared in fm.toml (`[resources.NAME]`, optional
 `slots = [...]` and `max_minutes`, default 20). `fm lock NAME run "what" command…` waits its turn, runs the command
 holding the resource (with `FM_SLOT`), stops it at the time limit and always releases it; `fm lock NAME status`.
 
@@ -274,7 +274,7 @@ holding the resource (with `FM_SLOT`), stops it at the time limit and always rel
 
 ## The guard
 
-A reminder, not a cage (`fm/guard.py`). It runs only in agent sessions (the hook comes in `--settings`), looks at
+A reminder, not a cage (`fm/core/oversight/guard.py`). It runs only in agent sessions (the hook comes in `--settings`), looks at
 the program each shell segment runs (never at words inside strings or messages), and denies a handful of actions
 with a reason that says: do not look for another way; `fm ask --action NAME "what and why"`, end your turn. The
 owner allows it once from the panel (`fm allow QID`); the loop tells its agent; it passes once.
@@ -345,9 +345,9 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Recurring tasks
 
-`[[recurring]]` tables in `fm.toml` (strict: `fm/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `fm add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
+`[[recurring]]` tables in `fm.toml` (strict: `fm/core/project/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `fm add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
 - Trigger: `every_merges = N` (N merged tasks) or `every = "12h" | "7d" | "2w"` (plain durations: h, d, w, at most 100 years; no cron).
-- Each tick (the `sources` step, which calls `fm/schedule.py` over the pure rules of `fm/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
+- Each tick (the `sources` step, which calls `fm/steps/schedule.py` over the pure rules of `fm/core/tasks/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
 - Anchor: the count or period starts when the entry's last task closed (done, canceled or duplicate), else when fm first saw the entry (`state/recurring.json`, the one store). A time trigger that fell due while fm was off files once. Merges are `done` tasks not filed by an entry and not parents; their closing time is that of the `→ done` event.
 - `fm list`, `fm show` and the panel's data mark an entry's task (`recurring`: the name); `fm health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it.
 
@@ -434,7 +434,7 @@ test = "make build"
   replaced by shell-quoted paths (another placeholder is a config error at load), 300 s each, once per worktree (a
   reused one does not run it again). A failing or timed-out step removes the worktree (and the branch, if this
   launch made it) and blocks the task: `post_create step failed (CMD): LAST 300 CHARS`.
-- When built: `fm/repos.py` in the core, pure (parse, validate, the view below, the layout check); the commands run in
+- When built: `fm/core/project/repos.py` in the core, pure (parse, validate, the view below, the layout check); the commands run in
   `agents.worktree` (a service). No port: nothing varies that `providers/` does not already cover.
 
 ### One task, one PR, one repo
@@ -496,7 +496,7 @@ test = "make build"
   --porcelain --ignored=matching --untracked-files=all`, so a file a global ignore hides is seen) with a component named
   `.claude`, `CLAUDE.md`, `CLAUDE.local.md` or `fm.toml`, and files one finding. It looks only inside the repos, never
   at the umbrella. Tracked files are the repo's own and are not reported; a folder ignored whole (dependencies) is not
-  looked into. The matching is a pure function over paths, in `fm/repos.py`.
+  looked into. The matching is a pure function over paths, in `fm/core/project/repos.py`.
 - The owner's own chat in the umbrella is the plugin's (FN-144 subtask 2), not this.
 
 ### Left out on purpose
@@ -525,7 +525,7 @@ its own layer and the ones below, never above. Three leaf files stay at `fm/`'s 
 
 | Layer | Package | Areas → modules | Responsibility |
 |---|---|---|---|
-| ui | `fm/ui/` | `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
+| ui | `fm/ui/` | `main.py` (starts `fm panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `fm/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
 | steps | `fm/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
 | services | `fm/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: git, claude, processes, the lock; called by steps |
@@ -545,14 +545,15 @@ inline comments, the description, evidence) → `rules` (`risk` on `project`; `d
 `tach.toml` (the settings above `layers` stay; `layers` is unchanged). A package path gives all its files
 its layer. A module with `depends_on` may import, in its own layer, only what it lists (lower layers stay open): that
 fixes the order of the core areas, so no cycle can form among them, as tach does not see a cycle inside one layer
-otherwise. `ui` is one module on purpose: `cli` and `panel` import each other (`cmd_panel`; the panel's actions run
-the owner's commands). Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
+otherwise. `cli` and `panel` are two modules: the panel imports the CLI's functions (its actions run the
+owner's commands), the CLI never imports the panel; `fm/ui/main.py` starts `fm panel`. Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
 `agents` is the reviewer's.
 
 ```toml
 layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
 modules = [
-  { path = "fm.ui", layer = "ui" },                    # one module: cli and panel import each other
+  { path = "fm.ui.cli", layer = "ui" },
+  { path = "fm.ui.panel", layer = "ui" },
   { path = "fm.loop", layer = "loop" },
   { path = "fm.steps", layer = "steps" },
   { path = "fm.services.agents", layer = "services" },
@@ -639,7 +640,7 @@ Metrics per task (`fm metrics`, the panel): the model and effort its responsible
 done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (stopped without finishing),
 questions to the owner, guard stops, risk, and what misled its agents (their `--misled` words, per agent).
 
-Health checks (`fm/health.py`), each finding a triage task, deduplicated by key while open or while it persists:
+Health checks (`fm/steps/health/`), each finding a triage task, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its
 transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
 tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing

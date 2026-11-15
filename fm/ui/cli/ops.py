@@ -1,4 +1,4 @@
-"""The operator's commands: loop, health, metrics, guard, lock, panel, launchd."""
+"""The operator's commands: loop, health, metrics, guard, lock, launchd."""
 
 import argparse
 import os
@@ -64,12 +64,6 @@ def cmd_lock(a: argparse.Namespace) -> None:
         sys.exit('fm: fm lock NAME run "what" command…')
     who = os.environ.get("FM_AGENT") or "owner"
     sys.exit(r.run(who, a.what, a.command, os.environ.get("FM_TASK", ""), say=lambda m: print(m, file=sys.stderr)))
-
-
-def cmd_panel(a: argparse.Namespace) -> None:
-    from ..panel import server
-
-    server.serve(a.port, a.host)
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:

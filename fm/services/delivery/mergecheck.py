@@ -1,6 +1,6 @@
 """The merged check (FN-113): just before an accepted branch merges, the test command runs on it merged with main as
 main is at that moment, so two branches that pass alone cannot break main together. It runs only at the merge step
-(fm/loop.py, `gate_merge`), one at a time; the result goes in the task's `check`, with `merged_with` = main's commit."""
+(fm/loop/queue.py, `gate_merge`), one at a time; the result goes in the task's `check`, with `merged_with` = main's commit."""
 
 from typing import Any
 
