@@ -217,9 +217,9 @@ class Retry:
     say: bool
 
 
-def retry_step(count: int, last_error: str, error: str) -> Retry:
+def retry_step(count: int, last_error: str | None, error: str) -> Retry:
     """`count` Transient failures in a row before this one, the last with `last_error`: the TRANSIENT_ATTEMPTS-th blocks
-    (and resets the count); before it, the task stays as is and a new error is noted once."""
+    (and resets the count); before it, the task stays as is and a new error is noted once (None: none stored yet)."""
     n = count + 1
     if n >= TRANSIENT_ATTEMPTS:
         return Retry(True, 0, False)

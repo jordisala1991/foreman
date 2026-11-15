@@ -28,19 +28,19 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
     for i in in_review:
         stop_review_sessions(p, i, rows)
     waiting = [tid for tid, _ in decide.queue_order(in_review)]
+    for tid in waiting:
+        i = backlog.get(backlog.load(p), tid)
+        if decide.queue_turn(i) == "merge":
+            guarded(p, tid, "merge it", lambda i=i: merge_one(p, i, main))
     key = check_key(p)
-    started = util.STARTED.get(key, 0)
-    for turn in ("merge", "check"):
-        for tid in waiting:
-            i = backlog.get(backlog.load(p), tid)
-            if decide.queue_turn(i) != turn:
-                continue
-            if turn == "merge":
-                guarded(p, tid, "merge it", lambda i=i: merge_one(p, i, main))
-                continue
-            guarded(p, tid, "check it", lambda i=i: queue_one(p, i, main, rows))
-            if decide.queue_full(util.STARTED.get(key, 0) - started):
-                return
+    started = util.STARTED.get(key, 0)  # after the merges: their merged checks are not the tick's branch check
+    for tid in waiting:
+        i = backlog.get(backlog.load(p), tid)
+        if decide.queue_turn(i) != "check":
+            continue
+        guarded(p, tid, "check it", lambda i=i: queue_one(p, i, main, rows))
+        if decide.queue_full(util.STARTED.get(key, 0) - started):
+            return
 
 
 def stop_review_sessions(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:

@@ -19,7 +19,7 @@ def guarded(p: Project, tid: str, what: str, fn: Callable[[], object], field: st
             backlog.update(p, tid, **{err: "", cnt: 0})
     except providers.Transient as e:
         i = backlog.get(backlog.load(p), tid)
-        r = decide.retry_step(int(i.get(cnt) or 0), i.get(err) or "", str(e))
+        r = decide.retry_step(int(i.get(cnt) or 0), i.get(err), str(e))
         if r.block:
             backlog.update(p, tid, blocked=f"the loop could not {what}: {e}"[:300], **{err: "", cnt: r.count})
             backlog.event(p, tid, f"blocked: could not {what} {decide.TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])

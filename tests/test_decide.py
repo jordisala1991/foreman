@@ -217,6 +217,7 @@ class TestRetry:
         assert retry_step(0, "", "e") == Retry(False, 1, True)
         assert retry_step(1, "e", "e") == Retry(False, 2, False)
         assert retry_step(1, "e", "f") == Retry(False, 2, True)
+        assert retry_step(0, None, "") == Retry(False, 1, True)  # an empty message with none stored is noted too
 
     def test_the_third_in_a_row_blocks(self):
         assert retry_step(2, "e", "e") == Retry(True, 0, False)
