@@ -146,7 +146,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
     backlog.update(p, i["id"], **keys)  # the guard reads the worktree from the backlog
     try:
-        short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, kind), cwd)
+        short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort, util.session_title(i["id"], kind, i["title"])), brief(p, i, kind), cwd)
     except sessions.SessionError as e:
         backlog.update(p, i["id"], blocked=f"could not launch its agent: {e}")
         backlog.event(p, i["id"], f"launch failed: {e}")
@@ -254,7 +254,8 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
     if scope.base:
         extra["round2"] = SCOPE[scope.rule] + " Nothing outside that diff is a finding."
     cwd = Path(i["worktree"])
-    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort), brief(p, i, role, extra), cwd)
+    title = util.session_title(i["id"], "review" if role == "reviewer" else role, i["title"])
+    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort, title), brief(p, i, role, extra), cwd)
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         launch = {
