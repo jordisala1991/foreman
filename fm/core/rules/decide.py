@@ -1,8 +1,8 @@
-"""What the loop does with a branch in review: pure functions, no I/O. The loop (fm/loop.py) reads the facts (sessions,
-files, git, CI, the check) and acts on what these return. The table is in DESIGN.md, "What the loop does with a task in
+"""What the loop decides: pure functions, no I/O. The loop (fm/loop/, the steps, the providers' registry) reads the facts
+(sessions, files, git, CI, the check, the backlog) and acts on what these return. The table is in DESIGN.md, "What the loop does with a task in
 review". Runs no program and touches no file: tach lets it import only `risk`, tests/test_decide.py rejects the rest."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -184,3 +184,81 @@ def merge_gate(c: Mapping[str, Any], head: str, main_head: str, failed: int, as_
 def ran_on(c: Mapping[str, Any]) -> str:
     """What the last check ran on, for `fm show`."""
     return f"merged with main {c['merged_with'][:9]}" if c.get("merged_with") else "branch alone"
+
+
+CHECKS_PER_TICK = 1  # branch checks started in one tick; the rest wait for the next ticks
+TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
+
+
+def queue_turn(i: Mapping[str, Any]) -> str:
+    """What the queue does with a task now: `merge` (accepted), `check`, or "" (not in review, or blocked)."""
+    if i["status"] != "in review" or i.get("blocked"):
+        return ""
+    return "merge" if i.get("accepted") else "check"
+
+
+def queue_order(tasks: Sequence[Mapping[str, Any]]) -> list[tuple[str, str]]:
+    """The queue's turns, `(id, turn)`: every merge (quick) before every check, each in the backlog's order."""
+    turns = [(i["id"], queue_turn(i)) for i in tasks]
+    return [t for t in turns if t[1] == "merge"] + [t for t in turns if t[1] == "check"]
+
+
+def queue_full(started: int) -> bool:
+    """`started` checks were started in this tick: no more this tick."""
+    return started >= CHECKS_PER_TICK
+
+
+@dataclass(frozen=True)
+class Retry:
+    """After a Transient failure: `block` the task, else store `count` and note the error in the events if `say`."""
+
+    block: bool
+    count: int
+    say: bool
+
+
+def retry_step(count: int, last_error: str, error: str) -> Retry:
+    """`count` Transient failures in a row before this one, the last with `last_error`: the TRANSIENT_ATTEMPTS-th blocks
+    (and resets the count); before it, the task stays as is and a new error is noted once."""
+    n = count + 1
+    if n >= TRANSIENT_ATTEMPTS:
+        return Retry(True, 0, False)
+    return Retry(False, n, last_error != error)
+
+
+def tests_or_ci(tests: str, ci: str) -> str:
+    """Without a test command (`none`), the PR's CI stands in for the tests once it has a result."""
+    return ci if tests == "none" and ci in ("pass", "fail") else tests
+
+
+def as_today(has_test: bool, conflict: bool) -> bool:
+    """For merge_gate: no test command (the PR's CI stands in) or a conflict with main goes to the merge as today."""
+    return not has_test or conflict
+
+
+class MergeConfig(NamedTuple):
+    """The `[merge]` values that pick and drive the provider (`provider` after `auto` is resolved)."""
+
+    provider: str
+    strategy: str
+    pr: str
+
+
+def provider_error(m: MergeConfig, merges: Mapping[str, Sequence[str]], strategies: Sequence[str], prs: Sequence[str]) -> str:
+    """Empty when `[merge]` is valid, else what is wrong: `merges` is each provider's strategies, `strategies` and `prs` the
+    values fm knows."""
+    provider, strategy, pr = m
+    if provider not in merges:
+        return f"[merge] provider = {provider!r} is not valid: use one of auto, {', '.join(merges)}"
+    if pr not in prs:
+        return f"[merge] pr = {pr!r} is not valid: use one of {', '.join(prs)}"
+    if strategy not in strategies:
+        return f"[merge] strategy = {strategy!r} is not valid: use one of {', '.join(strategies)}"
+    if strategy not in merges[provider]:
+        return f"[merge] strategy = {strategy!r} is not valid for {provider}: use one of {', '.join(merges[provider])}"
+    return ""
+
+
+def main_tests_due(ci_head: str | None, head: str, age_s: float | None, every_minutes: int) -> bool:
+    """Main's tests run again when main moved since the last run, or that run is older than `every_minutes`."""
+    return ci_head != head or (age_s or 1e9) > 60 * every_minutes

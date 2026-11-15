@@ -3,6 +3,7 @@ from typing import Any
 
 from ... import util
 from ...core.project.config import Project
+from ...core.rules import decide
 from ...core.tasks import backlog
 from ...services.delivery import check, git
 from .checks import Finding, agents, answers_undelivered, finding, login_check, loop_dead, loop_errors, orphan_worktrees
@@ -29,7 +30,7 @@ def main_tests(p: Project, run: bool = True) -> list[Finding]:
         return []
     head = git.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
     ci = util.read_json(p.state / "ci.json", {})
-    due = ci.get("head") != head or (util.age_s(ci.get("at")) or 1e9) > 60 * int(p.get("health", "ci_every_minutes"))
+    due = decide.main_tests_due(ci.get("head"), head, util.age_s(ci.get("at")), int(p.get("health", "ci_every_minutes")))
     if due and run:  # slow: in the background, the tick waits a little and goes on; the result lands in ci.json
         t = util.start_background(f"{p.state}:main-tests", p.state / "errors.jsonl", lambda: record_main_tests(p, head))
         if t:

@@ -27,20 +27,20 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
     in_review = [i for i in backlog.tasks(backlog.load(p)) if i["status"] == "in review"]
     for i in in_review:
         stop_review_sessions(p, i, rows)
-    waiting = [i["id"] for i in in_review if not i.get("blocked")]
-    for tid in waiting:
-        i = backlog.get(backlog.load(p), tid)
-        if i["status"] == "in review" and i.get("accepted") and not i.get("blocked"):
-            guarded(p, tid, "merge it", lambda i=i: merge_one(p, i, main))
+    waiting = [tid for tid, _ in decide.queue_order(in_review)]
     key = check_key(p)
     started = util.STARTED.get(key, 0)
-    for tid in waiting:
-        i = backlog.get(backlog.load(p), tid)
-        if i["status"] != "in review" or i.get("blocked") or i.get("accepted"):
-            continue
-        guarded(p, tid, "check it", lambda i=i: queue_one(p, i, main, rows))
-        if util.STARTED.get(key, 0) != started:
-            return
+    for turn in ("merge", "check"):
+        for tid in waiting:
+            i = backlog.get(backlog.load(p), tid)
+            if decide.queue_turn(i) != turn:
+                continue
+            if turn == "merge":
+                guarded(p, tid, "merge it", lambda i=i: merge_one(p, i, main))
+                continue
+            guarded(p, tid, "check it", lambda i=i: queue_one(p, i, main, rows))
+            if decide.queue_full(util.STARTED.get(key, 0) - started):
+                return
 
 
 def stop_review_sessions(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:
@@ -77,7 +77,8 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
         i = backlog.get(backlog.load(p), tid)
         c: dict[str, Any] = i.get("check") or {}
         head, main_head = (git.git(p.repo, "rev-parse", r).out.strip() for r in (i["branch"], p.get("project", "main")))
-        as_today = not p.get("merge", "test") or git.conflicts(p, i["branch"])
+        has_test = bool(p.get("merge", "test"))
+        as_today = decide.as_today(has_test, has_test and git.conflicts(p, i["branch"]))
         step = decide.merge_gate(c, head, main_head, int(i.get("failure_streak") or 0), as_today)
         if step != "check" or not first:
             break

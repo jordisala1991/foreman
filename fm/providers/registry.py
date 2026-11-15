@@ -4,7 +4,8 @@ import re
 
 from .. import proc
 from ..core.project.config import Project
-from . import ConfigError, Provider, merge_strategy, pr_mode
+from ..core.rules import decide
+from . import MERGES, PRS, ConfigError, Provider
 from .github.provider import GitHub
 from .local import Local
 
@@ -21,10 +22,8 @@ def get(p: Project) -> Provider:
     providers: dict[str, type[Provider]] = {"local": Local, "github": GitHub}
     if name == "auto":
         name = detect(p)
-    if name not in providers:
-        raise ConfigError(f"[merge] provider = {name!r} is not valid: use one of auto, {', '.join(providers)}")
-    pr_mode(p)
-    prov = providers[name](p)
-    if merge_strategy(p) not in prov.merges:
-        raise ConfigError(f"[merge] strategy = {merge_strategy(p)!r} is not valid for {name}: use one of {', '.join(prov.merges)}")
-    return prov
+    merges = {n: c.merges for n, c in providers.items()}
+    m = decide.MergeConfig(name, p.get("merge", "strategy"), p.get("merge", "pr"))
+    if err := decide.provider_error(m, merges, MERGES, PRS):
+        raise ConfigError(err)
+    return providers[name](p)

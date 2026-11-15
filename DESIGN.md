@@ -142,7 +142,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 ### What the loop does with a task in review
 
 Each tick, for a task in review (not accepted, not blocked), in this order. The decisions are pure functions in
-`fm/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
+`fm/core/rules/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
 
 A review runs only when its result goes somewhere: to the agent (rounds 1-2, an owner reject, a conflict resolution,
 the fix of failing tests or CI)
@@ -183,8 +183,8 @@ the second is checked with the first already in main.
 
 | Situation at the merge step | What the loop does | Function | Test |
 |---|---|---|---|
-| No test command | merges as today: the PR's CI stands in | `merge_gate` → `merge` | `test_without_a_test_command_it_merges_as_today` |
-| It conflicts with main | as today: the merge returns it to its agent (FN-133), no merged run | `merge_gate` → `merge` | `test_conflict_goes_back_without_a_merged_run` |
+| No test command | merges as today: the PR's CI stands in | `as_today`, `merge_gate` → `merge` | `test_without_a_test_command_it_merges_as_today` |
+| It conflicts with main | as today: the merge returns it to its agent (FN-133), no merged run | `as_today`, `merge_gate` → `merge` | `test_conflict_goes_back_without_a_merged_run` |
 | No merged check on this head and main as it is now (never run, or main moved since) | runs the merged check, then decides | `merge_gate` → `check` | `test_passes_alone_and_merged_merges`, `test_main_moved_after_a_pass_checks_again` |
 | Passed merged, neither main nor the branch moved since | merges without running the tests again | `merge_gate` → `merge` | `test_nothing_moved_merges_without_a_run` |
 | Fails merged, fewer than 2 returns in a row | back to its agent with the output, saying it failed merged with main `<sha>`, not on its branch alone; counts in `failures` and `failure_streak` | `merge_gate` → `failing`, `failing_note` | `test_fails_merged_goes_back_saying_so`, `test_autonomy_path_checks_merged_too` |
@@ -193,6 +193,17 @@ the second is checked with the first already in main.
 With a test command, a green check of the branch alone no longer ends a row of failures (`failure_streak`): only the
 merge does, otherwise each fix passing alone would reset the count. Without one, a green check ends it, as before
 (`test_a_green_check_ends_the_row_without_a_test_command`).
+
+### The loop's other decisions (FN-176)
+
+| Situation | What the loop does | Function | Test |
+|---|---|---|---|
+| Tasks in review at the queue step | accepted ones merge first, then the others are checked, each in the backlog's order; a blocked one waits | `queue_order`, `queue_turn` | `TestQueue` |
+| A branch check was started this tick | the other checks wait for the next ticks | `queue_full` | `TestQueue`, `test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick` |
+| A provider call fails `Transient` | counted, the new error noted once; the 3rd in a row blocks the task | `retry_step` | `TestRetry`, `test_any_provider_call_failing_transient_three_times_blocks_with_the_error` |
+| No test command and the PR's CI has a result | the CI's result stands in for the tests in the check | `tests_or_ci` | `TestTestsOrCi`, `test_ci_replaces_the_local_test_without_a_test_command` |
+| `[merge]` names an unknown provider, pr or strategy, or a strategy its provider lacks | a clear config error naming the value | `provider_error` | `TestProviderError`, `test_unknown_merge_or_provider_is_a_clear_config_error` |
+| Main moved since its tests ran, or they ran over `ci_every_minutes` ago | runs main's tests again (in the background) | `main_tests_due` | `TestMainTestsDue`, `test_failing_main_is_one_task_until_it_passes` |
 
 The decision tests are in `tests/test_decide.py` and launch no program; the loop's in `tests/test_review_rules.py`. How
 a tip follows the reviewed one is `delivery.merge_of`: a merge of the reviewed tip and a main commit whose tree equals
@@ -309,7 +320,7 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). O
 3. **merged**: the task closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
 
-Retry policy, one place (`loop.guarded`, every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both.
+Retry policy, one place (`loop.guarded`, deciding with `decide.retry_step`; every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both.
 
 Config: `[merge] provider = "auto"` (default: `github` if the repo's `origin` is on github.com, else `local`; or force
 `local` | `github`) and `strategy = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An

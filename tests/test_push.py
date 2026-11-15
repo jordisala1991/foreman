@@ -7,8 +7,14 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
+from fm import providers
 from fm.core.tasks import backlog
 from fm.loop import tick
+from fm.loop.guarded import guarded
+
+
+def transient() -> None:
+    raise providers.Transient("api graphql")
 
 
 class TestPushes:
@@ -123,29 +129,24 @@ class TestPushes:
         assert not e.task(tid).get("retry_count")
 
     def test_any_provider_call_failing_transient_three_times_blocks_with_the_error(self):
-        g = self.make(test="true")
-        g.set(ci="pending")  # not settled: it is asked for at every tick
-        tid = g.work()
-        g.deliver(tid)
-        g.set(fail_always=["api", "graphql"])
-        self.ticks(g, 2)
-        i = g.e.task(tid)
+        e = Env(test="true")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        for _ in range(2):
+            guarded(e.p, tid, "x", transient)
+        i = e.task(tid)
         assert (i["retry_count"], bool(i.get("blocked"))) == (2, False)
-        self.ticks(g, 1)
-        i = g.e.task(tid)
+        guarded(e.p, tid, "x", transient)
+        i = e.task(tid)
         assert "api graphql" in i["blocked"]
         assert i["retry_count"] == 0
 
     def test_a_provider_call_failing_once_then_working_resets_the_count(self):
-        g = self.make(test="true")
-        g.set(ci="pending")
-        tid = g.work()
-        g.deliver(tid)
-        g.set(fail_once=["api", "graphql"])
-        self.ticks(g, 1)
-        assert g.e.task(tid)["retry_count"] == 1
-        self.ticks(g, 1)
-        i = g.e.task(tid)
+        e = Env(test="true")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        guarded(e.p, tid, "x", transient)
+        assert e.task(tid)["retry_count"] == 1
+        guarded(e.p, tid, "x", lambda: None)
+        i = e.task(tid)
         assert (i["retry_count"], i["retry_error"], bool(i.get("blocked"))) == (0, "", False)
 
     def test_a_branch_that_diverged_from_origin_is_not_force_pushed(self):

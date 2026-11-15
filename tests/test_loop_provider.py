@@ -58,15 +58,17 @@ class TestProvider:
     def test_unknown_merge_or_provider_is_a_clear_config_error(self):
         from fm import providers
 
-        for key, val in (("strategy", "rebase"), ("provider", "gitlab"), ("pr", "never")):
-            e = Env(test="true")
+        e = Env(test="true")
+        tid = self.delivered(e)
+        tick.tick(e.p)
+        for key, val in (("strategy", "rebase"), ("provider", "gitlab"), ("pr", "never")):  # each message: TestProviderError
+            before = e.p.cfg["merge"][key]
             e.p.cfg["merge"][key] = val
             with pytest.raises(providers.ConfigError, match=f"{key} = '{val}'"):
                 registry.get(e.p)
-            tid = self.delivered(e)
-            tick.tick(e.p)
             with pytest.raises(providers.ConfigError):
                 merge.accept(e.p, tid)
+            e.p.cfg["merge"][key] = before
 
     def test_rejection_forgets_the_merge_of_the_old_tip(self):
         e = Env(test="true")

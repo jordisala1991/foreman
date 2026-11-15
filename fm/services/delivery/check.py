@@ -5,6 +5,7 @@ from typing import Any
 from ... import proc, util
 from ...core.project.config import Project
 from ...core.review import reviews
+from ...core.rules import decide
 from ...core.rules.risk import Facts, score
 from ...core.tasks import backlog
 from ...providers import registry
@@ -57,8 +58,7 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     if ci is None:
         ci = registry.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
     failed = registry.get(p).failed_checks(pulls.change_of(i, head)) if ci == "fail" else []
-    if tests == "none" and ci in ("pass", "fail"):  # no test command: the PR's CI stands in for it
-        tests = ci
+    tests = decide.tests_or_ci(tests, ci)  # no test command: the PR's CI stands in for it
     files = git.diff_stat(p, branch)
     deleted = git.deleted_files(p, branch)
     v: reviews.Review | None = i.get("review")
