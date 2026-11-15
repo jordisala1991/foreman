@@ -44,6 +44,7 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/diagnosis.py`, `fm/mechanic.py` | ~100 | the mechanic: required sections of a diagnosis and how it is stored; the tick step that launches, times out and stops mechanics |
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
+| `fm/plugin.py`, `fm/cli_plugin.py` | ~80 | the Claude Code plugin: the SessionStart context of a session in a project's folder, `fm project`'s values; manifests in `.claude-plugin/`, the hook in `hooks/hooks.json` |
 | `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
 || `fm/briefs/*.md` | ~80 | the briefs: `planning.md`, `responsible.md`, `hunter.md`, `reviewer.md`, `mechanic.md` (from the old foreman's briefs) ||
 | `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
@@ -62,8 +63,12 @@ one listed. A project owns its home, every repo, its worktrees folder and the um
 projects claiming it: fm refuses and `fm health` names them), then the nearest `fm.toml` above it. Every setting is per
 project: `[agents] slots` (how many at once), models, extra session settings; `[merge] autonomy`, `provider`, `strategy`, `test`,
 `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`; `[health]` timings.
-`fm init` links `.claude/fm.md` and `.claude/skills/define-task` to `fm/shared/` of the checkout it runs from, adds
-`[project] fm` (path of `bin/fm`), and never overwrites a file of the home.
+`fm init` makes `fm.toml`, `backlog.json` and `instructions.md` (the owner's own rules), never overwrites a file of the
+home, and prints the two lines that install the plugin. The plugin (`fm@fm`, marketplace `fm`, from this repo's branch
+`foreman-next`; no `version` anywhere, so Claude Code's version is the commit and every merge reaches it) gives a
+session in any folder of a registered project the skill `fm:define-task` (its values from `fm project`), the shared
+instructions with the project's values plus `<home>/instructions.md` (the SessionStart hook `fm session-context`), and
+`fm` on the PATH; a session elsewhere gets no context. Agents run with it disabled (`enabledPlugins` in their settings).
 
 ## The states of a task
 

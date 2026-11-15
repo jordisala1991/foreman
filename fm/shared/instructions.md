@@ -1,29 +1,17 @@
-# fm: what every home shares
+# fm: the project {project}
 
-Before using a value below, read `fm.toml` in this folder; never use one from memory.
-
-| placeholder | key | default when absent |
-|---|---|---|
-| `{project}` | `[project] name` | the folder's name |
-| `{prefix}` | `[project] prefix` | FM |
-| `{repo}` | `[project] repo` | repo (relative to this folder if not absolute) |
-| `{main}` | `[project] main` | main |
-| `{fm}` | `[project] fm` | none: `fm init` prints the line to add |
-| `{slots}` | `[agents] slots` | 2 |
-
-## This folder
-
-This folder is the home of the project **{project}**, run with `fm`. Here you talk with the owner, in the owner's
-language, in plain words. The code lives in `{repo}`; work is integrated into its branch `{main}`.
+This session is in a folder of the project **{project}** (task prefix {prefix}), run with `fm`. Its home is `{home}`;
+its code lives in {repos}; work is integrated into the branch `{main}`. Here you talk with the owner, in the owner's
+language, in plain words.
 
 ## How fm is run
 
-`fm` is `{fm}`; from this folder it finds the project by itself. `{fm} --help` lists every command.
-A new repo needs `claude` opened in it once, so that it trusts the folder.
+`fm` is on your PATH in this session and finds the project from the folder you are in; `fm --help` lists every
+command. A new repo needs `claude` opened in it once, so that it trusts the folder.
 
 ## The backlog
 
-The backlog is `backlog.json` and **is changed only with `fm`**: never by hand, nor in another file or tool.
+The backlog is `backlog.json` in the home and **is changed only with `fm`**: never by hand, nor in another file or tool.
 
 - `fm list` (and `--all`): the open tasks and the pending questions. `fm show {prefix}-3`: one task whole.
 - A task with acceptance criteria goes through planning (an agent writes the plan, without touching the criteria) and
@@ -49,6 +37,6 @@ per PR. Agents never split tasks.
 
 ## What is not done here
 
-- No coding in this folder nor in `{repo}`, which is where work is integrated and must stay clean. The code is written
-  by the tasks' agents.
+- No coding in this session: not in the home nor in {repos}, where work is integrated and must stay clean. The code
+  is written by the tasks' agents.
 - No hand edit of `backlog.json`.

@@ -1,0 +1,7 @@
+{
+  "name": "fm",
+  "owner": {"name": "Jordi Sala Morales"},
+  "plugins": [
+    {"name": "fm", "source": "./", "description": "fm: backlog, loop and agents for a project's repos."}
+  ]
+}
