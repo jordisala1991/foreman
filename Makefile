@@ -4,7 +4,7 @@
 # Fail if uv.lock is out of date with pyproject.toml; never rewrite it silently.
 export UV_LOCKED := 1
 
-.PHONY: check fix lint format types arch suppressions size test
+.PHONY: check fix lint format types arch suppressions size test test-serial
 
 # Everything, in this order, stopping at the first failure (even under `make -j`).
 check:
@@ -49,5 +49,10 @@ size:
 	uv run pylint --max-module-lines=600 tests
 
 # -W error::ResourceWarning: a file or pipe left open is reported loudly (traceback of where it was opened), not swallowed.
+# -n auto: one worker per core (pytest-xdist); `test-serial` runs them in one process. `python -m` puts the repo, so fm,
+# on the path; pytest puts tests/ there, so `helpers`.
 test:
-	python3 -W error::ResourceWarning -m unittest discover -s tests
+	uv run python -m pytest -q -n auto -W error::ResourceWarning tests
+
+test-serial:
+	uv run python -m pytest -q -W error::ResourceWarning tests

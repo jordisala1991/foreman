@@ -1,8 +1,8 @@
 import os
 import unittest
 
+import test_loop
 from helpers import Env, git
-from test_loop import Queue
 
 from fm import backlog, delivery, loop
 from fm.providers import ChangeState, registry
@@ -10,7 +10,7 @@ from fm.providers import ChangeState, registry
 
 class Provider(unittest.TestCase):
     def delivered(self, e):
-        return Queue().deliver(e)
+        return test_loop.Queue().deliver(e)  # via the module: an imported Queue would be collected and run twice
 
     def test_accept_only_marks_and_the_task_closes_when_the_merge_is_seen_in_main(self):
         from fm.providers import local

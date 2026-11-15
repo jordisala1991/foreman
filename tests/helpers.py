@@ -3,6 +3,7 @@ that records each launch and answers `claude agents --json` from a file the test
 
 import atexit
 import contextlib
+import functools
 import io
 import json
 import os
@@ -111,17 +112,25 @@ def fm(home: Path, *args: str) -> str:
     return out.getvalue()
 
 
+@functools.cache
+def template_repo() -> Path:
+    """The repo every Env starts from, built once per process and copied: a git init and commit per test is slow."""
+    repo = SANDBOX / "template-repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.email", "t@t")
+    git(repo, "config", "user.name", "t")
+    (repo / "app.py").write_text("def add(a, b):\n    return a + b\n")
+    git(repo, "add", "-A")
+    git(repo, "-c", "maintenance.auto=false", "commit", "-qm", "init")  # no background maintenance racing the copies
+    return repo
+
+
 class Env:
     def __init__(self, test: str = "", autonomy: str = "manual", slots: int = 2) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="fmtest-")).resolve()
         self.repo = self.tmp / "repo"
-        self.repo.mkdir()
-        git(self.repo, "init", "-q", "-b", "main")
-        git(self.repo, "config", "user.email", "t@t")
-        git(self.repo, "config", "user.name", "t")
-        (self.repo / "app.py").write_text("def add(a, b):\n    return a + b\n")
-        git(self.repo, "add", "-A")
-        git(self.repo, "commit", "-qm", "init")
+        shutil.copytree(template_repo(), self.repo, symlinks=True)
         self.bin = self.tmp / "bin"
         self.bin.mkdir()
         (self.bin / "claude").write_text(FAKE)
