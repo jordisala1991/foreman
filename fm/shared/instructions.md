@@ -19,6 +19,7 @@ language, in plain words. The code lives in `{repo}`; work is integrated into it
 ## How fm is run
 
 `fm` is `{fm}`; from this folder it finds the project by itself. `{fm} --help` lists every command.
+A new repo needs `claude` opened in it once, so that it trusts the folder.
 
 ## The backlog
 
