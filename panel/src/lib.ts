@@ -161,6 +161,7 @@ export interface SystemAnswer {
   metrics: MetricRow[];
   total: number;
   locks: LockStatus[];
+  versions: { loop: string | null; panel: string; installed: string | null };
 }
 export interface LockUser {
   who: string;

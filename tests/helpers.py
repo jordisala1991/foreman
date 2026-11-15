@@ -208,3 +208,21 @@ class Env:
 
     def task(self, tid: str) -> dict:
         return backlog.get(backlog.load(self.p), tid)
+
+
+def install_fm(test, *entries: dict, version: int = 2) -> Path:
+    """Write Claude Code's record of installed plugins in the sandbox HOME with these fm@fm entries; removed after the test."""
+    from fm import launcher
+
+    f = launcher.record()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    util.write_json(f, {"version": version, "plugins": {"other@x": [{"scope": "user", "installPath": "/x", "version": "1"}], "fm@fm": list(entries)}})
+    test.addCleanup(f.unlink, missing_ok=True)
+    return f
+
+
+def version_folder(parent: Path, name: str) -> dict:
+    """A version folder `parent/name` with a bin/fm, and its fm@fm entry."""
+    (parent / name / "bin").mkdir(parents=True)
+    (parent / name / "bin/fm").write_text("#!/usr/bin/env python3\n")
+    return {"scope": "user", "installPath": str(parent / name), "version": name, "gitCommitSha": "stale"}

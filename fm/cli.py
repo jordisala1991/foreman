@@ -181,14 +181,12 @@ def cmd_loop(a: argparse.Namespace) -> None:
 
 
 def cmd_health(a: argparse.Namespace) -> None:
-    for line in health.python_note():
-        print(line)
-    for line in health.shared_folders(config.loaded()):
+    for line in [*health.python_note(), *health.shared_folders(config.loaded())]:
         print(line)
     p = home(a)
     if note := health.repos_note(p):
         print(note)
-    for line in health.old_links(p):
+    for line in [*health.versions(p), *health.old_links(p)]:
         print(line)
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
@@ -234,10 +232,11 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
-    fm_bin = str(homesetup.FM_BIN)
+    from . import launchd
+
     jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
     for job, args in jobs.items():
-        text = loop.launchd_plist(fm_bin, job, args)
+        text = launchd.plist(job, args)
         if a.dir:
             out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
             out.write_text(text, encoding="utf-8")

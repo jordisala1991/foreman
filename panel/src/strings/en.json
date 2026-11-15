@@ -138,6 +138,7 @@
   "loop_dead": "The loop is not running",
   "loop_last": "Last tick {when}",
   "loop_never": "It has never ticked",
+  "versions": "Loop {loop} · panel {panel}",
   "paused_since": "Launching paused since {when}",
   "pause": "Pause launching",
   "resume": "Resume launching",

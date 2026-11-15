@@ -6,10 +6,8 @@ import os
 import sys
 from pathlib import Path
 
-from . import config, plugin
+from . import config, launcher, plugin
 from .cli_common import home
-
-BIN = Path(__file__).resolve().parent.parent / "bin"
 
 
 def cmd_session_context(a: argparse.Namespace) -> None:
@@ -29,7 +27,7 @@ def cmd_session_context(a: argparse.Namespace) -> None:
     try:
         if env_file := os.environ.get("CLAUDE_ENV_FILE"):
             with Path(env_file).open("a", encoding="utf-8") as f:
-                f.write(f'export PATH="{BIN}:$PATH"\n')
+                f.write(f'export PATH="{launcher.ROOT / "bin"}:$PATH"\n')
     except OSError:  # the instructions are out; fm stays reachable by its full path
         pass
 

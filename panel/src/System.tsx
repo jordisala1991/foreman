@@ -26,6 +26,7 @@ export function System({ project }: { project: Project }) {
               <div>
                 <div className="title">{t(d.loop.alive ? "loop_alive" : "loop_dead")}</div>
                 <div className="sub">{d.loop.time ? t("loop_last", { when: when(d.loop.time) }) : t("loop_never")}</div>
+                <div className="sub">{t("versions", { loop: d.versions.loop ?? "?", panel: d.versions.panel })}</div>
                 {d.paused ? <div className="sub warn">{t("paused_since", { when: when(d.paused) })}</div> : null}
               </div>
               <button type="button" className={d.paused ? "btn primary small-btn" : "btn small-btn"} disabled={w.busy}

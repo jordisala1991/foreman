@@ -16,12 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import backlog, login, plugin, proc, util
+from . import backlog, launcher, login, plugin, proc, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
-ROOT = Path(__file__).resolve().parent.parent
-BIN = ROOT / "bin"
 STOP_SETTLE_S = 3.0  # after the process is gone, a resume right away still copies (0 s: copy, 2 s: ok)
 STOP_WAIT_TRIES = 15
 
@@ -32,13 +30,14 @@ class SessionError(Exception):
 
 def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
     """The agent's `--settings`. The fm plugin is off: an agent gets nothing from it, its brief is its only instructions."""
+    bin_ = launcher.ROOT / "bin"
     env = {
         "FM_HOME": str(p.home),
         "FM_TASK": tid,
         "FM_AGENT": agent,
-        "PATH": f"{BIN}{os.pathsep}{os.environ.get('PATH', '')}",
+        "PATH": f"{bin_}{os.pathsep}{os.environ.get('PATH', '')}",
     }
-    guard = f"{sys.executable} {BIN / 'fm'} guard"
+    guard = f"{sys.executable} {bin_ / 'fm'} guard"
     s: dict[str, Any] = {
         "worktree": {"bgIsolation": "none"},
         "env": env,
