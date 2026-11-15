@@ -111,8 +111,15 @@ def conflict_note(main: str) -> str:
 
 
 def failing_note(c: Mapping[str, Any], pr_url: str) -> str:
-    """The note for an agent whose branch fails its checks: the last lines of the test output, each failing CI check."""
+    """The note for an agent whose branch fails its checks: the last lines of the test output, each failing CI check.
+    A branch that passes alone but fails merged with main is told so, and to merge main in."""
     note = "Your branch fails its checks. "
+    if c.get("merged_with") and c.get("tests") == "fail":
+        note = (
+            f"Your branch passes its tests alone but fails them merged with main {c['merged_with'][:9]}, not on its branch "
+            "alone. Merge main into your branch with a merge commit, not a rebase, fix what breaks, run the tests there, "
+            "and run `fm done` again.\n"
+        )
     if c.get("tests_output"):
         note += f"The test command fails; last lines of its output:\n```\n{c['tests_output']}\n```\n"
     elif c.get("tests") == "fail":
@@ -158,3 +165,22 @@ def after_check(c: Mapping[str, Any], autonomy: str, has_ci: bool, resolving: st
     if not wants:
         return "owner"
     return "conflict" if c.get("conflict") else "merge"
+
+
+def merge_gate(c: Mapping[str, Any], head: str, main_head: str, failed: int, as_today: bool) -> str:
+    """At the merge step of an accepted branch: `merge`, `check` (run the tests on it merged with main as it is now),
+    `failing` (back to its agent: it fails merged with main) or `owner` (past MAX_FAILURE_RETURNS: its accept lapses).
+    `as_today`: no test command (the PR's CI stands in) or a conflict with main (the merge returns it, FN-133); it and
+    a moved branch (the merge refuses it) go to the merge as today. A merged result counts only for this head and main."""
+    if as_today or c.get("head") != head:
+        return "merge"
+    if c.get("merged_with") != main_head:
+        return "check"
+    if c.get("tests") != "fail":
+        return "merge"
+    return "failing" if failed < MAX_FAILURE_RETURNS else "owner"
+
+
+def ran_on(c: Mapping[str, Any]) -> str:
+    """What the last check ran on, for `fm show`."""
+    return f"merged with main {c['merged_with'][:9]}" if c.get("merged_with") else "branch alone"

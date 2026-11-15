@@ -77,6 +77,7 @@ export interface Check {
   paths?: string[];
   risk: "low" | "medium" | "high";
   reasons: string[];
+  merged_with?: string; // the main commit the tests ran on, merged with the branch (FN-113); absent: the branch alone
   at?: string;
 }
 export interface Task {

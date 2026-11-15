@@ -53,16 +53,19 @@ def run_tests(p: Project, cwd: Path) -> tuple[str, str]:
     return "fail", "\n".join(f"{r.out}\n{r.err}".strip().splitlines()[-TAIL_LINES:])
 
 
-def tests_at(p: Project, commit: str, name: str) -> tuple[str, str]:
-    """The test command on exactly `commit` (a fresh detached worktree in state/), never on uncommitted files."""
+def tests_at(p: Project, commit: str, name: str, merge: str = "") -> tuple[str, str]:
+    """The test command on exactly `commit` (a fresh detached worktree in state/), never on uncommitted files; with
+    `merge`, on `commit` with that commit merged in (git refusing the worktree or the merge raises DeliveryError)."""
     if not p.get("merge", "test"):
         return "none", ""
     tmp = p.state / "trees" / name
     git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
-    added = git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=False)
+    added = git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=bool(merge))  # merged check: git's fault, it raises
     if added.code != 0:
         return "fail", added.err.strip()
     try:
+        if merge:  # a failure here is git's, not the tests': it raises
+            git(tmp, "merge", "--no-commit", "--no-ff", merge)
         return run_tests(p, tmp)
     finally:
         git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)

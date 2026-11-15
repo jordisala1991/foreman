@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from . import backlog, blockers, decide, delivery, health, mechanic, parents, proc, providers, pulls, release, sessions, sources, subtasks, util
+from . import backlog, blockers, decide, delivery, health, mechanic, mergecheck, parents, proc, providers, pulls, release, sessions, sources, subtasks, util
 from .agents import fill_sessions, launch, running
 from .config import Project, registered
 from .providers import registry
@@ -82,9 +82,41 @@ def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
     """The merge step of an accepted task; a conflict with main returns it to its agent, keeping who accepted it."""
     acc: dict[str, Any] = i.get("accepted") or {}
     try:
-        delivery.merge_accepted(p, i["id"])
+        if gate_merge(p, i):
+            delivery.merge_accepted(p, i["id"])
     except delivery.MergeConflict:
         return_to_agent(p, i["id"], "conflict", decide.conflict_note(main), by=acc.get("by", ""))
+
+
+def gate_merge(p: Project, i: dict[str, Any]) -> bool:
+    """May this accepted task merge now? With a test command, only once its tests pass on it merged with main as main is
+    now (run here, in the background, one at a time); a failure goes back to its agent, or past the row, to the owner."""
+    tid = i["id"]
+    for first in (True, False):
+        i = backlog.get(backlog.load(p), tid)
+        c: dict[str, Any] = i.get("check") or {}
+        head, main_head = (delivery.git(p.repo, "rev-parse", r).out.strip() for r in (i["branch"], p.get("project", "main")))
+        as_today = not p.get("merge", "test") or delivery.conflicts(p, i["branch"])
+        step = decide.merge_gate(c, head, main_head, int(i.get("failure_streak") or 0), as_today)
+        if step != "check" or not first:
+            break
+        t = util.start_background(check_key(p), p.state / "errors.jsonl", lambda: merged_guarded(p, tid))
+        if t is None:
+            return False
+        t.join(util.BACKGROUND_WAIT_S)
+        if t.is_alive():
+            return False
+    if step == "failing":
+        pr: dict[str, Any] = i.get("pr") or {}
+        return_to_agent(p, tid, "failing", decide.failing_note(c, pr.get("url", "")))
+    elif step == "owner":
+        backlog.update(p, tid, accepted=None)
+        backlog.event(p, tid, f"its accept lapses: tests fail merged with main {main_head[:9]}: the owner decides")
+    return step == "merge"
+
+
+def merged_guarded(p: Project, tid: str) -> None:
+    guarded(p, tid, "check it merged with main", lambda: mergecheck.merged_check(p, tid), "check_retry")
 
 
 TRANSIENT_ATTEMPTS = 3  # consecutive Transient failures of one task before it is blocked
@@ -151,13 +183,13 @@ def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) ->
 def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> None:
     """After the check: back to its agent for failing tests or CI, or for a conflict someone wants merged; or deliver
     it, merging it when wanted (by the accept a conflict carried over, or the autonomy). An accept carried over lapses
-    when the owner must decide. A check without failing tests or CI ends a row of failures."""
+    when the owner must decide. Without a test command, a check without failing tests or CI ends a row of failures."""
     by = i.get("resolving") or "autonomy " + p.get("merge", "autonomy")
     if action == "failing":
         pr: dict[str, Any] = i.get("pr") or {}
         return_to_agent(p, i["id"], "failing", decide.failing_note(c, pr.get("url", "")))
         return
-    if i.get("failure_streak") and not decide.failing(c):
+    if i.get("failure_streak") and not decide.failing(c) and not p.get("merge", "test"):  # with tests: only the merge
         backlog.update(p, i["id"], failure_streak=0)
     if action == "conflict":
         return_to_agent(p, i["id"], "conflict", decide.conflict_note(p.get("project", "main")), by=by)
@@ -167,7 +199,8 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
         try:
             delivery.accept(p, i["id"], by=by)
             backlog.update(p, i["id"], resolving="")
-            delivery.merge_accepted(p, i["id"])
+            if gate_merge(p, backlog.get(backlog.load(p), i["id"])):
+                delivery.merge_accepted(p, i["id"])
         except delivery.DeliveryError as e:
             backlog.event(p, i["id"], f"automatic merge failed: {e}")
     elif i.get("resolving"):
