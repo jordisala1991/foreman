@@ -56,7 +56,7 @@ A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `wo
 `fm.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
 (`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Several repos are
 `[repos.<key>]` tables (`path`, `main`) instead of `[project] repo` (both forms: fm refuses); tasks run in the first
-one listed. A project owns its home, every repo, its worktrees folder and the umbrella folder set in
+one listed until `## Several repos` is built (FN-144 subtask 4). A project owns its home, every repo, its worktrees folder and the umbrella folder set in
 `[project] umbrella` (explicit, never guessed). A command finds its project by `--project NAME`, `--home`, `FM_HOME`,
 `FM_PROJECT`, then the registered project owning the current folder (paths resolved, the deepest folder wins; two
 projects claiming it: fm refuses and `fm health` names them), then the nearest `fm.toml` above it. Every setting is per
@@ -353,6 +353,174 @@ names saved in `reports/ID/`) go, by git plumbing and never forced, to `ID/` on 
 only push fm makes besides the task branch (agents may not: guard `push-evidence`); the PR body links them with
 `?raw=true` blob URLs and the panel serves them at `/evidence`. Conflicts with main go back to the responsible agent once accepted, also when the merge itself is refused for a conflict after acceptance: the acceptance is carried over as `resolving`, and the resolved tip merges without a new accept unless its review leaves findings open or its checks fail. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
+
+## Several repos (defined in FN-148; not built yet)
+
+This section defines how a project with several repos runs its tasks; FN-144 subtask 4 builds it in the subtasks
+listed in FN-148's report. Until then fm reads only `path` and `main` of each repo table and runs every task in the
+first repo (FN-145). Two rules carry it all: **one task = one PR in one repo**, and **the project's repos stay
+untouched** (their own git sees no fm or Claude file).
+
+### Shape of fm.toml
+
+```toml
+[project]
+name = "shop"
+prefix = "SH"
+umbrella = "~/src/shop"              # optional: the folder that holds the repos
+worktrees = "~/fm/shop-worktrees"    # outside the umbrella and every repo
+
+[merge]                              # defaults for every repo
+autonomy = "manual"
+
+[repos.app]
+path = "~/src/shop/app"
+post_create = ["cp -c -R {main}/node_modules {wt}/", "cp {main}/.env {wt}/"]
+
+[repos.app.merge]
+strategy = "squash"
+test = "npm run lint && npm test"
+
+[repos.app.risk.high]
+release = ["app.config.ts", ".github/workflows/"]
+
+[repos.api]
+path = "~/src/shop/api"
+
+[repos.api.merge]
+strategy = "merge"                   # no test: the PR's CI stands in
+
+[repos.api.risk.high]
+schema = ["migrations/"]
+
+[repos.site]
+path = "~/src/shop/site"
+publish_on_merge = true              # its host deploys main
+
+[repos.site.merge]
+strategy = "merge"
+test = "npm run build"
+
+[repos.emails]
+path = "~/src/shop/emails"
+remote = "none"                      # no remote: the local provider
+
+[repos.emails.merge]
+test = "npm run build"
+```
+
+| Key | Level | Default | Meaning |
+|---|---|---|---|
+| `path` | `[repos.K]` | required | the repo's main checkout |
+| `main` | `[repos.K]` | `"main"` | its main branch |
+| `remote` | `[repos.K]` | `"origin"` | where task branches are pushed; `"none"`: no remote, provider `local` |
+| `worktrees` | `[repos.K]` | `[project] worktrees` | the folder of this repo's task worktrees |
+| `post_create` | `[repos.K]` | `[]` | shell commands run once in each new worktree |
+| `publish_on_merge` | `[repos.K]` | `false` | merging into its main publishes (a host deploys it) |
+| `provider`, `strategy`, `pr`, `test`, `autonomy` | `[repos.K.merge]` | as `[merge]` | same values and meaning as `[merge]` |
+| `large_lines`, `[repos.K.risk.high]`, `[repos.K.risk.medium]` | `[repos.K.risk]` | as `[risk]` | as `[risk]`; patterns relative to the repo's root, as diff paths are |
+
+- Project-wide only, never in a repo table: `[project]` (`name`, `prefix`, `branch_prefix`, `worktrees`, `umbrella`,
+  `fm`), `[agents]` (slots, models, `claude`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
+  `[risk]` stay as the defaults for every repo.
+- **A setting given at both levels: the repo's wins, key by key; absent there, the project's; absent there, fm's
+  default.** A `high` or `medium` table in a repo replaces the project's table of that level whole, never label by
+  label (as a project table replaces fm's default one today).
+- Repo tables are strict: a project-wide key or an unknown key in one is a config error naming table and key
+  (`fm: [repos.api] has no setting 'slots'`). No other table changes.
+- `path` and `worktrees` are relative to the home, `~` expanded. `[project] repo` alone stays the one-repo form, with
+  none of these tables.
+- `post_create`: each command runs with `sh -c`, cwd the new worktree, `{main}` (the repo's main checkout) and `{wt}`
+  replaced by shell-quoted paths (another placeholder is a config error at load), 300 s each, once per worktree (a
+  reused one does not run it again). A failing or timed-out step removes the worktree (and the branch, if this
+  launch made it) and blocks the task: `post_create step failed (CMD): LAST 300 CHARS`.
+- When built: `fm/repos.py` in the core, pure (parse, validate, the view below, the layout check); the commands run in
+  `agents.worktree` (a service). No port: nothing varies that `providers/` does not already cover.
+
+### One task, one PR, one repo
+
+- A task's repo is its `repo` key (a `[repos.K]` key). The project hands every step a **view** of itself for that
+  repo: `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`remote`/`worktrees`, `[merge]` and
+  `[risk]` are the repo's, merged by the rule above; home, state, agents, guard, resources and backlog are the
+  project's. The code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls
+  `for_task` once per task step. A task with no repo (a parent, a loop finding) gets the project as it is, that is
+  the first repo.
+- Choosing: `fm add TITLE --repo KEY`; `fm edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops
+  the plan and returns to backlog, as criteria do, because a plan is about one repo). With several repos, `fm add` of
+  a task with criteria and `fm go` refuse one without repo: `fm: FN-3: choose its repo first (fm edit FN-3 --repo
+  app|api|site|emails)`; in triage it may have none. An unknown key is refused, naming the keys. A health finding
+  about one repo carries it (main's tests, an orphan worktree); the loop's own findings carry none and are never let
+  in as they are (the mechanic diagnoses, the owner files the real task).
+- Showing: `fm show` prints `repo`; `fm list` adds a repo column between status and agent; the panel's `state` and
+  `task` data carry `repo` per task, and `state` carries `repos` (the keys).
+- **Only with more than one repo.** With one repo the key is never stored, asked, listed or sent, and `--repo` is
+  refused (`fm: this project has one repo`).
+- A change across repos is a parent with one subtask per repo (`fm add --parent`), ordered with `--blocked-by`: the
+  dependent subtask launches once the first is merged. No PR links across repos, no merge of several repos at once.
+  A planning agent that finds a task needs two repos runs `fm block` with that split proposed.
+
+### Each moving part
+
+| Part | Answer |
+|---|---|
+| Worktrees | `<the repo's worktrees folder, else the project's>/<id>`, made from the repo's checkout; the planning agent runs in the task's repo checkout (read only); parent and mechanic agents keep the first repo as cwd |
+| Branch names | unchanged, `<branch_prefix><id>`: ids are unique in the project and a task has one repo, so a branch lives in one repo only |
+| PR | per repo: provider (`auto` looks at that repo's `remote`; `"none"` is `local`), `pr` mode, push to that `remote`; draft PR, description, review comments and `fm-evidence` go to the task's repo |
+| Merge | per repo `strategy`; the local provider merges into that repo's main checkout; the merged check runs on that repo's main. Merges stay one at a time for the whole project |
+| Tests and CI | per repo `test`, in a detached tree of that repo (`state/trees/<id>`); no `test`: the PR's CI stands in and the doubt is medium, as today. Main's tests (health) run per repo that has a test command: `state/ci-<key>.json`, tree `main-<key>`, finding key `ci:<key>:<since>` (one repo keeps `ci.json` and `ci:<since>`) |
+| Risk | the repo's tables and `large_lines`. `publish_on_merge` makes the impact high with the reason `merging publishes [repo]` (a fact of the score, `publishes`), so only the owner's accept merges it. fm still never tags or releases |
+| Autonomy | the repo's, else the project's; `high` never merges alone, as today |
+| Review | unchanged: hunter and reviewer start in the task's worktree, so they are per repo by their cwd |
+| Health checks | orphan worktrees in every repo's worktree list; main's tests per repo; new: a repo path that is not a git checkout, a task whose repo key left fm.toml (blocked at launch with that reason), fm or Claude files in a repo or the umbrella (below). `fm health`'s «runs in the first one» note goes |
+| Slots | one count for the project (`[agents] slots`), one queue by priority then id, whatever the repo; no per-repo cap. Checks and merged checks stay one at a time for the project |
+| Locks | `[resources.*]` stay project-wide and machine-wide: a simulator or a port is shared by every repo; the brief lists them for every task |
+| Guard | `push-main` covers every repo's `main`; the rest as today |
+| A project with one repo | nothing above shows: the `[project] repo` form is untouched; a project with one `[repos.K]` table has an implicit repo (no key stored); same files, names, columns and text |
+
+### The umbrella and files kept out of repos
+
+- The umbrella (`[project] umbrella`) holds repos cloned inside it. No fm or Claude file goes in it or in a repo.
+  Checked at load for a project with `[repos.*]` or an umbrella (`fm: the home is inside repo app: …`): the home,
+  `state/`, every worktrees folder and the registry file are outside the umbrella and outside every repo. A one-repo
+  `[project] repo` project is not checked (unchanged).
+- fm writes into a repo only what git keeps out of `git status`: `.git/worktrees/<id>`, the refs
+  `<branch_prefix><id>`, and the local provider's merges into main. Everything else lives in the home: agent settings
+  inline on the command line, plans, reports, reviews, `state/trees/`. Evidence goes to `fm-evidence` by git plumbing,
+  without touching a checkout.
+- Safety net, because fm cannot prove that a Claude session started in a repo (planning, parent, mechanic) writes
+  nothing there: a health check lists, per repo and at the umbrella's top level, untracked entries named `.claude`,
+  `CLAUDE.md`, `CLAUDE.local.md` or `fm.toml` (a repo's `??` lines of `git status --porcelain`; a tracked
+  `CLAUDE.md` is the repo's own and is not reported), and files one finding. The matching is a pure function over
+  names, in `fm/repos.py`.
+- The owner's own chat in the umbrella is the plugin's (FN-144 subtask 2), not this.
+
+### Left out on purpose
+
+- Per-repo slots or locks: one queue is simpler, and the machine is what is shared.
+- A check queue per repo (checks in parallel): one at a time is enough for one owner.
+- Repos found by their git remote, and `fm init` for several repos: the owner writes the tables.
+- A repo's own brief or agent models: the project's serve every repo.
+- A setting for a GitHub repo with no CI: under autonomy `low`/`medium` it never merges alone and waits for the owner,
+  as today; a `ci = "none"` key can come if needed.
+- Merges across repos at once and PR links across repos: subtasks with `--blocked-by` order them.
+- Moving a task to another repo after its plan: `fm edit --repo` does it and the plan is redone.
+
+### Not kept from the old foreman
+
+| Old | Why not |
+|---|---|
+| `github = "owner/repo"` | `gh` runs in the repo and reads its remote |
+| `local_ci`, `ci_runs`, `ci_summary`, `main_ci` | tests run on the committed head at the check, not before a push; the setting is `test` |
+| `remote_checks` | CI is the provider's |
+| `require_approval` | it is autonomy `manual`, the default |
+| `risky_paths` as one list with `file:text` entries | labelled path tables; the file is the unit, text in a line is not matched (`package.json` goes in a medium table) |
+| `review`, `review_paths`, `review_lines` | every branch is reviewed; size is `large_lines` |
+| `public`, `privacy_scan`, `pre_merge_report`, `post_merge`, `plan_check_heading` | nobody asked; each can be its own task |
+| the `worktree` template with `{repo}-{name}` | a folder key is enough: names carry no repo |
+| `post_create` placeholders `{repo}`, `{name}`, `{branch}` | `{main}` and `{wt}` suffice |
+| the folder of repos found by rule, with the home inside it | the umbrella is explicit and the home stays outside it |
+| the backlog's projects with `repos` lists, `launch --repo` | a task has one repo and `fm go` launches it |
+| `import-gh` and `Closes #n` | fm imports nothing from GitHub |
 
 ## Architecture
 
