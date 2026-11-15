@@ -272,6 +272,13 @@ def undelivered(d: Data) -> list[dict[str, Any]]:
     return [q for q in d["decisions_resolved"] if q.get("delivered") is False]
 
 
+def holds_slot(d: Data, i: Task) -> bool:
+    """A task whose planning or responsible agent counts against the slots: in `RUNNING`, not blocked, and not waiting
+    for the owner (an open question or permission with no answer on its way)."""
+    waiting = open_questions(d, i["id"]) and not any(q.get("task") == i["id"] for q in undelivered(d))
+    return i["status"] in RUNNING and not i.get("blocked") and not waiting
+
+
 def mark_delivered(p: Project, qid: str) -> None:
     with edit(p) as d:
         for q in d["decisions_resolved"]:
