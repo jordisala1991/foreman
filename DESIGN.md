@@ -96,7 +96,9 @@ instructions with the project's values plus `<home>/instructions.md` (the Sessio
 - `blocked_by` (`fm add/edit --blocked-by FN-n …`; `none` clears): the task is never planned or launched until every
   blocker is `done`, then the loop marks it unblocked in the history. A canceled or duplicate blocker blocks the task
   with a reason: the owner edits `--blocked-by` or cancels, then `fm unblock`.
-- `fm edit` changes title, goal, criteria, detail, model, effort or blockers of a task in triage, backlog or ready (never one with an agent,
+- `type` (`fm add/edit --type change|bug|mechanical|definition`; default and every task without one: change) only
+  changes the instructions of the task's agents, one paragraph per type; a parent has none.
+- `fm edit` changes title, goal, criteria, detail, model, effort, type or blockers of a task in triage, backlog or ready (never one with an agent,
   nor a closed one); criteria or detail on a backlog or ready task drops its plan and returns it to backlog.
 - A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only while the parent is in triage or
   backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent. A parent in triage
@@ -555,7 +557,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `decide`, `subtasks`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `repos`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
+| core | `risk`, `decide`, `subtasks`, `tasktypes`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `repos`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,

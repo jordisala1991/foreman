@@ -9,7 +9,26 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, backlog, blockers, config, decide, delivery, editing, guard, health, homesetup, lock, loop, metrics, providers, sessions, subtasks, util
+from . import (
+    agents,
+    backlog,
+    blockers,
+    config,
+    decide,
+    delivery,
+    editing,
+    guard,
+    health,
+    homesetup,
+    lock,
+    loop,
+    metrics,
+    providers,
+    sessions,
+    subtasks,
+    tasktypes,
+    util,
+)
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -45,6 +64,7 @@ def cmd_add(a: argparse.Namespace) -> None:
         blocked_by=ids,
         model=a.model or "",
         effort=a.effort or "",
+        type=a.type or "",
     )
     print(tid)
 
@@ -81,7 +101,7 @@ def cmd_list(a: argparse.Namespace) -> None:
         ag = agent.get("name", "")
         title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
         note = (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
-        print(f"{i['id']:8} {i['status']:12} {ag:14} {title}{note}")
+        print(f"{i['id']:8} {i['status']:12} {tasktypes.of(i, all_):10} {ag:14} {title}{note}")
     for q in backlog.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
 
@@ -89,7 +109,7 @@ def cmd_list(a: argparse.Namespace) -> None:
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
-    i = backlog.get(d, a.id)
+    i = tasktypes.shown(backlog.get(d, a.id), backlog.tasks(d))
     i = {**i, "checked_on": decide.ran_on(i["check"])} if i.get("check") else i
     if wait := blockers.pending(i, backlog.tasks(d)):
         i = {**i, "waiting_for": wait}

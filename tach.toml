@@ -161,6 +161,9 @@ layer = "core"
 path = "fm.subtasks"
 layer = "core"
 [[modules]]
+path = "fm.tasktypes"
+layer = "core"
+[[modules]]
 path = "fm.editing"
 layer = "core"
 [[modules]]

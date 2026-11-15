@@ -160,6 +160,7 @@ class NewTask(TypedDict, total=False):
     blocked_by: list[str]
     model: str
     effort: str
+    type: str
 
 
 class Question(TypedDict, total=False):
@@ -195,7 +196,7 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewTask]
             task["parent"] = parent
         if ids := f.get("blocked_by"):
             task["blocked_by"] = ids
-        for k in ("model", "effort"):
+        for k in ("model", "effort", "type"):
             if v := f.get(k):
                 task[k] = v
         d["tasks"].append(task)

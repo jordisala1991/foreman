@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import backlog, config, costs, evidence, health, lock, metrics, pulls, sessions, util
+from . import backlog, config, costs, evidence, health, lock, metrics, pulls, sessions, tasktypes, util
 from .config import Project
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
@@ -66,7 +66,8 @@ def state(p: Project) -> Obj:
     d = backlog.load(p)
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     rows = sessions.listing(p)
-    shown = [with_session(p, i, rows) for i in backlog.tasks(d) if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
+    all_tasks = backlog.tasks(d)
+    shown = [tasktypes.shown(with_session(p, i, rows), all_tasks) for i in all_tasks if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
     return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "tasks": shown, "questions": d["decisions"], "events": events}
 
@@ -76,7 +77,7 @@ def task(p: Project, tid: str) -> Obj:
     i = backlog.get(d, tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
-    shown = with_session(p, i, sessions.listing(p))
+    shown = tasktypes.shown(with_session(p, i, sessions.listing(p)), backlog.tasks(d))
     if i.get("report"):
         check: Obj = i.get("check") or {}
         text = pulls.description(p, i, check.get("head", ""), check.get("at", ""))

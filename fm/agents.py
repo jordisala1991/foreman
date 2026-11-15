@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from . import backlog, costs, decide, delivery, lock, sessions, util
+from . import backlog, costs, decide, delivery, lock, sessions, tasktypes, util
 from .config import Project
 
 BRIEFS = Path(__file__).parent / "briefs"
@@ -105,6 +105,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "report": str(report_file(p, i["id"])),
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
+        "type_section": tasktypes.section(i),
         "model_effort": f"{i.get('model') or 'project default'} / {i.get('effort') or 'project default'}",
         "round2": "",
         "owner_notes": owner_notes_section(p, i["id"]) if kind in ("reviewer", "hunter") else "",

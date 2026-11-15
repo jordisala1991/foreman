@@ -11,7 +11,7 @@ $plan_section
 # Where
 Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured.
 
-# Vocabulary
+$type_section# Vocabulary
 Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
 
 # How
