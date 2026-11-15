@@ -66,7 +66,7 @@ class Project:
         if f.exists():
             raw = tomllib.loads(f.read_text(encoding="utf-8"))
         cfg: dict[str, dict[str, Any]] = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
-        cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: fm/lock.py
+        cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: fm/services/lock.py
         try:
             cfg["repos"] = repos.parse(raw, cfg)
             cfg["recurring"] = recurring_table.parse(raw)
