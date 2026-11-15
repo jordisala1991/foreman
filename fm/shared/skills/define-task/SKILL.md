@@ -1,23 +1,19 @@
 ---
 name: define-task
-description: Use when the owner wants to turn the conversation into a task of this project ("make it a task", "put it in the backlog", "define the task", "do it", in whatever language the owner speaks) or to define an existing triage task (give it acceptance criteria) before its Go. Writes the task with `fm` (title, goal, acceptance criteria, detail), splits it at filing time when it does not fit in one PR, then lets it in or leaves it in triage. Never plans, codes or launches an agent itself: the loop does that.
+description: Use when the owner wants to turn the conversation into a task of this project ("make it a task", "put it in the backlog", "define the task", "do it", in whatever language the owner speaks) or to define an existing triage task (give it acceptance criteria) before its Go. Writes the task with `fm` (title, goal, acceptance criteria, detail), splits it at filing time when it does not fit in one PR, then lets it in or leaves it in triage. Never plans, codes or launches an agent itself: the loop does that. Works only in a folder of a project registered with fm.
 ---
 
 # Define a task
 
-Before using a value below, read `fm.toml` in this folder; never use one from memory.
+## This project's values
 
-| placeholder | key | default when absent |
-|---|---|---|
-| `{project}` | `[project] name` | the folder's name |
-| `{prefix}` | `[project] prefix` | FM |
-| `{repo}` | `[project] repo` | repo (relative to this folder if not absolute) |
-| `{main}` | `[project] main` | main |
-| `{fm}` | `[project] fm` | none: `fm init` prints the line to add |
-| `{slots}` | `[agents] slots` | 2 |
+!`"${CLAUDE_PLUGIN_ROOT}/bin/fm" project`
+
+Below, `{project}`, `{prefix}`, `{home}`, `{repos}`, `{main}` and `{slots}` stand for the values above; never use one
+from memory. If the block above is an error (`fm: …`), tell the owner this folder is in no fm project and stop.
 
 Turns what the owner and this chat already know into one task (or a parent with subtasks) in the backlog of
-**{project}**, with `fm` only (`{fm}`). Defining is the step that turns triage into something the loop can plan and do;
+**{project}**, with `fm` only (on your PATH). Defining is the step that turns triage into something the loop can plan and do;
 nobody defines it later, and the planning agent never changes what is written here.
 
 ## 1. Gather
@@ -43,13 +39,13 @@ From the conversation (and `fm show {prefix}-n` when defining an existing task),
 - **Blocked by** (`--blocked-by {prefix}-n`): a task that needs another one done first.
 
 Every claim the task makes about the code (a name, a file, what exists, what is already integrated, how many) is
-checked in `{repo}` today and cites file:line; a guess is written as one. Work that is not on `{main}` yet is a
+checked in {repos} today and cites file:line; a guess is written as one. Work that is not on `{main}` yet is a
 `--blocked-by`, never «define after X» or «X adds Y». Most of what misleads agents is a task that says something the
 code does not.
 
 Ask the owner only for what is missing, and only what the acceptance criteria need: one message, in the owner's
 language, each question standing alone with your recommendation. Do not ask what you can read in the conversation,
-the backlog (`fm list`, `fm show`) or the code (`{repo}`, read only). Close every decision now; none is left for the
+the backlog (`fm list`, `fm show`) or the code ({repos}, read only). Close every decision now; none is left for the
 agent.
 
 ### Model and effort rubric
@@ -89,6 +85,6 @@ triage. Then stop.
 
 ## Never
 
-- Write code, plans or anything in `{repo}`, or edit `backlog.json` by hand.
+- Write code, plans or anything in {repos}, or edit `backlog.json` by hand.
 - Leave a decision open for the agent, or write criteria about how instead of what.
 - Let a task in without telling the owner it will launch.
