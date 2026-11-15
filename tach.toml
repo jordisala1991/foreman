@@ -69,6 +69,9 @@ layer = "steps"
 path = "fm.metrics"
 layer = "steps"
 [[modules]]
+path = "fm.launchd"
+layer = "steps"
+[[modules]]
 path = "fm.schedule"
 layer = "steps"
 
@@ -189,4 +192,8 @@ path = "fm.homesetup"
 layer = "core"
 [[modules]]
 path = "fm.plugin"
+layer = "core"
+# launcher: which fm version runs; stdlib only, as the launchd jobs run it alone (python3 -c).
+[[modules]]
+path = "fm.launcher"
 layer = "core"

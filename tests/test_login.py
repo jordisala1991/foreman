@@ -5,9 +5,9 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from unittest import mock
 
-from helpers import Env, fm
+from helpers import Env, fm, install_fm, version_folder
 
-from fm import backlog, health, login, loop, proc, sessions
+from fm import backlog, health, launchd, launcher, login, loop, proc, sessions
 
 
 class Login(unittest.TestCase):
@@ -100,7 +100,7 @@ class Login(unittest.TestCase):
         out = fm(self.p.home, "launchd")
         self.assertNotIn("sk-ant-oat01-SECRET", out)
         for job in ("loop", "panel"):
-            plist = plistlib.loads(loop.launchd_plist("/x/fm", job).encode())
+            plist = plistlib.loads(launchd.plist(job).encode())
             self.assertEqual(plist["Label"], f"dev.fm.{job}")
             self.assertTrue(plist["RunAtLoad"] and plist["KeepAlive"])
             self.assertEqual(list(plist["EnvironmentVariables"]), ["PATH"])
@@ -113,8 +113,20 @@ class Login(unittest.TestCase):
         panel = plistlib.loads((d / "dev.fm.panel.plist").read_bytes())
         self.assertEqual(panel["ProgramArguments"][-5:], ["panel", "--host", "0.0.0.0", "--port", "7788"])
         self.assertTrue((d / "dev.fm.loop.plist").exists())
+        self.assertEqual(panel["ProgramArguments"][1], str(launcher.ROOT / "bin/fm"))  # a checkout, no plugin: names it
         with mock.patch.dict(os.environ, {"PATH": "/a&b:/c"}):
-            self.assertEqual(plistlib.loads(loop.launchd_plist("/x/fm").encode())["EnvironmentVariables"]["PATH"], "/a&b:/c")
+            self.assertEqual(plistlib.loads(launchd.plist().encode())["EnvironmentVariables"]["PATH"], "/a&b:/c")
+
+    def test_launchd_dir_from_the_plugin_writes_jobs_that_name_no_version(self):
+        cache = self.e.tmp / "cache/fm/fm"
+        install_fm(self, version_folder(cache, "aaa"))
+        version_folder(cache, "bbb")
+        with mock.patch.object(launcher, "ROOT", cache / "bbb"):
+            fm(self.p.home, "launchd", "--dir", str(self.e.tmp))
+        for job in ("loop", "panel"):
+            argv = plistlib.loads((self.e.tmp / f"dev.fm.{job}.plist").read_bytes())["ProgramArguments"]
+            self.assertEqual(argv[1:3], ["-c", launcher.source()])
+            self.assertFalse([a for a in argv if "aaa" in a or "bbb" in a])
 
 
 if __name__ == "__main__":

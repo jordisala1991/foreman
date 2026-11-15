@@ -22,9 +22,25 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from xml.sax.saxutils import escape
 
-from . import backlog, blockers, decide, delivery, health, mechanic, mergecheck, parents, proc, providers, pulls, release, sessions, sources, subtasks, util
+from . import (
+    backlog,
+    blockers,
+    decide,
+    delivery,
+    health,
+    launcher,
+    mechanic,
+    mergecheck,
+    parents,
+    providers,
+    pulls,
+    release,
+    sessions,
+    sources,
+    subtasks,
+    util,
+)
 from .agents import fill_sessions, launch, running
 from .config import Project, registered
 from .providers import registry
@@ -232,7 +248,10 @@ def launch_free(p: Project) -> None:
 
 
 def beat(p: Project, step: str) -> None:
-    util.write_json(p.state / "loop.json", {"pid": os.getpid(), "time": util.now(), "epoch": time.time(), "step": step})
+    util.write_json(
+        p.state / "loop.json",
+        {"pid": os.getpid(), "time": util.now(), "epoch": time.time(), "step": step, "version": launcher.ROOT.name},
+    )
 
 
 def tick(p: Project) -> None:
@@ -271,29 +290,11 @@ def forever(homes: list[str] | None = None, once: bool = False) -> None:
         except BlockingIOError:
             raise SystemExit("fm: another loop is running for this registry") from None
         while True:
+            if why := launcher.stale():  # another version installed: exit, launchd starts the new one
+                raise SystemExit(f"fm: {why}")
             projects = [Project.load(h) for h in (homes or registered())]
             for p in projects:
                 tick(p)
             if once:
                 return
             time.sleep(min((int(p.get("health", "loop_seconds")) for p in projects), default=30))
-
-
-def launchd_plist(fm_bin: str, job: str = "loop", args: tuple[str, ...] = ()) -> str:
-    """A launchd job (`loop` or `panel`) that starts at login and is restarted if it dies. Only PATH goes in the
-    environment."""
-    py = proc.run(["/usr/bin/which", "python3"]).out.strip() or "python3"
-    argv = "".join(f"<string>{escape(a)}</string>" for a in (py, fm_bin, job, *args))
-    log = f"{escape(str(Path.home()))}/Library/Logs/fm-{job}.log"
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>dev.fm.{job}</string>
-  <key>ProgramArguments</key><array>{argv}</array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{escape(os.environ.get("PATH", ""))}</string></dict>
-  <key>StandardOutPath</key><string>{log}</string>
-  <key>StandardErrorPath</key><string>{log}</string>
-</dict></plist>
-"""

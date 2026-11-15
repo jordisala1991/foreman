@@ -19,7 +19,7 @@ Python 3.12+ standard library only; the panel is React + Vite, built into `panel
 
 ```sh
 bin/fm --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
-bin/fm loop            # or: bin/fm launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die)
+bin/fm loop            # or: bin/fm launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die; from the installed plugin they follow `claude plugin update fm@fm`, from a checkout they run that checkout)
 bin/fm panel --port 7788
 make check            # (needs uv) everything CI runs, in order: lint, format, types, arch (tach), suppressions, size, test (make fix: the mechanical fixes)
 python3 -m unittest discover -s tests   # just the tests

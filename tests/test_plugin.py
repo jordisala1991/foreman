@@ -12,7 +12,7 @@ from unittest import mock
 
 from helpers import ROOT, fm
 
-from fm import backlog, cli, cli_plugin, config, plugin, sessions, util
+from fm import backlog, cli, cli_plugin, config, launcher, plugin, sessions, util
 from fm.config import Project
 
 
@@ -148,6 +148,14 @@ class PluginTest(unittest.TestCase):
         self.assertIs(sessions.settings(p, "AL-1", "al-1")["enabledPlugins"]["fm@fm"], False)
         p = self.alpha(f'repo = "{self.repo}"', '[agents.settings]\nenabledPlugins = {"foreman@foreman" = false}\n')
         self.assertEqual(sessions.settings(p, "AL-1", "al-1")["enabledPlugins"], {"fm@fm": False, "foreman@foreman": False})
+
+    def test_agents_run_the_loops_fm(self) -> None:
+        """Their PATH and their guard hook name the folder the loop runs from."""
+        p = self.alpha(f'repo = "{self.repo}"')
+        with mock.patch.object(launcher, "ROOT", self.root / "v1"):
+            s = sessions.settings(p, "AL-1", "al-1")
+        self.assertTrue(s["env"]["PATH"].startswith(f"{self.root / 'v1/bin'}{os.pathsep}"))
+        self.assertIn(f"{self.root / 'v1/bin/fm'} guard", s["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
 
     def test_the_manifests_name_fm_and_declare_no_version(self) -> None:
         market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
