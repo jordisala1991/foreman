@@ -149,6 +149,14 @@ class Authority(unittest.TestCase):
             run_as(self.e, self.P, "ty-1", "add", "x", "--parent", self.Q, "--triage", "--criteria", "c")
         self.assertEqual(self.e.task(self.S)["acceptance"]["criteria"], "x")
 
+    def test_a_subtask_it_files_waits_for_a_go(self):
+        for flags in ((), ("--ready",)):
+            with self.subTest(flags=flags):
+                run_as(self.e, self.P, "ty-1", "add", "new", "--parent", self.P, "--criteria", "c", *flags)
+                new = subtasks.of(backlog.tasks(backlog.load(self.e.p)), self.P)[-1]
+                loop.tick(self.e.p)
+                self.assertEqual(self.e.task(new["id"])["status"], "triage")
+
     def test_refused_from_a_planning_agent(self):
         backlog.update(self.e.p, self.T, agent={"kind": "planning", "name": "ty-4-planning"})
         with self.assertRaises(SystemExit):

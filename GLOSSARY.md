@@ -15,7 +15,7 @@ _Chat_: subtarea
 _Avoid_: child task, sub-issue
 
 **Parent**
-A task too big for one PR, split into subtasks. On its Go it gets a parent agent; it closes when every subtask is done or canceled and its agent and the owner agree its goal holds.
+A task too big for one PR, split into subtasks. Before its Go it closes by itself when every subtask has; on its Go it gets a parent agent, and then it closes only when every subtask is done or canceled and its agent and the owner agree its goal holds.
 _Chat_: tarea madre
 _Avoid_: epic, umbrella task
 

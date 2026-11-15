@@ -36,7 +36,7 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "triage" if a.triage else "backlog"
+    status = "triage" if a.triage or (a.parent and os.environ.get("FM_TASK")) else "backlog"  # a parent agent's waits for a Go
     tasks = backlog.tasks(backlog.load(p))
     ids = blockers.ids(a.blocked_by or [])
     by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FM_TASK", ""), a.parent, "subtasks are filed")
