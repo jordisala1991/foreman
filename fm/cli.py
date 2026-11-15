@@ -174,7 +174,10 @@ def cmd_pause(a: argparse.Namespace) -> None:
     else:
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(util.now())
-    print("launching paused" if not a.off else "launching resumed")
+    if a.off:
+        print("launching resumed")
+    else:
+        print(f"launching paused; tasks still in flight: {backlog.in_flight(backlog.load(p))}")
 
 
 def cmd_loop(a: argparse.Namespace) -> None:

@@ -124,6 +124,10 @@ class PanelTest(unittest.TestCase):
         self.assertEqual(backlog.get(backlog.load(self.p), d["id"])["status"], "backlog")
         self.assertEqual(self.call("/api/pause?p=demo&on=1", "")[0], 200)
         self.assertTrue((self.p.state / "paused").exists())
+        flying = sum(1 for i in backlog.tasks(backlog.load(self.p)) if i["status"] in ("in progress", "refining", "in review"))
+        _, system = self.call("/api/system?p=demo")
+        self.assertIsInstance(system, dict)
+        self.assertEqual(system["in_flight"], flying)
         evil = {"Origin": "http://127.0.0.1:1"}
         self.assertEqual(self.call("/api/pause?p=demo&on=0", "", headers=evil)[0], 403)
         self.assertTrue((self.p.state / "paused").exists())

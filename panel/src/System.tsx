@@ -28,6 +28,7 @@ export function System({ project }: { project: Project }) {
                 <div className="sub">{d.loop.time ? t("loop_last", { when: when(d.loop.time) }) : t("loop_never")}</div>
                 <div className="sub">{t("versions", { loop: d.versions.loop ?? "?", panel: d.versions.panel })}</div>
                 {d.paused ? <div className="sub warn">{t("paused_since", { when: when(d.paused) })}</div> : null}
+                {d.paused ? <div className="sub warn">{t("in_flight", { n: d.in_flight })}</div> : null}
               </div>
               <button type="button" className={d.paused ? "btn primary small-btn" : "btn small-btn"} disabled={w.busy}
                 onClick={() => void w.run(`/api/pause?p=${enc(project.name)}&on=${d.paused ? "0" : "1"}`)}>

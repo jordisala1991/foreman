@@ -103,6 +103,11 @@ def tasks(d: Data) -> list[Task]:
     return list(d["tasks"])
 
 
+def in_flight(d: Data) -> int:
+    """Tasks a pause leaves working: an agent on them, or in review."""
+    return sum(1 for i in tasks(d) if i["status"] in (*RUNNING, "in review"))
+
+
 def get(d: Data, tid: str) -> Task:
     for i in tasks(d):
         if i["id"] == tid:

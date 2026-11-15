@@ -156,6 +156,7 @@ export interface MetricRow {
 export interface SystemAnswer {
   name: string;
   paused: string | null;
+  in_flight: number;
   loop: Loop;
   findings: Finding[];
   metrics: MetricRow[];

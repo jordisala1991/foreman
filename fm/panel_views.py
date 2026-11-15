@@ -100,6 +100,7 @@ def system(p: Project) -> Obj:
     return {
         "name": p.name,
         "paused": paused(p),
+        "in_flight": backlog.in_flight(backlog.load(p)),
         "loop": loop_beat(p),
         "findings": found,
         "metrics": rows,

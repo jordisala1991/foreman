@@ -128,6 +128,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
    never launched here: just before, a let-in parent gets its parent agent regardless of slots (`fm/parents.py`).
+   A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
 9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
    that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.
@@ -146,7 +147,7 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 
 | Situation | What the loop does | Function | Test |
 |---|---|---|---|
-| A tip with no review, in rounds 1-2 | launches the hunter if a slot is free (and not paused); else waits | `review_step` → `hunt` / `wait` | `test_no_hunter_launches_it` |
+| A tip with no review, in rounds 1-2 | launches the hunter if a slot is free; else waits | `review_step` → `hunt` / `wait` | `test_no_hunter_launches_it` |
 | The hunter's file is written and the hunter is not working | launches the reviewer if a slot is free; else waits | `review_step` → `review` / `wait` | `test_hunter_file_and_ended_launches_reviewer` |
 | The hunter ended without its findings file | blocks the task | `review_step` → `block` | `test_hunter_without_file_blocks` |
 | The reviewer ended without a verdict | blocks the task | `review_step` → `block` | `test_reviewer_without_verdict_blocks` |
