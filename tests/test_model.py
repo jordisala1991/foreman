@@ -7,10 +7,11 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import agents, loop, metrics
+from fm import loop, metrics
 from fm.core.oversight import costs
 from fm.core.project import config
 from fm.core.tasks import backlog
+from fm.services.agents import brief
 
 
 def flags(c: dict) -> tuple[str, str]:
@@ -116,8 +117,8 @@ class TestChoice:
 
     def test_planning_brief_shows_the_choice(self):
         i = {"id": "TY-1", "title": "t", "model": "opus", "effort": "high"}
-        assert "opus / high" in agents.brief(self.e.p, i, "planning")
-        assert "project default / project default" in agents.brief(self.e.p, {**i, "model": "", "effort": ""}, "planning")
+        assert "opus / high" in brief.brief(self.e.p, i, "planning")
+        assert "project default / project default" in brief.brief(self.e.p, {**i, "model": "", "effort": ""}, "planning")
 
 
 class TestMeasured:

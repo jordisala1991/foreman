@@ -1,21 +1,14 @@
-"""The agents' side of the loop: the brief, the worktree, launching a task's agent and its reviewer, messaging an agent."""
-
-import string
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from . import delivery, lock, scratch, sessions, util
-from .core.project.config import Project
-from .core.review.reviews import review_round
-from .core.rules import decide
-from .core.tasks import backlog, tasktypes
-
-BRIEFS = Path(__file__).parent / "briefs"
-
-
-def agent_name(p: Project, tid: str, kind: str) -> str:
-    return f"{tid.lower()}-planning" if kind == "planning" else tid.lower()
-
+from ... import util
+from ...core.project.config import Project
+from ...core.review.reviews import review_round
+from ...core.rules import decide
+from ...core.tasks import backlog
+from .. import scratch
+from ..claude import sessions
+from . import brief, worktree
 
 ROUND2 = (
     "7. **Round $round checks the fixes**, not the whole branch again: read the previous review "
@@ -23,11 +16,14 @@ ROUND2 = (
     "earlier finding is fixed, answered (with a reason you accept), or still open. No new findings, "
     "except a fix that is itself Wrong (shown) or Too much."
 )
+
+
 HUNTER_ROUND2 = (
     "7. **Round $round looks at the fixes**, not the whole branch again: read the previous review (`$previous`), "
     "`git diff $previous_tip..$branch` and the «Review rounds» section of the report. List only earlier findings "
     "that are still open and anything wrong or too much in the fixes themselves."
 )
+
 
 SCOPE = {  # a review of one fix only (decide.RULES), in the same brief slot as round 2; `$base` is what it compares with
     "reject": "7. **This review checks only the agent's fix to the owner's note** (in «The owner's notes»): `git diff $base $tip`.",
@@ -45,111 +41,27 @@ class Scope(NamedTuple):  # why a review is launched (a key of decide.RULES) and
 ROUNDS = Scope("round")  # the rounds: the whole branch, then the fixes
 
 
-def report_file(p: Project, tid: str) -> Path:
-    return p.home / "reports" / f"{tid}.md"
-
-
-def seed_report(p: Project, tid: str, worktree: Path) -> None:
-    """Gives a responsible agent its report as a template to fill: the repo's PR template (plus a Review rounds section) or
-    fm's own. An existing report is never overwritten (a relaunch keeps its agent's work)."""
-    f = report_file(p, tid)
-    if f.exists():
-        return
-    theirs = worktree / ".github" / "pull_request_template.md"
-    text = (BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", tid)
-    if theirs.is_file():
-        text = theirs.read_text(encoding="utf-8").rstrip() + "\n\n## Review rounds\n"
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(text, encoding="utf-8")
-
-
-def plan_file(p: Project, tid: str) -> Path:
-    return p.home / "plans" / f"{tid}.md"
-
-
-def plan_section(i: dict[str, Any]) -> str:
-    if i.get("plan_file"):
-        return (
-            f"# The plan\nThe task has a plan: `{i['plan_file']}`. Read it whole and follow it. If it does not hold "
-            "on a detail (a name, a line, the order of steps), decide, and list it in your report under «Off the plan» with why; "
-            "if it would change the goal, the acceptance criteria, a decision or the out of scope, `fm ask` and end your turn."
-        )
-    return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and acceptance criteria."
-
-
-def owner_notes_section(p: Project, tid: str) -> str:
-    """The owner's corrections on this task (rejection notes), oldest first; empty when there are none."""
-    notes = [q for q in backlog.load(p)["decisions_resolved"] if q.get("task") == tid and q.get("kind") == "rejection"]
-    if not notes:
-        return ""
-    lines = "\n".join(f"- {q.get('at') or q.get('resolved', '')}: {q.get('answer', '')}" for q in notes)
-    return (
-        f"\n# The owner's notes on this task\n{lines}\n"
-        "A note overrides the plan and the acceptance criteria where they differ; the latest note wins. A departure backed by a note "
-        "is not a finding, and the report's «Off the plan» should cite it.\n"
-    )
-
-
-def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None = None) -> str:
-    a: dict[str, Any] = i.get("acceptance") or {}
-    values = {
-        "id": i["id"],
-        "project": p.name,
-        "title": i["title"],
-        "detail": i.get("detail", ""),
-        "goal": a.get("goal") or i["title"],
-        "criteria": a.get("criteria", ""),
-        "repo": str(p.repo),
-        "worktree": i.get("worktree", ""),
-        "branch": i.get("branch", ""),
-        "main": p.get("project", "main"),
-        "test": p.get("merge", "test") or "(none configured)",
-        "report": str(report_file(p, i["id"])),
-        "plan": str(plan_file(p, i["id"])),
-        "plan_section": plan_section(i),
-        "type_section": tasktypes.section(i),
-        "model_effort": f"{i.get('model') or 'project default'} / {i.get('effort') or 'project default'}",
-        "round2": "",
-        "owner_notes": owner_notes_section(p, i["id"]) if kind in ("reviewer", "hunter") else "",
-        "resources": lock.describe(p.cfg),
-        **(extra or {}),
-    }
-    if values.get("round2"):
-        values["round2"] = string.Template(values["round2"]).safe_substitute(values)
-    text = string.Template((BRIEFS / f"{kind}.md").read_text(encoding="utf-8")).safe_substitute(values)
-    return f"[fm {kind} {i['id']}]\n{text}"
-
-
-def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
-    branch = f"{p.get('project', 'branch_prefix')}{i['id'].lower()}"
-    wt = p.path("worktrees") / i["id"].lower()
-    if not wt.exists():
-        wt.parent.mkdir(parents=True, exist_ok=True)
-        exists = delivery.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).code == 0
-        args = ["worktree", "add", str(wt), branch] if exists else ["worktree", "add", "-b", branch, str(wt), p.get("project", "main")]
-        delivery.git(p.repo, *args)
-    return wt, branch
-
-
 def launch(p: Project, i: dict[str, Any]) -> None:
     kind = "planning" if i["status"] == "backlog" else "responsible"
-    name = agent_name(p, i["id"], kind)
+    name = brief.agent_name(p, i["id"], kind)
     own = i if kind == "responsible" else {}  # the task's choice is for its responsible agent only
     model = own.get("model") or p.get("agents", "planning_model" if kind == "planning" else "model")
     effort = own.get("effort") or p.get("agents", "planning_effort" if kind == "planning" else "effort")
     keys: dict[str, Any] = {}
     if kind == "responsible":
-        wt, branch = worktree(p, i)
+        wt, branch = worktree.worktree(p, i)
         i = {**i, "worktree": str(wt), "branch": branch}
         keys = {"worktree": str(wt), "branch": branch}
         cwd = wt
-        seed_report(p, i["id"], wt)
+        brief.seed_report(p, i["id"], wt)
     else:
         cwd = p.repo
-        plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
+        brief.plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
     backlog.update(p, i["id"], **keys)  # the guard reads the worktree from the backlog
     try:
-        short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort, util.session_title(i["id"], kind, i["title"])), brief(p, i, kind), cwd)
+        short, sid = sessions.start(
+            p, sessions.Agent(i["id"], name, model, effort, util.session_title(i["id"], kind, i["title"])), brief.brief(p, i, kind), cwd
+        )
     except sessions.SessionError as e:
         backlog.update(p, i["id"], blocked=f"could not launch its agent: {e}")
         backlog.event(p, i["id"], f"launch failed: {e}")
@@ -226,7 +138,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         extra["round2"] = SCOPE[scope.rule] + " Nothing outside that diff is a finding."
     cwd = Path(i["worktree"])
     title = util.session_title(i["id"], "review" if role == "reviewer" else role, i["title"])
-    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort, title), brief(p, i, role, extra), cwd)
+    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort, title), brief.brief(p, i, role, extra), cwd)
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         launch = {
@@ -247,23 +159,3 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         if sid:
             record_session(it, sid, "review")
     backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {short}); rule: {decide.RULES[scope.rule]}")
-
-
-def update_agent(p: Project, tid: str, **fields: Any) -> None:
-    """Merges fields into the task's agent, from the current backlog (not from a read made earlier)."""
-    with backlog.edit(p) as d:
-        it = backlog.get(d, tid)
-        it["agent"] = {**(it.get("agent") or {}), **fields}
-
-
-def send(p: Project, i: dict[str, Any], message: str) -> bool:
-    """Resumes the task's agent with a message; False when it has no session to resume."""
-    a: dict[str, Any] = i.get("agent") or {}
-    if not a.get("session"):
-        return False
-    try:
-        sessions.resume(p, a["session"], message, Path(a.get("cwd") or p.repo))
-    except sessions.SessionError as e:
-        backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
-        return False
-    return True

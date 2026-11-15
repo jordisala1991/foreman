@@ -4,9 +4,11 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import agents, loop, pulls
+from fm import loop
 from fm.core.review import describe
 from fm.core.tasks import backlog
+from fm.services.agents import brief
+from fm.services.delivery import pulls
 
 
 class TestText:
@@ -141,12 +143,12 @@ class TestTemplate:
     def launched(self, e: Env) -> tuple[str, str]:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        return tid, agents.report_file(e.p, tid).read_text()
+        return tid, brief.report_file(e.p, tid).read_text()
 
     def test_a_launched_work_agent_finds_the_template_at_its_report(self):
         e = Env(test="true")
         tid, text = self.launched(e)
-        assert text == (agents.BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", tid)
+        assert text == (brief.BRIEFS / "report.md").read_text(encoding="utf-8").replace("ID", tid)
 
     def test_a_repo_pr_template_wins_and_review_rounds_is_added(self):
         e = Env(test="true")
@@ -163,7 +165,7 @@ class TestTemplate:
     def test_an_existing_report_is_not_overwritten_on_relaunch(self):
         e = Env(test="true")
         tid, _ = self.launched(e)
-        f = agents.report_file(e.p, tid)
+        f = brief.report_file(e.p, tid)
         f.write_text("my work")
-        agents.seed_report(e.p, tid, e.repo)
+        brief.seed_report(e.p, tid, e.repo)
         assert f.read_text() == "my work"

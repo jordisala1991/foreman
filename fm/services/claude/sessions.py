@@ -16,10 +16,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import launcher, login, proc, util
-from .core.project import plugin
-from .core.project.config import Project
-from .core.tasks import backlog
+from ... import launcher, proc, util
+from ...core.project import plugin
+from ...core.project.config import Project
+from ...core.tasks import backlog
+from . import login
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
 STOP_SETTLE_S = 3.0  # after the process is gone, a resume right away still copies (0 s: copy, 2 s: ok)

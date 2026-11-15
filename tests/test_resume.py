@@ -5,8 +5,9 @@ import json
 import pytest
 from helpers import Env
 
-from fm import health, loop, proc, sessions, talk, util
+from fm import health, loop, proc, talk, util
 from fm.core.tasks import backlog, questions
+from fm.services.claude import sessions
 
 
 def launched(e: Env) -> str:

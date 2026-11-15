@@ -2,11 +2,14 @@
 
 from typing import Any
 
-from . import agents, agents_running, proc, sessions, util
-from .agents_running import idle_s
+from . import proc, util
 from .core.oversight import diagnosis
 from .core.project.config import Project
 from .core.tasks import backlog
+from .services.agents.brief import brief
+from .services.agents.launch import record_session
+from .services.agents.running import diagnosing, idle_s, running
+from .services.claude import sessions
 from .talk import NUDGE_IDLE_S
 
 TIMEOUT_S = 1800
@@ -31,9 +34,9 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
     out = p.home / "diagnoses" / f"{tid}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
-    brief = agents.brief(p, i, "mechanic", {"state": str(p.state), "diagnosis": str(out)})
+    text = brief(p, i, "mechanic", {"state": str(p.state), "diagnosis": str(out)})
     try:
-        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, util.session_title(tid, "mechanic", i["title"])), brief, p.repo)
+        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, util.session_title(tid, "mechanic", i["title"])), text, p.repo)
     except sessions.SessionError as e:
         note_missing(p, tid, f"could not launch: {e}")
         return
@@ -44,7 +47,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         if still:
             it["mechanic"] = m
             if sid:
-                agents.record_session(it, sid, "mechanic")
+                record_session(it, sid, "mechanic")
     if not still:
         try:
             sessions.stop(p, short)
@@ -56,7 +59,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
 
 def run(p: Project, rows: dict[str, Any]) -> None:
     for i in backlog.tasks(backlog.load(p)):
-        if agents_running.diagnosing(i) and (why := missing_why(i["mechanic"], rows)):
+        if diagnosing(i) and (why := missing_why(i["mechanic"], rows)):
             note_missing(p, i["id"], why)
     d = backlog.load(p)
     for i in backlog.tasks(d):
@@ -64,7 +67,7 @@ def run(p: Project, rows: dict[str, Any]) -> None:
             sessions.stop_live(p, i["id"], i["mechanic"], rows)
     if (p.state / "paused").exists():
         return
-    free = int(p.get("agents", "slots")) - agents_running.running(d)
+    free = int(p.get("agents", "slots")) - running(d)
     health = (i for i in backlog.tasks(d) if i["status"] == "triage" and str(i.get("source", "")).startswith("health:"))
     todo = [i for i in health if not i.get("mechanic") and not i.get("diagnosis")]
     for i in todo[: max(0, free)]:

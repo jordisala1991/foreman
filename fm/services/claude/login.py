@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from . import proc, util
+from ... import proc, util
 
 ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 SOON = timedelta(days=3)  # `fm health` warns this long before the login expires

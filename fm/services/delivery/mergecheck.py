@@ -4,9 +4,10 @@ main is at that moment, so two branches that pass alone cannot break main togeth
 
 from typing import Any
 
-from . import delivery, pulls, util
-from .core.project.config import Project
-from .core.tasks import backlog
+from ... import util
+from ...core.project.config import Project
+from ...core.tasks import backlog
+from . import check, git, pulls
 
 
 def merged_check(p: Project, tid: str) -> None:
@@ -14,10 +15,10 @@ def merged_check(p: Project, tid: str) -> None:
     merge step returns it, as today) or when the branch moved meanwhile (its new head is checked first)."""
     i = backlog.get(backlog.load(p), tid)
     head = pulls.head_of(p, i["branch"])
-    main_head = delivery.git(p.repo, "rev-parse", p.get("project", "main")).out.strip()
-    if delivery.git(p.repo, "merge-tree", "--write-tree", main_head, head, check=False).code != 0:
+    main_head = git.git(p.repo, "rev-parse", p.get("project", "main")).out.strip()
+    if git.git(p.repo, "merge-tree", "--write-tree", main_head, head, check=False).code != 0:
         return
-    tests, out = delivery.tests_at(p, main_head, tid.lower(), merge=head)
+    tests, out = check.tests_at(p, main_head, tid.lower(), merge=head)
     c: dict[str, Any] = backlog.get(backlog.load(p), tid).get("check") or {}
     if c.get("head") != head:
         return

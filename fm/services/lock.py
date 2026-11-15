@@ -24,7 +24,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import util
+from .. import util
 
 POLL_S = 1.0
 

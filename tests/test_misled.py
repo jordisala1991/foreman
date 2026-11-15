@@ -4,8 +4,9 @@ from pathlib import Path
 import pytest
 from helpers import fm
 
-from fm import agents, loop
+from fm import loop
 from fm.core.tasks import backlog
+from fm.services.agents import brief
 
 BRIEFS = Path(__file__).resolve().parent.parent / "fm" / "briefs"
 
@@ -48,7 +49,7 @@ class TestMisled:
 
     def test_no_lessons_file_and_no_brief_mentions_it(self):
         run_as(self.e, self.tid, "ty-1", "done", "--summary", "s", "--misled", "a")
-        agents.brief(self.e.p, self.e.task(self.tid), "responsible")
+        brief.brief(self.e.p, self.e.task(self.tid), "responsible")
         assert not (self.e.home / "LESSONS.md").exists()
         for f in BRIEFS.glob("*.md"):
             assert "lesson" not in f.read_text().lower(), f.name

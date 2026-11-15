@@ -7,8 +7,10 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
-from fm import delivery, launcher, loop, proc, providers, util
+from fm import launcher, loop, proc, providers, util
 from fm.core.tasks import backlog, questions
+from fm.services.delivery import check, merge
+from fm.services.delivery.git import DeliveryError
 
 
 class TestLaunch:
@@ -175,7 +177,7 @@ class TestQueue:
         loop.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"], i["check"]["tests"]) == ("in review", "low", "pass")
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         assert e.task(tid)["status"] == "in review"  # accepting merges nothing
         loop.tick(e.p)
         assert e.task(tid)["status"] == "done"
@@ -186,21 +188,21 @@ class TestQueue:
         e = Env(test="true")
         ids = [self.deliver(e) for _ in range(3)]
         loop.tick(e.p)
-        delivery.accept(e.p, ids[0])
+        merge.accept(e.p, ids[0])
         (e.repo / "other.py").write_text("x = 1\n")
         git(e.repo, "add", "other.py")
         git(e.repo, "commit", "-qm", "main moves")  # every branch is now stale
         checks: list[str] = []
-        real = delivery.check
-        delivery.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
-        request.addfinalizer(functools.partial(setattr, delivery, "check", real))
+        real = check.check
+        check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
+        request.addfinalizer(functools.partial(setattr, check, "check", real))
         try:
             loop.tick(e.p)
             assert (e.task(ids[0])["status"], checks) == ("done", [ids[1]])
             loop.tick(e.p)
             assert checks == [ids[1], ids[2]]
         finally:
-            delivery.check = real
+            check.check = real
 
     def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self, request):
         e = Env(test="true")
@@ -209,14 +211,14 @@ class TestQueue:
         git(e.repo, "add", "other.py")
         git(e.repo, "commit", "-qm", "main moves")
         checks: list[str] = []
-        real, deliver = delivery.check, loop.pulls.deliver
-        delivery.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
+        real, deliver = check.check, loop.pulls.deliver
+        check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
 
         def boom(*a):
             raise RuntimeError("boom")
 
         loop.pulls.deliver = boom
-        request.addfinalizer(functools.partial(setattr, delivery, "check", real))
+        request.addfinalizer(functools.partial(setattr, check, "check", real))
         request.addfinalizer(functools.partial(setattr, loop.pulls, "deliver", deliver))
         loop.tick(e.p)
         assert len(checks) == 1
@@ -249,9 +251,9 @@ class TestQueue:
             time.sleep(0.3)  # longer than the wait: the tick has gone on when it fails
             raise providers.Transient("net down")
 
-        real = delivery.check
-        delivery.check = down
-        request.addfinalizer(functools.partial(setattr, delivery, "check", real))
+        real = check.check
+        check.check = down
+        request.addfinalizer(functools.partial(setattr, check, "check", real))
         util.BACKGROUND_WAIT_S = 0.05
         request.addfinalizer(functools.partial(setattr, util, "BACKGROUND_WAIT_S", 20))
         for _ in range(3):
@@ -283,11 +285,11 @@ class TestQueue:
         e = Env(test="true")
 
         def boom(*args):
-            raise delivery.DeliveryError("git timed out")
+            raise DeliveryError("git timed out")
 
-        real = delivery.tests_at
-        delivery.tests_at = boom
-        request.addfinalizer(functools.partial(setattr, delivery, "tests_at", real))
+        real = check.tests_at
+        check.tests_at = boom
+        request.addfinalizer(functools.partial(setattr, check, "tests_at", real))
         loop.tick(e.p)
         for t in list(util.BACKGROUND.values()):
             t.join()
@@ -300,7 +302,7 @@ class TestQueue:
 
         def cancel_b_first(p, i, main, rows):
             if i["id"] == a:
-                delivery.close(p, b, "canceled", "x")
+                merge.close(p, b, "canceled", "x")
             real(p, i, main, rows)
 
         loop.queue_one = cancel_b_first
@@ -381,7 +383,7 @@ class TestQueue:
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.hunt_then_review(tid)
         i = e.task(tid)
-        delivery.close(e.p, tid, "canceled", "no")
+        merge.close(e.p, tid, "canceled", "no")
         for role in ("agent", "hunter", "reviewer"):
             assert e.state_of(i[role]["name"]) == "stopped", role
 
@@ -391,7 +393,7 @@ class TestQueue:
         e.review(tid)
         i = e.task(tid)
         loop.tick(e.p)
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         loop.tick(e.p)
         assert e.task(tid)["status"] == "done"
         for role in ("agent", "hunter", "reviewer"):
@@ -414,8 +416,8 @@ class TestQueue:
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        with mock.patch("fm.sessions.stop", side_effect=proc.ProcError("timed out")):
-            delivery.close(e.p, tid, "canceled", "no")
+        with mock.patch("fm.services.claude.sessions.stop", side_effect=proc.ProcError("timed out")):
+            merge.close(e.p, tid, "canceled", "no")
         assert e.task(tid)["status"] == "canceled"
 
     def test_cancel_stops_a_session_the_listing_does_not_show(self):
@@ -423,7 +425,7 @@ class TestQueue:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: its agent still runs
-        delivery.close(e.p, tid, "canceled", "no")
+        merge.close(e.p, tid, "canceled", "no")
         assert e.stops() == [e.task(tid)["agent"]["short"]]
 
     def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self):
@@ -443,7 +445,7 @@ class TestQueue:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         name = e.task(tid)["agent"]["name"]
-        delivery.close(e.p, tid, "canceled", "no")
+        merge.close(e.p, tid, "canceled", "no")
         assert e.stops() == [e.task(tid)["agent"]["short"]]  # once, though its id is also in `sessions`
         assert e.state_of(name) == "stopped"
 
@@ -487,7 +489,7 @@ class TestQueue:
         git(e.repo, "commit", "-qam", "main moves")
         loop.tick(e.p)
         assert e.task(tid)["status"] == "in review"  # nobody wants it merged yet: it waits
-        delivery.accept(e.p, tid)
+        merge.accept(e.p, tid)
         loop.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["conflicts"]) == ("in progress", 1)

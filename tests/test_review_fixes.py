@@ -5,9 +5,10 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import agents, health, loop
+from fm import health, loop
 from fm.core.oversight import guard
 from fm.core.tasks import backlog, questions
+from fm.services.agents import brief, launch
 
 
 class TestGuardFalsePositives:
@@ -122,7 +123,7 @@ class TestLaunchRace:
 
         loop.sessions.start = start_and_cancel
         try:
-            agents.launch(e.p, e.task(tid))
+            launch.launch(e.p, e.task(tid))
         finally:
             loop.sessions.start = real
         assert e.task(tid)["status"] == "canceled"
@@ -150,7 +151,7 @@ class TestLaunchRace:
 
 class TestReviewerSeesOwnerNotes:
     def brief(self, e: Env, tid: str) -> str:
-        return agents.brief(e.p, e.task(tid), "reviewer")
+        return brief.brief(e.p, e.task(tid), "reviewer")
 
     def test_every_owner_note_of_the_task_reaches_the_reviewer_oldest_first_with_its_time(self):
         e = Env()
@@ -174,5 +175,5 @@ class TestReviewerSeesOwnerNotes:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
         loop.return_to_agent(e.p, tid, "review", "REVIEWFIX")
-        assert agents.owner_notes_section(e.p, tid) == ""
+        assert brief.owner_notes_section(e.p, tid) == ""
         assert "owner's notes" not in self.brief(e, tid)

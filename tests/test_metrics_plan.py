@@ -3,8 +3,9 @@ from unittest import mock
 import pytest
 from helpers import Env
 
-from fm import agents, loop, metrics
+from fm import loop, metrics
 from fm.core.tasks import backlog
+from fm.services.agents import launch
 
 USD = {"A": 1.0, "B": 2.0, "B1": 2.0, "B2": 3.0, "C": 0.5, "L": 4.0}
 
@@ -98,8 +99,8 @@ class TestRecording:
         loop.tick(e.p)
         assert list(e.task(d)["session_kinds"].values()) == ["planning"]
         assert list(e.task(w)["session_kinds"].values()) == ["responsible"]
-        agents.launch_reviewer(e.p, e.task(w), "abc123", "hunter")
-        agents.launch_reviewer(e.p, e.task(w), "abc123")
+        launch.launch_reviewer(e.p, e.task(w), "abc123", "hunter")
+        launch.launch_reviewer(e.p, e.task(w), "abc123")
         i = e.task(w)
         assert sorted(i["session_kinds"].values()) == ["responsible", "review", "review"]
         assert sorted(i["sessions"]) == sorted(i["session_kinds"])
@@ -108,7 +109,7 @@ class TestRecording:
         e = Env()
         tid = backlog.add(e.p, "clear", status="ready", criteria="y")
         backlog.update(e.p, tid, agent={"short": "aa", "kind": "responsible"}, reviewer={"short": "rr"})
-        agents.fill_sessions(e.p, {"aa-full": {"id": "aa"}, "rr-full": {"id": "rr"}})
+        launch.fill_sessions(e.p, {"aa-full": {"id": "aa"}, "rr-full": {"id": "rr"}})
         i = e.task(tid)
         assert i["session_kinds"] == {"aa-full": "responsible", "rr-full": "review"}
         assert i["sessions"] == ["aa-full", "rr-full"]

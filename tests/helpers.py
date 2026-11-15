@@ -17,9 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from fm import sessions, util
+from fm import util
 from fm.core.project.config import Project
 from fm.core.tasks import backlog
+from fm.services.claude import sessions
 
 sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent

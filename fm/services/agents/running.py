@@ -4,9 +4,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import util
-from .core.oversight import costs
-from .core.tasks import backlog, questions
+from ... import util
+from ...core.oversight import costs
+from ...core.project.config import Project
+from ...core.tasks import backlog, questions
+from ..claude import sessions
 
 
 def idle_s(a: backlog.Agent | dict[str, Any]) -> float:
@@ -39,3 +41,23 @@ def diagnosing(i: dict[str, Any]) -> bool:
 
 def running(d: dict[str, Any]) -> int:
     return sum(1 for i in backlog.tasks(d) if questions.holds_slot(d, i) or reviewer_active(i) or diagnosing(i))
+
+
+def update_agent(p: Project, tid: str, **fields: Any) -> None:
+    """Merges fields into the task's agent, from the current backlog (not from a read made earlier)."""
+    with backlog.edit(p) as d:
+        it = backlog.get(d, tid)
+        it["agent"] = {**(it.get("agent") or {}), **fields}
+
+
+def send(p: Project, i: dict[str, Any], message: str) -> bool:
+    """Resumes the task's agent with a message; False when it has no session to resume."""
+    a: dict[str, Any] = i.get("agent") or {}
+    if not a.get("session"):
+        return False
+    try:
+        sessions.resume(p, a["session"], message, Path(a.get("cwd") or p.repo))
+    except sessions.SessionError as e:
+        backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
+        return False
+    return True

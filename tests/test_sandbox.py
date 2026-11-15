@@ -11,8 +11,9 @@ from unittest import mock
 import pytest
 from helpers import REAL_REGISTRY, SANDBOX, fm
 
-from fm import lock, panel
+from fm import panel
 from fm.core.project import registry
+from fm.services import lock
 
 
 def leaked(registry: Path) -> list[str]:

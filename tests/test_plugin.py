@@ -14,10 +14,11 @@ from unittest import mock
 import pytest
 from helpers import ROOT, fm
 
-from fm import cli, cli_plugin, launcher, sessions, util
+from fm import cli, cli_plugin, launcher, util
 from fm.core.project import plugin, registry
 from fm.core.project.config import Project
 from fm.core.tasks import backlog
+from fm.services.claude import sessions
 
 
 class TestPluginTest:
