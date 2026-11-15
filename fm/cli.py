@@ -13,6 +13,7 @@ from . import agents, backlog, blockers, config, decide, delivery, editing, guar
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
+from .cli_plugin import cmd_project, cmd_session_context
 from .config import Project, register
 
 
@@ -196,6 +197,8 @@ def cmd_health(a: argparse.Namespace) -> None:
     p = home(a)
     if note := health.repos_note(p):
         print(note)
+    for line in health.old_links(p):
+        print(line)
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
         print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
@@ -281,6 +284,8 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "guard": cmd_guard,
     "panel": cmd_panel,
     "launchd": cmd_launchd,
+    "project": cmd_project,
+    "session-context": cmd_session_context,
 }
 
 

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import backlog, login, proc, util
+from . import backlog, login, plugin, proc, util
 from .config import Project
 
 BACKGROUNDED = re.compile(r"backgrounded\s*·\s*([0-9a-f]{6,})", re.I)
@@ -31,6 +31,7 @@ class SessionError(Exception):
 
 
 def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
+    """The agent's `--settings`. The fm plugin is off: an agent gets nothing from it, its brief is its only instructions."""
     env = {
         "FM_HOME": str(p.home),
         "FM_TASK": tid,
@@ -41,6 +42,7 @@ def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
     s: dict[str, Any] = {
         "worktree": {"bgIsolation": "none"},
         "env": env,
+        "enabledPlugins": {plugin.PLUGIN: False},
         "hooks": {"PreToolUse": [{"matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit", "hooks": [{"type": "command", "command": guard}]}]},
     }
     settings: dict[str, Any] = p.get("agents", "settings") or {}

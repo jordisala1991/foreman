@@ -23,6 +23,9 @@ layer = "ui"
 path = "fm.cli_parser"
 layer = "ui"
 [[modules]]
+path = "fm.cli_plugin"
+layer = "ui"
+[[modules]]
 path = "fm.panel"
 layer = "ui"
 [[modules]]
@@ -165,4 +168,7 @@ path = "fm.blockers"
 layer = "core"
 [[modules]]
 path = "fm.homesetup"
+layer = "core"
+[[modules]]
+path = "fm.plugin"
 layer = "core"

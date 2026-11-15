@@ -190,6 +190,23 @@ def shared_folders(projects: list[Project]) -> list[str]:
     return [f"! {f} is claimed by two projects: {' and '.join(names)}" for f, names in config.shared(projects).items()]
 
 
+def old_links(p: Project) -> list[str]:
+    """The links `fm init` made before the plugin (FN-143): the plugin replaces them, so they are to be deleted."""
+    out = [
+        f"! the home still has the old link {rel} (FN-143): the plugin replaces it; delete it"
+        for rel in (".claude/fm.md", ".claude/skills/define-task")
+        if (p.home / rel).is_symlink()
+    ]
+    if out and out[0].endswith(".claude/fm.md (FN-143): the plugin replaces it; delete it"):
+        try:
+            lines = (p.home / "CLAUDE.md").read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):  # no CLAUDE.md, or one fm cannot read: the link is still named
+            lines = []
+        if "@.claude/fm.md" in (line.strip() for line in lines):
+            out[0] += ", and remove the line @.claude/fm.md from CLAUDE.md"
+    return out
+
+
 def repos_note(p: Project) -> str:
     n = len(p.repos)
     return f"note: {p.name} has {n} repos; its tasks run in the first one, {p.repo}" if n > 1 else ""
