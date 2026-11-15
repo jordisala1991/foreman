@@ -48,6 +48,14 @@ class PythonVersion(unittest.TestCase):
         for s in ("3.99", "3.9.6", f"{self.t}/old"):
             self.assertIn(s, r.stderr)
 
+    def test_a_python3_that_times_out_is_named_in_the_line(self):
+        fake(self.t / "hang", "3.99.1", "echo hang")
+        (self.t / "hang/python3").write_text("#!/bin/sh\nexec /bin/sleep 30\n")
+        r = self.run_fm(f"{self.t}/hang", "list")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(len(r.stderr.splitlines()), 1)
+        self.assertIn("timed out", r.stderr)
+
     def test_no_python3_at_all_is_said(self):
         r = self.run_fm(f"{self.t}/empty", "list")
         self.assertNotEqual(r.returncode, 0)

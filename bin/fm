@@ -21,9 +21,11 @@ def _probe(cand):
 
     try:
         out = subprocess.run([cand, "-c", "import sys;print('.'.join(map(str,sys.version_info[:3])))"],
-                             capture_output=True, text=True, timeout=2).stdout.strip()
+                             capture_output=True, text=True, timeout=10).stdout.strip()
         return out if re.fullmatch(r"\d+\.\d+\.\d+", out) else None
-    except (OSError, subprocess.SubprocessError):
+    except subprocess.TimeoutExpired:
+        return "timed out"
+    except OSError:
         return None
 
 
@@ -35,7 +37,7 @@ def _ensure_python(minimum):
     for cand in cands:
         ver = _probe(cand)
         first = first or (cand, ver)
-        if ver and tuple(map(int, ver.split(".")[:2])) >= minimum:
+        if ver and ver[0].isdigit() and tuple(map(int, ver.split(".")[:2])) >= minimum:
             os.execv(cand, [cand, *sys.argv])
     need = "fm: needs Python %d.%d or newer; " % minimum
     line = need + ("the python3 found is %s (%s)" % (first[1] or "?", first[0]) if first else "no python3 found on PATH")
