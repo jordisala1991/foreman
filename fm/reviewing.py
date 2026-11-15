@@ -71,6 +71,10 @@ def sweep_scratch(p: Project, rows: dict[str, Any]) -> None:
     for i in backlog.tasks(backlog.load(p)):
         launches = [(i.get("hunter"), "hunter"), (i.get("reviewer"), "reviewer"), *((a, "reviewer") for a in i.get("reviewers", []))]
         for a, role in launches:
-            if a and (not a.get("session") or (sessions.state(rows, a["session"]) not in ("stopped", "gone") and not ended(a, rows))):
+            if not a:
+                continue
+            sid = a.get("session") or sessions.find(rows, a.get("short", ""))  # a `reviewers` copy is never filled in
+            live = sid and sessions.state(rows, sid) not in ("stopped", "gone") and not ended({**a, "session": sid}, rows)
+            if not sid or live:
                 keep.add(scratch.folder(p, i["id"], a["round"], a["tip"], role))
     scratch.sweep(p, keep)

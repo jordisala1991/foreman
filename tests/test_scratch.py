@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from fm import agents, backlog, loop
 from tests.helpers import Env, fm
@@ -67,3 +68,15 @@ class Scratch(unittest.TestCase):
         loop.tick(e.p)  # launches an agent: the listing has rows
         loop.tick(e.p)
         self.assertFalse(dead.exists())
+
+    def test_a_session_unlisted_at_launch_is_swept_once_it_stops(self):
+        e = Env(test="true")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        backlog.update(e.p, tid, status="in review", worktree=str(e.repo))
+        agents.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
+        with patch("fm.sessions.find", return_value=None):
+            agents.launch_reviewer(e.p, e.task(tid), "abc123")
+        name = e.task(tid)["reviewer"]["name"]
+        e.set_state(name, "stopped")
+        loop.tick(e.p)
+        self.assertEqual(sorted(f.name for f in (e.home / "scratch").iterdir() if "abc123" in f.name), [f"{tid}-r1-abc123-hunter"])

@@ -23,6 +23,6 @@ def sweep(p: Project, keep: set[Path]) -> None:
     root = p.home / "scratch"
     if not root.is_dir():
         return
-    for d in sorted(root.iterdir()):
+    for d in root.iterdir():
         if d.is_dir() and d not in keep:
             shutil.rmtree(d, ignore_errors=True)
