@@ -22,6 +22,7 @@ from . import (
     loop,
     metrics,
     providers,
+    schedule,
     sessions,
     subtasks,
     util,
@@ -173,7 +174,10 @@ def cmd_pause(a: argparse.Namespace) -> None:
     else:
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(util.now())
-    print("launching paused" if not a.off else "launching resumed")
+    if a.off:
+        print("launching resumed")
+    else:
+        print(f"launching paused; tasks still in flight: {backlog.in_flight(backlog.load(p))}")
 
 
 def cmd_loop(a: argparse.Namespace) -> None:
@@ -186,6 +190,8 @@ def cmd_health(a: argparse.Namespace) -> None:
     p = home(a)
     if note := health.repos_note(p):
         print(note)
+    for r in schedule.rows(p):
+        print(schedule.line(r))
     for line in [*health.versions(p), *health.old_links(p)]:
         print(line)
     rows = sessions.listing(p)

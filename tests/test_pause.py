@@ -1,0 +1,74 @@
+"""A pause stops tasks from starting; what is in flight (reviews, checks, merges) goes on (FN-164)."""
+
+import unittest
+
+from helpers import Env, fm
+from test_review_rules import commit, deliver
+from test_subtasks import owner
+
+from fm import backlog, loop
+
+
+def pause(e: Env) -> None:
+    e.p.state.mkdir(parents=True, exist_ok=True)
+    (e.p.state / "paused").write_text("now")
+
+
+def in_review(e: Env) -> str:
+    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    loop.tick(e.p)
+    commit(e.task(tid)["worktree"], "app.py", "# change\n")
+    backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+    return tid
+
+
+class Pause(unittest.TestCase):
+    def test_a_task_in_review_gets_hunter_and_reviewer_while_paused(self):
+        e = Env(slots=2, test="true")
+        tid = in_review(e)
+        pause(e)
+        loop.tick(e.p)
+        self.assertTrue(e.task(tid).get("hunter"))
+        e.hunter_done(tid)
+        loop.tick(e.p)
+        self.assertTrue(e.task(tid).get("reviewer"))
+
+    def test_paused_task_in_review_is_checked_and_merged_after_accept(self):
+        e = Env(test="true")
+        tid = deliver(e)
+        pause(e)
+        loop.tick(e.p)
+        self.assertTrue(e.task(tid).get("check"))
+        fm(e.home, "accept", tid)
+        loop.tick(e.p)
+        self.assertEqual(e.task(tid)["status"], "done")
+
+    def test_paused_launches_no_task_agent(self):
+        e = Env(slots=3, test="true")
+        in_review(e)
+        r = backlog.add(e.p, "r", status="ready", criteria="y")
+        b = backlog.add(e.p, "b", status="backlog", criteria="y")
+        pause(e)
+        loop.tick(e.p)
+        for t, s in ((r, "ready"), (b, "backlog")):
+            self.assertEqual(e.task(t)["status"], s)
+            self.assertNotIn("agent", e.task(t))
+
+    def test_paused_launches_no_parent_agent(self):
+        owner(self)
+        e = Env(test="true")
+        parent = backlog.add(e.p, "parent", status="backlog", criteria="c")
+        fm(e.home, "add", "s", "--parent", parent, "--triage", "--criteria", "c")
+        n = len(e.calls())
+        pause(e)
+        loop.tick(e.p)
+        self.assertEqual(len(e.calls()), n)
+
+    def test_in_flight_counts_work_still_running(self):
+        e = Env(test="true")
+        for s in ("in progress", "in review", "ready", "done"):
+            tid = backlog.add(e.p, s, status="ready", criteria="y")
+            backlog.set_status(e.p, tid, s, "test")
+        self.assertEqual(backlog.in_flight(backlog.load(e.p)), 2)
+        self.assertIn("2", fm(e.home, "pause"))
+        self.assertNotIn("2", fm(e.home, "pause", "--off"))
