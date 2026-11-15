@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from helpers import git
 
-from fm import backlog, loop, sources, util
+from fm import loop, sources, util
+from fm.core.tasks import backlog
 
 
 class TestSignals:

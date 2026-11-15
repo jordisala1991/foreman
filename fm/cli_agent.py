@@ -5,14 +5,17 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, diagnosis, parents, reviews, util
+from . import parents, util
 from .cli_common import home, mine
+from .core.oversight import diagnosis
+from .core.review import reviews
+from .core.tasks import backlog, questions
 
 
 def cmd_ask(a: argparse.Namespace) -> None:
     p = home(a)
     kind = "permission" if a.action else "question"
-    qid = backlog.ask(p, mine(a), os.environ.get("FM_AGENT", "?"), a.text, kind=kind, action=a.action or "")
+    qid = questions.ask(p, mine(a), os.environ.get("FM_AGENT", "?"), a.text, kind=kind, action=a.action or "")
     print(f"{qid} is with the owner. End your turn now: his answer will come back to this conversation.")
 
 

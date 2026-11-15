@@ -8,7 +8,8 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm import backlog, delivery, loop, subtasks
+from fm import delivery, loop
+from fm.core.tasks import backlog, subtasks
 
 
 def count(e: Env) -> int:

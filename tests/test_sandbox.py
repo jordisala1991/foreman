@@ -11,7 +11,8 @@ from unittest import mock
 import pytest
 from helpers import REAL_REGISTRY, SANDBOX, fm
 
-from fm import config, lock, panel
+from fm import lock, panel
+from fm.core.project import registry
 
 
 def leaked(registry: Path) -> list[str]:
@@ -35,7 +36,7 @@ class TestSandbox:
 
     def test_home_files_live_in_the_sandbox(self) -> None:
         self.unset("FM_REGISTRY", "FM_LOCKS")
-        for path in (Path.home(), config.registry_file(), panel.token_file(), lock.root()):
+        for path in (Path.home(), registry.registry_file(), panel.token_file(), lock.root()):
             assert path.is_relative_to(SANDBOX), path
 
     def test_init_registers_in_the_sandbox(self, request) -> None:
@@ -43,8 +44,8 @@ class TestSandbox:
         d = Path(tempfile.mkdtemp(prefix="fmtest-")).resolve()
         request.addfinalizer(functools.partial(shutil.rmtree, d, ignore_errors=True))
         fm(d, "init", "--prefix", "ZZ", "--repo", "r")
-        assert d in config.registered()
-        assert config.registry_file().is_relative_to(SANDBOX)
+        assert d in registry.registered()
+        assert registry.registry_file().is_relative_to(SANDBOX)
 
     def test_the_real_registry_has_nothing_of_this_run(self) -> None:
         assert leaked(REAL_REGISTRY) == []

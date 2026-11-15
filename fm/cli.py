@@ -8,31 +8,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import (
-    agents,
-    backlog,
-    blockers,
-    config,
-    delivery,
-    editing,
-    guard,
-    health,
-    homesetup,
-    lock,
-    loop,
-    metrics,
-    providers,
-    schedule,
-    sessions,
-    subtasks,
-    util,
-)
+from . import agents, delivery, health, homesetup, lock, loop, metrics, providers, schedule, sessions, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
 from .cli_plugin import cmd_project, cmd_session_context
 from .cli_view import cmd_list, cmd_show
-from .config import Project, register
+from .core.oversight import guard
+from .core.project import config, registry
+from .core.project.config import Project
+from .core.project.registry import register
+from .core.tasks import backlog, blockers, editing, questions, subtasks
 
 
 def cmd_init(a: argparse.Namespace) -> None:
@@ -93,7 +79,7 @@ def cmd_edit(a: argparse.Namespace) -> None:
 
 def cmd_answer(a: argparse.Namespace) -> None:
     p = home(a)
-    q = backlog.answer(p, a.qid, a.text)
+    q = questions.answer(p, a.qid, a.text)
     print(f"answered {q['id']}; the loop gives it to {q.get('agent')}")
 
 
@@ -104,7 +90,7 @@ def cmd_allow(a: argparse.Namespace, allowed: bool = True) -> None:
         sys.exit(f"fm: {a.qid} is not an open permission request")
     if allowed:
         guard.grant(p, q["task"], q["action"])
-    backlog.answer(p, a.qid, a.text or ("allowed once" if allowed else "not allowed"))
+    questions.answer(p, a.qid, a.text or ("allowed once" if allowed else "not allowed"))
     with backlog.edit(p) as d:
         next(x for x in d["decisions_resolved"] if x["id"] == a.qid)["allowed"] = allowed
 
@@ -185,7 +171,7 @@ def cmd_loop(a: argparse.Namespace) -> None:
 
 
 def cmd_health(a: argparse.Namespace) -> None:
-    for line in [*health.python_note(), *health.shared_folders(config.loaded())]:
+    for line in [*health.python_note(), *health.shared_folders(registry.loaded())]:
         print(line)
     p = home(a)
     if note := health.repos_note(p):

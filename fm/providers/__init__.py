@@ -18,8 +18,8 @@ Config: `[merge] provider` (`auto` default: github when `origin` is on GitHub, e
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import Project
-from ..inline import Review
+from ..core.project.config import Project
+from ..core.review.inline import Review
 
 MERGES = ("squash", "merge", "rebase")
 PRS = ("draft", "done")

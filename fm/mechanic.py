@@ -2,9 +2,11 @@
 
 from typing import Any
 
-from . import agents, backlog, diagnosis, proc, sessions, util
+from . import agents, proc, sessions, util
 from .agents import idle_s
-from .config import Project
+from .core.oversight import diagnosis
+from .core.project.config import Project
+from .core.tasks import backlog
 from .talk import NUDGE_IDLE_S
 
 TIMEOUT_S = 1800

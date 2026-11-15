@@ -4,7 +4,9 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import agents, backlog, describe, loop, pulls
+from fm import agents, loop, pulls
+from fm.core.review import describe
+from fm.core.tasks import backlog
 
 
 class TestText:

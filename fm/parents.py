@@ -4,8 +4,9 @@ already told), and closes only by its own `fm done` after the owner's yes."""
 
 from typing import Any
 
-from . import agents, backlog, blockers, sessions, subtasks, util
-from .config import Project
+from . import agents, sessions, util
+from .core.project.config import Project
+from .core.tasks import backlog, blockers, questions, subtasks
 
 
 def launch(p: Project, i: dict[str, Any]) -> None:
@@ -47,7 +48,7 @@ def notify(p: Project) -> None:
             subs = subtasks.of(tasks, i["id"])
             for s in subs:
                 if s["status"] in backlog.CLOSED and s["id"] not in i.get("notified", []):
-                    backlog.message(d, i, "S", ("subtask",), kind="subtask", text="subtask", answer=subtasks.notice(s, subs, i["id"]))
+                    questions.message(d, i, "S", ("subtask",), kind="subtask", text="subtask", answer=subtasks.notice(s, subs, i["id"]))
                     i["notified"] = [*i.get("notified", []), s["id"]]
                     told.append((i["id"], s["id"]))
     for tid, sid in told:

@@ -2,9 +2,10 @@
 
 from typing import Any
 
-from . import backlog, sessions, util
+from . import sessions, util
 from .agents import idle_s, send, update_agent
-from .config import Project
+from .core.project.config import Project
+from .core.tasks import backlog, questions
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
 
@@ -28,10 +29,10 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
 def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
     d = backlog.load(p)
     sent: set[str] = set()  # one answer per task per tick: the session is working after the first
-    for q in backlog.undelivered(d):
+    for q in questions.undelivered(d):
         i = backlog.get(d, q["task"])
         if i["status"] in backlog.CLOSED:
-            backlog.mark_delivered(p, q["id"])
+            questions.mark_delivered(p, q["id"])
             continue
         agent: dict[str, Any] = i.get("agent") or {}
         if i["id"] in sent:
@@ -40,7 +41,7 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
             continue  # it is busy (maybe talking with the owner): next tick
         msg = message_for(i, q)
         if send(p, i, msg):
-            backlog.mark_delivered(p, q["id"])
+            questions.mark_delivered(p, q["id"])
             sent.add(i["id"])
             update_agent(p, i["id"], nudged=None, started=util.now())
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
@@ -51,7 +52,7 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
 
 def watch_agents(p: Project, rows: dict[str, Any]) -> None:
     d = backlog.load(p)
-    waiting = {q["task"] for q in backlog.open_questions(d)} | {q["task"] for q in backlog.undelivered(d)}
+    waiting = {q["task"] for q in questions.open_questions(d)} | {q["task"] for q in questions.undelivered(d)}
     for i in backlog.tasks(d):
         a: dict[str, Any] = i.get("agent") or {}
         if i["status"] not in backlog.RUNNING or i.get("blocked") or i["id"] in waiting:
@@ -109,5 +110,5 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
             i.pop("review_for", None)
         agent: dict[str, Any] = {**(i.get("agent") or {}), "started": util.now(), "nudged": None}
         i["agent"] = agent
-        backlog.message(d, i, "R", ("rejection", "conflict", "failing", "review"), kind=kind, text="review", answer=note, at=util.now())
+        questions.message(d, i, "R", ("rejection", "conflict", "failing", "review"), kind=kind, text="review", answer=note, at=util.now())
     backlog.event(p, tid, f"→ in progress: returned to its agent ({kind}): {note}")

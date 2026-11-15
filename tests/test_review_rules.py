@@ -7,7 +7,8 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import backlog, delivery, loop, util
+from fm import delivery, loop, util
+from fm.core.tasks import backlog
 
 
 def commit(wt: str, name: str, text: str, msg: str = "change") -> None:

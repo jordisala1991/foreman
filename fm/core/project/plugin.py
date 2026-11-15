@@ -7,10 +7,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from . import config
+from . import registry
 from .config import Project, Unreadable
 
-SHARED = Path(__file__).parent / "shared"
+SHARED = Path(__file__).parents[2] / "shared"
 PLUGIN = "fm@fm"
 PLACEHOLDERS = ("project", "prefix", "home", "repos", "main", "slots")
 
@@ -50,7 +50,7 @@ def session_context(stdin: str, env: Mapping[str, str], projects: Sequence[Proje
         return ""
     if not isinstance(cwd, str):
         return ""
-    found = config.owners(projects, Path(cwd))
+    found = registry.owners(projects, Path(cwd))
     if len(found) != 1 or not isinstance(p := found[0][0], Project):
         return ""
     return json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": instructions(p)}})

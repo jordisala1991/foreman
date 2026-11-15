@@ -17,8 +17,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import backlog, evidence, util
-from .config import Project
+from ... import util
+from ..project.config import Project
+from ..review import evidence
+from ..tasks import backlog
 
 PUBLISH = {
     ("npm", "publish"),

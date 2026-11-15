@@ -4,7 +4,8 @@ import pytest
 import test_loop
 from helpers import Env, git
 
-from fm import backlog, delivery, loop
+from fm import delivery, loop
+from fm.core.tasks import backlog
 from fm.providers import ChangeState, registry
 
 

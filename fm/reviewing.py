@@ -4,9 +4,12 @@ what that step said (`apply_review`). The decisions themselves are in fm/decide.
 from pathlib import Path
 from typing import Any
 
-from . import backlog, decide, delivery, reviews, scratch, sessions
+from . import delivery, scratch, sessions
 from .agents import Scope, idle_s, launch_reviewer, running
-from .config import Project
+from .core.project.config import Project
+from .core.review import reviews
+from .core.rules import decide
+from .core.tasks import backlog
 from .talk import NUDGE_IDLE_S, return_to_agent
 
 

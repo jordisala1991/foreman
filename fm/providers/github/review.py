@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable
 
 from ... import proc
-from ...inline import LineComment, Review, resolve_links
+from ...core.review.inline import LineComment, Review, resolve_links
 from .. import Change, Permanent, ProviderError, Transient
 
 Run = Callable[..., proc.Result]

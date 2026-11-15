@@ -127,74 +127,37 @@ path = "fm.proc"
 layer = "proc"
 
 # core: vocabulary and pure rules (risk, autonomy, guard), plus the plain files that do not vary (backlog.json, config).
-# No subprocess here (ruff, TID251 in pyproject.toml).
-[[modules]]
-path = "fm.risk"
-layer = "core"
+# Packages under fm/core/ (a package path gives all its files); no subprocess here (ruff, TID251 in pyproject.toml).
 # decide: the loop's review and merge decisions; runs no program and touches no file, so it may import only risk.
 [[modules]]
-path = "fm.decide"
+path = "fm.core.project"
 layer = "core"
-depends_on = ["fm.risk"]
+depends_on = ["fm.util"]
 [[modules]]
-path = "fm.diagnosis"
+path = "fm.core.tasks"
 layer = "core"
+depends_on = ["fm.core.project", "fm.util"]
 [[modules]]
-path = "fm.guard"
+path = "fm.core.review"
 layer = "core"
+depends_on = ["fm.util"]
 [[modules]]
-path = "fm.backlog"
+path = "fm.core.rules.risk"
 layer = "core"
+depends_on = ["fm.core.project"]
 [[modules]]
-path = "fm.costs"
+path = "fm.core.rules.decide"
 layer = "core"
+depends_on = ["fm.core.rules.risk"]
 [[modules]]
-path = "fm.config"
+path = "fm.core.oversight"
 layer = "core"
-[[modules]]
-path = "fm.repos"
-layer = "core"
+depends_on = ["fm.core.project", "fm.core.tasks", "fm.core.review", "fm.util"]
 [[modules]]
 path = "fm.util"
 layer = "core"
 [[modules]]
-path = "fm.describe"
-layer = "core"
-[[modules]]
-path = "fm.verdict"
-layer = "core"
-[[modules]]
-path = "fm.inline"
-layer = "core"
-[[modules]]
-path = "fm.evidence"
-layer = "core"
-[[modules]]
-path = "fm.subtasks"
-layer = "core"
-[[modules]]
-path = "fm.reviews"
-layer = "core"
-[[modules]]
-path = "fm.tasktypes"
-layer = "core"
-[[modules]]
-path = "fm.recurring"
-layer = "core"
-[[modules]]
-path = "fm.recurring_table"
-layer = "core"
-[[modules]]
-path = "fm.editing"
-layer = "core"
-[[modules]]
-path = "fm.blockers"
-layer = "core"
-[[modules]]
 path = "fm.homesetup"
-layer = "core"
-[[modules]]
-path = "fm.plugin"
 layer = "core"
 # launcher: which fm version runs; stdlib only, as the launchd jobs run it alone (python3 -c).
 [[modules]]

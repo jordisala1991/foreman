@@ -28,7 +28,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import backlog, evidence, launcher, pulls
+from . import launcher, pulls
+from .core.review import evidence
+from .core.tasks import backlog
 from .panel_actions import Refused, act
 from .panel_views import Obj, project, projects, state, summary, system, task
 

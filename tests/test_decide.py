@@ -6,7 +6,19 @@ from typing import Any
 
 from helpers import ROOT
 
-from fm.decide import Seen, Step, after_check, checks_again, closes_review, conflict_note, failing_note, merge_gate, ran_on, review_step, waits_for_ci
+from fm.core.rules.decide import (
+    Seen,
+    Step,
+    after_check,
+    checks_again,
+    closes_review,
+    conflict_note,
+    failing_note,
+    merge_gate,
+    ran_on,
+    review_step,
+    waits_for_ci,
+)
 
 
 def seen(**kw: Any) -> Seen:
@@ -201,4 +213,4 @@ class TestPure:
         assert impurities(source) == []
 
     def test_decide_is_pure(self):
-        assert impurities((ROOT / "fm" / "decide.py").read_text()) == []
+        assert impurities((ROOT / "fm" / "core" / "rules" / "decide.py").read_text()) == []

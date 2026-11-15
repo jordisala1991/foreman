@@ -10,7 +10,9 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
-from fm import backlog, config, delivery, health, launcher, login, loop, util
+from fm import delivery, health, launcher, login, loop, util
+from fm.core.project import registry
+from fm.core.tasks import backlog, questions
 
 
 class TestHealth:
@@ -26,7 +28,7 @@ class TestHealth:
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"FM_REGISTRY": f"{d}/projects.json"}):
             assert health.python_note() == []
             line = "fm: needs Python 3.12 or newer; the python3 found is 3.9.6 (/usr/bin/python3)"
-            config.python_note_file().write_text(line + "\n")
+            registry.python_note_file().write_text(line + "\n")
             assert health.python_note() == ["! " + line]
 
     def test_dead_loop_is_seen_from_outside(self):
@@ -57,8 +59,8 @@ class TestHealth:
 
     def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
         tid = backlog.add(self.p, "x", status="ready", criteria="y")
-        qid = backlog.ask(self.p, tid, "a", "A or B?")
-        backlog.answer(self.p, qid, "B")
+        qid = questions.ask(self.p, tid, "a", "A or B?")
+        questions.answer(self.p, qid, "B")
         assert health.answers_undelivered(self.p) == []
         with backlog.edit(self.p) as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
@@ -101,7 +103,8 @@ class TestHealth:
 
 class TestMetrics:
     def test_cost_from_transcripts_counts_each_response_once(self):
-        from fm import costs, metrics
+        from fm import metrics
+        from fm.core.oversight import costs
 
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -118,7 +121,7 @@ class TestMetrics:
         assert metrics.per_task(e.p)[0]["usd"] == 2.0
 
     def test_usage_skips_lines_that_are_not_objects(self):
-        from fm import costs
+        from fm.core.oversight import costs
 
         good = {"type": "assistant", "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 1000, "output_tokens": 0}}}
         f = Path(tempfile.mkdtemp()) / "s.jsonl"

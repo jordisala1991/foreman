@@ -9,7 +9,8 @@ import textwrap
 import pytest
 from helpers import Env, fm, git
 
-from fm import backlog, cli, delivery, loop, providers, util
+from fm import cli, delivery, loop, providers, util
+from fm.core.tasks import backlog
 from fm.providers import registry
 from fm.providers.github import provider, types
 

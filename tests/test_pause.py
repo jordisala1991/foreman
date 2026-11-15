@@ -3,7 +3,8 @@
 from helpers import Env, fm
 from test_review_rules import commit, deliver
 
-from fm import backlog, loop
+from fm import loop
+from fm.core.tasks import backlog
 
 
 def pause(e: Env) -> None:

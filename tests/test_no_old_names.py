@@ -7,8 +7,9 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import backlog, util
-from fm.config import Project
+from fm import util
+from fm.core.project.config import Project
+from fm.core.tasks import backlog
 
 # The old names, written from parts so a scan for them finds nothing outside GLOSSARY.md.
 OLD_ENV = "FM_" + "IS" + "SUE"

@@ -3,7 +3,8 @@
 import argparse
 from collections.abc import Callable
 
-from . import backlog, config, tasktypes
+from .core.project import config
+from .core.tasks import backlog, tasktypes
 
 Command = Callable[[str, str], argparse.ArgumentParser]
 

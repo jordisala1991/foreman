@@ -523,12 +523,12 @@ the questions below, in the flat module that will move there.
 | adapters | `fm/providers/` | local · `github/`: provider, types, checks, review | one per platform; they see the port, never the loop or each other |
 | ports | `fm/providers/__init__.py` | | the `Provider` interface |
 | proc | `fm/proc.py` | | the one module that runs programs |
-| core | `fm/core/` | `project/`: config, registry, repos, plugin · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, editing, recurring, recurring_table · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+| core | `fm/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
-Core areas, in their `depends_on` order: `project` (fm.toml, the registry of homes, repos, the plugin's text) →
+Core areas, in their `depends_on` order: `project` (fm.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
 `tasks` (the backlog file, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
 inline comments, the description, evidence) → `rules` (`risk` on `project`; `decide` on `risk` only) → `oversight`
-(the guard, diagnosis, costs). `schedule`, `recurring` and `recurring_table` (FN-162) are in flight.
+(the guard, diagnosis, costs). `schedule` (FN-162) moves with the steps.
 
 ### tach rules
 

@@ -7,7 +7,8 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import backlog, loop
+from fm import loop
+from fm.core.tasks import backlog
 
 
 class TestPushes:

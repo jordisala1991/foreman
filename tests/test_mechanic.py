@@ -4,7 +4,9 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import backlog, diagnosis, loop
+from fm import loop
+from fm.core.oversight import diagnosis
+from fm.core.tasks import backlog
 
 FULL = "\n".join(f"## {s}\nx" for s in diagnosis.SECTIONS)
 

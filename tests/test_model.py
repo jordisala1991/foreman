@@ -7,7 +7,10 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import agents, backlog, config, costs, loop, metrics
+from fm import agents, loop, metrics
+from fm.core.oversight import costs
+from fm.core.project import config
+from fm.core.tasks import backlog
 
 
 def flags(c: dict) -> tuple[str, str]:
@@ -127,7 +130,7 @@ class TestMeasured:
         backlog.update(self.e.p, a, agent={"kind": "responsible", "model": "opus", "effort": "high"})
         b = backlog.add(self.e.p, "b", criteria="c", model="haiku")
         c = backlog.add(self.e.p, "c", criteria="c")
-        with mock.patch("fm.costs.of_sessions", lambda s, seen=None: {"usd": 3.0, "minutes": 0}):
+        with mock.patch("fm.core.oversight.costs.of_sessions", lambda s, seen=None: {"usd": 3.0, "minutes": 0}):
             rows = {r["id"]: r for r in metrics.per_task(self.e.p)}
         assert (rows[a]["model"], rows[a]["effort"]) == ("opus", "high")
         assert rows[b]["model"] == "haiku"

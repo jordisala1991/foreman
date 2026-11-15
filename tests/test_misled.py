@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 from helpers import fm
 
-from fm import agents, backlog, loop
+from fm import agents, loop
+from fm.core.tasks import backlog
 
 BRIEFS = Path(__file__).resolve().parent.parent / "fm" / "briefs"
 

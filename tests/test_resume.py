@@ -5,7 +5,8 @@ import json
 import pytest
 from helpers import Env
 
-from fm import backlog, health, loop, proc, sessions, talk, util
+from fm import health, loop, proc, sessions, talk, util
+from fm.core.tasks import backlog, questions
 
 
 def launched(e: Env) -> str:
@@ -15,7 +16,7 @@ def launched(e: Env) -> str:
 
 
 def answer(e: Env, tid: str, text: str = "B") -> None:
-    backlog.answer(e.p, backlog.ask(e.p, tid, tid.lower(), "A or B?"), text)
+    questions.answer(e.p, questions.ask(e.p, tid, tid.lower(), "A or B?"), text)
 
 
 def rows(e: Env) -> list[dict]:
@@ -32,7 +33,7 @@ class TestResume:
         loop.tick(e.p)
         assert e.task(tid)["agent"]["session"] == sid
         assert len(rows(e)) == 1
-        assert backlog.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(backlog.load(e.p)) == []
         assert e.calls()[-1]["argv"][:3] == ["--bg", "--resume", sid]
         assert len(e.calls()[-1]["argv"]) == 4
 
@@ -109,13 +110,13 @@ class TestResume:
         answer(e, tid, "C")
         loop.tick(e.p)
         assert len(e.calls()) == 2
-        assert len(backlog.undelivered(backlog.load(e.p))) == 1
+        assert len(questions.undelivered(backlog.load(e.p))) == 1
         loop.tick(e.p)  # the session is working now
         assert len(e.calls()) == 2
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)
         assert len(e.calls()) == 3
-        assert backlog.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(backlog.load(e.p)) == []
         assert len(rows(e)) == 1
 
     def test_a_session_that_became_busy_since_the_listing_is_not_resumed(self):
@@ -148,7 +149,7 @@ class TestResume:
         answer(e, tid)
         for _ in range(4):
             loop.tick(e.p)
-        assert len(backlog.undelivered(backlog.load(e.p))) == 1
+        assert len(questions.undelivered(backlog.load(e.p))) == 1
         assert e.task(tid)["blocked"] == ""
         with backlog.edit(e.p) as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"

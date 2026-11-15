@@ -1,7 +1,8 @@
 """A mechanic's diagnosis of a health finding: the sections it must have, and how it is stored in the task."""
 
-from . import backlog, util
-from .config import Project
+from ... import util
+from ..project.config import Project
+from ..tasks import backlog
 
 SECTIONS = ("Seen", "Inferred", "Same area before", "Experiment", "Root cause", "Proposed fix")
 GONE = "Symptom gone"

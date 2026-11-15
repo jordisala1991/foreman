@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from ..project.recurring_table import interval
 from . import backlog, subtasks
 from .backlog import Task
-from .recurring_table import interval
 
 SOURCE = "recurring:"
 STAMP = "%Y-%m-%d %H:%M:%S"

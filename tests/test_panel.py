@@ -14,8 +14,10 @@ from urllib.parse import quote
 import pytest
 from helpers import install_fm, version_folder
 
-from fm import backlog, launcher, panel, util
-from fm.config import Project, register
+from fm import launcher, panel, util
+from fm.core.project.config import Project
+from fm.core.project.registry import register
+from fm.core.tasks import backlog, questions
 
 
 def start_panel(t) -> None:
@@ -34,8 +36,8 @@ def start_panel(t) -> None:
     t.triage = backlog.add(t.p, "A health finding", status="triage", criteria="it is gone")
     t.work = backlog.add(t.p, "Some work", status="ready", criteria="it works")
     backlog.set_status(t.p, t.work, "in progress", agent={"name": "de-2", "short": "abc123"})
-    t.qid = backlog.ask(t.p, t.work, "de-2", "Which colour?")
-    t.perm = backlog.ask(t.p, t.work, "de-2", "push the tag", kind="permission", action="publish")
+    t.qid = questions.ask(t.p, t.work, "de-2", "Which colour?")
+    t.perm = questions.ask(t.p, t.work, "de-2", "push the tag", kind="permission", action="publish")
     t.srv, t.key = panel.make_server(0, token="test-key")
     t.base = f"http://127.0.0.1:{t.srv.server_address[1]}"
     threading.Thread(target=t.srv.serve_forever, daemon=True).start()

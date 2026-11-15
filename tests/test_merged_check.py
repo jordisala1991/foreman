@@ -11,7 +11,8 @@ from helpers import Env, fm, git
 from test_failing import fix
 from test_review_rules import commit, events, take_note
 
-from fm import backlog, delivery, loop, mergecheck
+from fm import delivery, loop, mergecheck
+from fm.core.tasks import backlog
 
 TOGETHER_FAIL = "test ! -e a.py -o ! -e b.py"
 

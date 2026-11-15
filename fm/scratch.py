@@ -3,7 +3,7 @@
 import shutil
 from pathlib import Path
 
-from .config import Project
+from .core.project.config import Project
 
 
 def folder(p: Project, tid: str, rnd: int, tip: str, role: str) -> Path:

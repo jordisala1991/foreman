@@ -5,7 +5,9 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import agents, backlog, guard, health, loop
+from fm import agents, health, loop
+from fm.core.oversight import guard
+from fm.core.tasks import backlog, questions
 
 
 class TestGuardFalsePositives:
@@ -87,10 +89,10 @@ class TestClosed:
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
-        backlog.ask(e.p, tid, tid.lower(), "A or B?")
+        questions.ask(e.p, tid, tid.lower(), "A or B?")
         fm(e.home, "cancel", tid)
         d = backlog.load(e.p)
-        assert backlog.open_questions(d) == []
+        assert questions.open_questions(d) == []
         assert not Path(e.task(tid)["worktree"]).exists()
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)

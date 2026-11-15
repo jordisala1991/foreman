@@ -56,7 +56,7 @@ class TestLock:
 
     def test_the_command_fails_and_the_resource_is_released_with_its_code(self):
         assert self.fm_lock("gpu", "a", "sh", "-c", "exit 3").wait(timeout=20) == 3
-        from fm.config import Project
+        from fm.core.project.config import Project
 
         assert lock.declared(Project.load(self.e.home).cfg)["gpu"].status()["held"] == {}
 
@@ -67,7 +67,7 @@ class TestLock:
         assert lock.uses(["gpu"])[-1]["event"] == "timeout"
 
     def test_a_holder_that_died_is_cleaned_up(self):
-        from fm.config import Project
+        from fm.core.project.config import Project
 
         dead = subprocess.Popen(["true"])
         dead.wait()
@@ -82,8 +82,9 @@ class TestLock:
         assert r.stdout.strip() == "free"
 
     def test_the_brief_names_the_resources(self):
-        from fm import agents, backlog
-        from fm.config import Project
+        from fm import agents
+        from fm.core.project.config import Project
+        from fm.core.tasks import backlog
 
         p = Project.load(self.e.home)
         tid = backlog.add(p, "x", status="ready", criteria="y")

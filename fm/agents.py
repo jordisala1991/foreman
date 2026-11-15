@@ -5,9 +5,12 @@ import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from . import backlog, costs, decide, delivery, lock, scratch, sessions, tasktypes, util
-from .config import Project
-from .reviews import review_round
+from . import delivery, lock, scratch, sessions, util
+from .core.oversight import costs
+from .core.project.config import Project
+from .core.review.reviews import review_round
+from .core.rules import decide
+from .core.tasks import backlog, questions, tasktypes
 
 BRIEFS = Path(__file__).parent / "briefs"
 
@@ -218,7 +221,7 @@ def diagnosing(i: dict[str, Any]) -> bool:
 
 
 def running(d: dict[str, Any]) -> int:
-    return sum(1 for i in backlog.tasks(d) if backlog.holds_slot(d, i) or reviewer_active(i) or diagnosing(i))
+    return sum(1 for i in backlog.tasks(d) if questions.holds_slot(d, i) or reviewer_active(i) or diagnosing(i))
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:

@@ -6,7 +6,7 @@ import re
 from datetime import timedelta
 from typing import Any
 
-from . import util
+from ... import util
 
 TEXTS = ("name", "title", "goal", "criteria", "detail", "model", "effort", "type", "every")
 SETTINGS = (*TEXTS, "every_merges", "triage")

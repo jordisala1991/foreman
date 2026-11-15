@@ -9,8 +9,9 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from . import backlog, cli, delivery, providers
-from .config import Project
+from . import cli, delivery, providers
+from .core.project.config import Project
+from .core.tasks import backlog
 from .panel_views import Obj, project
 
 Query = dict[str, list[str]]
