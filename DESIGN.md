@@ -45,7 +45,7 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
 | `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
 | `fm/plugin.py`, `fm/cli_plugin.py` | ~80 | the Claude Code plugin: the SessionStart context of a session in a project's folder, `fm project`'s values; manifests in `.claude-plugin/`, the hook in `hooks/hooks.json` |
-| `fm/cli.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel` |
+| `fm/cli.py`, `fm/cli_view.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel`; `cli_view`: `list` and `show` |
 || `fm/briefs/*.md` | ~80 | the briefs: `planning.md`, `responsible.md`, `hunter.md`, `reviewer.md`, `mechanic.md` (from the old foreman's briefs) ||
 | `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
 
@@ -557,7 +557,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `decide`, `subtasks`, `tasktypes`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `repos`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
+| core | `risk`, `decide`, `subtasks`, `tasktypes`, `reviews`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `repos`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,

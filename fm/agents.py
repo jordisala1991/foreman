@@ -7,6 +7,7 @@ from typing import Any, NamedTuple
 
 from . import backlog, costs, decide, delivery, lock, sessions, tasktypes, util
 from .config import Project
+from .reviews import review_round
 
 BRIEFS = Path(__file__).parent / "briefs"
 
@@ -230,7 +231,7 @@ def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
 def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "reviewer", scope: Scope = ROUNDS) -> None:
     """One of the two review sessions: the `hunter` lists what it suspects, then the `reviewer` checks each finding. With
     a `scope.base`, it reviews only what changed from it (an owner reject's fix, a conflict's resolution)."""
-    rnd = backlog.review_round(i)
+    rnd = review_round(i)
     all_reviews: list[dict[str, Any]] = i.get("reviews") or []
     reviews = all_reviews[int(i.get("review_from", 0)) :]
     prev = reviews[-1] if reviews else {}
