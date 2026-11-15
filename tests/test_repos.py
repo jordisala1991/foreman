@@ -65,6 +65,12 @@ class ReposTest(unittest.TestCase):
         self.refused(self.tables('post_create = ["x {repo}"]'), "[repos.api]", "{repo}")
         self.refused(self.tables('post_create = ["x {}"]'), "[repos.api]", "{}")
         self.refused(self.tables("post_create = 3"), "[repos.api]", "post_create")
+        self.refused(self.tables('post_create = ["echo {"]'), "[repos.api]", "post_create")
+        self.refused(self.tables('post_create = ["echo }"]'), "[repos.api]", "post_create")
+
+    def test_worktrees_must_be_a_path(self) -> None:
+        self.refused(self.tables("worktrees = 3"), "[repos.api]", "worktrees")
+        self.refused(self.tables(), "[project]", "worktrees", project="worktrees = 3")
 
     def test_layout_inside_repo_refused(self) -> None:
         api, web = self.root / "api", self.root / "web"
@@ -92,6 +98,8 @@ class ReposTest(unittest.TestCase):
         p = self.load(text, home=home)
         self.assertEqual(p.repo, api)
         self.assertEqual(p.get("merge", "strategy"), "squash")
+        p = self.load(f'[repos.api]\npath = "{api}"\nmain = 3\n', home=home)
+        self.assertEqual(p.get("project", "main"), "3")
 
 
 if __name__ == "__main__":

@@ -17,19 +17,23 @@ def parse(raw: dict[str, Any], cfg: dict[str, dict[str, Any]]) -> dict[str, dict
     tables: dict[str, Any] = raw.get("repos", {})
     if tables and "repo" in raw.get("project", {}):
         raise ValueError("fm.toml has both [project] repo and [repos.<key>] tables: use one of the two forms")
+    if tables and not isinstance(cfg["project"]["worktrees"], str):
+        raise ValueError("[project] worktrees is a folder path")
     out: dict[str, dict[str, Any]] = {}
     for key in tables:
         if not isinstance(tables[key], dict) or not isinstance(tables[key].get("path"), str):
             raise ValueError(f"[repos.{key}] needs a path")
         _check_keys(f"[repos.{key}]", tables[key], SETTINGS)
         repo: dict[str, Any] = {
-            "main": "main",
+            "main": str(tables[key].get("main", "main")),
             "remote": "origin",
             "worktrees": cfg["project"]["worktrees"],
             "post_create": [],
             "publish_on_merge": False,
-            **{k: v for k, v in tables[key].items() if k not in SUB_SETTINGS},
+            **{k: v for k, v in tables[key].items() if k not in SUB_SETTINGS and k != "main"},
         }
+        if not isinstance(repo["worktrees"], str):
+            raise ValueError(f"[repos.{key}] worktrees is a folder path")
         for name, allowed in SUB_SETTINGS.items():
             if not isinstance(tables[key].get(name, {}), dict):
                 raise ValueError(f"[repos.{key}.{name}] must be a table")
@@ -50,7 +54,11 @@ def _check_keys(where: str, table: dict[str, Any], allowed: tuple[str, ...]) -> 
 
 def _check_placeholders(key: str, commands: list[str]) -> None:
     for cmd in commands:
-        for _, name, _, _ in string.Formatter().parse(cmd):
+        try:
+            names = [name for _, name, _, _ in string.Formatter().parse(cmd)]
+        except ValueError as e:
+            raise ValueError(f"[repos.{key}] post_create: {e}") from None
+        for name in names:
             if name is not None and name not in PLACEHOLDERS:
                 raise ValueError(f"[repos.{key}] post_create: unknown placeholder {{{name}}}")
 
