@@ -15,7 +15,7 @@ _Chat_: subtarea
 _Avoid_: child task, sub-issue
 
 **Parent**
-A task too big for one PR, split into subtasks. It never gets an agent and closes by itself when every subtask has.
+A task too big for one PR, split into subtasks. Before its Go it closes by itself when every subtask has; on its Go it gets a parent agent, and then it closes only when every subtask is done or canceled and its agent and the owner agree its goal holds.
 _Chat_: tarea madre
 _Avoid_: epic, umbrella task
 
@@ -45,6 +45,11 @@ _Avoid_: worker, developer, dev agent, work agent, implementer, the agent (alone
 The session that turns a task in backlog into a plan and leaves it ready.
 _Chat_: agente de planificación
 _Avoid_: planner, definer, defining agent
+
+**Parent agent**
+The session that follows a parent and its subtasks with the owner: reports from real data, proposes the next subtask and changes, never codes, reviews or merges.
+_Chat_: agente de la tarea madre
+_Avoid_: coordinator, supervisor
 
 **Hunter**
 The first of the two review sessions: it lists every suspicion about a branch, with a confidence each.

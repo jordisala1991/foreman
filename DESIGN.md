@@ -30,7 +30,8 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/inline.py` | ~80 | the diff's visible lines and findings as line comments (pure) |
 | `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
 | `fm/evidence.py` | ~35 | the images a report names: bare names, relink, size and kinds (pure text) |
-| `fm/subtasks.py` | ~35 | subtasks: which belong to a parent, listing order, when a subtask may be filed, how the parent closes (pure) |
+| `fm/subtasks.py` | ~80 | subtasks: which belong to a parent, listing order, when and by whom a subtask may be filed or edited, how the parent closes, what its agent reads and is told (pure) |
+| `fm/parents.py` | ~85 | the parent agent: the tick step that launches it on a let-in parent, tells it of each subtask merged or canceled (`notified`, message kind `subtask`) and stops it once the parent closes; `fm done` of a parent |
 | `fm/blockers.py` | ~50 | which tasks a task waits for (`blocked_by`): pending, dead, refusals incl. cycles (pure) |
 | `fm/release.py` | ~25 | the loop's blockers step: marks a task unblocked once, or blocks it when a blocker closed undone |
 | `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
@@ -82,10 +83,13 @@ project: `[agents] slots` (how many at once), models, extra session settings; `[
   with a reason: the owner edits `--blocked-by` or cancels, then `fm unblock`.
 - `fm edit` changes title, goal, criteria, detail, model, effort or blockers of a task in triage, backlog or ready (never one with an agent,
   nor a closed one); criteria or detail on a backlog or ready task drops its plan and returns it to backlog.
-- A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only the owner, only while the parent is
-  in triage or backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent; the
-  parent never gets an agent and closes by itself when every subtask has (done if any is done, else canceled).
-  `fm cancel` of a parent cancels its open subtasks and closes their PRs.
+- A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only while the parent is in triage or
+  backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent. A parent in triage
+  closes by itself when every subtask has (done if any is done, else canceled). Once let in (backlog) it gets a parent
+  agent (`agent.kind` `parent`, no worktree, status stays backlog): it is told each subtask merged or canceled and
+  nothing else (`notified` lists those told; message kind `subtask`), proposes the next Go and changes to the owner, may
+  file (`--triage`) and edit only its own subtasks, and closes the parent with `fm done` (refused while a subtask is
+  open) after the owner's yes. `fm cancel` of a parent cancels its open subtasks and closes their PRs.
 - A question (`fm ask`) does not change the state: it is a decision tied to the task and its agent. Its agent ends
   its turn; the owner answers in the panel (or talks to that agent directly); the loop resumes *that* session with the
   answer.
@@ -132,7 +136,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
    with a reason (`fm/release.py`).
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
-   started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews.
+   started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`fm/parents.py`).
 9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
    that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.

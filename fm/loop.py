@@ -11,6 +11,7 @@
 7. health: broken states become triage tasks, deduplicated (health.py)
 8. launch: while there are free slots, a planning agent for a `backlog` task, the responsible agent for a `ready`
    one; a task whose blockers are not all done waits. The loop never plans, never reviews, never talks to the owner.
+   Before it, a let-in parent gets its parent agent outside the slots, told of each subtask merged or canceled (parents.py).
 9. mechanic: a diagnosing helper for each health finding in triage, in the slots launch left free (mechanic.py)
 """
 
@@ -23,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
-from . import backlog, blockers, decide, delivery, health, mechanic, proc, providers, pulls, release, sessions, sources, subtasks, util
+from . import backlog, blockers, decide, delivery, health, mechanic, parents, proc, providers, pulls, release, sessions, sources, subtasks, util
 from .agents import fill_sessions, launch, running
 from .config import Project, registered
 from .providers import registry
@@ -212,6 +213,7 @@ def tick(p: Project) -> None:
         ("queue", lambda: run_queue(p, rows)),
         ("health", lambda: health.run(p, rows)),
         ("blockers", lambda: release.run(p)),
+        ("parents", lambda: parents.run(p, rows)),
         ("launch", lambda: launch_free(p)),
         ("mechanic", lambda: mechanic.run(p, rows)),
     ]

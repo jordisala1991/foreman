@@ -108,16 +108,16 @@ class Loop(unittest.TestCase):
     def setUp(self):
         owner(self)
 
-    def test_a_parent_never_gets_an_agent(self):
+    def test_a_parent_gets_only_a_parent_agent(self):
         e = Env()
         P = backlog.add(e.p, "parent", status="backlog", criteria="c")
         s1 = fm(e.home, "add", "s1", "--parent", P, "--triage", "--criteria", "c").strip()
         loop.tick(e.p)
-        self.assertEqual(e.calls(), [])
-        self.assertEqual(e.task(P)["status"], "backlog")
+        self.assertEqual([c["argv"][c["argv"].index("-n") + 1] for c in e.calls()], ["ty-1"])
+        self.assertEqual((e.task(P)["status"], e.task(P)["agent"]["kind"]), ("backlog", "parent"))
         fm(e.home, "go", s1)
         loop.tick(e.p)
-        self.assertEqual(len(e.calls()), 1)
+        self.assertEqual([c["argv"][c["argv"].index("-n") + 1] for c in e.calls()], ["ty-1", "ty-2-planning"])
         self.assertEqual((e.task(s1)["status"], e.task(P)["status"]), ("refining", "backlog"))
 
 
