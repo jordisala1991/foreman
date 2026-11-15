@@ -35,5 +35,5 @@ Then end your turn.
 - Nothing: end your turn with your file; the reviewer reads it.
 
 # Never
-- Edit, commit or build in the repo, or write any file but `${hunter_file}`.
+- Edit, commit or build in the repo, or write anywhere but `${hunter_file}` and your scratch folder `$scratch` (for every temporary file: copies of the repo, fake registries, throwaway configs). It is yours alone and the loop removes it when you end: do not delete it or write anywhere else.
 - Describe output you did not see.
