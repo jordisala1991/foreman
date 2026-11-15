@@ -127,8 +127,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
    task, unknown action, missing key, or an action invalid for the task's state: nothing changes, logged in
    `state/errors.jsonl`, not retried. A transient failure (accept before its check, busy checkout, hung stop) is
    logged and the same key is tried again next tick.
-   Cursors in `state/cursors/`. None shipped (the owner's call for now). The step `recurring` right after it
-   files the recurring entries that fell due (`fm/schedule.py`, see `## Recurring tasks`).
+   Cursors in `state/cursors/`. None shipped (the owner's call for now). The same step first files the
+   recurring entries that fell due (`fm/schedule.py`, see `## Recurring tasks`).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
    (`claude --bg --resume SID MESSAGE`, no other flag: a flag or a live process makes claude start a copy), when that
    session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
@@ -369,7 +369,7 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 `[[recurring]]` tables in `fm.toml` (strict: `fm/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `fm add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
 - Trigger: `every_merges = N` (N merged tasks) or `every = "12h" | "7d" | "2w"` (plain durations: h, d, w; no cron).
-- Each tick (the `recurring` step after `sources`, `fm/schedule.py` over the pure rules of `fm/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
+- Each tick (the `sources` step, which calls `fm/schedule.py` over the pure rules of `fm/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
 - Anchor: the count or period starts when the entry's last task closed (done, canceled or duplicate), else when fm first saw the entry (`state/recurring.json`, the one store). A time trigger that fell due while fm was off files once. Merges are `done` tasks not filed by an entry and not parents; their closing time is that of the `→ done` event.
 - `fm list`, `fm show` and the panel's data mark an entry's task (`recurring`: the name); `fm health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it.
 

@@ -46,7 +46,6 @@ from .agents import fill_sessions, launch, running
 from .config import Project, registered
 from .providers import registry
 from .reviewing import apply_review, seen_of, sweep_scratch, working
-from .schedule import run as recurring_run
 from .talk import deliver_answers, return_to_agent, watch_agents
 
 PRIORITY = {p: n for n, p in enumerate(backlog.PRIORITIES)}
@@ -262,7 +261,6 @@ def tick(p: Project) -> None:
         ("sessions", lambda: fill_sessions(p, rows)),
         ("scratch", lambda: sweep_scratch(p)),
         ("sources", lambda: sources.run(p)),
-        ("recurring", lambda: recurring_run(p)),
         ("answers", lambda: deliver_answers(p, rows)),
         ("agents", lambda: watch_agents(p, rows)),
         ("pulls", lambda: run_pulls(p)),

@@ -17,14 +17,14 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import backlog, delivery, proc, util
+from . import backlog, delivery, proc, schedule, util
 from .config import Project
 from .talk import return_to_agent
 
 
 def run(p: Project) -> list[str]:
     folder = p.home / "sources"
-    filed: list[str] = []
+    filed: list[str] = schedule.run(p)  # the recurring entries that fell due (DESIGN.md `## Recurring tasks`)
     if not folder.is_dir():
         return filed
     for exe in sorted(folder.iterdir()):
