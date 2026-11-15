@@ -72,6 +72,8 @@ session in any folder of a registered project the skill `fm:define-task` (its va
 instructions with the project's values plus `<home>/instructions.md` (the SessionStart hook `fm session-context`; `bin/fm` re-executes under a newer `python3` from PATH or names the minimum, and the hook leaves that line for `fm health`), and
 `fm` on the PATH; a session elsewhere gets no context. Agents run with it disabled (`enabledPlugins` in their settings).
 
+A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and `~/Projects/<name>/home`.
+
 ## The states of a task
 
 ```
