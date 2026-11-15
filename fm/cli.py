@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, backlog, blockers, decide, delivery, editing, guard, health, homesetup, lock, loop, metrics, providers, sessions, subtasks, util
+from . import agents, backlog, blockers, config, decide, delivery, editing, guard, health, homesetup, lock, loop, metrics, providers, sessions, subtasks, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -191,7 +191,11 @@ def cmd_loop(a: argparse.Namespace) -> None:
 
 
 def cmd_health(a: argparse.Namespace) -> None:
+    for line in health.shared_folders(config.loaded()):
+        print(line)
     p = home(a)
+    if note := health.repos_note(p):
+        print(note)
     rows = sessions.listing(p)
     for f in health.findings(p, rows, outside=True):
         print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
@@ -284,5 +288,5 @@ def main(argv: list[str] | None = None) -> None:
     a = parser(__doc__).parse_args(argv)
     try:
         HANDLERS[a.cmd](a)
-    except backlog.BacklogError as e:
+    except (backlog.BacklogError, config.ProjectError) as e:
         sys.exit(f"fm: {e}")

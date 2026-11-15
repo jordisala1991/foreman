@@ -28,7 +28,7 @@ def run_cli(fn: Callable[[argparse.Namespace], Any], p: Project, **kw: Any) -> N
     """A command of fm.cli as `fm --home HOME ...` would run it; its sys.exit(message) becomes a refusal."""
     try:
         with _cli_lock, contextlib.redirect_stdout(io.StringIO()):
-            fn(argparse.Namespace(home=str(p.home), **kw))
+            fn(argparse.Namespace(project=None, home=str(p.home), **kw))
     except SystemExit as e:
         raise Refused(str(e.code)) from None
 
