@@ -1,3 +1,5 @@
+"""Which agents are running: idle time, and the tasks that hold a slot."""
+
 import time
 from pathlib import Path
 from typing import Any
