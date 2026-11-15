@@ -1,16 +1,17 @@
 import json
 import stat
-import unittest
 from pathlib import Path
 
-from helpers import Env, git
+import pytest
+from helpers import git
 
 from fm import backlog, loop, sources, util
 
 
-class Signals(unittest.TestCase):
-    def setUp(self):
-        self.e = Env()
+class TestSignals:
+    @pytest.fixture(autouse=True)
+    def set_up(self, env):
+        self.e = env
         self.p = self.e.p
         (self.e.home / "sources").mkdir()
 
@@ -27,7 +28,7 @@ class Signals(unittest.TestCase):
         """A task with a launched agent."""
         tid = backlog.add(self.p, "work", status="ready", criteria="x")
         loop.tick(self.p)
-        self.assertEqual(self.e.task(tid)["status"], "in progress")
+        assert self.e.task(tid)["status"] == "in progress"
         return tid
 
     def queued(self):
@@ -45,7 +46,7 @@ class Signals(unittest.TestCase):
         self.emit(sig, sig)
         self.emit(sig)
         tasks = backlog.tasks(backlog.load(self.p))
-        self.assertEqual([(i["status"], i["source"]) for i in tasks], [("triage", "src:k1")])
+        assert [(i["status"], i["source"]) for i in tasks] == [("triage", "src:k1")]
 
     def test_note_reaches_the_agent_like_an_answer(self):
         tid = self.running()
@@ -54,16 +55,16 @@ class Signals(unittest.TestCase):
         self.e.set_state(tid.lower(), "done")
         loop.tick(self.p)
         resumes = [c for c in self.e.calls() if "--resume" in c["argv"]]
-        self.assertEqual(len(resumes), 1)
-        self.assertIn("approved by Ana", resumes[0]["argv"][-1])
-        self.assertEqual(self.errors(), [])
+        assert len(resumes) == 1
+        assert "approved by Ana" in resumes[0]["argv"][-1]
+        assert self.errors() == []
 
     def test_reject_is_fm_reject(self):
         tid, _ = self.queued()
         self.emit({"key": "r1", "task": tid, "action": "reject", "text": "change X"})
         i = self.e.task(tid)
-        self.assertEqual((i["status"], i["rework"]), ("in progress", 1))
-        self.assertEqual(backlog.load(self.p)["decisions_resolved"][-1]["answer"], "change X")
+        assert (i["status"], i["rework"]) == ("in progress", 1)
+        assert backlog.load(self.p)["decisions_resolved"][-1]["answer"] == "change X"
 
     def test_accept_is_fm_accept(self):
         tid, branch = self.queued()
@@ -71,21 +72,21 @@ class Signals(unittest.TestCase):
 
         delivery.check(self.p, tid)
         self.emit({"key": "a1", "task": tid, "action": "accept"})
-        self.assertTrue(self.e.task(tid)["accepted"])  # as `fm accept`: the decision; the loop merges
+        assert self.e.task(tid)["accepted"]  # as `fm accept`: the decision; the loop merges
         loop.tick(self.p)
-        self.assertEqual(self.e.task(tid)["status"], "done")
-        self.assertTrue(self.e.task(tid)["commit"])
+        assert self.e.task(tid)["status"] == "done"
+        assert self.e.task(tid)["commit"]
 
     def test_done_closes_as_done(self):
         tid = self.running()
         self.emit({"key": "d1", "task": tid, "action": "done", "text": "merged on GitHub"})
-        self.assertEqual(self.e.task(tid)["status"], "done")
-        self.assertEqual(self.errors(), [])
+        assert self.e.task(tid)["status"] == "done"
+        assert self.errors() == []
 
     def test_cancel_is_fm_cancel(self):
         tid = self.running()
         self.emit({"key": "c1", "task": tid, "action": "cancel"})
-        self.assertEqual(self.e.task(tid)["status"], "canceled")
+        assert self.e.task(tid)["status"] == "canceled"
 
     def test_invalid_signals_change_nothing_and_are_logged(self):
         run = self.running()
@@ -101,39 +102,35 @@ class Signals(unittest.TestCase):
             {"key": "b6", "task": run, "action": "note"},  # no text
         ]
         self.emit(*bad)
-        self.assertEqual(json.dumps(backlog.load(self.p), sort_keys=True), before)
-        self.assertEqual(len(self.errors()), len(bad))
+        assert json.dumps(backlog.load(self.p), sort_keys=True) == before
+        assert len(self.errors()) == len(bad)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
-class Review1(Signals):
+class TestReview1(TestSignals):
     def test_failed_accept_is_logged_and_retried_then_applied_once(self):  # F1, F4
         from fm import delivery
 
         tid, _ = self.queued()
         sig = {"key": "a1", "task": tid, "action": "accept"}
         self.emit(sig)  # no check yet: "moved since it was checked"
-        self.assertEqual(self.e.task(tid)["status"], "in review")
-        self.assertEqual(len(self.errors()), 1)
+        assert self.e.task(tid)["status"] == "in review"
+        assert len(self.errors()) == 1
         delivery.check(self.p, tid)
         self.emit(sig)
-        self.assertTrue(self.e.task(tid)["accepted"])
+        assert self.e.task(tid)["accepted"]
         loop.tick(self.p)  # the loop's merge step closes it
-        self.assertEqual(self.e.task(tid)["status"], "done")
+        assert self.e.task(tid)["status"] == "done"
         n = len(self.errors())
         self.emit(sig)  # once
-        self.assertEqual(len(self.errors()), n)
+        assert len(self.errors()) == n
 
     def test_a_retried_signal_leaves_one_error_line_per_key(self):  # F7
         tid, _ = self.queued()
         sig = {"key": "a1", "task": tid, "action": "accept"}
         for _ in range(3):
             self.emit(sig)  # still no check: fails every tick
-        self.assertEqual(len(self.errors()), 1)
-        self.assertEqual(self.e.task(tid)["status"], "in review")
+        assert len(self.errors()) == 1
+        assert self.e.task(tid)["status"] == "in review"
 
     def test_unexpected_failure_is_logged_and_does_not_stop_the_next_signal(self):  # F2
         from unittest import mock
@@ -142,19 +139,19 @@ class Review1(Signals):
         backlog.set_status(self.p, b, "in progress")
         with mock.patch("fm.sessions.stop", side_effect=OSError("hung")):
             self.emit({"key": "x1", "task": a, "action": "cancel"}, {"key": "x2", "task": b, "action": "done"})
-        self.assertEqual(self.e.task(b)["status"], "done")
-        self.assertEqual(self.e.task(a)["status"], "in progress")
-        self.assertTrue(any("hung" in e["error"] for e in self.errors()))
+        assert self.e.task(b)["status"] == "done"
+        assert self.e.task(a)["status"] == "in progress"
+        assert any("hung" in e["error"] for e in self.errors())
 
     def test_signal_without_key_or_not_an_object_is_logged(self):  # F3
         tid = self.running()
         self.emit({"task": tid, "action": "cancel"}, [1, 2])
-        self.assertEqual(self.e.task(tid)["status"], "in progress")
-        self.assertEqual(len(self.errors()), 2)
+        assert self.e.task(tid)["status"] == "in progress"
+        assert len(self.errors()) == 2
 
     def test_reject_and_done_applied_once(self):  # F4
         tid, _ = self.queued()
         rej = {"key": "r1", "task": tid, "action": "reject", "text": "x"}
         self.emit(rej)
         self.emit(rej)
-        self.assertEqual(self.e.task(tid)["rework"], 1)
+        assert self.e.task(tid)["rework"] == 1

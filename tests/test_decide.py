@@ -2,7 +2,6 @@
 task in review", none launches a program. `Pure` keeps the module free of programs and files."""
 
 import ast
-import unittest
 from typing import Any
 
 from helpers import ROOT
@@ -24,112 +23,112 @@ def step(**kw: Any) -> Step:
     return review_step(seen(**kw), {}, 2)
 
 
-class Review(unittest.TestCase):
+class TestReview:
     def test_no_hunter_launches_it(self):
-        self.assertEqual(step(), Step("hunt", "round"))
-        self.assertEqual(step(free=False), Step("wait", "round"))
-        self.assertEqual(step(hunter_tip="t1", reviewer_tip="t1"), Step("hunt", "round"))
+        assert step() == Step("hunt", "round")
+        assert step(free=False) == Step("wait", "round")
+        assert step(hunter_tip="t1", reviewer_tip="t1") == Step("hunt", "round")
 
     def test_hunter_file_and_ended_launches_reviewer(self):
-        self.assertEqual(step(hunter_tip="t2", hunter_file=True), Step("review", "round"))
-        self.assertEqual(step(hunter_tip="t2", hunter_file=True, hunter_working=True), Step("wait", "round"))
-        self.assertEqual(step(hunter_tip="t2", hunter_file=True, free=False), Step("wait", "round"))
+        assert step(hunter_tip="t2", hunter_file=True) == Step("review", "round")
+        assert step(hunter_tip="t2", hunter_file=True, hunter_working=True) == Step("wait", "round")
+        assert step(hunter_tip="t2", hunter_file=True, free=False) == Step("wait", "round")
 
     def test_hunter_without_file_blocks(self):
         s = step(hunter_tip="t2", hunter_ended=True)
-        self.assertEqual(s.do, "block")
-        self.assertIn("hunter ended without its findings file", s.text)
-        self.assertEqual(step(hunter_tip="t2"), Step("wait", "round"))
+        assert s.do == "block"
+        assert "hunter ended without its findings file" in s.text
+        assert step(hunter_tip="t2") == Step("wait", "round")
 
     def test_reviewer_without_verdict_blocks(self):
         s = step(hunter_tip="t2", reviewer_tip="t2", reviewer_ended=True)
-        self.assertEqual(s.do, "block")
-        self.assertIn("reviewer ended without a verdict", s.text)
-        self.assertEqual(step(hunter_tip="t2", reviewer_tip="t2"), Step("wait", "round"))
+        assert s.do == "block"
+        assert "reviewer ended without a verdict" in s.text
+        assert step(hunter_tip="t2", reviewer_tip="t2") == Step("wait", "round")
 
     def test_open_findings_go_back_once(self):
         s = review_step(seen(verdict_tip="t2"), {"open": 1, "round": 1, "file": "r.md"}, 2)
-        self.assertEqual(s.do, "back")
-        self.assertTrue(s.text.startswith("The review of your branch (round 1) leaves 1 open: read r.md."), s.text)
+        assert s.do == "back"
+        assert s.text.startswith("The review of your branch (round 1) leaves 1 open: read r.md."), s.text
         for v in ({"open": 0, "round": 1}, {"open": 1, "round": 2}, {"open": 1, "round": 1, "returned": True}):
-            self.assertEqual(review_step(seen(verdict_tip="t2"), v, 2), Step("go"), v)
+            assert review_step(seen(verdict_tip="t2"), v, 2) == Step("go"), v
 
     def test_a_clean_merge_or_a_closed_review_holds(self):
         v = {"open": 0, "round": 1}
-        self.assertEqual(review_step(seen(verdict_tip="t1", merge="clean"), v, 2), Step("hold"))
-        self.assertEqual(review_step(seen(verdict_tip="t1", review_for="none"), v, 2), Step("hold"))
-        self.assertEqual(review_step(seen(verdict_tip="t1", review_for="none", merge="resolved", auto="T"), v, 2), Step("hold"))
-        self.assertEqual(step(merge="clean"), Step("hunt", "round"))
+        assert review_step(seen(verdict_tip="t1", merge="clean"), v, 2) == Step("hold")
+        assert review_step(seen(verdict_tip="t1", review_for="none"), v, 2) == Step("hold")
+        assert review_step(seen(verdict_tip="t1", review_for="none", merge="resolved", auto="T"), v, 2) == Step("hold")
+        assert step(merge="clean") == Step("hunt", "round")
 
     def test_a_review_closes_after_the_last_round(self):
         for v in ({"open": 1, "round": 2}, {"open": 0, "round": 2}):
-            self.assertTrue(closes_review(v, 2), v)
+            assert closes_review(v, 2), v
         for v in ({"open": 0, "round": 1}, {"open": 1, "round": 1}):
-            self.assertFalse(closes_review(v, 2), v)
+            assert not closes_review(v, 2), v
 
     def test_reject_and_conflict_launch_with_their_base(self):
-        self.assertEqual(step(verdict_tip="t1", review_for="reject"), Step("hunt", "reject", "t1"))
-        self.assertEqual(step(verdict_tip="t1", review_for="conflict", merge="resolved", auto="T"), Step("hunt", "conflict", "T"))
-        self.assertEqual(step(verdict_tip="t1", review_for="conflict"), Step("hunt", "conflict", ""))
-        self.assertEqual(step(verdict_tip="t1", review_for="conflict", merge="clean"), Step("hold"))
-        self.assertEqual(step(verdict_tip="t1", review_for="reject", hunter_tip="t2", hunter_file=True), Step("review", "reject", "t1"))
+        assert step(verdict_tip="t1", review_for="reject") == Step("hunt", "reject", "t1")
+        assert step(verdict_tip="t1", review_for="conflict", merge="resolved", auto="T") == Step("hunt", "conflict", "T")
+        assert step(verdict_tip="t1", review_for="conflict") == Step("hunt", "conflict", "")
+        assert step(verdict_tip="t1", review_for="conflict", merge="clean") == Step("hold")
+        assert step(verdict_tip="t1", review_for="reject", hunter_tip="t2", hunter_file=True) == Step("review", "reject", "t1")
 
 
-class Check(unittest.TestCase):
+class TestCheck:
     def test_pending_ci_waits(self):
-        self.assertTrue(waits_for_ci("pending"))
+        assert waits_for_ci("pending")
         for ci in ("pass", "fail", ""):
-            self.assertFalse(waits_for_ci(ci), ci)
+            assert not waits_for_ci(ci), ci
 
     def test_moved_branch_is_checked_again(self):
         c = check(ci="fail")
-        self.assertTrue(checks_again(c, "h2", "m", None))
-        self.assertTrue(checks_again(c, "h", "m2", None))
-        self.assertTrue(checks_again(c, "h", "m", "pass"))
-        self.assertFalse(checks_again(c, "h", "m", "fail"))
-        self.assertFalse(checks_again(check(ci="pass"), "h", "m", None))
+        assert checks_again(c, "h2", "m", None)
+        assert checks_again(c, "h", "m2", None)
+        assert checks_again(c, "h", "m", "pass")
+        assert not checks_again(c, "h", "m", "fail")
+        assert not checks_again(check(ci="pass"), "h", "m", None)
 
     def test_conflict_goes_back(self):
-        self.assertEqual(after_check(check(conflict=True), "medium", False), "conflict")
-        self.assertEqual(conflict_note("main").count("main"), 2)
+        assert after_check(check(conflict=True), "medium", False) == "conflict"
+        assert conflict_note("main").count("main") == 2
 
     def test_conflict_waits_unless_someone_wants_the_merge(self):
-        self.assertEqual(after_check(check(conflict=True), "manual", False), "owner")
-        self.assertEqual(after_check(check(conflict=True, risk="high"), "medium", False), "owner")
-        self.assertEqual(after_check(check(conflict=True), "low", False), "conflict")
-        self.assertEqual(after_check(check(conflict=True, risk="high"), "manual", False, "owner"), "conflict")
-        self.assertEqual(after_check(check(risk="high"), "manual", False, "owner"), "merge")
-        self.assertEqual(after_check(check(risk="high"), "manual", False, "owner (panel)"), "merge")  # the panel's accept
-        self.assertEqual(after_check(check(review="open after round 2: 1"), "manual", False, "owner"), "owner")
-        self.assertEqual(after_check(check(tests="fail"), "manual", False, "owner", failed=2), "owner")
-        self.assertEqual(after_check(check(ci="fail"), "manual", True, "owner", failed=2), "owner")
-        self.assertEqual(after_check(check(risk="high"), "low", False, "autonomy low"), "owner")  # high never merges alone
-        self.assertEqual(after_check(check(), "low", False, "autonomy low"), "merge")
+        assert after_check(check(conflict=True), "manual", False) == "owner"
+        assert after_check(check(conflict=True, risk="high"), "medium", False) == "owner"
+        assert after_check(check(conflict=True), "low", False) == "conflict"
+        assert after_check(check(conflict=True, risk="high"), "manual", False, "owner") == "conflict"
+        assert after_check(check(risk="high"), "manual", False, "owner") == "merge"
+        assert after_check(check(risk="high"), "manual", False, "owner (panel)") == "merge"  # the panel's accept
+        assert after_check(check(review="open after round 2: 1"), "manual", False, "owner") == "owner"
+        assert after_check(check(tests="fail"), "manual", False, "owner", failed=2) == "owner"
+        assert after_check(check(ci="fail"), "manual", True, "owner", failed=2) == "owner"
+        assert after_check(check(risk="high"), "low", False, "autonomy low") == "owner"  # high never merges alone
+        assert after_check(check(), "low", False, "autonomy low") == "merge"
 
     def test_failing_tests_or_ci_go_back_up_to_the_cap(self):
         rows = [(check(tests="fail"), "manual", False, ""), (check(ci="fail"), "low", True, ""), (check(tests="fail", conflict=True), "low", False, "owner")]
         for c, autonomy, has_ci, resolving in rows:
-            self.assertEqual(after_check(c, autonomy, has_ci, resolving), "failing", c)
-            self.assertEqual(after_check(c, autonomy, has_ci, resolving, failed=2), "owner", c)
-        self.assertEqual(after_check(check(tests="pass", ci="pass"), "low", True, failed=2), "merge")
+            assert after_check(c, autonomy, has_ci, resolving) == "failing", c
+            assert after_check(c, autonomy, has_ci, resolving, failed=2) == "owner", c
+        assert after_check(check(tests="pass", ci="pass"), "low", True, failed=2) == "merge"
 
     def test_the_fix_of_a_failure_gets_a_review_of_only_that_fix(self):
-        self.assertEqual(step(verdict_tip="t1", review_for="failing"), Step("hunt", "failing", "t1"))
+        assert step(verdict_tip="t1", review_for="failing") == Step("hunt", "failing", "t1")
 
     def test_failing_note_names_the_output_and_the_checks(self):
         note = failing_note(check(tests="fail", tests_output="L9\nL10"), "https://pr/1")
-        self.assertIn("L9\nL10", note)
+        assert "L9\nL10" in note
         note = failing_note(check(tests="pass", ci="fail", failed_checks=[{"name": "lint", "url": "https://ci/lint"}]), "https://pr/1")
-        self.assertIn("lint: https://ci/lint", note)
-        self.assertNotIn("test command", note)
-        self.assertIn("https://pr/1", failing_note(check(tests="pass", ci="fail", failed_checks=[]), "https://pr/1"))
+        assert "lint: https://ci/lint" in note
+        assert "test command" not in note
+        assert "https://pr/1" in failing_note(check(tests="pass", ci="fail", failed_checks=[]), "https://pr/1")
         for ci in ("", "fail"):
-            self.assertIn("The tests fail and print nothing", failing_note(check(tests="fail", tests_output="", ci=ci), ""), ci)
+            assert "The tests fail and print nothing" in failing_note(check(tests="fail", tests_output="", ci=ci), ""), ci
 
     def test_autonomy_merges_alone(self):
-        self.assertEqual(after_check(check(), "low", False), "merge")
-        self.assertEqual(after_check(check(risk="medium"), "medium", False), "merge")
-        self.assertEqual(after_check(check(ci="pass"), "low", True), "merge")
+        assert after_check(check(), "low", False) == "merge"
+        assert after_check(check(risk="medium"), "medium", False) == "merge"
+        assert after_check(check(ci="pass"), "low", True) == "merge"
 
     def test_everything_else_waits_for_the_owner(self):
         rows = [
@@ -140,11 +139,11 @@ class Check(unittest.TestCase):
             (check(ci=""), "low", True),
         ]
         for c, autonomy, has_ci in rows:
-            self.assertEqual(after_check(c, autonomy, has_ci), "owner", (c, autonomy, has_ci))
-        self.assertEqual(after_check(check(ci="fail"), "low", True, failed=2), "owner")  # failing, past its returns
+            assert after_check(c, autonomy, has_ci) == "owner", (c, autonomy, has_ci)
+        assert after_check(check(ci="fail"), "low", True, failed=2) == "owner"  # failing, past its returns
 
 
-class MergeGate(unittest.TestCase):
+class TestMergeGate:
     """At the merge step (FN-113): merge, check it merged with main, back to its agent, or the owner decides."""
 
     def test_the_table(self):
@@ -160,17 +159,17 @@ class MergeGate(unittest.TestCase):
             (check(tests="pass"), "h", "m", 0, False, "check"),  # only checked on the branch alone
         ]
         for c, head, main, failed, as_today, want in rows:
-            self.assertEqual(merge_gate(c, head, main, failed, as_today), want, (c, head, main, failed, as_today))
+            assert merge_gate(c, head, main, failed, as_today) == want, (c, head, main, failed, as_today)
 
     def test_what_the_check_ran_on(self):
-        self.assertEqual(ran_on(check()), "branch alone")
-        self.assertEqual(ran_on(check(merged_with="abcdef1234567")), "merged with main abcdef123")
+        assert ran_on(check()) == "branch alone"
+        assert ran_on(check(merged_with="abcdef1234567")) == "merged with main abcdef123"
 
     def test_a_merged_failure_says_so(self):
         note = failing_note(check(tests="fail", tests_output="L9", merged_with="abcdef1234567"), "")
         for s in ("abcdef123", "not on its branch alone", "L9"):
-            self.assertIn(s, note)
-        self.assertNotIn("not on its branch alone", failing_note(check(tests="fail", tests_output="L9"), ""))
+            assert s in note
+        assert "not on its branch alone" not in failing_note(check(tests="fail", tests_output="L9"), "")
 
 
 ALLOWED = {"collections.abc", "dataclasses", "typing", ".risk"}
@@ -192,18 +191,14 @@ def impurities(source: str) -> list[str]:
     return found
 
 
-class Pure(unittest.TestCase):
+class TestPure:
     def test_programs_and_files_are_caught(self):
         for source in ("import subprocess", "from pathlib import Path", "from . import proc", "import os", 'x = open("f")'):
-            self.assertTrue(impurities(source), source)
+            assert impurities(source), source
 
     def test_allowed_imports_pass(self):
         source = "from collections.abc import Mapping\nfrom dataclasses import dataclass\nfrom typing import Any\nfrom .risk import allows\n"
-        self.assertEqual(impurities(source), [])
+        assert impurities(source) == []
 
     def test_decide_is_pure(self):
-        self.assertEqual(impurities((ROOT / "fm" / "decide.py").read_text()), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert impurities((ROOT / "fm" / "decide.py").read_text()) == []

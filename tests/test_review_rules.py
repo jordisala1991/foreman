@@ -3,7 +3,6 @@ with a task in review" that this rule adds. Conflicts with main are resolved onl
 
 import os
 import subprocess
-import unittest
 from pathlib import Path
 
 from helpers import Env, fm, git
@@ -64,7 +63,7 @@ def launched(e: Env, tid: str) -> list[str]:
     return [t for t in events(e, tid) if t.startswith("launched ") and "rule: " in t]
 
 
-class MergeOf(unittest.TestCase):
+class TestMergeOf:
     def test_merge_of(self):
         e = Env()
         r = e.repo
@@ -75,26 +74,26 @@ class MergeOf(unittest.TestCase):
         main_moves(e)
         git(r, "checkout", "-q", "b")
         git(r, "merge", "-q", "--no-edit", "main")
-        self.assertEqual(delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()), ("clean", ""))
+        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("clean", "")
         tip = git(r, "rev-parse", "HEAD").strip()
         git(r, "checkout", "-q", "main")
         main_conflicts(e)
         git(r, "checkout", "-q", "b")
         git(r, "merge", "-q", "--no-edit", "-X", "ours", "main")
         auto = auto_tree(r, tip)
-        self.assertEqual(delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()), ("resolved", auto))
+        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("resolved", auto)
         tip = git(r, "rev-parse", "HEAD").strip()
         commit(str(r), "app.py", "# plain\n")
-        self.assertEqual(delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()), ("", ""))
+        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("", "")
         tip = git(r, "rev-parse", "HEAD").strip()
         git(r, "checkout", "-qb", "c", "main")
         commit(str(r), "c.py", "c = 1\n")
         git(r, "checkout", "-q", "b")
         git(r, "merge", "-q", "--no-edit", "c")
-        self.assertEqual(delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()), ("", ""))
+        assert delivery.merge_of(e.p, tip, git(r, "rev-parse", "HEAD").strip()) == ("", "")
 
 
-class Rules(unittest.TestCase):
+class TestRules:
     def test_a_waiting_task_that_conflicts_stays_and_says_so(self):
         e = Env(test="true")
         tid = deliver(e)
@@ -102,10 +101,10 @@ class Rules(unittest.TestCase):
         main_conflicts(e)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual(i["status"], "in review")
-        self.assertNotIn("conflicts", i)
-        self.assertTrue(i["check"]["conflict"])
-        self.assertTrue(i["check"]["reasons"][0].startswith("conflicts with main"), i["check"]["reasons"])
+        assert i["status"] == "in review"
+        assert "conflicts" not in i
+        assert i["check"]["conflict"]
+        assert i["check"]["reasons"][0].startswith("conflicts with main"), i["check"]["reasons"]
 
     def accept_into_conflict(self, e: Env) -> tuple[str, str]:
         """Delivered and checked; main conflicts; the owner accepts; the merge sends it back. Returns (task, old tip)."""
@@ -117,9 +116,9 @@ class Rules(unittest.TestCase):
         old = head(e, tid)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["conflicts"], i["resolving"]), ("in progress", 1, "owner"))
+        assert (i["status"], i["conflicts"], i["resolving"]) == ("in progress", 1, "owner")
         take_note(e, tid)
-        self.assertIn("conflicts", e.calls()[-1]["argv"][-1])
+        assert "conflicts" in e.calls()[-1]["argv"][-1]
         return tid, old
 
     def resolve(self, e: Env, tid: str) -> None:
@@ -132,15 +131,15 @@ class Rules(unittest.TestCase):
         self.resolve(e, tid)
         before = len(e.calls())
         e.hunt_then_review(tid)
-        self.assertEqual(len(e.calls()), before + 2)  # one hunter, one reviewer
+        assert len(e.calls()) == before + 2  # one hunter, one reviewer
         auto = auto_tree(e.repo, old)
-        self.assertIn(f"git diff {auto} {head(e, tid)}", e.calls()[-1]["argv"][-1])
-        self.assertTrue(launched(e, tid)[-1].endswith("rule: conflict resolution"), launched(e, tid))
+        assert f"git diff {auto} {head(e, tid)}" in e.calls()[-1]["argv"][-1]
+        assert launched(e, tid)[-1].endswith("rule: conflict resolution"), launched(e, tid)
         e.verdict(tid, 0)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["acceptance"]["verdict"]), ("done", "accepted by owner"))
-        self.assertIn("Merge TY-1", git(e.repo, "log", "--oneline", "-1"))
+        assert (i["status"], i["acceptance"]["verdict"]) == ("done", "accepted by owner")
+        assert "Merge TY-1" in git(e.repo, "log", "--oneline", "-1")
 
     def test_a_resolution_left_open_waits_for_the_owner(self):
         e = Env(test="true")
@@ -149,32 +148,32 @@ class Rules(unittest.TestCase):
         e.hunt_then_review(tid)
         e.verdict(tid, 1)
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "in progress")  # round 1 of the resolution: back to its agent
+        assert e.task(tid)["status"] == "in progress"  # round 1 of the resolution: back to its agent
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# fixed\n")
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual(i["status"], "in review")
-        self.assertFalse(i.get("accepted"))
-        self.assertFalse(i.get("resolving"))
-        self.assertIn("its accept is not carried over", " ".join(events(e, tid)))
+        assert i["status"] == "in review"
+        assert not i.get("accepted")
+        assert not i.get("resolving")
+        assert "its accept is not carried over" in " ".join(events(e, tid))
 
     def test_a_clean_merge_of_main_launches_nothing(self):
         e = Env(test="true")
         tid = deliver(e)
         loop.tick(e.p)
-        self.assertTrue(launched(e, tid)[0].endswith("rule: rounds 1-2"), launched(e, tid))
+        assert launched(e, tid)[0].endswith("rule: rounds 1-2"), launched(e, tid)
         before = len(e.calls())
         main_moves(e)
         git(e.repo.parent / e.task(tid)["worktree"], "merge", "-q", "--no-edit", "main")
         loop.tick(e.p)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual(len(e.calls()), before)
-        self.assertEqual((i["review"]["holds"], i["check"]["head"]), (head(e, tid), head(e, tid)))
-        self.assertIn("no review runs, its verdict holds", " ".join(events(e, tid)))
+        assert len(e.calls()) == before
+        assert (i["review"]["holds"], i["check"]["head"]) == (head(e, tid), head(e, tid))
+        assert "no review runs, its verdict holds" in " ".join(events(e, tid))
 
     def test_after_round_two_later_tips_launch_no_review(self):
         e = Env(test="true")
@@ -185,25 +184,25 @@ class Rules(unittest.TestCase):
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)
         loop.tick(e.p)
-        self.assertEqual((e.task(tid)["status"], e.task(tid)["review_for"]), ("in review", "none"))
+        assert (e.task(tid)["status"], e.task(tid)["review_for"]) == ("in review", "none")
         before = len(e.calls())
         commit(e.task(tid)["worktree"], "app.py", "# again\n")
         loop.tick(e.p)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual(len(e.calls()), before)
-        self.assertEqual(i["review"]["holds"], head(e, tid))
-        self.assertTrue(i["check"]["review"].startswith("open after round 2"), i["check"])
+        assert len(e.calls()) == before
+        assert i["review"]["holds"] == head(e, tid)
+        assert i["check"]["review"].startswith("open after round 2"), i["check"]
 
     def test_a_new_tip_after_a_clean_verdict_gets_a_review(self):
         e = Env(test="true")
         tid = deliver(e)
         loop.tick(e.p)
-        self.assertEqual(e.task(tid).get("review_for", ""), "")
+        assert e.task(tid).get("review_for", "") == ""
         commit(e.task(tid)["worktree"], "app.py", "# more\n")
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["hunter"]["tip"], head(e, tid))
-        self.assertTrue(launched(e, tid)[-1].endswith("rule: rounds 1-2"), launched(e, tid))
+        assert e.task(tid)["hunter"]["tip"] == head(e, tid)
+        assert launched(e, tid)[-1].endswith("rule: rounds 1-2"), launched(e, tid)
 
     def test_after_two_clean_rounds_a_new_tip_launches_nothing(self):
         e = Env(test="true")
@@ -211,15 +210,15 @@ class Rules(unittest.TestCase):
         loop.tick(e.p)
         commit(e.task(tid)["worktree"], "app.py", "# more\n")
         e.review(tid, 0)
-        self.assertIn("Round: 2", e.calls()[-1]["argv"][-1])
+        assert "Round: 2" in e.calls()[-1]["argv"][-1]
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["review_for"], "none")
+        assert e.task(tid)["review_for"] == "none"
         before = len(e.calls())
         commit(e.task(tid)["worktree"], "app.py", "# again\n")
         loop.tick(e.p)
         loop.tick(e.p)
-        self.assertEqual(len(e.calls()), before)
-        self.assertEqual(e.task(tid)["review"]["holds"], head(e, tid))
+        assert len(e.calls()) == before
+        assert e.task(tid)["review"]["holds"] == head(e, tid)
 
     def test_reject_gets_a_review_of_the_fix_and_open_findings_go_back(self):
         e = Env(test="true")
@@ -232,13 +231,9 @@ class Rules(unittest.TestCase):
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)
         brief = e.calls()[-1]["argv"][-1]
-        self.assertIn(f"git diff {old} {head(e, tid)}", brief)
-        self.assertIn("Round: 1", brief)
-        self.assertTrue(launched(e, tid)[-1].endswith("rule: owner reject"), launched(e, tid))
+        assert f"git diff {old} {head(e, tid)}" in brief
+        assert "Round: 1" in brief
+        assert launched(e, tid)[-1].endswith("rule: owner reject"), launched(e, tid)
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "in progress")
-        self.assertIn("leaves 1 open", " ".join(events(e, tid)))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert e.task(tid)["status"] == "in progress"
+        assert "leaves 1 open" in " ".join(events(e, tid))

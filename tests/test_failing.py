@@ -1,8 +1,6 @@
 """Failing tests or CI return a delivered branch to its agent (FN-67): one test per row of DESIGN.md's table "What the
 loop does with a task in review" that this adds. The owner only sees branches that pass."""
 
-import unittest
-
 from helpers import Env
 from test_github import GH
 from test_review_rules import commit, head, launched, take_note
@@ -27,16 +25,16 @@ def fix(e: Env, tid: str, open_findings: int = 0) -> None:
     e.review(tid, open_findings)
 
 
-class Failing(unittest.TestCase):
+class TestFailing:
     def test_failing_tests_go_back_with_the_output(self):
         e = Env(test="echo BOOM-LINE; exit 1")
         tid = deliver(e)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["failures"]), ("in progress", 1))
-        self.assertIn("tests fail [tests]", i["check"]["reasons"])  # kept for the panel while it is back
+        assert (i["status"], i["failures"]) == ("in progress", 1)
+        assert "tests fail [tests]" in i["check"]["reasons"]  # kept for the panel while it is back
         take_note(e, tid)
-        self.assertIn("BOOM-LINE", e.calls()[-1]["argv"][-1])
+        assert "BOOM-LINE" in e.calls()[-1]["argv"][-1]
 
     def test_only_the_last_lines_of_the_output_go_back(self):
         e = Env(test="for n in $(seq 1 30); do echo L$n; done; exit 1")
@@ -44,8 +42,8 @@ class Failing(unittest.TestCase):
         loop.tick(e.p)
         take_note(e, tid)
         note = e.calls()[-1]["argv"][-1]
-        self.assertIn("L30", note)
-        self.assertNotIn("L1\n", note)
+        assert "L30" in note
+        assert "L1\n" not in note
 
     def test_the_fix_gets_a_review_of_only_that_fix(self):
         e = Env(test="echo BOOM-LINE; exit 1")
@@ -56,37 +54,37 @@ class Failing(unittest.TestCase):
         commit(e.task(tid)["worktree"], "app.py", "# fix\n")
         backlog.set_status(e.p, tid, "in review")
         e.hunt_then_review(tid)
-        self.assertTrue(launched(e, tid)[-1].endswith("rule: failing tests or CI"), launched(e, tid))
-        self.assertIn(f"git diff {old} {head(e, tid)}", e.calls()[-1]["argv"][-1])
+        assert launched(e, tid)[-1].endswith("rule: failing tests or CI"), launched(e, tid)
+        assert f"git diff {old} {head(e, tid)}" in e.calls()[-1]["argv"][-1]
         e.verdict(tid, 1)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["failures"]), ("in progress", 1))  # open findings go back: not a failure
+        assert (i["status"], i["failures"]) == ("in progress", 1)  # open findings go back: not a failure
 
     def test_the_third_failure_waits_for_the_owner(self):
         e = Env(test="echo BOOM-LINE; exit 1")
         tid = deliver(e)
         for n in (1, 2):
             loop.tick(e.p)
-            self.assertEqual((e.task(tid)["status"], e.task(tid)["failures"]), ("in progress", n))
+            assert (e.task(tid)["status"], e.task(tid)["failures"]) == ("in progress", n)
             fix(e, tid)
         before = len(e.calls())
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["failures"]), ("in review", 2))
-        self.assertIn("tests fail [tests]", i["check"]["reasons"])
-        self.assertEqual(len(e.calls()), before)
+        assert (i["status"], i["failures"]) == ("in review", 2)
+        assert "tests fail [tests]" in i["check"]["reasons"]
+        assert len(e.calls()) == before
 
-    def test_a_green_check_ends_the_row_without_a_test_command(self):
+    def test_a_green_check_ends_the_row_without_a_test_command(self, request):
         """With a test command only the merge ends the row (FN-113, tests/test_merged_check.py); without one, the PR's
         CI stands in and a green check ends it."""
         g = GH(test="")
-        self.addCleanup(g.close)
+        request.addfinalizer(g.close)
         g.set(ci="fail")
         tid = g.work()
         g.deliver(tid)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.task(tid)["failure_streak"], 1)
+        assert g.e.task(tid)["failure_streak"] == 1
         take_note(g.e, tid)
         commit(g.e.task(tid)["worktree"], "app.py", "# fix\n")
         g.set(ci="pass")
@@ -94,22 +92,18 @@ class Failing(unittest.TestCase):
         g.e.review(tid)
         loop.tick(g.e.p)
         i = g.e.task(tid)
-        self.assertEqual((i["status"], i["failure_streak"], i["failures"]), ("in review", 0, 1))
+        assert (i["status"], i["failure_streak"], i["failures"]) == ("in review", 0, 1)
 
-    def test_failing_ci_goes_back_with_each_check(self):
+    def test_failing_ci_goes_back_with_each_check(self, request):
         g = GH(test="true")
-        self.addCleanup(g.close)
+        request.addfinalizer(g.close)
         g.set(ci="fail", failed=[["lint", "https://ci/lint"], ["unit", "https://ci/unit"]])
         tid = g.work()
         g.deliver(tid)
         loop.tick(g.e.p)
-        self.assertEqual(g.e.task(tid)["status"], "in progress")
+        assert g.e.task(tid)["status"] == "in progress"
         take_note(g.e, tid)
         note = g.e.calls()[-1]["argv"][-1]
         for s in ("lint: https://ci/lint", "unit: https://ci/unit"):
-            self.assertIn(s, note)
-        self.assertNotIn("build", note)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert s in note
+        assert "build" not in note

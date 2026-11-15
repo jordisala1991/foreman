@@ -1,12 +1,14 @@
 """Images of a report: the pure rules, the `fm-evidence` branch on GitHub, the panel's /evidence and the guard."""
 
+import functools
 import json
 import subprocess
-import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 from helpers import Env, git
 from test_github import GH
 
@@ -18,24 +20,25 @@ PNG = b"\x89PNG\r\n\x1a\n-evidence"
 BODY = "Did X\n\n![the home](x.png)\n"
 
 
-class Rules(unittest.TestCase):
+class TestRules:
     def test_names_and_relink(self):
         md = "![a](x.png) ![b](http://h/y.png) ![c](d/z.png) ![d](x.png) ![e](n.txt)"
-        self.assertEqual(evidence.names(md), ["x.png"])
+        assert evidence.names(md) == ["x.png"]
         out = evidence.relink(md, {"x.png": "U"})
-        self.assertEqual(out, "![a](U) ![b](http://h/y.png) ![c](d/z.png) ![d](U) ![e](n.txt)")
+        assert out == "![a](U) ![b](http://h/y.png) ![c](d/z.png) ![d](U) ![e](n.txt)"
 
     def test_guard_push_evidence(self):
         sc = guard.Scope("/w", [Path("/w")], "fm/ty-1", Path("/h/fm.toml"), [])
         for cmd in ("git push origin HEAD:fm-evidence", "git push origin abc123:refs/heads/fm-evidence"):
-            self.assertEqual(guard.check_bash(cmd, sc), "push-evidence", cmd)
-        self.assertIsNone(guard.check_bash("git push origin fm/ty-1", sc))
+            assert guard.check_bash(cmd, sc) == "push-evidence", cmd
+        assert guard.check_bash("git push origin fm/ty-1", sc) is None
 
 
-class OnGitHub(unittest.TestCase):
-    def setUp(self):
+class TestOnGitHub:
+    @pytest.fixture(autouse=True)
+    def set_up(self, request):
         self.g = GH(test="true")
-        self.addCleanup(self.g.close)
+        request.addfinalizer(self.g.close)
 
     def deliver(self, text=BODY, image=PNG, name="x.png"):
         g = self.g
@@ -63,8 +66,8 @@ class OnGitHub(unittest.TestCase):
     def test_github_pushes_evidence_and_links(self):
         tid = self.deliver()
         self.ticks()
-        self.assertIn(f"![the home](https://github.com/o/r/blob/fm-evidence/{tid}/x.png?raw=true)", self.body())
-        self.assertEqual(self.remote("show", f"fm-evidence:{tid}/x.png"), PNG)
+        assert f"![the home](https://github.com/o/r/blob/fm-evidence/{tid}/x.png?raw=true)" in self.body()
+        assert self.remote("show", f"fm-evidence:{tid}/x.png") == PNG
 
     def test_evidence_leaves_task_branch_and_checkout(self):
         g = self.g
@@ -72,13 +75,13 @@ class OnGitHub(unittest.TestCase):
         repo = g.e.repo
         before = (git(repo, "rev-parse", g.e.task(tid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
         self.ticks()
-        self.assertIn("fm-evidence", self.body())
+        assert "fm-evidence" in self.body()
         after = (git(repo, "rev-parse", g.e.task(tid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
-        self.assertEqual(before, after)
+        assert before == after
         branch = g.e.task(tid)["branch"]
         files = self.remote("ls-tree", "-r", "--name-only", branch) + self.remote("diff", "--name-only", f"main...{branch}")
-        self.assertIn(b"app.py", files)
-        self.assertNotIn(b".png", files)
+        assert b"app.py" in files
+        assert b".png" not in files
 
     def test_evidence_twice_pushes_once(self):
         tid = self.deliver()
@@ -86,8 +89,8 @@ class OnGitHub(unittest.TestCase):
         i = self.g.e.task(tid)
         backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
         self.ticks()
-        self.assertEqual(self.remote("rev-list", "--count", "fm-evidence").strip(), b"1")
-        self.assertIn("fm-evidence", self.body())
+        assert self.remote("rev-list", "--count", "fm-evidence").strip() == b"1"
+        assert "fm-evidence" in self.body()
 
     def test_changed_image_is_pushed_again(self):
         tid = self.deliver()
@@ -96,8 +99,8 @@ class OnGitHub(unittest.TestCase):
         i = self.g.e.task(tid)
         backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
         self.ticks()
-        self.assertEqual(self.remote("show", f"fm-evidence:{tid}/x.png"), PNG + b"2")
-        self.assertEqual(self.remote("rev-list", "--count", "fm-evidence").strip(), b"2")
+        assert self.remote("show", f"fm-evidence:{tid}/x.png") == PNG + b"2"
+        assert self.remote("rev-list", "--count", "fm-evidence").strip() == b"2"
 
     def test_symlinked_image_is_not_published(self):
         g = self.g
@@ -107,13 +110,13 @@ class OnGitHub(unittest.TestCase):
         folder = g.e.home / "reports" / tid
         folder.mkdir(parents=True)
         (folder / "k.png").symlink_to(secret)
-        self.assertEqual(pulls.evidence_files(g.e.p, tid, "![x](k.png)"), {})
-        self.assertEqual(self.remote("branch", "--list", "fm-evidence"), b"")
+        assert pulls.evidence_files(g.e.p, tid, "![x](k.png)") == {}
+        assert self.remote("branch", "--list", "fm-evidence") == b""
 
     def test_non_ascii_name_is_not_published_twice(self):
         for name in ("é.png", "a b.png", "$x.png"):
-            self.assertFalse(evidence.bare(name), name)
-        self.assertEqual(evidence.names("![a](é.png) ![b](ok-1_2.png)"), ["ok-1_2.png"])
+            assert not evidence.bare(name), name
+        assert evidence.names("![a](é.png) ![b](ok-1_2.png)") == ["ok-1_2.png"]
 
     def test_second_task_keeps_first(self):
         g = self.g
@@ -123,26 +126,26 @@ class OnGitHub(unittest.TestCase):
         other = g.e.tmp / "y.png"
         other.write_bytes(b"other")
         reg.evidence(Change(id="TY-99"), {"y.png": other})
-        self.assertEqual(self.remote("show", f"fm-evidence:{first}/x.png"), PNG)
-        self.assertEqual(self.remote("show", "fm-evidence:TY-99/y.png"), b"other")
+        assert self.remote("show", f"fm-evidence:{first}/x.png") == PNG
+        assert self.remote("show", "fm-evidence:TY-99/y.png") == b"other"
 
     def test_missing_image_is_left_alone(self):
         self.deliver(image=None)
         self.ticks()
-        self.assertIn("![the home](x.png)", self.body())
-        self.assertEqual(self.remote("branch", "--list", "fm-evidence"), b"")
+        assert "![the home](x.png)" in self.body()
+        assert self.remote("branch", "--list", "fm-evidence") == b""
 
     def test_no_images_no_push(self):
         self.deliver(text="Did X\n")
         self.ticks()
-        self.assertEqual(self.remote("branch", "--list", "fm-evidence"), b"")
-        self.assertEqual(self.g.calls("repo", "view", "--json", "nameWithOwner"), [])  # the review reads the repo url for its links
+        assert self.remote("branch", "--list", "fm-evidence") == b""
+        assert self.g.calls("repo", "view", "--json", "nameWithOwner") == []  # the review reads the repo url for its links
 
     def test_big_image_skipped(self):
         self.deliver(image=b"0" * (evidence.MAX_BYTES + 1))
         self.ticks()
-        self.assertIn("![the home](x.png)", self.body())
-        self.assertEqual(self.remote("branch", "--list", "fm-evidence"), b"")
+        assert "![the home](x.png)" in self.body()
+        assert self.remote("branch", "--list", "fm-evidence") == b""
 
     def test_evidence_push_failure_is_transient(self):
         g = self.g
@@ -151,30 +154,30 @@ class OnGitHub(unittest.TestCase):
         hook.chmod(0o755)
         tid = self.deliver()
         reg = registry.get(g.e.p)
-        with self.assertRaises(types.TransientError):
+        with pytest.raises(types.TransientError):
             reg.evidence(Change(id=tid), {"x.png": g.e.home / "reports" / tid / "x.png"})
         self.ticks(2)
-        self.assertIn("![the home](x.png)", self.body())  # written, unlinked
-        self.assertFalse(g.e.task(tid)["pr"].get("described"))
+        assert "![the home](x.png)" in self.body()  # written, unlinked
+        assert not g.e.task(tid)["pr"].get("described")
         hook.unlink()
         self.ticks(2)
-        self.assertIn("?raw=true", self.body())
-        self.assertTrue(g.e.task(tid)["pr"].get("described"))
+        assert "?raw=true" in self.body()
+        assert g.e.task(tid)["pr"].get("described")
 
     def test_local_has_no_evidence_push(self):
         e = Env()
-        self.assertEqual(registry.get(e.p).evidence(Change(id="TY-1"), {"x.png": Path("x.png")}), {})
-        self.assertEqual(pulls.evidence_files(e.p, "TY-1", BODY), {})
+        assert registry.get(e.p).evidence(Change(id="TY-1"), {"x.png": Path("x.png")}) == {}
+        assert pulls.evidence_files(e.p, "TY-1", BODY) == {}
 
 
-class Panel(unittest.TestCase):
-    def setUp(self):
-        from test_panel import PanelTest
+class TestPanel:
+    @pytest.fixture(autouse=True)
+    def set_up(self, request):
+        from test_panel import start_panel, stop_panel
 
-        self.t = PanelTest()
-        self.t.setUp()
-        self.addCleanup(self.t.doCleanups)  # the cleanups of its setUp
-        self.addCleanup(self.t.tearDown)
+        self.t = SimpleNamespace()
+        start_panel(self.t)
+        request.addfinalizer(functools.partial(stop_panel, self.t))
         t = self.t
         self.folder = t.p.home / "reports" / t.work
         self.folder.mkdir(parents=True)
@@ -200,19 +203,19 @@ class Panel(unittest.TestCase):
         return f"/evidence?p=demo&id={self.t.work}&name={quote(name)}"
 
     def test_panel_serves_evidence(self):
-        self.assertEqual(self.get(self.q("x.png")), (200, "image/png", PNG))
-        self.assertEqual(self.get(self.q("x.png"), key=False)[0], 403)
+        assert self.get(self.q("x.png")) == (200, "image/png", PNG)
+        assert self.get(self.q("x.png"), key=False)[0] == 403
 
     def test_panel_evidence_refuses_paths(self):
         for name in ("../../fm.toml", "a/b.png", "../secret.png", "..", "x.txt", "nope.png", "/etc/passwd"):
-            self.assertEqual(self.get(self.q(name))[0], 404, name)
-        self.assertEqual(self.get("/evidence?p=demo&id=..&name=x.png")[0], 404)
+            assert self.get(self.q(name))[0] == 404, name
+        assert self.get("/evidence?p=demo&id=..&name=x.png")[0] == 404
         (self.folder / "k.png").symlink_to(self.t.p.home / "reports" / "secret.png")
-        self.assertEqual(self.get(self.q("k.png"))[0], 404)
+        assert self.get(self.q("k.png"))[0] == 404
         (self.folder / "big.png").write_bytes(b"0" * (evidence.MAX_BYTES + 1))
-        self.assertEqual(self.get(self.q("big.png"))[0], 404)
+        assert self.get(self.q("big.png"))[0] == 404
         (self.folder / "ok.png").write_bytes(b"0" * evidence.MAX_BYTES)
-        self.assertEqual(self.get(self.q("ok.png"))[0], 200)
+        assert self.get(self.q("ok.png"))[0] == 200
 
     def test_panel_evidence_refuses_linked_folder(self):
         t = self.t
@@ -220,17 +223,17 @@ class Panel(unittest.TestCase):
         other.mkdir()
         (other / "a.png").write_bytes(PNG)
         (t.p.home / "reports" / "FN-9").symlink_to(other)
-        self.assertEqual(self.get("/evidence?p=demo&id=FN-9&name=a.png")[0], 404)
-        self.assertEqual(pulls.evidence_files(t.p, "FN-9", "![a](a.png)"), {})
+        assert self.get("/evidence?p=demo&id=FN-9&name=a.png")[0] == 404
+        assert pulls.evidence_files(t.p, "FN-9", "![a](a.png)") == {}
 
     def test_panel_description_links_existing_images(self):
         t = self.t
         status, _, body = self.get(f"/api/task?p=demo&id={t.work}")
         desc = json.loads(body)["task"]["description"]
-        self.assertIn(f"![the home](/evidence?p=demo&id={t.work}&name=x.png)", desc)
+        assert f"![the home](/evidence?p=demo&id={t.work}&name=x.png)" in desc
 
 
-class Local(unittest.TestCase):
+class TestLocal:
     def test_local_tick_pushes_nothing(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -249,9 +252,9 @@ class Local(unittest.TestCase):
         e.review(tid)
         loop.tick(e.p)
         loop.tick(e.p)
-        self.assertTrue(e.task(tid)["pr"].get("described"))
-        self.assertFalse(e.task(tid).get("pr_error"))
-        self.assertEqual(git(e.repo, "branch", "--list", "fm-evidence"), "")
-        self.assertEqual(pulls.evidence_files(e.p, tid, BODY), {"x.png": path.parent / tid / "x.png"})
+        assert e.task(tid)["pr"].get("described")
+        assert not e.task(tid).get("pr_error")
+        assert git(e.repo, "branch", "--list", "fm-evidence") == ""
+        assert pulls.evidence_files(e.p, tid, BODY) == {"x.png": path.parent / tid / "x.png"}
         events = [json.loads(x) for x in (e.p.state / "events.jsonl").read_text().splitlines()]
-        self.assertFalse([v for v in events if v.get("task") == tid and "error" in v["text"].lower()])
+        assert not [v for v in events if v.get("task") == tid and "error" in v["text"].lower()]

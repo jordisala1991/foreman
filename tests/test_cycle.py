@@ -1,4 +1,3 @@
-import unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -35,36 +34,33 @@ SKIPPED = [
 NONE = {**{k: None for k in (*metrics.PARTS, "total")}, "merged_at": None}
 
 
-class Cycle(unittest.TestCase):
+class TestCycle:
     def test_parts_add_up_to_total(self):
         c = metrics.cycle(ev(*FULL))
-        self.assertEqual(
-            c,
-            {"slot": 15, "planning": 20, "working": 60, "review": 21, "owner": 30, "merging": 2, "total": 148, "merged_at": "2026-11-10 12:58:00"},
-        )
+        assert c == {"slot": 15, "planning": 20, "working": 60, "review": 21, "owner": 30, "merging": 2, "total": 148, "merged_at": "2026-11-10 12:58:00"}
 
     def test_part_never_gone_through_is_none(self):
         c = metrics.cycle(ev(*SKIPPED))
-        self.assertEqual((c["planning"], c["slot"], c["working"], c["review"], c["owner"], c["merging"], c["total"]), (None, 10, 30, 10, 30, 5, 85))
+        assert (c["planning"], c["slot"], c["working"], c["review"], c["owner"], c["merging"], c["total"]) == (None, 10, 30, 10, 30, 5, 85)
 
     def test_part_entered_for_zero_minutes_is_zero(self):
         c = metrics.cycle(ev(*SKIPPED[:3], ("09:40:00", "review round 1 of a: 0 open (f)"), *SKIPPED[4:]))
-        self.assertEqual(c["review"], 0.0)
+        assert c["review"] == 0.0
 
     def test_events_before_the_rename_are_measured_the_same(self):
         old = [(t, x.replace("(planning,", "(define,").replace("(responsible,", "(work,").replace("returned to its agent", "sent back")) for t, x in FULL]
         old[-1] = ("12:58:00", "→ done: integrated, accepted by owner, as c3")
-        self.assertEqual(metrics.cycle(ev(*old)), metrics.cycle(ev(*FULL)))
+        assert metrics.cycle(ev(*old)) == metrics.cycle(ev(*FULL))
 
     def test_canceled_and_parent_done_have_no_cycle(self):
         for last in ("→ canceled: by the owner", "→ done: its subtasks are closed"):
-            self.assertEqual(metrics.cycle(ev(*FULL[:5], ("12:00:00", last))), NONE)
+            assert metrics.cycle(ev(*FULL[:5], ("12:00:00", last))) == NONE
 
     def test_hunter_and_reviewer_launches_change_nothing(self):
         hunt = ("11:36:00", "launched fn-1-hunt (hunter, sonnet, high, session h)")
         rev = ("11:37:00", "launched fn-1-rev (reviewer, x, y, z)")
         extra = [*FULL[:5], hunt, rev, *FULL[5:]]
-        self.assertEqual(metrics.cycle(ev(*extra)), metrics.cycle(ev(*FULL)))
+        assert metrics.cycle(ev(*extra)) == metrics.cycle(ev(*FULL))
 
 
 def row(tid, status, merged_days=None, **parts):
@@ -75,7 +71,7 @@ def row(tid, status, merged_days=None, **parts):
     return {"id": tid, "status": status, "cycle": c}
 
 
-class LastWeek(unittest.TestCase):
+class TestLastWeek:
     def test_median_and_worst(self):
         rows = [
             row("A", "done", 1, total=60, working=30),
@@ -86,14 +82,14 @@ class LastWeek(unittest.TestCase):
             row("F", "in review"),
         ]
         median, worst = metrics.last_week(rows)
-        self.assertEqual((median["total"], median["working"], median["planning"], median["owner"]), (100, 50, 30, None))
-        self.assertEqual(worst and worst["id"], "C")
+        assert (median["total"], median["working"], median["planning"], median["owner"]) == (100, 50, 30, None)
+        assert (worst and worst["id"]) == "C"
 
     def test_no_merged_task(self):
-        self.assertEqual(metrics.last_week([row("E", "canceled"), row("F", "in review")]), ({k: None for k in (*metrics.PARTS, "total")}, None))
+        assert metrics.last_week([row("E", "canceled"), row("F", "in review")]) == ({k: None for k in (*metrics.PARTS, "total")}, None)
 
 
-class Text(unittest.TestCase):
+class TestText:
     def rows(self):
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -108,9 +104,9 @@ class Text(unittest.TestCase):
         lines = metrics.text(self.rows()).splitlines()
         at = lines.index(metrics.CYCLE_TITLE)
         got = dict(zip(lines[at + 1].split(), lines[at + 2].split(), strict=True))
-        self.assertEqual((got["planning"], got["total"], got["merging"]), ("-", "85", "5"))
+        assert (got["planning"], got["total"], got["merging"]) == ("-", "85", "5")
 
     def test_old_columns_unchanged(self):
         head = metrics.text(self.rows()).splitlines()[0].split()
         old = "id status $ model effort planning$ responsible$ rounds min rework confl fail nudge ask stop risk"
-        self.assertEqual(head, old.split())
+        assert head == old.split()

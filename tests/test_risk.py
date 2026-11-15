@@ -1,5 +1,4 @@
 import tempfile
-import unittest
 from pathlib import Path
 
 from fm import risk
@@ -18,40 +17,40 @@ def facts(*paths: str, **kw) -> risk.Facts:
     return risk.Facts(**{**base, **kw})
 
 
-class Score(unittest.TestCase):
+class TestScore:
     def test_custom_high_path_names_label_and_path(self):
         p = project('[risk.high]\n"the merge path" = ["fm/delivery.py"]\n')
         r, why = risk.score(p, facts("fm/delivery.py"))
-        self.assertEqual(r, "high")
-        self.assertTrue(any("the merge path" in x and "fm/delivery.py" in x and x.endswith("[diff]") for x in why))
+        assert r == "high"
+        assert any("the merge path" in x and "fm/delivery.py" in x and x.endswith("[diff]") for x in why)
 
     def test_default_ci_file_is_high(self):
-        self.assertEqual(risk.score(project(), facts(".github/workflows/ci.yml"))[0], "high")
+        assert risk.score(project(), facts(".github/workflows/ci.yml"))[0] == "high"
 
     def test_file_count_is_not_a_reason(self):
         f = facts(*[f"m{n}.py" for n in range(12)])
         for x in f.files:
             x["added"] = 30
-        self.assertEqual(risk.score(project(), f)[0], "low")
+        assert risk.score(project(), f)[0] == "low"
 
     def test_open_review_is_a_reason_not_a_level(self):
         r, why = risk.score(project(), facts("app.py", review="open after round 2: H 1, M 0"))
-        self.assertEqual(r, "low")
-        self.assertTrue(any("[review]" in x for x in why))
-        self.assertEqual(risk.score(project(), facts("app.py", review=""))[0], "low")
+        assert r == "low"
+        assert any("[review]" in x for x in why)
+        assert risk.score(project(), facts("app.py", review=""))[0] == "low"
 
     def test_review_does_not_change_high_impact(self):
         for rev in ("clean", "open after round 2: H 1, M 0"):
-            self.assertEqual(risk.score(project(), facts(".github/x.yml", review=rev))[0], "high")
+            assert risk.score(project(), facts(".github/x.yml", review=rev))[0] == "high"
 
     def test_dependencies_and_deletions_are_medium(self):
-        self.assertEqual(risk.score(project(), facts("pyproject.toml"))[0], "medium")
-        self.assertEqual(risk.score(project(), facts("app.py", deleted=["old.py"]))[0], "medium")
+        assert risk.score(project(), facts("pyproject.toml"))[0] == "medium"
+        assert risk.score(project(), facts("app.py", deleted=["old.py"]))[0] == "medium"
 
     def test_a_lock_file_alone_is_medium_dependencies(self):
         r, why = risk.score(project(), facts("uv.lock"))
-        self.assertEqual(r, "medium")
-        self.assertIn("dependencies", why[0])
+        assert r == "medium"
+        assert "dependencies" in why[0]
 
     def test_evidence_is_high_with_its_tag(self):
         rows = [
@@ -61,58 +60,58 @@ class Score(unittest.TestCase):
         ]
         for f, tag in rows:
             r, why = risk.score(project(), f)
-            self.assertEqual(r, "high")
-            self.assertTrue(why[0].endswith(tag), why)
+            assert r == "high"
+            assert why[0].endswith(tag), why
 
     def test_a_conflict_alone_is_low_and_comes_first(self):
         r, why = risk.score(project(), facts("a.py", conflict=True, review="open after round 2: 1"))
-        self.assertEqual(r, "low")
-        self.assertTrue(why[0].startswith("conflicts with main"), why)
+        assert r == "low"
+        assert why[0].startswith("conflicts with main"), why
 
     def test_many_hits_give_three_reasons_high_first(self):
         f = facts(".github/x.yml", tests="fail", ci="fail", conflict=True, deleted=["o.py"])
         r, why = risk.score(project(), f)
-        self.assertEqual((r, len(why)), ("high", 3))
-        self.assertFalse(any("deletes" in x for x in why))
+        assert (r, len(why)) == ("high", 3)
+        assert not any("deletes" in x for x in why)
 
     def test_high_and_medium_path_hits_capped_at_three(self):
         r, why = risk.score(project(), facts(".github/x.yml", "uv.lock", "pyproject.toml", tests="fail"))
-        self.assertEqual(r, "high")
-        self.assertLessEqual(len(why), 3)
+        assert r == "high"
+        assert len(why) <= 3
 
     def test_empty_high_table_means_no_path_impact(self):
-        self.assertEqual(risk.score(project("[risk.high]\n"), facts(".github/x.yml"))[0], "low")
+        assert risk.score(project("[risk.high]\n"), facts(".github/x.yml"))[0] == "low"
 
     def test_path_matches(self):
         pats = project().get("risk", "high")["config, secrets or CI"]
-        self.assertTrue(risk.path_matches(".github/workflows/ci.yml", pats))
-        self.assertTrue(risk.path_matches("conf/fm.toml", pats))
-        self.assertFalse(risk.path_matches("src/app.py", pats))
+        assert risk.path_matches(".github/workflows/ci.yml", pats)
+        assert risk.path_matches("conf/fm.toml", pats)
+        assert not risk.path_matches("src/app.py", pats)
 
 
 def sized(*pairs: tuple[str, int]) -> risk.Facts:
     return facts(*[p for p, _ in pairs]).__class__(**{**facts().__dict__, "files": [{"path": p, "added": n, "deleted": 0} for p, n in pairs]})
 
 
-class LargeChange(unittest.TestCase):
+class TestLargeChange:
     def test_450_counted_lines_on_an_ordinary_file_is_medium_with_the_reason(self):
         r, why = risk.score(project(), sized(("app.py", 450)))
-        self.assertEqual(r, "medium")
-        self.assertIn("large change, reviews miss more past ~400 lines (450 lines) [diff]", why)
+        assert r == "medium"
+        assert "large change, reviews miss more past ~400 lines (450 lines) [diff]" in why
 
     def test_lines_under_tests_do_not_count(self):
-        self.assertEqual(risk.score(project(), sized(("app.py", 150), ("tests/test_a.py", 300)))[0], "low")
+        assert risk.score(project(), sized(("app.py", 150), ("tests/test_a.py", 300)))[0] == "low"
 
     def test_lock_and_generated_files_do_not_count(self):
-        self.assertEqual(risk.score(project(), sized(("generated/x.py", 900)))[0], "low")
+        assert risk.score(project(), sized(("generated/x.py", 900)))[0] == "low"
         why = risk.score(project(), sized(("uv.lock", 900)))[1]  # medium as a dependency change, not as a large one
-        self.assertFalse(any("large change" in x for x in why), why)
+        assert not any("large change" in x for x in why), why
 
     def test_large_change_on_a_high_path_is_high_with_the_path_reason_first(self):
         r, why = risk.score(project(), sized((".github/x.yml", 450)))
-        self.assertEqual(r, "high")
-        self.assertTrue(why[0].startswith("touches config, secrets or CI"))
-        self.assertTrue(why[1].startswith("large change"))
+        assert r == "high"
+        assert why[0].startswith("touches config, secrets or CI")
+        assert why[1].startswith("large change")
 
     def test_large_lines_is_configurable(self):
-        self.assertEqual(risk.score(project("[risk]\nlarge_lines = 100\n"), sized(("app.py", 150)))[0], "medium")
+        assert risk.score(project("[risk]\nlarge_lines = 100\n"), sized(("app.py", 150)))[0] == "medium"

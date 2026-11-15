@@ -15,6 +15,8 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from fm import backlog, sessions, util
 from fm.config import Project
 
@@ -219,14 +221,14 @@ class Env:
         return backlog.get(backlog.load(self.p), tid)
 
 
-def install_fm(test, *entries: dict, version: int = 2) -> Path:
+def install_fm(request: pytest.FixtureRequest, *entries: dict, version: int = 2) -> Path:
     """Write Claude Code's record of installed plugins in the sandbox HOME with these fm@fm entries; removed after the test."""
     from fm import launcher
 
     f = launcher.record()
     f.parent.mkdir(parents=True, exist_ok=True)
     util.write_json(f, {"version": version, "plugins": {"other@x": [{"scope": "user", "installPath": "/x", "version": "1"}], "fm@fm": list(entries)}})
-    test.addCleanup(f.unlink, missing_ok=True)
+    request.addfinalizer(functools.partial(f.unlink, missing_ok=True))
     return f
 
 

@@ -4,9 +4,9 @@ shape): A adds a.py, B adds b.py, and the test command fails when both are there
 
 import json
 import tempfile
-import unittest
 from pathlib import Path
 
+import pytest
 from helpers import Env, fm, git
 from test_failing import fix
 from test_review_rules import commit, events, take_note
@@ -16,7 +16,7 @@ from fm import backlog, delivery, loop, mergecheck
 TOGETHER_FAIL = "test ! -e a.py -o ! -e b.py"
 
 
-class Merged(unittest.TestCase):
+class TestMerged:
     def env(self, cmd: str = TOGETHER_FAIL, autonomy: str = "manual") -> Env:
         """An Env whose test command also writes, outside the repo, the name of the worktree of each run."""
         self.log = Path(tempfile.mkdtemp(prefix="fmlog-")) / "runs"
@@ -51,51 +51,51 @@ class Merged(unittest.TestCase):
         before = self.main(e)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual(i["status"], "done")
-        self.assertEqual(i["check"]["merged_with"], before)
+        assert i["status"] == "done"
+        assert i["check"]["merged_with"] == before
 
     def test_fails_merged_goes_back_saying_so(self):
         e = self.env()
         a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
-        self.assertEqual(self.runs(), 2)  # one per branch, alone: nothing is about to merge yet
-        self.assertNotIn("merged_with", e.task(a)["check"])
-        self.assertNotIn("merged_with", e.task(b)["check"])
+        assert self.runs() == 2  # one per branch, alone: nothing is about to merge yet
+        assert "merged_with" not in e.task(a)["check"]
+        assert "merged_with" not in e.task(b)["check"]
         delivery.accept(e.p, a)
         delivery.accept(e.p, b)
         loop.tick(e.p)
-        self.assertEqual(e.task(a)["status"], "done")
+        assert e.task(a)["status"] == "done"
         i = e.task(b)
-        self.assertEqual((i["status"], i["failures"], i["failure_streak"]), ("in progress", 1, 1))
+        assert (i["status"], i["failures"], i["failure_streak"]) == ("in progress", 1, 1)
         main = self.main(e)
-        self.assertEqual(i["check"]["merged_with"], main)  # checked with A already in main
+        assert i["check"]["merged_with"] == main  # checked with A already in main
         take_note(e, b)
         note = e.calls()[-1]["argv"][-1]
-        self.assertIn(main[:9], note)
-        self.assertIn("not on its branch alone", note)
-        self.assertFalse((e.repo / "b.py").exists())
+        assert main[:9] in note
+        assert "not on its branch alone" in note
+        assert not (e.repo / "b.py").exists()
 
     def test_autonomy_path_checks_merged_too(self):
         e = self.env(autonomy="low")
         a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
         loop.tick(e.p)
-        self.assertEqual(e.task(a)["status"], "done")
+        assert e.task(a)["status"] == "done"
         i = e.task(b)
-        self.assertEqual((i["status"], i["failures"]), ("in progress", 1))
-        self.assertEqual(i["check"]["merged_with"], self.main(e))
-        self.assertFalse((e.repo / "b.py").exists())
+        assert (i["status"], i["failures"]) == ("in progress", 1)
+        assert i["check"]["merged_with"] == self.main(e)
+        assert not (e.repo / "b.py").exists()
 
     def test_main_moved_after_a_pass_checks_again(self):
         e = self.env("true")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
         mergecheck.merged_check(e.p, tid)
-        self.assertEqual(self.runs(), 2)
+        assert self.runs() == 2
         commit(str(e.repo), "other.py", "o\n")
         delivery.accept(e.p, tid)
         moved = self.main(e)
         loop.tick(e.p)
-        self.assertEqual(self.runs(), 3)
+        assert self.runs() == 3
         i = e.task(tid)
-        self.assertEqual((i["status"], i["check"]["merged_with"]), ("done", moved))
+        assert (i["status"], i["check"]["merged_with"]) == ("done", moved)
 
     def test_nothing_moved_merges_without_a_run(self):
         e = self.env("true")
@@ -104,7 +104,7 @@ class Merged(unittest.TestCase):
         delivery.accept(e.p, tid)
         runs = self.runs()
         loop.tick(e.p)
-        self.assertEqual((e.task(tid)["status"], self.runs()), ("done", runs))
+        assert (e.task(tid)["status"], self.runs()) == ("done", runs)
 
     def test_conflict_goes_back_without_a_merged_run(self):
         e = self.env("true")
@@ -117,11 +117,11 @@ class Merged(unittest.TestCase):
         delivery.accept(e.p, b)
         runs = self.runs()
         loop.tick(e.p)
-        self.assertEqual(e.task(a)["status"], "done")
+        assert e.task(a)["status"] == "done"
         i = e.task(b)
-        self.assertEqual((i["status"], i["conflicts"]), ("in progress", 1))
-        self.assertEqual(self.runs(), runs + 1)  # A's merged run only
-        self.assertFalse([t for t in events(e, b) if t.startswith("checked merged")])
+        assert (i["status"], i["conflicts"]) == ("in progress", 1)
+        assert self.runs() == runs + 1  # A's merged run only
+        assert not [t for t in events(e, b) if t.startswith("checked merged")]
 
     def test_without_a_test_command_it_merges_as_today(self):
         e = self.env("")
@@ -129,50 +129,46 @@ class Merged(unittest.TestCase):
         delivery.accept(e.p, tid)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual(i["status"], "done")
-        self.assertNotIn("merged_with", i["check"])
+        assert i["status"] == "done"
+        assert "merged_with" not in i["check"]
 
     def test_third_merged_failure_waits_for_the_owner(self):
         e = self.env()
         a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
         delivery.accept(e.p, a)
         loop.tick(e.p)
-        self.assertEqual(e.task(a)["status"], "done")
+        assert e.task(a)["status"] == "done"
         for n in (1, 2):
             delivery.accept(e.p, b)
             loop.tick(e.p)
             i = e.task(b)
-            self.assertEqual((i["status"], i["failures"], i["failure_streak"]), ("in progress", n, n))
+            assert (i["status"], i["failures"], i["failure_streak"]) == ("in progress", n, n)
             fix(e, b)
             loop.tick(e.p)  # its branch alone passes: the row goes on
-            self.assertEqual(e.task(b)["failure_streak"], n)
+            assert e.task(b)["failure_streak"] == n
         delivery.accept(e.p, b)
         before = len(e.calls())
         loop.tick(e.p)
         i = e.task(b)
-        self.assertEqual((i["status"], i["failures"], i["check"]["tests"]), ("in review", 2, "fail"))
-        self.assertIsNone(i.get("accepted"))
-        self.assertEqual(len(e.calls()), before)
-        self.assertFalse((e.repo / "b.py").exists())
+        assert (i["status"], i["failures"], i["check"]["tests"]) == ("in review", 2, "fail")
+        assert i.get("accepted") is None
+        assert len(e.calls()) == before
+        assert not (e.repo / "b.py").exists()
 
     def test_a_git_failure_at_the_merge_is_not_a_test_failure(self):
         e = self.env("true")
-        with self.assertRaises(delivery.DeliveryError):
+        with pytest.raises(delivery.DeliveryError):
             delivery.tests_at(e.p, self.main(e), "x", merge="no-such-commit")
 
     def test_a_failed_worktree_add_in_the_merged_check_raises(self):
         e = self.env("true")
-        with self.assertRaises(delivery.DeliveryError):
+        with pytest.raises(delivery.DeliveryError):
             delivery.tests_at(e.p, "no-such-commit", "x", merge=self.main(e))
-        self.assertEqual(delivery.tests_at(e.p, "no-such-commit", "x")[0], "fail")  # without merge: as before
+        assert delivery.tests_at(e.p, "no-such-commit", "x")[0] == "fail"  # without merge: as before
 
     def test_show_says_what_the_check_ran_on(self):
         e = self.env("true")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
-        self.assertEqual(json.loads(fm(e.home, "show", tid))["checked_on"], "branch alone")
+        assert json.loads(fm(e.home, "show", tid))["checked_on"] == "branch alone"
         mergecheck.merged_check(e.p, tid)
-        self.assertEqual(json.loads(fm(e.home, "show", tid))["checked_on"], "merged with main " + self.main(e)[:9])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert json.loads(fm(e.home, "show", tid))["checked_on"] == "merged with main " + self.main(e)[:9]

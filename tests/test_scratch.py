@@ -1,4 +1,4 @@
-import unittest
+import re
 
 from fm import agents, backlog, loop
 from tests.helpers import Env, fm
@@ -11,18 +11,18 @@ def launched(e: Env, tid: str) -> str:
     return tid
 
 
-class Scratch(unittest.TestCase):
+class TestScratch:
     def test_each_review_has_its_own_folder_told_in_its_brief(self):
         e = Env()
         for _ in range(2):
             launched(e, backlog.add(e.p, "x", status="ready", criteria="y"))
         folders = sorted((e.home / "scratch").iterdir())
-        self.assertEqual(len(folders), 4)
+        assert len(folders) == 4
         briefs = [c["argv"][-1] for c in e.calls()]
         for f in folders:
-            self.assertRegex(f.name, r"^[A-Z]+-\d+-r1-abc123-(hunter|reviewer)$")
-            self.assertEqual(sum(str(f) in b for b in briefs), 1)
-        self.assertFalse((e.home / "reviews" / "scratch").exists())
+            assert re.search(r"^[A-Z]+-\d+-r1-abc123-(hunter|reviewer)$", f.name)
+            assert sum(str(f) in b for b in briefs) == 1
+        assert not (e.home / "reviews" / "scratch").exists()
 
     def test_gone_with_its_verdict(self):
         e = Env(test="true")
@@ -32,7 +32,7 @@ class Scratch(unittest.TestCase):
         e.review(tid)
         loop.tick(e.p)
         loop.tick(e.p)
-        self.assertEqual(list((e.home / "scratch").iterdir()), [])
+        assert list((e.home / "scratch").iterdir()) == []
 
     def test_gone_when_canceled(self):
         e = Env(test="true")
@@ -43,14 +43,14 @@ class Scratch(unittest.TestCase):
         fm(e.home, "cancel", tid)
         loop.tick(e.p)
         loop.tick(e.p)
-        self.assertEqual(list((e.home / "scratch").iterdir()), [])
+        assert list((e.home / "scratch").iterdir()) == []
 
     def test_a_folder_no_review_owns_is_swept(self):
         e = Env(test="true")
         dead = e.home / "scratch" / "TY-9-r1-abc123-reviewer"
         dead.mkdir(parents=True)
         loop.tick(e.p)
-        self.assertFalse(dead.exists())
+        assert not dead.exists()
 
     def test_a_session_unlisted_at_launch_is_swept_with_its_round(self):
         e = Env(test="true")
@@ -60,7 +60,7 @@ class Scratch(unittest.TestCase):
         agents.launch_reviewer(e.p, e.task(tid), "abc123")
         mine = e.home / "scratch" / f"{tid}-r1-abc123-reviewer"
         loop.tick(e.p)
-        self.assertTrue(mine.exists())  # round 1 is not over
+        assert mine.exists()  # round 1 is not over
         backlog.update(e.p, tid, reviews=[{"tip": "abc123"}])
         loop.tick(e.p)
-        self.assertFalse(mine.exists())
+        assert not mine.exists()

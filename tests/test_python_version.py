@@ -3,10 +3,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from helpers import ROOT
 
 from fm import config
@@ -19,10 +19,11 @@ def fake(d: Path, version: str, body: str) -> None:
     p.chmod(0o755)
 
 
-class PythonVersion(unittest.TestCase):
-    def setUp(self) -> None:
+class TestPythonVersion:
+    @pytest.fixture(autouse=True)
+    def set_up(self, request) -> None:
         tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
+        request.addfinalizer(tmp.cleanup)
         self.t = Path(tmp.name).resolve()
         (self.t / "bin").mkdir()
         shutil.copy(ROOT / "bin/fm", self.t / "bin/fm")
@@ -38,51 +39,51 @@ class PythonVersion(unittest.TestCase):
 
     def test_an_old_python3_first_defers_to_a_newer_one_on_the_path(self):
         r = self.run_fm(f"{self.t}/old:{self.t}/new", "list")
-        self.assertEqual((r.returncode, r.stdout), (0, f"new: {self.t}/bin/fm list\n"))
+        assert (r.returncode, r.stdout) == (0, f"new: {self.t}/bin/fm list\n")
 
     def test_without_a_new_enough_python_fm_exits_with_one_line(self):
         r = self.run_fm(f"{self.t}/old", "list")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertEqual(r.stdout, "")
-        self.assertEqual(len(r.stderr.splitlines()), 1)
+        assert r.returncode != 0
+        assert r.stdout == ""
+        assert len(r.stderr.splitlines()) == 1
         for s in ("3.99", "3.9.6", f"{self.t}/old"):
-            self.assertIn(s, r.stderr)
+            assert s in r.stderr
 
     def test_a_python3_that_times_out_is_named_in_the_line(self):
         fake(self.t / "hang", "3.99.1", "echo hang")
         (self.t / "hang/python3").write_text("#!/bin/sh\nexec /bin/sleep 30\n")
         r = self.run_fm(f"{self.t}/hang", "list")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertEqual(len(r.stderr.splitlines()), 1)
-        self.assertIn("timed out", r.stderr)
+        assert r.returncode != 0
+        assert len(r.stderr.splitlines()) == 1
+        assert "timed out" in r.stderr
 
     def test_the_hook_writes_its_note_before_its_own_timeout_when_pythons_hang(self):
         for n in ("a", "b"):
             fake(self.t / n, "3.99.1", "echo hang")
             (self.t / n / "python3").write_text("#!/bin/sh\nexec /bin/sleep 30\n")
         r = self.run_fm(f"{self.t}/a:{self.t}/b", "session-context", stdin='{"cwd": "/"}')
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
-        self.assertIn("timed out", Path(f"{self.reg}.python").read_text())
+        assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
+        assert "timed out" in Path(f"{self.reg}.python").read_text()
 
     def test_no_python3_at_all_is_said(self):
         r = self.run_fm(f"{self.t}/empty", "list")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertEqual(len(r.stderr.splitlines()), 1)
-        self.assertIn("3.99", r.stderr)
-        self.assertIn("no python3", r.stderr)
+        assert r.returncode != 0
+        assert len(r.stderr.splitlines()) == 1
+        assert "3.99" in r.stderr
+        assert "no python3" in r.stderr
 
     def test_the_hook_adds_nothing_and_leaves_the_line_for_health(self):
         r = self.run_fm(f"{self.t}/old", "session-context", stdin='{"cwd": "/"}')
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+        assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
         with mock.patch.dict(os.environ, {"FM_REGISTRY": str(self.reg)}):
             text = config.python_note_file().read_text()
-        self.assertIn("3.99", text)
-        self.assertIn("3.9.6", text)
+        assert "3.99" in text
+        assert "3.9.6" in text
 
     def test_a_new_enough_python_is_not_searched_for(self):
         marker = self.t / "ran"
         (self.t / "spy").mkdir()
         (self.t / "spy/python3").write_text(f"#!/bin/sh\ntouch {marker}\n")
         r = self.run_fm(f"{self.t}/spy", "--help", bin=ROOT / "bin/fm")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertFalse(marker.exists())
+        assert r.returncode == 0, r.stderr
+        assert not marker.exists()

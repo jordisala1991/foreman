@@ -1,10 +1,9 @@
 """A task waits for the tasks in `blocked_by`: filing, editing, the loop holding and releasing it, refusals."""
 
 import json
-import unittest
 
+import pytest
 from helpers import Env, fm
-from test_subtasks import owner
 
 from fm import backlog, blockers, delivery, loop, util
 
@@ -13,9 +12,13 @@ def events(e: Env, tid: str) -> list[str]:
     return [x["text"] for x in util.read_jsonl(e.p.state / "events.jsonl") if x["task"] == tid]
 
 
-class Blockers(unittest.TestCase):
-    def setUp(self):
-        owner(self)
+class TestBlockers:
+    @pytest.fixture(autouse=True)
+    def set_up(self, owner):
+        self.fresh()
+
+    def fresh(self) -> None:
+        """A new project with two triage tasks (a test that needs several calls it again)."""
         self.e = Env()
         self.X1 = backlog.add(self.e.p, "x1", status="triage")
         self.X2 = backlog.add(self.e.p, "x2", status="triage")
@@ -29,70 +32,67 @@ class Blockers(unittest.TestCase):
     def test_add_and_edit_take_blockers_and_show_them(self):
         a = self.y("--blocked-by", self.X1, self.X2)
         b = self.y("--blocked-by", self.X1, "--blocked-by", self.X2)
-        self.assertEqual((self.ids(a), self.ids(b)), ([self.X1, self.X2],) * 2)
+        assert (self.ids(a), self.ids(b)) == ([self.X1, self.X2],) * 2
         fm(self.e.home, "edit", a, "--blocked-by", self.X1)
-        self.assertEqual(self.ids(a), [self.X1])
-        self.assertEqual(json.loads(fm(self.e.home, "show", a))["waiting_for"], [self.X1])
+        assert self.ids(a) == [self.X1]
+        assert json.loads(fm(self.e.home, "show", a))["waiting_for"] == [self.X1]
         line = next(x for x in fm(self.e.home, "list").splitlines() if x.startswith(a))
-        self.assertIn(self.X1, line)
+        assert self.X1 in line
         delivery.close(self.e.p, self.X1, "done", "x")
         line = next(x for x in fm(self.e.home, "list").splitlines() if x.startswith(a))
-        self.assertNotIn(self.X1, line)
+        assert self.X1 not in line
         fm(self.e.home, "edit", a, "--blocked-by", "none")
-        self.assertEqual(self.ids(a), [])
+        assert self.ids(a) == []
         fm(self.e.home, "edit", a, "--blocked-by", self.X2)
         fm(self.e.home, "cancel", a)
         line = next(x for x in fm(self.e.home, "list", "--all").splitlines() if x.startswith(a))
-        self.assertNotIn(self.X2, line)
-        self.assertNotIn("waiting_for", json.loads(fm(self.e.home, "show", a)))
+        assert self.X2 not in line
+        assert "waiting_for" not in json.loads(fm(self.e.home, "show", a))
 
-    def test_not_launched_until_the_last_blocker_is_done(self):
-        for status, started in (("backlog", "refining"), ("ready", "in progress")):
-            with self.subTest(status=status):
-                self.setUp()
-                y = self.y("--blocked-by", self.X1, self.X2)
-                backlog.set_status(self.e.p, y, status)
-                loop.tick(self.e.p)
-                self.assertEqual((self.e.calls(), self.e.task(y)["status"]), ([], status))
-                delivery.close(self.e.p, self.X1, "done", "x")
-                loop.tick(self.e.p)
-                self.assertEqual(self.e.calls(), [])
-                delivery.close(self.e.p, self.X2, "done", "x")
-                loop.tick(self.e.p)
-                self.assertEqual((len(self.e.calls()), self.e.task(y)["status"]), (1, started))
-                self.assertEqual(len([t for t in events(self.e, y) if "unblocked" in t]), 1)
-                loop.tick(self.e.p)
-                self.assertEqual(len([t for t in events(self.e, y) if "unblocked" in t]), 1)
+    @pytest.mark.parametrize(("status", "started"), (("backlog", "refining"), ("ready", "in progress")))
+    def test_not_launched_until_the_last_blocker_is_done(self, status, started):
+        y = self.y("--blocked-by", self.X1, self.X2)
+        backlog.set_status(self.e.p, y, status)
+        loop.tick(self.e.p)
+        assert (self.e.calls(), self.e.task(y)["status"]) == ([], status)
+        delivery.close(self.e.p, self.X1, "done", "x")
+        loop.tick(self.e.p)
+        assert self.e.calls() == []
+        delivery.close(self.e.p, self.X2, "done", "x")
+        loop.tick(self.e.p)
+        assert (len(self.e.calls()), self.e.task(y)["status"]) == (1, started)
+        assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
+        loop.tick(self.e.p)
+        assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
 
     def test_a_task_filed_with_a_done_blocker_launches_at_once(self):
         delivery.close(self.e.p, self.X1, "done", "x")
         y = self.y("--blocked-by", self.X1)
         loop.tick(self.e.p)
-        self.assertEqual(len(self.e.calls()), 1)
-        self.assertEqual(self.e.task(y)["status"], "refining")
+        assert len(self.e.calls()) == 1
+        assert self.e.task(y)["status"] == "refining"
 
     def test_a_canceled_blocker_blocks_the_task_for_the_owner(self):
         for status in ("canceled", "duplicate"):
-            with self.subTest(status=status):
-                self.setUp()
-                y = self.y("--blocked-by", self.X1)
-                backlog.set_status(self.e.p, self.X1, status)
-                loop.tick(self.e.p)
-                self.assertEqual(self.e.calls(), [])
-                self.assertIn(self.X1, self.e.task(y)["blocked"])
-                n = len(events(self.e, y))
-                loop.tick(self.e.p)
-                self.assertEqual(len(events(self.e, y)), n)
-                fm(self.e.home, "edit", y, "--blocked-by", "none")
-                fm(self.e.home, "unblock", y)
-                loop.tick(self.e.p)
-                self.assertEqual(len(self.e.calls()), 1)
-        self.setUp()
+            self.fresh()
+            y = self.y("--blocked-by", self.X1)
+            backlog.set_status(self.e.p, self.X1, status)
+            loop.tick(self.e.p)
+            assert self.e.calls() == []
+            assert self.X1 in self.e.task(y)["blocked"]
+            n = len(events(self.e, y))
+            loop.tick(self.e.p)
+            assert len(events(self.e, y)) == n
+            fm(self.e.home, "edit", y, "--blocked-by", "none")
+            fm(self.e.home, "unblock", y)
+            loop.tick(self.e.p)
+            assert len(self.e.calls()) == 1
+        self.fresh()
         y = self.y("--blocked-by", self.X1)
         backlog.set_status(self.e.p, self.X1, "canceled")
         loop.tick(self.e.p)
         fm(self.e.home, "cancel", y)
-        self.assertEqual(self.e.task(y)["status"], "canceled")
+        assert self.e.task(y)["status"] == "canceled"
 
     def test_refused_changes_nothing(self):
         y = self.y("--blocked-by", self.X1)
@@ -110,28 +110,26 @@ class Blockers(unittest.TestCase):
         wants = ["TY-99", y, "TY-99", "none", b, c]
         before = (backlog.load(self.e.p), (self.e.p.state / "events.jsonl").read_text())
         for args, want in zip(cases, wants, strict=True):
-            with self.subTest(args=args), self.assertRaises(SystemExit) as r:
+            with pytest.raises(SystemExit) as r:
                 fm(self.e.home, *args)
-            self.assertIn(want, str(r.exception.code))
-        self.assertEqual((backlog.load(self.e.p), (self.e.p.state / "events.jsonl").read_text()), before)
+            assert want in str(r.value.code)
+        assert (backlog.load(self.e.p), (self.e.p.state / "events.jsonl").read_text()) == before
 
     def test_blockers_follow_the_edit_rules(self):
         y = self.y()
         for status in ("triage", "backlog", "ready"):
-            with self.subTest(status=status):
-                backlog.update(self.e.p, y, plan_file="/x/p.md")
-                backlog.set_status(self.e.p, y, status)
-                fm(self.e.home, "edit", y, "--blocked-by", self.X1)
-                self.assertEqual((self.e.task(y)["status"], self.e.task(y)["plan_file"]), (status, "/x/p.md"))
+            backlog.update(self.e.p, y, plan_file="/x/p.md")
+            backlog.set_status(self.e.p, y, status)
+            fm(self.e.home, "edit", y, "--blocked-by", self.X1)
+            assert (self.e.task(y)["status"], self.e.task(y)["plan_file"]) == (status, "/x/p.md")
         for status in ("refining", "in progress", "in review", "done", "canceled", "duplicate"):
-            with self.subTest(status=status):
-                backlog.set_status(self.e.p, y, status)
-                before = self.e.task(y)
-                with self.assertRaises(SystemExit):
-                    fm(self.e.home, "edit", y, "--blocked-by", self.X2)
-                self.assertEqual(self.e.task(y), before)
+            backlog.set_status(self.e.p, y, status)
+            before = self.e.task(y)
+            with pytest.raises(SystemExit):
+                fm(self.e.home, "edit", y, "--blocked-by", self.X2)
+            assert self.e.task(y) == before
 
     def test_pending_and_dead_by_status(self):
         for status, want in (("done", ([], [])), ("canceled", (["B"], ["B"])), ("in progress", (["B"], []))):
             tasks = [{"id": "A", "status": "backlog", "blocked_by": ["B"]}, {"id": "B", "status": status}]
-            self.assertEqual((blockers.pending(tasks[0], tasks), blockers.dead(tasks[0], tasks)), want)
+            assert (blockers.pending(tasks[0], tasks), blockers.dead(tasks[0], tasks)) == want

@@ -1,7 +1,6 @@
 """A delivered tip's verdict is one GitHub PR review with its findings on their lines, against the fake gh."""
 
-import unittest
-
+import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
@@ -30,10 +29,14 @@ def commit(g: GH, iid: str) -> str:
     return git(wt, "rev-parse", "HEAD").strip()
 
 
-class Review_(unittest.TestCase):
+class TestReview_:
+    @pytest.fixture(autouse=True)
+    def keep_request(self, request):
+        self.request = request  # for the cleanups of helpers
+
     def make(self) -> tuple[GH, str]:
         g = GH(test="true")
-        self.addCleanup(g.close)
+        self.request.addfinalizer(g.close)
         g.set(diff=DIFF)
         return g, g.work()
 
@@ -45,37 +48,37 @@ class Review_(unittest.TestCase):
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", 1)
         loop.tick(g.e.p)
         pr = self.pr(g)
-        self.assertEqual(len(pr["reviews"]), 1)
+        assert len(pr["reviews"]) == 1
         r = pr["reviews"][0]
-        self.assertEqual((r["event"], r["commit_id"]), ("COMMENT", g.e.task(iid)["pr"] and git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()))
-        self.assertEqual(pr["comments"], [])
+        assert (r["event"], r["commit_id"]) == ("COMMENT", g.e.task(iid)["pr"] and git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip())
+        assert pr["comments"] == []
         (c,) = r["comments"]
-        self.assertEqual((c["path"], c["line"], c["side"]), ("app.py", 3, "RIGHT"))
-        self.assertIn("the what", c["body"])
-        self.assertIn("the why", c["body"])
-        self.assertNotIn("the why", r["body"])
-        self.assertLess(r["body"].index("<details"), r["body"].index("the what"))
+        assert (c["path"], c["line"], c["side"]) == ("app.py", 3, "RIGHT")
+        assert "the what" in c["body"]
+        assert "the why" in c["body"]
+        assert "the why" not in r["body"]
+        assert r["body"].index("<details") < r["body"].index("the what")
 
     def test_findings_outside_the_diff_are_listed_in_the_body(self):
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | L | - | nit\n", 1)
         (r,) = self.pr(g)["reviews"]
-        self.assertEqual(r["comments"], [])
-        self.assertIn("boom", r["body"])
-        self.assertLess(r["body"].index("boom"), r["body"].index("<details"))
-        self.assertGreater(r["body"].index("nit"), r["body"].index("<details"))
+        assert r["comments"] == []
+        assert "boom" in r["body"]
+        assert r["body"].index("boom") < r["body"].index("<details")
+        assert r["body"].index("nit") > r["body"].index("<details")
 
     def test_a_finding_already_commented_is_not_posted_again(self):
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", 1)
         commit(g, iid)
         tip(g, iid, "Findings:\nF2 | M | app.py:4 | the what\n", 1)
-        self.assertEqual(len(self.pr(g)["reviews"]), 2)
-        self.assertEqual(len(self.pr(g)["review_comments"]), 1)
+        assert len(self.pr(g)["reviews"]) == 2
+        assert len(self.pr(g)["review_comments"]) == 1
         fm(g.e.home, "reject", iid, "fix F2")  # after round 2 only an owner reject (or a conflict) gets a review
         commit(g, iid)
         tip(g, iid, "Findings:\nF2 | M | app.py:4 | another what\n", 1)
-        self.assertEqual(len(self.pr(g)["review_comments"]), 2)
+        assert len(self.pr(g)["review_comments"]) == 2
 
     def test_a_lost_record_does_not_post_the_review_twice(self):
         g, iid = self.make()
@@ -83,7 +86,7 @@ class Review_(unittest.TestCase):
         backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})
         loop.tick(g.e.p)
         loop.tick(g.e.p)
-        self.assertEqual(len(self.pr(g)["reviews"]), 1)
+        assert len(self.pr(g)["reviews"]) == 1
 
     def test_a_failed_diff_read_posts_the_review_without_inline_comments(self):
         g, iid = self.make()
@@ -91,7 +94,7 @@ class Review_(unittest.TestCase):
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         loop.tick(g.e.p)
         (r,) = self.pr(g)["reviews"]
-        self.assertEqual(r["comments"], [])
+        assert r["comments"] == []
 
     def test_rejected_inline_comments_still_post_the_review(self):
         g, iid = self.make()
@@ -99,14 +102,14 @@ class Review_(unittest.TestCase):
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         loop.tick(g.e.p)
         (r,) = self.pr(g)["reviews"]
-        self.assertEqual(r["comments"], [])
+        assert r["comments"] == []
 
     def test_unlisted_findings_are_never_read_as_ready(self):
         g, iid = self.make()
         tip(g, iid, "no findings line here\n", 1)
         (r,) = self.pr(g)["reviews"]
-        self.assertNotIn("Ready", r["body"])
-        self.assertEqual(g.calls("pr", "diff"), [])
+        assert "Ready" not in r["body"]
+        assert g.calls("pr", "diff") == []
 
     def test_a_verdict_of_another_tip_adds_no_findings(self):
         g, iid = self.make()
@@ -114,9 +117,9 @@ class Review_(unittest.TestCase):
         f.write_text("Findings:\nF1 | M | app.py:3 | w\n")
         i = {"id": iid, "title": "t", "review": {"tip": "aaa", "file": str(f), "open": 1}}
         c = {"head": "bbb", "risk": "low", "tests": "pass", "files": 1, "lines": 1}
-        self.assertEqual(pulls.findings_of(i, "bbb"), [])
-        self.assertEqual(len(pulls.findings_of(i, "aaa")), 1)
-        self.assertIsNone(pulls.case_of(i, c).open)
+        assert pulls.findings_of(i, "bbb") == []
+        assert len(pulls.findings_of(i, "aaa")) == 1
+        assert pulls.case_of(i, c).open is None
 
     def test_a_review_with_a_null_body_does_not_stop_the_review(self):
         g, iid = self.make()
@@ -126,18 +129,18 @@ class Review_(unittest.TestCase):
         g.set(prs=prs)
         commit(g, iid)
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
-        self.assertEqual(len(self.pr(g)["reviews"]), 3)
+        assert len(self.pr(g)["reviews"]) == 3
 
     def test_body_links_point_at_the_comment_or_the_reviewed_commit_and_line(self):
         g, iid = self.make()
         head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
         tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | M | app.py:3 | mid | why: because\n", 2)
         (r,) = self.pr(g)["reviews"]
-        self.assertIn(f"https://github.com/o/r/blob/{head}/app.py#L99", r["body"])
-        self.assertIn("https://github.com/o/r/pull/1#discussion_r1", r["body"])
-        self.assertNotIn("fm-link", r["body"])
-        self.assertNotIn("why: because", r["comments"][0]["body"])
-        self.assertIn("because", r["comments"][0]["body"])
+        assert f"https://github.com/o/r/blob/{head}/app.py#L99" in r["body"]
+        assert "https://github.com/o/r/pull/1#discussion_r1" in r["body"]
+        assert "fm-link" not in r["body"]
+        assert "why: because" not in r["comments"][0]["body"]
+        assert "because" in r["comments"][0]["body"]
 
     def test_a_failed_comment_link_edit_keeps_the_file_links(self):
         g, iid = self.make()
@@ -145,16 +148,12 @@ class Review_(unittest.TestCase):
         head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
         tip(g, iid, "Findings:\nF2 | M | app.py:3 | mid\n", 1)
         (r,) = self.pr(g)["reviews"]
-        self.assertIn(f"/blob/{head}/app.py#L3", r["body"])
+        assert f"/blob/{head}/app.py#L3" in r["body"]
 
     def test_local_provider_reviews_nothing(self):
         e = Env()
         provider = registry.get(e.p)
-        self.assertEqual(provider.name, "local")
+        assert provider.name == "local"
         c = Change(id="FN-1", head="abc")
-        self.assertEqual(provider.diff(c), "")
-        self.assertEqual(provider.review(c, Review("k", "b", [])), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert provider.diff(c) == ""
+        assert provider.review(c, Review("k", "b", [])) == 0

@@ -1,16 +1,18 @@
+import functools
 import json
 import os
 import time
-import unittest
 from unittest import mock
 
+import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
 from fm import backlog, delivery, launcher, loop, proc, providers, util
 
 
-class Launch(unittest.TestCase):
-    def setUp(self):
+class TestLaunch:
+    @pytest.fixture(autouse=True)
+    def set_up(self):
         self.e = Env(slots=2)
         self.p = self.e.p
 
@@ -20,21 +22,21 @@ class Launch(unittest.TestCase):
         c = backlog.add(self.p, "another", status="ready", criteria="x")
         t = backlog.add(self.p, "a finding", status="triage")
         loop.tick(self.p)
-        self.assertEqual(self.e.task(b)["status"], "in progress")
-        self.assertEqual(self.e.task(c)["status"], "in progress")  # ready before backlog, both slots used
-        self.assertEqual(self.e.task(a)["status"], "backlog")
-        self.assertEqual(self.e.task(t)["status"], "triage")  # triage waits for the owner
+        assert self.e.task(b)["status"] == "in progress"
+        assert self.e.task(c)["status"] == "in progress"  # ready before backlog, both slots used
+        assert self.e.task(a)["status"] == "backlog"
+        assert self.e.task(t)["status"] == "triage"  # triage waits for the owner
         calls = self.e.calls()
-        self.assertEqual(len(calls), 2)
+        assert len(calls) == 2
         argv = calls[0]["argv"]
-        self.assertIn("--bg", argv)
-        self.assertEqual(argv[argv.index("-n") + 1], "TY-2 responsible · clear one")
-        self.assertEqual(self.e.task(b)["agent"]["name"], b.lower())  # identity unchanged
-        self.assertEqual(json.loads(argv[argv.index("--settings") + 1])["env"]["FM_AGENT"], b.lower())
-        self.assertIn("[fm responsible TY-2]", argv[-1])
-        self.assertTrue(calls[0]["cwd"].endswith("worktrees/ty-2"))
-        self.assertIn("fm/ty-2", git(self.e.repo, "branch"))
-        self.assertTrue(self.e.task(b)["agent"]["session"])
+        assert "--bg" in argv
+        assert argv[argv.index("-n") + 1] == "TY-2 responsible · clear one"
+        assert self.e.task(b)["agent"]["name"] == b.lower()  # identity unchanged
+        assert json.loads(argv[argv.index("--settings") + 1])["env"]["FM_AGENT"] == b.lower()
+        assert "[fm responsible TY-2]" in argv[-1]
+        assert calls[0]["cwd"].endswith("worktrees/ty-2")
+        assert "fm/ty-2" in git(self.e.repo, "branch")
+        assert self.e.task(b)["agent"]["session"]
 
     def test_a_title_edited_before_launch_shows_in_the_new_agent(self):
         e = Env()
@@ -42,7 +44,7 @@ class Launch(unittest.TestCase):
         fm(e.home, "edit", tid, "--title", "new title")
         loop.tick(e.p)
         argv = e.calls()[0]["argv"]
-        self.assertEqual(argv[argv.index("-n") + 1], "TY-1 responsible · new title")
+        assert argv[argv.index("-n") + 1] == "TY-1 responsible · new title"
 
     def flags(self, e: Env) -> dict[str, tuple[str, str]]:
         """(model, effort) of every launched command, by the kind in its prompt."""
@@ -62,40 +64,44 @@ class Launch(unittest.TestCase):
 
     def test_every_kind_launches_with_an_explicit_model_and_effort(self):
         e = Env(test="true")
-        self.assertEqual(
-            self.run_all_kinds(e),
-            {"planning": ("sonnet", "high"), "responsible": ("sonnet", "medium"), "hunter": ("sonnet", "high"), "reviewer": ("sonnet", "high")},
-        )
+        assert self.run_all_kinds(e) == {
+            "planning": ("sonnet", "high"),
+            "responsible": ("sonnet", "medium"),
+            "hunter": ("sonnet", "high"),
+            "reviewer": ("sonnet", "high"),
+        }
         i = e.task("TY-2")
-        self.assertEqual(i["reviewer"]["effort"], "high")
-        self.assertEqual(i["agent"]["effort"], "medium")
+        assert i["reviewer"]["effort"] == "high"
+        assert i["agent"]["effort"] == "medium"
 
     def test_a_configured_model_and_effort_reach_each_command(self):
         e = Env(test="true")
         cfg = e.p.cfg["agents"]
         cfg.update(planning_model="opus", planning_effort="max", model="haiku", effort="low", review_model="opus", review_effort="xhigh")
-        self.assertEqual(
-            self.run_all_kinds(e),
-            {"planning": ("opus", "max"), "responsible": ("haiku", "low"), "hunter": ("opus", "xhigh"), "reviewer": ("opus", "xhigh")},
-        )
+        assert self.run_all_kinds(e) == {
+            "planning": ("opus", "max"),
+            "responsible": ("haiku", "low"),
+            "hunter": ("opus", "xhigh"),
+            "reviewer": ("opus", "xhigh"),
+        }
 
     def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self):
         a = backlog.add(self.p, "vague idea", criteria="c")
         loop.tick(self.p)
-        self.assertEqual(self.e.task(a)["status"], "refining")
-        self.assertEqual(os.path.realpath(self.e.calls()[0]["cwd"]), str(self.e.repo))
-        self.assertIn("[fm planning TY-1]", self.e.calls()[0]["argv"][-1])
-        self.assertNotIn("worktree", self.e.task(a))
+        assert self.e.task(a)["status"] == "refining"
+        assert os.path.realpath(self.e.calls()[0]["cwd"]) == str(self.e.repo)
+        assert "[fm planning TY-1]" in self.e.calls()[0]["argv"][-1]
+        assert "worktree" not in self.e.task(a)
 
     def test_paused_launches_nothing(self):
         backlog.add(self.p, "x", status="ready", criteria="y")
         (self.p.state).mkdir(parents=True, exist_ok=True)
         (self.p.state / "paused").write_text("now")
         loop.tick(self.p)
-        self.assertEqual(self.e.calls(), [])
+        assert self.e.calls() == []
 
 
-class Answers(unittest.TestCase):
+class TestAnswers:
     def test_the_answer_goes_back_to_the_agent_that_asked(self):
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -103,23 +109,22 @@ class Answers(unittest.TestCase):
         qid = backlog.ask(e.p, tid, tid.lower(), "A or B?")
         backlog.answer(e.p, qid, "B")
         loop.tick(e.p)  # its session is still working: wait
-        self.assertEqual(len(e.calls()), 1)
+        assert len(e.calls()) == 1
         e.set_state(tid.lower(), "blocked")
         e.set_status(tid.lower(), "active")
         loop.tick(e.p)  # nor while blocked: resuming it would start a copy
-        self.assertEqual(len(e.calls()), 1)
+        assert len(e.calls()) == 1
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)
         resume = e.calls()[-1]["argv"]
-        self.assertIn("--resume", resume)
-        self.assertEqual(resume[resume.index("--resume") + 1], e.task(tid)["agent"]["session"])
-        self.assertIn("«B»", resume[-1])
-        self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
+        assert "--resume" in resume
+        assert resume[resume.index("--resume") + 1] == e.task(tid)["agent"]["session"]
+        assert "«B»" in resume[-1]
+        assert backlog.undelivered(backlog.load(e.p)) == []
 
-    def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self):
-        for state, status in (("blocked", "idle"), ("working", "idle"), ("blocked", None)):
-            with self.subTest(state=state, status=status):
-                self.delivered_to_idle(state, status)
+    @pytest.mark.parametrize(("state", "status"), (("blocked", "idle"), ("working", "idle"), ("blocked", None)))
+    def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self, state, status):
+        self.delivered_to_idle(state, status)
 
     def delivered_to_idle(self, state, status):
         e = Env()
@@ -130,11 +135,11 @@ class Answers(unittest.TestCase):
         e.set_state(tid.lower(), state)
         e.set_status(tid.lower(), status) if status else e.drop_pid(tid.lower())  # no status: its process is gone too
         loop.tick(e.p)
-        self.assertIn("--resume", e.calls()[-1]["argv"])
-        self.assertEqual(backlog.undelivered(backlog.load(e.p)), [])
+        assert "--resume" in e.calls()[-1]["argv"]
+        assert backlog.undelivered(backlog.load(e.p)) == []
 
 
-class Stopped(unittest.TestCase):
+class TestStopped:
     def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self):
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -142,16 +147,16 @@ class Stopped(unittest.TestCase):
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)
-        self.assertIn("not finished", e.calls()[-1]["argv"][-1])
-        self.assertEqual(e.task(tid)["nudges"], 1)
+        assert "not finished" in e.calls()[-1]["argv"][-1]
+        assert e.task(tid)["nudges"] == 1
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")  # the nudge woke it; it ended its turn again
         loop.tick(e.p)
-        self.assertIn("stopped without finishing", e.task(tid)["blocked"])
-        self.assertEqual(len([c for c in e.calls() if "-mechanic" not in str(c["argv"])]), 2)  # health files the block: a mechanic follows
+        assert "stopped without finishing" in e.task(tid)["blocked"]
+        assert len([c for c in e.calls() if "-mechanic" not in str(c["argv"])]) == 2  # health files the block: a mechanic follows
 
 
-class Queue(unittest.TestCase):
+class TestQueue:
     def deliver(self, e: Env, lines: int = 1, open_findings: int = 0) -> str:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         loop.tick(e.p)
@@ -168,15 +173,15 @@ class Queue(unittest.TestCase):
         tid = self.deliver(e)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["check"]["risk"], i["check"]["tests"]), ("in review", "low", "pass"))
+        assert (i["status"], i["check"]["risk"], i["check"]["tests"]) == ("in review", "low", "pass")
         delivery.accept(e.p, tid)
-        self.assertEqual(e.task(tid)["status"], "in review")  # accepting merges nothing
+        assert e.task(tid)["status"] == "in review"  # accepting merges nothing
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "done")
-        self.assertIn("Merge TY-1", git(e.repo, "log", "--oneline", "-1"))
-        self.assertNotIn("fm/ty-1", git(e.repo, "branch"))
+        assert e.task(tid)["status"] == "done"
+        assert "Merge TY-1" in git(e.repo, "log", "--oneline", "-1")
+        assert "fm/ty-1" not in git(e.repo, "branch")
 
-    def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self):
+    def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self, request):
         e = Env(test="true")
         ids = [self.deliver(e) for _ in range(3)]
         loop.tick(e.p)
@@ -187,16 +192,16 @@ class Queue(unittest.TestCase):
         checks: list[str] = []
         real = delivery.check
         delivery.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
-        self.addCleanup(setattr, delivery, "check", real)
+        request.addfinalizer(functools.partial(setattr, delivery, "check", real))
         try:
             loop.tick(e.p)
-            self.assertEqual((e.task(ids[0])["status"], checks), ("done", [ids[1]]))
+            assert (e.task(ids[0])["status"], checks) == ("done", [ids[1]])
             loop.tick(e.p)
-            self.assertEqual(checks, [ids[1], ids[2]])
+            assert checks == [ids[1], ids[2]]
         finally:
             delivery.check = real
 
-    def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self):
+    def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self, request):
         e = Env(test="true")
         ids = [self.deliver(e) for _ in range(3)]
         (e.repo / "other.py").write_text("x = 1\n")
@@ -210,13 +215,13 @@ class Queue(unittest.TestCase):
             raise RuntimeError("boom")
 
         loop.pulls.deliver = boom
-        self.addCleanup(setattr, delivery, "check", real)
-        self.addCleanup(setattr, loop.pulls, "deliver", deliver)
+        request.addfinalizer(functools.partial(setattr, delivery, "check", real))
+        request.addfinalizer(functools.partial(setattr, loop.pulls, "deliver", deliver))
         loop.tick(e.p)
-        self.assertEqual(len(checks), 1)
-        self.assertEqual(len(ids), 3)
+        assert len(checks) == 1
+        assert len(ids) == 3
 
-    def test_a_slow_check_does_not_hold_up_a_launch(self):
+    def test_a_slow_check_does_not_hold_up_a_launch(self, request):
         e = Env(test="case $PWD in */trees/*) sleep 3;; esac")
         a = self.deliver(e)
         (e.repo / "other.py").write_text("x = 1\n")
@@ -224,15 +229,15 @@ class Queue(unittest.TestCase):
         git(e.repo, "commit", "-qm", "main moves")
         ready = backlog.add(e.p, "later", status="ready", criteria="z")
         util.BACKGROUND_WAIT_S = 0.2
-        self.addCleanup(setattr, util, "BACKGROUND_WAIT_S", 20)
+        request.addfinalizer(functools.partial(setattr, util, "BACKGROUND_WAIT_S", 20))
         loop.tick(e.p)
-        self.assertEqual(e.task(ready)["status"], "in progress")  # launched while the check still runs
-        self.assertNotEqual((e.task(a).get("check") or {}).get("main"), git(e.repo, "rev-parse", "main").strip())
+        assert e.task(ready)["status"] == "in progress"  # launched while the check still runs
+        assert (e.task(a).get("check") or {}).get("main") != git(e.repo, "rev-parse", "main").strip()
         for t in list(util.BACKGROUND.values()):
             t.join()
-        self.assertEqual(e.task(a)["check"]["main"], git(e.repo, "rev-parse", "main").strip())
+        assert e.task(a)["check"]["main"] == git(e.repo, "rev-parse", "main").strip()
 
-    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self):
+    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self, request):
         e = Env(test="true")
         a = self.deliver(e)
         (e.repo / "other.py").write_text("x = 1\n")
@@ -245,16 +250,16 @@ class Queue(unittest.TestCase):
 
         real = delivery.check
         delivery.check = down
-        self.addCleanup(setattr, delivery, "check", real)
+        request.addfinalizer(functools.partial(setattr, delivery, "check", real))
         util.BACKGROUND_WAIT_S = 0.05
-        self.addCleanup(setattr, util, "BACKGROUND_WAIT_S", 20)
+        request.addfinalizer(functools.partial(setattr, util, "BACKGROUND_WAIT_S", 20))
         for _ in range(3):
             loop.tick(e.p)
             for t in list(util.BACKGROUND.values()):
                 t.join()
-        self.assertIn("net down", e.task(a)["blocked"])
+        assert "net down" in e.task(a)["blocked"]
 
-    def test_transient_failures_of_the_queue_step_that_are_not_in_a_row_do_not_block(self):
+    def test_transient_failures_of_the_queue_step_that_are_not_in_a_row_do_not_block(self, request):
         e = Env(test="true")
         a = self.deliver(e)
         loop.tick(e.p)  # checked: up to date, no check runs from now on
@@ -268,12 +273,12 @@ class Queue(unittest.TestCase):
             return real(*args)
 
         loop.pulls.prepare = flaky
-        self.addCleanup(setattr, loop.pulls, "prepare", real)
+        request.addfinalizer(functools.partial(setattr, loop.pulls, "prepare", real))
         for _ in range(4):
             loop.tick(e.p)
-        self.assertEqual((len(calls), e.task(a).get("blocked", "")), (4, ""))
+        assert (len(calls), e.task(a).get("blocked", "")) == (4, "")
 
-    def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self):
+    def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self, request):
         e = Env(test="true")
 
         def boom(*args):
@@ -281,11 +286,11 @@ class Queue(unittest.TestCase):
 
         real = delivery.tests_at
         delivery.tests_at = boom
-        self.addCleanup(setattr, delivery, "tests_at", real)
+        request.addfinalizer(functools.partial(setattr, delivery, "tests_at", real))
         loop.tick(e.p)
         for t in list(util.BACKGROUND.values()):
             t.join()
-        self.assertIn("git timed out", util.read_jsonl(e.p.state / "errors.jsonl")[-1]["error"])
+        assert "git timed out" in util.read_jsonl(e.p.state / "errors.jsonl")[-1]["error"]
 
     def test_a_task_canceled_while_the_queue_runs_is_not_checked(self):
         e = Env(test="true")
@@ -302,27 +307,27 @@ class Queue(unittest.TestCase):
             loop.tick(e.p)
         finally:
             loop.queue_one = real
-        self.assertFalse(e.task(b).get("check"))
+        assert not e.task(b).get("check")
 
     def test_autonomy_low_merges_low_risk_alone(self):
         e = Env(test="true", autonomy="low")
         tid = self.deliver(e)
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "done")
+        assert e.task(tid)["status"] == "done"
 
     def test_a_big_diff_alone_does_not_raise_risk(self):
         e = Env(test="true", autonomy="low")
         big = self.deliver(e, lines=400)
         loop.tick(e.p)
-        self.assertEqual((e.task(big)["status"], e.task(big)["check"]["risk"]), ("done", "low"))
+        assert (e.task(big)["status"], e.task(big)["check"]["risk"]) == ("done", "low")
 
     def test_failing_tests_are_high(self):
         e = Env(test="false", autonomy="medium")
         tid = self.deliver(e)
         loop.tick(e.p)
         c = e.task(tid)["check"]
-        self.assertEqual((e.task(tid)["status"], c["risk"]), ("in progress", "high"))  # returned to its agent (FN-67)
-        self.assertTrue(any("tests fail" in r for r in c["reasons"]))
+        assert (e.task(tid)["status"], c["risk"]) == ("in progress", "high")  # returned to its agent (FN-67)
+        assert any("tests fail" in r for r in c["reasons"])
 
     def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self):
         e = Env(test="true")
@@ -331,29 +336,29 @@ class Queue(unittest.TestCase):
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         loop.tick(e.p)
         call = e.calls()[-1]
-        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], "TY-1 hunter · x")
+        assert call["argv"][call["argv"].index("-n") + 1] == "TY-1 hunter · x"
         hunter = call["argv"][-1]
-        self.assertIn("[fm hunter TY-1]", hunter)
-        self.assertEqual(call["cwd"], e.task(tid)["worktree"])
+        assert "[fm hunter TY-1]" in hunter
+        assert call["cwd"] == e.task(tid)["worktree"]
         hunter_file = e.task(tid)["hunter"]["file"]
-        self.assertIn(hunter_file, hunter)
+        assert hunter_file in hunter
         loop.tick(e.p)
-        self.assertEqual(len(e.calls()), 2)  # no reviewer while the hunter has no file
+        assert len(e.calls()) == 2  # no reviewer while the hunter has no file
         e.hunter_done(tid)
         loop.tick(e.p)
         call = e.calls()[-1]
-        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], "TY-1 review · x")
+        assert call["argv"][call["argv"].index("-n") + 1] == "TY-1 review · x"
         reviewer = call["argv"][-1]
-        self.assertIn("[fm reviewer TY-1]", reviewer)
-        self.assertIn("Round: 1", reviewer)
-        self.assertIn(hunter_file, reviewer)  # it reads the file, nothing else of the hunter
-        self.assertIn("DETAIL-OF-THE-TASK", hunter)
-        self.assertIn("DETAIL-OF-THE-TASK", reviewer)
-        self.assertIn("a finding leaves only with a cited refutation", reviewer)  # no cited refutation: it stays in To fix
-        self.assertEqual(call["cwd"], e.task(tid)["worktree"])
-        self.assertNotIn("check", e.task(tid))  # no check before the verdict
+        assert "[fm reviewer TY-1]" in reviewer
+        assert "Round: 1" in reviewer
+        assert hunter_file in reviewer  # it reads the file, nothing else of the hunter
+        assert "DETAIL-OF-THE-TASK" in hunter
+        assert "DETAIL-OF-THE-TASK" in reviewer
+        assert "a finding leaves only with a cited refutation" in reviewer  # no cited refutation: it stays in To fix
+        assert call["cwd"] == e.task(tid)["worktree"]
+        assert "check" not in e.task(tid)  # no check before the verdict
         loop.tick(e.p)
-        self.assertEqual(len(e.calls()), 3)  # not launched twice
+        assert len(e.calls()) == 3  # not launched twice
 
     def test_a_finished_hunter_and_a_reviewer_with_a_verdict_are_stopped(self):
         e = Env(test="true")
@@ -362,11 +367,11 @@ class Queue(unittest.TestCase):
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.hunt_then_review(tid)
         loop.tick(e.p)
-        self.assertEqual(e.state_of(e.task(tid)["hunter"]["name"]), "stopped")
-        self.assertEqual(e.state_of(e.task(tid)["reviewer"]["name"]), "working")
+        assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
+        assert e.state_of(e.task(tid)["reviewer"]["name"]) == "working"
         e.verdict(tid)
         loop.tick(e.p)
-        self.assertEqual(e.state_of(e.task(tid)["reviewer"]["name"]), "stopped")
+        assert e.state_of(e.task(tid)["reviewer"]["name"]) == "stopped"
 
     def test_cancelling_a_task_in_review_stops_every_session_of_it(self):
         e = Env(test="true")
@@ -377,7 +382,7 @@ class Queue(unittest.TestCase):
         i = e.task(tid)
         delivery.close(e.p, tid, "canceled", "no")
         for role in ("agent", "hunter", "reviewer"):
-            self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
+            assert e.state_of(i[role]["name"]) == "stopped", role
 
     def test_merging_stops_every_session_of_the_task(self):
         e = Env(test="true")
@@ -387,9 +392,9 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         delivery.accept(e.p, tid)
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "done")
+        assert e.task(tid)["status"] == "done"
         for role in ("agent", "hunter", "reviewer"):
-            self.assertEqual(e.state_of(i[role]["name"]), "stopped", role)
+            assert e.state_of(i[role]["name"]) == "stopped", role
 
     def test_a_blocked_task_still_has_its_finished_hunter_stopped(self):
         e = Env(test="true")
@@ -400,7 +405,7 @@ class Queue(unittest.TestCase):
         e.hunter_done(tid)
         backlog.update(e.p, tid, blocked="why")
         loop.tick(e.p)
-        self.assertEqual(e.state_of(e.task(tid)["hunter"]["name"]), "stopped")
+        assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
 
     def test_a_failing_stop_does_not_stop_the_cancel(self):
         from unittest import mock
@@ -410,7 +415,7 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         with mock.patch("fm.sessions.stop", side_effect=proc.ProcError("timed out")):
             delivery.close(e.p, tid, "canceled", "no")
-        self.assertEqual(e.task(tid)["status"], "canceled")
+        assert e.task(tid)["status"] == "canceled"
 
     def test_cancel_stops_a_session_the_listing_does_not_show(self):
         e = Env(test="true")
@@ -418,7 +423,7 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: its agent still runs
         delivery.close(e.p, tid, "canceled", "no")
-        self.assertEqual(e.stops(), [e.task(tid)["agent"]["short"]])
+        assert e.stops() == [e.task(tid)["agent"]["short"]]
 
     def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self):
         e = Env(test="true")
@@ -430,7 +435,7 @@ class Queue(unittest.TestCase):
         (e.bin / "agents.json").write_text("[]")  # gone, or an unreadable listing
         for _ in range(3):
             loop.tick(e.p)
-        self.assertEqual(e.stops(), [])
+        assert e.stops() == []
 
     def test_a_cancel_stops_each_session_once(self):
         e = Env(test="true")
@@ -438,8 +443,8 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         name = e.task(tid)["agent"]["name"]
         delivery.close(e.p, tid, "canceled", "no")
-        self.assertEqual(e.stops(), [e.task(tid)["agent"]["short"]])  # once, though its id is also in `sessions`
-        self.assertEqual(e.state_of(name), "stopped")
+        assert e.stops() == [e.task(tid)["agent"]["short"]]  # once, though its id is also in `sessions`
+        assert e.state_of(name) == "stopped"
 
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self):
         e = Env(test="true")
@@ -450,28 +455,28 @@ class Queue(unittest.TestCase):
         e.set_state(e.task(tid)["hunter"]["name"], "done")
         backlog.update(e.p, tid, hunter={**e.task(tid)["hunter"], "started": "2000-01-01 00:00:00"})
         loop.tick(e.p)
-        self.assertIn("hunter ended without its findings file", e.task(tid)["blocked"])
-        self.assertEqual(len(e.calls()), 2)
+        assert "hunter ended without its findings file" in e.task(tid)["blocked"]
+        assert len(e.calls()) == 2
 
     def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self):
         e = Env(test="true", autonomy="medium")
         tid = self.deliver(e, open_findings=1)
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "in progress")
+        assert e.task(tid)["status"] == "in progress"
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)
-        self.assertIn("leaves 1 open", e.calls()[-1]["argv"][-1])
+        assert "leaves 1 open" in e.calls()[-1]["argv"][-1]
         wt = e.task(tid)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
             f.write("# fixed\n")
         git(e.repo.parent / wt, "commit", "-qam", "fix")
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)  # round 2 still open: to the owner, whatever the autonomy
-        self.assertIn("Round: 2", e.calls()[-1]["argv"][-1])
+        assert "Round: 2" in e.calls()[-1]["argv"][-1]
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
-        self.assertTrue(any("open after round 2" in r for r in i["check"]["reasons"]))
+        assert (i["status"], i["check"]["risk"]) == ("in review", "low")
+        assert any("open after round 2" in r for r in i["check"]["reasons"])
 
     def test_a_branch_that_conflicts_after_main_moved_goes_back_to_its_agent_once_accepted(self):
         e = Env(test="true")
@@ -480,23 +485,23 @@ class Queue(unittest.TestCase):
         (e.repo / "app.py").write_text("changed on main\n")
         git(e.repo, "commit", "-qam", "main moves")
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "in review")  # nobody wants it merged yet: it waits
+        assert e.task(tid)["status"] == "in review"  # nobody wants it merged yet: it waits
         delivery.accept(e.p, tid)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["conflicts"]), ("in progress", 1))
+        assert (i["status"], i["conflicts"]) == ("in progress", 1)
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)
-        self.assertIn("conflicts", e.calls()[-1]["argv"][-1])
+        assert "conflicts" in e.calls()[-1]["argv"][-1]
 
     def test_reject_sends_the_note_back_to_the_agent(self):
         e = Env(test="true")
         tid = self.deliver(e)
         fm(e.home, "reject", tid, "name it better")
-        self.assertEqual((e.task(tid)["status"], e.task(tid)["rework"]), ("in progress", 1))
+        assert (e.task(tid)["status"], e.task(tid)["rework"]) == ("in progress", 1)
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)
-        self.assertIn("name it better", e.calls()[-1]["argv"][-1])
+        assert "name it better" in e.calls()[-1]["argv"][-1]
 
     def fix_and_resubmit(self, e: Env, tid: str) -> None:
         e.set_state(tid.lower(), "done")
@@ -511,20 +516,20 @@ class Queue(unittest.TestCase):
         e = Env(test="true")
         tid = self.deliver(e, open_findings=1)
         loop.tick(e.p)
-        self.assertEqual(e.task(tid)["status"], "in progress")
+        assert e.task(tid)["status"] == "in progress"
         e.set_state(tid.lower(), "done")
         loop.tick(e.p)
-        self.assertIn(f"reviews/{tid}.md", e.calls()[-1]["argv"][-1])
+        assert f"reviews/{tid}.md" in e.calls()[-1]["argv"][-1]
 
     def test_clean_review_sends_nothing(self):
         e = Env(test="true")
         tid = self.deliver(e)
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual(i["status"], "in review")
-        self.assertIn("check", i)
+        assert i["status"] == "in review"
+        assert "check" in i
         d = backlog.load(e.p)
-        self.assertFalse([x for x in d["decisions_resolved"] if x.get("kind") == "review"])
+        assert not [x for x in d["decisions_resolved"] if x.get("kind") == "review"]
 
     def test_refuted_without_commit_is_not_returned_twice(self):
         e = Env(test="true")
@@ -535,34 +540,31 @@ class Queue(unittest.TestCase):
         backlog.set_status(e.p, tid, "in review")
         loop.tick(e.p)
         i = e.task(tid)
-        self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
+        assert (i["status"], i["check"]["risk"]) == ("in review", "low")
 
 
-class Version(unittest.TestCase):
+class TestVersion:
     """A loop started by the launcher (FM_PINNED) exits as soon as another fm@fm version is installed."""
 
-    def setUp(self):
-        self.e = Env()
+    @pytest.fixture(autouse=True)
+    def set_up(self, request, env):
+        self.e = env
         self.p = self.e.p
         cache = self.e.tmp / "cache/fm/fm"
         self.a, self.b = version_folder(cache, "aaa"), version_folder(cache, "bbb")
         env = mock.patch.dict(os.environ, {"FM_PINNED": self.a["installPath"]})
         env.start()
-        self.addCleanup(env.stop)
+        request.addfinalizer(env.stop)
 
-    def test_a_new_install_stops_the_loop_before_its_tick(self):
-        install_fm(self, self.b)
-        with self.assertRaises(SystemExit) as e:
+    def test_a_new_install_stops_the_loop_before_its_tick(self, request):
+        install_fm(request, self.b)
+        with pytest.raises(SystemExit) as e:
             loop.forever([str(self.p.home)], once=True)
-        self.assertEqual(str(e.exception), "fm: fm@fm bbb is installed now; this runs aaa")
-        self.assertFalse((self.p.state / "loop.json").exists())
+        assert str(e.value) == "fm: fm@fm bbb is installed now; this runs aaa"
+        assert not (self.p.state / "loop.json").exists()
 
-    def test_the_same_install_ticks_and_the_heartbeat_names_the_version(self):
-        install_fm(self, self.a)
+    def test_the_same_install_ticks_and_the_heartbeat_names_the_version(self, request):
+        install_fm(request, self.a)
         loop.forever([str(self.p.home)], once=True)
         hb = util.read_json(self.p.state / "loop.json", {})
-        self.assertEqual(hb["version"], launcher.ROOT.name)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert hb["version"] == launcher.ROOT.name

@@ -1,16 +1,18 @@
 """fm.toml with [repos.<key>] tables: strict keys, repo settings over the project's, post_create placeholders, layout."""
 
 import tempfile
-import unittest
 from pathlib import Path
+
+import pytest
 
 from fm.config import Project, ProjectError
 
 
-class ReposTest(unittest.TestCase):
-    def setUp(self) -> None:
+class TestReposTest:
+    @pytest.fixture(autouse=True)
+    def set_up(self, request) -> None:
         tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
+        request.addfinalizer(tmp.cleanup)
         self.root = Path(tmp.name).resolve()
         for d in ("api", "web", "home"):
             (self.root / d).mkdir()
@@ -25,10 +27,10 @@ class ReposTest(unittest.TestCase):
         return Project.load(self.write(text, home, project))
 
     def refused(self, text: str, *needles: str, home: Path | None = None, project: str = "") -> None:
-        with self.assertRaises(ProjectError) as cm:
+        with pytest.raises(ProjectError) as cm:
             self.load(text, home, project)
         for n in needles:
-            self.assertIn(n, str(cm.exception))
+            assert n in str(cm.value)
 
     def tables(self, extra_api: str = "", extra_web: str = "") -> str:
         return f'[repos.api]\npath = "{self.root / "api"}"\n{extra_api}\n[repos.web]\npath = "{self.root / "web"}"\n{extra_web}\n'
@@ -46,22 +48,22 @@ class ReposTest(unittest.TestCase):
         )
         repos = self.load(text).cfg["repos"]
         api, web = repos["api"], repos["web"]
-        self.assertEqual((api["merge"]["strategy"], api["merge"]["test"]), ("merge", "make b"))
-        self.assertEqual((api["merge"]["autonomy"], api["merge"]["pr"]), ("low", "draft"))
-        self.assertEqual((web["merge"]["strategy"], web["merge"]["test"]), ("squash", "make a"))
-        self.assertEqual((api["risk"]["large_lines"], web["risk"]["large_lines"]), (10, 400))
+        assert (api["merge"]["strategy"], api["merge"]["test"]) == ("merge", "make b")
+        assert (api["merge"]["autonomy"], api["merge"]["pr"]) == ("low", "draft")
+        assert (web["merge"]["strategy"], web["merge"]["test"]) == ("squash", "make a")
+        assert (api["risk"]["large_lines"], web["risk"]["large_lines"]) == (10, 400)
 
     def test_repo_risk_table_replaces_whole(self) -> None:
         text = '[risk.high]\na = ["x/"]\nb = ["y/"]\n\n' + self.tables('[repos.api.risk.high]\nc = ["z/"]\n')
         p = self.load(text)
         api, web = p.cfg["repos"]["api"]["risk"], p.cfg["repos"]["web"]["risk"]
-        self.assertEqual(api["high"], {"c": ["z/"]})
-        self.assertEqual(web["high"], {"a": ["x/"], "b": ["y/"]})
-        self.assertEqual(api["medium"], p.cfg["risk"]["medium"])
+        assert api["high"] == {"c": ["z/"]}
+        assert web["high"] == {"a": ["x/"], "b": ["y/"]}
+        assert api["medium"] == p.cfg["risk"]["medium"]
 
     def test_post_create_placeholders(self) -> None:
         p = self.load(self.tables('post_create = ["cp {main}/a {wt}/"]'))
-        self.assertEqual(p.cfg["repos"]["api"]["post_create"], ["cp {main}/a {wt}/"])
+        assert p.cfg["repos"]["api"]["post_create"] == ["cp {main}/a {wt}/"]
         self.refused(self.tables('post_create = ["x {repo}"]'), "[repos.api]", "{repo}")
         self.refused(self.tables('post_create = ["x {}"]'), "[repos.api]", "{}")
         self.refused(self.tables("post_create = 3"), "[repos.api]", "post_create")
@@ -86,21 +88,17 @@ class ReposTest(unittest.TestCase):
         text = f'[repos.api]\npath = "{shop / "api"}"\n[repos.web]\npath = "{shop / "web"}"\n'
         project = f'umbrella = "{shop}"\nworktrees = "{shop / "worktrees"}"'
         p = self.load(text, home=shop / "home", project=project)
-        self.assertEqual(list(p.cfg["repos"]), ["api", "web"])
+        assert list(p.cfg["repos"]) == ["api", "web"]
         self.refused(text, "api", home=shop / "api" / "home", project=project)
 
     def test_one_repo_as_today(self) -> None:
         api = self.root / "api"
         home = api / "home"
         p = Project.load(self.write("", home=home, project=f'repo = "{api}"'))
-        self.assertEqual(p.repo, api)
+        assert p.repo == api
         text = f'[repos.api]\npath = "{api}"\n[repos.api.merge]\nstrategy = "merge"\n'
         p = self.load(text, home=home)
-        self.assertEqual(p.repo, api)
-        self.assertEqual(p.get("merge", "strategy"), "squash")
+        assert p.repo == api
+        assert p.get("merge", "strategy") == "squash"
         p = self.load(f'[repos.api]\npath = "{api}"\nmain = 3\n', home=home)
-        self.assertEqual(p.get("project", "main"), "3")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert p.get("project", "main") == "3"

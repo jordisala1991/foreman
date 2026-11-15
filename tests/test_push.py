@@ -2,18 +2,22 @@
 and a bare origin come from test_github."""
 
 import subprocess
-import unittest
 
+import pytest
 from helpers import Env, git
 from test_github import GH
 
 from fm import backlog, loop
 
 
-class Pushes(unittest.TestCase):
+class TestPushes:
+    @pytest.fixture(autouse=True)
+    def keep_request(self, request):
+        self.request = request  # for the cleanups of helpers
+
     def make(self, extra: str = "", **kw) -> GH:
         g = GH(extra, **kw)
-        self.addCleanup(g.close)
+        self.request.addfinalizer(g.close)
         return g
 
     def origin_tip(self, g: GH, tid: str) -> str:
@@ -36,12 +40,12 @@ class Pushes(unittest.TestCase):
         loop.tick(g.e.p)
         self.more_commits(g, tid)
         g.deliver(tid)
-        self.assertNotEqual(self.origin_tip(g, tid), self.local_tip(g, tid))
+        assert self.origin_tip(g, tid) != self.local_tip(g, tid)
         loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, tid), self.local_tip(g, tid))
-        self.assertEqual(g.e.task(tid)["status"], "in review")
-        self.assertFalse(g.e.task(tid).get("blocked"))
-        self.assertFalse(g.state["prs"]["1"]["draft"])
+        assert self.origin_tip(g, tid) == self.local_tip(g, tid)
+        assert g.e.task(tid)["status"] == "in review"
+        assert not g.e.task(tid).get("blocked")
+        assert not g.state["prs"]["1"]["draft"]
 
     def test_a_failing_push_blocks_the_task_with_git_s_error(self):
         g = self.make(test="true")
@@ -53,8 +57,8 @@ class Pushes(unittest.TestCase):
         hook.write_text("#!/bin/sh\necho 'no pushing today' >&2\nexit 1\n")
         hook.chmod(0o755)
         self.ticks(g, 3)
-        self.assertIn("no pushing today", g.e.task(tid)["blocked"])
-        self.assertEqual(g.e.task(tid)["status"], "in review")
+        assert "no pushing today" in g.e.task(tid)["blocked"]
+        assert g.e.task(tid)["status"] == "in review"
 
     def flaky_push(self, g: GH, failures: int, error: str = "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com"):
         """Patches the push so its first `failures` calls fail with `error`; returns the list of push calls."""
@@ -73,7 +77,7 @@ class Pushes(unittest.TestCase):
 
         patcher = mock.patch.object(pulls.proc, "run", run)
         patcher.start()
-        self.addCleanup(patcher.stop)
+        self.request.addfinalizer(patcher.stop)
         return calls
 
     def ticks(self, g: GH, times: int) -> None:
@@ -85,11 +89,11 @@ class Pushes(unittest.TestCase):
         tid = g.work(push=False)
         self.flaky_push(g, 1)
         loop.tick(g.e.p)
-        self.assertFalse(g.e.task(tid).get("blocked"))
-        self.assertEqual(self.origin_tip(g, tid), "")
+        assert not g.e.task(tid).get("blocked")
+        assert self.origin_tip(g, tid) == ""
         loop.tick(g.e.p)
-        self.assertFalse(g.e.task(tid).get("blocked"))
-        self.assertEqual(self.origin_tip(g, tid), self.local_tip(g, tid))
+        assert not g.e.task(tid).get("blocked")
+        assert self.origin_tip(g, tid) == self.local_tip(g, tid)
 
     def test_a_delivered_branch_whose_push_fails_transiently_stays_in_review_and_is_pushed_later(self):
         g = self.make(test="true")
@@ -97,11 +101,11 @@ class Pushes(unittest.TestCase):
         g.deliver(tid)
         self.flaky_push(g, 1)
         loop.tick(g.e.p)
-        self.assertFalse(g.e.task(tid).get("blocked"))
-        self.assertEqual(g.e.task(tid)["status"], "in review")
+        assert not g.e.task(tid).get("blocked")
+        assert g.e.task(tid)["status"] == "in review"
         loop.tick(g.e.p)
-        self.assertEqual(self.origin_tip(g, tid), self.local_tip(g, tid))
-        self.assertFalse(g.e.task(tid).get("blocked"))
+        assert self.origin_tip(g, tid) == self.local_tip(g, tid)
+        assert not g.e.task(tid).get("blocked")
 
     def test_the_local_provider_pushes_nothing(self):
         e = Env(test="true")
@@ -113,9 +117,9 @@ class Pushes(unittest.TestCase):
             f.write("# change\n")
         git(wt, "commit", "-qam", "change")
         loop.tick(e.p)
-        self.assertFalse((e.tmp / "never.git").exists())
-        self.assertFalse(e.task(tid).get("blocked"))
-        self.assertFalse(e.task(tid).get("retry_count"))
+        assert not (e.tmp / "never.git").exists()
+        assert not e.task(tid).get("blocked")
+        assert not e.task(tid).get("retry_count")
 
     def test_any_provider_call_failing_transient_three_times_blocks_with_the_error(self):
         g = self.make(test="true")
@@ -125,11 +129,11 @@ class Pushes(unittest.TestCase):
         g.set(fail_always=["api", "graphql"])
         self.ticks(g, 2)
         i = g.e.task(tid)
-        self.assertEqual((i["retry_count"], bool(i.get("blocked"))), (2, False))
+        assert (i["retry_count"], bool(i.get("blocked"))) == (2, False)
         self.ticks(g, 1)
         i = g.e.task(tid)
-        self.assertIn("api graphql", i["blocked"])
-        self.assertEqual(i["retry_count"], 0)
+        assert "api graphql" in i["blocked"]
+        assert i["retry_count"] == 0
 
     def test_a_provider_call_failing_once_then_working_resets_the_count(self):
         g = self.make(test="true")
@@ -138,10 +142,10 @@ class Pushes(unittest.TestCase):
         g.deliver(tid)
         g.set(fail_once=["api", "graphql"])
         self.ticks(g, 1)
-        self.assertEqual(g.e.task(tid)["retry_count"], 1)
+        assert g.e.task(tid)["retry_count"] == 1
         self.ticks(g, 1)
         i = g.e.task(tid)
-        self.assertEqual((i["retry_count"], i["retry_error"], bool(i.get("blocked"))), (0, "", False))
+        assert (i["retry_count"], i["retry_error"], bool(i.get("blocked"))) == (0, "", False)
 
     def test_a_branch_that_diverged_from_origin_is_not_force_pushed(self):
         g = self.make(test="true")
@@ -150,9 +154,5 @@ class Pushes(unittest.TestCase):
         git(g.e.repo.parent / g.e.task(tid)["worktree"], "commit", "-q", "--amend", "-m", "rewritten")
         g.deliver(tid)
         self.ticks(g, 3)
-        self.assertEqual(self.origin_tip(g, tid), remote_tip)
-        self.assertTrue(g.e.task(tid)["blocked"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.origin_tip(g, tid) == remote_tip
+        assert g.e.task(tid)["blocked"]
