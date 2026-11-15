@@ -561,7 +561,7 @@ class Version(unittest.TestCase):
         install_fm(self, self.a)
         loop.forever([str(self.p.home)], once=True)
         hb = util.read_json(self.p.state / "loop.json", {})
-        self.assertEqual((hb["version"], hb["pinned"]), (launcher.ROOT.name, True))
+        self.assertEqual(hb["version"], launcher.ROOT.name)
 
 
 if __name__ == "__main__":

@@ -249,7 +249,7 @@ def launch_free(p: Project) -> None:
 def beat(p: Project, step: str) -> None:
     util.write_json(
         p.state / "loop.json",
-        {"pid": os.getpid(), "time": util.now(), "epoch": time.time(), "step": step, "version": launcher.ROOT.name, "pinned": bool(launcher.pinned())},
+        {"pid": os.getpid(), "time": util.now(), "epoch": time.time(), "step": step, "version": launcher.ROOT.name},
     )
 
 

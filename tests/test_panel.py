@@ -11,6 +11,8 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
+from helpers import install_fm, version_folder
+
 from fm import backlog, launcher, panel, util
 from fm.config import Project, register
 
@@ -95,6 +97,8 @@ class PanelTest(unittest.TestCase):
         self.assertIn("loop-dead", [f["key"] for f in d["findings"]])
         self.assertEqual(len(d["metrics"]), 2)
         self.assertEqual(d["versions"], {"loop": None, "panel": launcher.ROOT.name, "installed": None})
+        install_fm(self, version_folder(Path(self.tmp.name), "ccc"))  # helpers' HOME: never the machine's own record
+        self.assertEqual(self.call("/api/system?p=demo")[1]["versions"]["installed"], "ccc")
         util.write_json(self.p.state / "loop.json", {"version": "aaa"})
         self.assertEqual(self.call("/api/system?p=demo")[1]["versions"]["loop"], "aaa")
         self.assertEqual(self.call("/api/state?p=nope")[0], 404)

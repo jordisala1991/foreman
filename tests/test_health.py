@@ -219,17 +219,21 @@ class Versions(unittest.TestCase):
         self.p = self.e.p
 
     def test_health_shows_the_versions(self):
-        util.write_json(self.p.state / "loop.json", {"version": "aaa", "pinned": False})
+        util.write_json(self.p.state / "loop.json", {"version": "aaa"})
         install_fm(self, version_folder(self.e.tmp / "cache", "ccc"))
         self.assertIn(f"versions: this command {launcher.ROOT.name} · the loop aaa · installed ccc\n", fm(self.p.home, "health"))
 
-    def test_a_launched_loop_without_an_install_is_reported(self):
-        util.write_json(self.p.state / "loop.json", {"version": "aaa", "pinned": True})
-        lines = health.versions(self.p)
-        self.assertTrue(lines[0].endswith("installed none"))
-        self.assertTrue(lines[1].startswith("! fm@fm cannot start the loop and the panel: fm@fm is not installed"), lines)
-        util.write_json(self.p.state / "loop.json", {"version": "aaa", "pinned": False})
-        self.assertEqual(len(health.versions(self.p)), 1)  # a loop run by hand needs no install
+    def test_without_an_install_health_says_the_jobs_cannot_start(self):
+        """Whether or not a loop ever ran from the plugin: a job that exits at once writes no heartbeat."""
+        for hb in (None, [], {"version": "aaa"}):
+            (self.p.state / "loop.json").unlink(missing_ok=True)
+            if hb is not None:
+                util.write_json(self.p.state / "loop.json", hb)
+            lines = health.versions(self.p)
+            self.assertTrue(lines[0].endswith("installed none"))
+            self.assertTrue(lines[1].startswith("! fm@fm cannot start the loop and the panel: fm@fm is not installed"), lines)
+        install_fm(self, version_folder(self.e.tmp / "cache", "ccc"))
+        self.assertEqual(len(health.versions(self.p)), 1)
 
 
 if __name__ == "__main__":
