@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from .. import evidence, proc, util
 from ..inline import Review
-from . import Change, ChangeState, Conflict, Permanent, Provider, ProviderError, Published, Transient, ghreview
+from . import Change, ChangeState, Conflict, FailedCheck, Permanent, Provider, ProviderError, Published, Transient, ghreview
 from .checks import down, open_prs, pull
 
 POLL = 20  # seconds a pending (or no-checks) CI answer is reused: one read serves every task of a poll
@@ -212,6 +212,11 @@ class GitHub(Provider):
             e = util.read_json(self.p.state / "pr_ci.json", {}).get(pr)
         return e["ci"] if e and e["head"] == head else "pending"  # GitHub has not shown this commit yet
 
+    def failed_checks(self, change: Change) -> list[FailedCheck]:
+        """The failing checks the last CI read stored for this tip (no call to GitHub)."""
+        e = util.read_json(self.p.state / "pr_ci.json", {}).get(str(change.pr))
+        return [FailedCheck(f["name"], f["url"]) for f in e.get("failed", [])] if e and e["head"] == change.head else []
+
     def graphql(self, query: str, *fields: str) -> object:
         r = self.run("gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}", *fields, "-f", f"query={query}")
         try:
@@ -222,7 +227,9 @@ class GitHub(Provider):
     def refresh(self, pr: str) -> None:
         """One GraphQL call: head commit and check state of every open PR into state/pr_ci.json; then, if `pr` is not among
         them, one more for that PR."""
-        fields = "number headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+        checks = "... on CheckRun { name conclusion detailsUrl } ... on StatusContext { context state targetUrl }"
+        rollup = f"statusCheckRollup {{ state contexts(first: 50) {{ nodes {{ __typename {checks} }} }} }}"
+        fields = f"number headRefOid commits(last: 1) {{ nodes {{ commit {{ {rollup} }} }} }}"
         found = open_prs(
             self.graphql(
                 "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) "

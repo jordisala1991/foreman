@@ -31,6 +31,7 @@ SCOPE = {  # a review of one fix only (decide.RULES), in the same brief slot as 
     "reject": "7. **This review checks only the agent's fix to the owner's note** (in «The owner's notes»): `git diff $base $tip`.",
     "conflict": "7. **This review checks only the agent's resolution of a conflict with $main**: `git diff $base $tip`, where `$base` is git's "
     "automatic merge, so the diff is only what the agent changed.",
+    "failing": "7. **This review checks only the agent's fix of failing tests or CI**: `git diff $base $tip`.",
 }
 
 

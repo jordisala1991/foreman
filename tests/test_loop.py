@@ -309,7 +309,7 @@ class Queue(unittest.TestCase):
         tid = self.deliver(e)
         loop.tick(e.p)
         c = e.task(tid)["check"]
-        self.assertEqual((e.task(tid)["status"], c["risk"]), ("in review", "high"))
+        self.assertEqual((e.task(tid)["status"], c["risk"]), ("in progress", "high"))  # returned to its agent (FN-67)
         self.assertTrue(any("tests fail" in r for r in c["reasons"]))
 
     def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self):

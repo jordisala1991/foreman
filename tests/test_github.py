@@ -47,7 +47,9 @@ FAKE_GH = textwrap.dedent("""\
         import subprocess
         def node(n, pr):
             sha = subprocess.run(["git", "ls-remote", "origin", "refs/heads/" + pr["head"]], capture_output=True, text=True).stdout.split()[:1]
-            roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]]}
+            runs = [{"__typename": "CheckRun", "name": c, "conclusion": "FAILURE", "detailsUrl": u} for c, u in s.get("failed", [])]
+            runs.append({"__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "detailsUrl": "https://ci/build"})
+            roll = None if s["ci"] == "none" else {"state": {"pass": "SUCCESS", "fail": "FAILURE", "pending": "PENDING"}[s["ci"]], "contexts": {"nodes": runs}}
             return {"number": int(n), "headRefOid": sha[0] if sha else "", "commits": {"nodes": [{"commit": {"statusCheckRollup": roll}}]}}
         one = [x for x in a if x.startswith("number=")]
         if one:  # a PR on its own, open or not
@@ -427,7 +429,7 @@ class Pulls(unittest.TestCase):
         c = g.e.task(tid)["check"]
         self.assertEqual((c["risk"], c["ci"]), ("high", "fail"))
         self.assertIn("CI fails [ci]", c["reasons"])
-        self.assertEqual(g.e.task(tid)["status"], "in review")
+        self.assertEqual(g.e.task(tid)["status"], "in progress")  # returned to its agent (FN-67)
 
     def test_ci_replaces_the_local_test_without_a_test_command(self):
         for ci, tests in (("pass", "pass"), ("fail", "fail"), ("none", "none")):
@@ -450,7 +452,7 @@ class Pulls(unittest.TestCase):
         self.assertEqual(g.e.task(tid)["check"]["ci"], "pass")
 
     def test_autonomy_merges_only_with_green_ci(self):
-        for ci, status in (("none", "in review"), ("pending", "in review"), ("fail", "in review"), ("pass", "done")):
+        for ci, status in (("none", "in review"), ("pending", "in review"), ("fail", "in progress"), ("pass", "done")):
             g = self.make(test="true", autonomy="medium")
             g.set(ci=ci)
             tid = g.work()

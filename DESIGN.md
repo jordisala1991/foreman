@@ -122,6 +122,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
    dependencies, the paths it touches, conflicts with main, the review's verdict → risk `low|medium|high` with
    reasons. A branch that conflicts with main waits, shown, until someone wants it merged (the owner's accept or the
    autonomy): then it goes back to its agent with a note to merge main, and merges once resolved without a new accept.
+   A branch whose tests or CI fail is returned to its agent with the last lines of the test output or each failing
+   CI check's name and link, twice in a row at most; the third failure waits for the owner.
    If the project's autonomy allows the risk, it merges (`git merge --no-ff` into the main checkout),
    removes the worktree and branch and closes the task.
 6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
@@ -142,9 +144,10 @@ on). The heartbeat is written before every step, so a long test run does not loo
 Each tick, for a task in review (not accepted, not blocked), in this order. The decisions are pure functions in
 `fm/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
 
-A review runs only when its result goes somewhere: to the agent (rounds 1-2, an owner reject, a conflict resolution)
+A review runs only when its result goes somewhere: to the agent (rounds 1-2, an owner reject, a conflict resolution,
+the fix of failing tests or CI)
 or, once, to the owner when the rounds run out. Each launch event ends with the rule that launched it
-(`rule: rounds 1-2`, `rule: owner reject`, `rule: conflict resolution`: `decide.RULES`).
+(`rule: rounds 1-2`, `rule: owner reject`, `rule: conflict resolution`, `rule: failing tests or CI`: `decide.RULES`).
 
 | Situation | What the loop does | Function | Test |
 |---|---|---|---|
@@ -157,10 +160,13 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 | A new tip after the loop acted on a verdict of the last round, open or clean (`review_for` none) | no review: the verdict holds; what is open stays for the owner; no round 3 runs by itself (after a round-1 verdict, a new tip gets round 2) | `closes_review`, `launch_rule` → `hold` | `test_a_review_closes_after_the_last_round`, `test_after_two_clean_rounds_a_new_tip_launches_nothing`, `test_a_clean_merge_or_a_closed_review_holds`, `test_after_round_two_later_tips_launch_no_review`, `test_a_new_tip_after_a_clean_verdict_gets_a_review` |
 | The agent's fix after `fm reject` | one review of the fix only (`git diff` reviewed tip..new tip), from round 1; open findings back to its agent | `launch_rule` → `reject`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_reject_gets_a_review_of_the_fix_and_open_findings_go_back` |
 | A new tip that merges main resolving a conflict | one review of the resolution only (`git diff` git's automatic merge..new tip), from round 1; open findings back to its agent | `launch_rule` → `conflict`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
+| The agent's fix after failing tests or CI | one review of the fix only (`git diff` failing tip..new tip), from round 1; open findings back to its agent | `launch_rule` → `failing`, `review_base` | `test_the_fix_of_a_failure_gets_a_review_of_only_that_fix`, `test_the_fix_gets_a_review_of_only_that_fix` |
 | CI pending | waits | `waits_for_ci` | `test_pending_ci_waits` |
 | Head, main or CI moved since the last check | checks it again (in the background) | `checks_again` | `test_moved_branch_is_checked_again` |
 | It conflicts with main and nobody said it should merge | waits for the owner; `fm show` and the panel say it conflicts and goes back when accepted | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_waiting_task_that_conflicts_stays_and_says_so` |
 | It conflicts and the owner accepted it (also a merge refused for a conflict) or the autonomy would merge it | back to its agent for the conflict, keeping that accept (`resolving`) | `after_check` → `conflict`, `conflict_note` | `test_conflict_goes_back`, `test_conflict_waits_unless_someone_wants_the_merge` |
+| Tests or CI fail, returned fewer than 2 times in a row (`failure_streak`; a check without failures ends the row) | returned to its agent with the failing output or checks, whoever wants the merge; keeps its check (the panel shows why) and counts `failures` | `after_check` → `failing`, `failing_note` | `test_failing_tests_or_ci_go_back_up_to_the_cap`, `test_failing_note_names_the_output_and_the_checks`, `test_failing_tests_go_back_with_the_output`, `test_failing_ci_goes_back_with_each_check`, `test_a_green_check_ends_the_row` |
+| Tests or CI fail a third time in a row | waits for the owner, the failure shown in its check | `after_check` → `owner` | `test_failing_tests_or_ci_go_back_up_to_the_cap`, `test_the_third_failure_waits_for_the_owner` |
 | Resolved, no findings open, checks green, with the owner's accept kept | merges without a new accept (an accept the autonomy made is decided again: high never merges alone) | `after_check` → `merge` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
 | The resolution's review leaves findings open, tests fail or CI is not green | the kept accept lapses; waits for the owner | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_resolution_left_open_waits_for_the_owner` |
 | Autonomy allows the risk, no open findings, CI green where the provider has CI | merges alone | `after_check` → `merge` | `test_autonomy_merges_alone` |
@@ -362,8 +368,8 @@ The panel's TypeScript is out of this (a dependency check there can come later).
 ## Watching itself
 
 Metrics per task (`fm metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; planning_usd of planning sessions and responsible_usd of responsible sessions, from `session_kinds`; review rounds), time to review and to
-done, rework (rejected), nudges (stopped without finishing), questions to the owner, guard stops, risk, and what
-misled its agents (their `--misled` words, per agent).
+done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (stopped without finishing),
+questions to the owner, guard stops, risk, and what misled its agents (their `--misled` words, per agent).
 
 Health checks (`fm/health.py`), each finding a triage task, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its

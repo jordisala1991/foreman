@@ -8,7 +8,13 @@ from typing import Any, NamedTuple
 
 from .risk import allows
 
-RULES = {"round": "rounds 1-2", "reject": "owner reject", "conflict": "conflict resolution"}  # why a review is launched
+RULES = {  # why a review is launched
+    "round": "rounds 1-2",
+    "reject": "owner reject",
+    "conflict": "conflict resolution",
+    "failing": "failing tests or CI",
+}
+MAX_FAILURE_RETURNS = 2  # failing tests or CI return a branch this many times in a row; the next failure waits for the owner
 
 
 class Step(NamedTuple):
@@ -35,25 +41,27 @@ class Seen:
     hunter_working: bool
     hunter_ended: bool
     reviewer_ended: bool
-    review_for: str = ""  # `reject`, `conflict`, `none` (the review is closed); "" the rounds
+    review_for: str = ""  # `reject`, `conflict`, `failing`, `none` (the review is closed); "" the rounds
     merge: str = ""  # how the head follows the verdict's tip: `clean` (a merge of main git does alone), `resolved`, ""
     auto: str = ""  # git's automatic merge tree of the verdict's tip and main, when `resolved`
 
 
 def launch_rule(s: Seen) -> str:
     """Why a new tip gets a review (a key of RULES), or "" when nothing would act on it: a clean merge of main keeps the
-    verdict; after an owner reject or a conflict, a review of that fix; a closed review launches nothing."""
+    verdict; after an owner reject, a conflict or failing tests or CI, a review of that fix; a closed review launches
+    nothing."""
     if s.verdict_tip and s.merge == "clean":
         return ""
-    if s.review_for in ("reject", "conflict"):
+    if s.review_for in ("reject", "conflict", "failing"):
         return s.review_for
     return "" if s.review_for == "none" else "round"
 
 
 def review_base(rule: str, s: Seen) -> str:
-    """What the review compares with: git's automatic merge for a conflict resolution, the reviewed tip for a reject's
-    fix, the whole branch otherwise."""
-    return s.auto if rule == "conflict" else s.verdict_tip if rule == "reject" else ""
+    """What the review compares with: git's automatic merge for a conflict resolution, the reviewed tip for the fix of a
+    reject or of failing tests or CI (the failing tip: a check runs only once the verdict is for the head), the whole
+    branch otherwise."""
+    return s.auto if rule == "conflict" else s.verdict_tip if rule in ("reject", "failing") else ""
 
 
 def review_step(seen: Seen, v: Mapping[str, Any], max_rounds: int) -> Step:
@@ -102,6 +110,25 @@ def conflict_note(main: str) -> str:
     )
 
 
+def failing_note(c: Mapping[str, Any], pr_url: str) -> str:
+    """The note for an agent whose branch fails its checks: the last lines of the test output, each failing CI check."""
+    note = "Your branch fails its checks. "
+    if c.get("tests_output"):
+        note += f"The test command fails; last lines of its output:\n```\n{c['tests_output']}\n```\n"
+    elif c.get("tests") == "fail":
+        note += "The tests fail and print nothing (the test command, or the PR's CI when there is no test command).\n"
+    failed: list[Mapping[str, str]] = c.get("failed_checks") or []
+    if failed:
+        note += "The PR's CI fails:\n" + "".join(f"- {f['name']}: {f['url']}\n" for f in failed)
+    elif c.get("ci") == "fail":
+        note += f"The PR's CI fails and GitHub names no failing check: see {pr_url}\n"
+    return note + "Fix it, run the tests, and run `fm done` again."
+
+
+def failing(c: Mapping[str, Any]) -> bool:
+    return c.get("tests") == "fail" or c.get("ci") == "fail"
+
+
 def waits_for_ci(ci: str) -> bool:
     return ci == "pending"
 
@@ -112,12 +139,16 @@ def checks_again(c: Mapping[str, Any], head: str, main_head: str, ci: str | None
     return c.get("head") != head or c.get("main") != main_head or (ci is not None and c.get("ci") != ci)
 
 
-def after_check(c: Mapping[str, Any], autonomy: str, has_ci: bool, resolving: str = "") -> str:
-    """It wants to merge when no finding is open, tests do not fail, the CI passed (when the provider has CI), and either
-    the owner's accept carried over a conflict (`resolving`) or the autonomy lets this risk in (quality is not risk, but
-    unresolved quality waits for the owner; an accept the autonomy made is decided again, so high never merges alone).
-    Wanted and conflicting: `conflict`, back to its agent; wanted: `merge`; else `owner`: a conflict nobody said should
-    merge waits, shown in its check."""
+def after_check(c: Mapping[str, Any], autonomy: str, has_ci: bool, resolving: str = "", failed: int = 0) -> str:
+    """Failing tests or CI go back to its agent (`failing`), whoever wants the merge, unless they already went back
+    `failed` (MAX_FAILURE_RETURNS) times in a row: then the owner sees them. Otherwise it wants to merge when no finding
+    is open, tests do not fail, the CI passed (when the provider has CI), and either the owner's accept carried over a
+    conflict (`resolving`) or the autonomy lets this risk in (quality is not risk, but unresolved quality waits for the
+    owner; an accept the autonomy made is decided again, so high never merges alone). Wanted and conflicting:
+    `conflict`, back to its agent; wanted: `merge`; else `owner`: a conflict nobody said should merge waits, shown in
+    its check."""
+    if failing(c) and failed < MAX_FAILURE_RETURNS:
+        return "failing"
     wants = (
         not str(c.get("review", "")).startswith("open")
         and c.get("tests") != "fail"

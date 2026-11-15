@@ -8,7 +8,7 @@ Accepting only records the decision; the merge step (`merge_accepted`, through t
 and the task closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -110,9 +110,10 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     main = p.get("project", "main")
     commits = pulls.commits_of(p, branch)
     head = pulls.head_of(p, branch)
-    tests, _ = tests_at(p, head, tid.lower())
+    tests, out = tests_at(p, head, tid.lower())
     if ci is None:
         ci = registry.get(p).ci(pulls.change_of(i, head)) if i.get("pr") else ""
+    failed = registry.get(p).failed_checks(pulls.change_of(i, head)) if ci == "fail" else []
     if tests == "none" and ci in ("pass", "fail"):  # no test command: the PR's CI stands in for it
         tests = ci
     files = diff_stat(p, branch)
@@ -123,7 +124,9 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci))
     c = {
         "tests": tests,
+        "tests_output": out,
         "ci": ci,
+        "failed_checks": [asdict(f) for f in failed],
         "files": len(files),
         "lines": sum(f["added"] + f["deleted"] for f in files),
         "paths": [f["path"] for f in files][:30],

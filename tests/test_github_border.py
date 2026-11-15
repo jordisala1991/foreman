@@ -44,7 +44,14 @@ class Border(unittest.TestCase):
         def answer(*nodes):
             return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
 
-        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass"}})
+        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass", "failed": []}})
+        runs = [
+            {"__typename": "CheckRun", "name": "lint", "conclusion": "FAILURE", "detailsUrl": "https://ci/lint"},
+            {"__typename": "StatusContext", "context": "deploy", "state": "ERROR", "targetUrl": "https://ci/deploy"},
+            {"__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "detailsUrl": "https://ci/build"},
+        ]
+        failed = github.open_prs(answer(node({"state": "FAILURE", "contexts": {"nodes": runs}})))["1"]["failed"]
+        self.assertEqual(failed, [{"name": "lint", "url": "https://ci/lint"}, {"name": "deploy", "url": "https://ci/deploy"}])
         self.assertEqual(github.open_prs(answer(node(None)))["1"]["ci"], "none")
         for bad in (answer({"number": "1"}), answer("x")):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
