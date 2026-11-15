@@ -4,7 +4,7 @@ what that step said (`apply_review`). The decisions themselves are in fm/decide.
 from pathlib import Path
 from typing import Any
 
-from . import backlog, decide, delivery, reviews, sessions
+from . import backlog, decide, delivery, reviews, scratch, sessions
 from .agents import Scope, idle_s, launch_reviewer, running
 from .config import Project
 from .talk import NUDGE_IDLE_S, return_to_agent
@@ -61,3 +61,16 @@ def ended(a: dict[str, Any], rows: dict[str, Any]) -> bool:
 def block_review(p: Project, tid: str, why: str) -> None:
     backlog.update(p, tid, blocked=why)
     backlog.event(p, tid, f"blocked: {why}")
+
+
+def sweep_scratch(p: Project, rows: dict[str, Any]) -> None:
+    """Removes the scratch folders no live review owns; an unreadable session listing (no rows) removes nothing."""
+    if not rows:
+        return
+    keep: set[Path] = set()
+    for i in backlog.tasks(backlog.load(p)):
+        launches = [(i.get("hunter"), "hunter"), (i.get("reviewer"), "reviewer"), *((a, "reviewer") for a in i.get("reviewers", []))]
+        for a, role in launches:
+            if a and (not a.get("session") or (sessions.state(rows, a["session"]) not in ("stopped", "gone") and not ended(a, rows))):
+                keep.add(scratch.folder(p, i["id"], a["round"], a["tip"], role))
+    scratch.sweep(p, keep)

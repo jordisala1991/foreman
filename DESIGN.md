@@ -267,6 +267,7 @@ so what it could not refute stays in To fix. What was dropped goes under Noted a
 decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`decide.review_step`);
 round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
 round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
+Each review session gets its own `<home>/scratch/ID-rN-<tip>-ROLE/`, told in its brief as `$scratch`; the loop removes it on the first tick where no live session owns it.
 
 The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health finding and changes nothing else: read-only by its
 brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/diagnosis.py`)
@@ -553,7 +554,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | ui | `cli*`, `panel*` | the owner's and the agents' entry points; call the loop and below |
 | loop | `loop` | the process that ticks: does the I/O, calls the core |
 | steps | `sources`, `talk`, `mechanic`, `health`, `metrics` | one step of a tick, or a view over several pieces |
-|| services | `agents`, `delivery`, `pulls`, `sessions`, `lock` || the outside world: git, gh, claude, processes |
+|| services | `agents`, `scratch`, `delivery`, `pulls`, `sessions`, `lock` || the outside world: git, gh, claude, processes |
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |

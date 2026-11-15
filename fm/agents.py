@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from . import backlog, costs, decide, delivery, lock, sessions, tasktypes, util
+from . import backlog, costs, decide, delivery, lock, scratch, sessions, tasktypes, util
 from .config import Project
 from .reviews import review_round
 
@@ -238,8 +238,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
     name = f"{i['id'].lower()}-{'hunt' if role == 'hunter' else 'review'}"
     model = p.get("agents", "review_model")
     effort = p.get("agents", "review_effort")
-    hunt: dict[str, Any] = i.get("hunter") or {}
-    hunter_file = str(hunt["file"]) if role == "reviewer" else str(review_file(p, i, tip, "hunter"))
+    hunter_file = str(i["hunter"]["file"]) if role == "reviewer" else str(review_file(p, i, tip, "hunter"))
     out = review_file(p, i, tip, role)
     out.parent.mkdir(parents=True, exist_ok=True)
     extra: dict[str, Any] = {
@@ -248,6 +247,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         "tip": tip,
         "hunter_file": hunter_file,
         "review_file": str(out),
+        "scratch": str(scratch.make(p, i["id"], rnd, tip, role)),
         "round2": (HUNTER_ROUND2 if role == "hunter" else ROUND2) if rnd > 1 else "",
         "base": scope.base,
         "previous": prev.get("file", ""),
