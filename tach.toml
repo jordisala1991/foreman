@@ -54,6 +54,9 @@ layer = "steps"
 path = "fm.mechanic"
 layer = "steps"
 [[modules]]
+path = "fm.parents"
+layer = "steps"
+[[modules]]
 path = "fm.health"
 layer = "steps"
 [[modules]]
@@ -156,4 +159,7 @@ path = "fm.editing"
 layer = "core"
 [[modules]]
 path = "fm.blockers"
+layer = "core"
+[[modules]]
+path = "fm.homesetup"
 layer = "core"

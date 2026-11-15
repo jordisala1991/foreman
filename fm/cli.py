@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, backlog, blockers, decide, delivery, editing, guard, health, lock, loop, metrics, providers, sessions, subtasks, util
+from . import agents, backlog, blockers, decide, delivery, editing, guard, health, homesetup, lock, loop, metrics, providers, sessions, subtasks, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -18,30 +18,19 @@ from .config import Project, register
 
 def cmd_init(a: argparse.Namespace) -> None:
     h = Path(a.home or ".").resolve()
-    h.mkdir(parents=True, exist_ok=True)
-    if not (h / "fm.toml").exists():
-        (h / "fm.toml").write_text(
-            f'[project]\nname = "{h.name}"\nprefix = "{a.prefix}"\nrepo = "{a.repo}"\nmain = "main"\n\n'
-            '[agents]\nslots = 2\nmodel = "sonnet"\neffort = "medium"\n'
-            'planning_model = "sonnet"\nplanning_effort = "high"\nreview_model = "sonnet"\nreview_effort = "high"\n\n'
-            '[merge]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nstrategy = "squash"  # squash | merge\ntest = ""\n',
-            encoding="utf-8",
-        )
-    p = Project.load(h)
-    if not p.backlog_file.exists():
-        util.write_json(p.backlog_file, backlog.empty())
+    for line in homesetup.init(h, a.prefix, a.repo):
+        print(line)
     register(h)
-    print(f"project {p.name} at {h} (registered)")
+    print(f"project {Project.load(h).name} at {h} (registered)")
 
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "triage" if a.triage else "backlog"
-    if a.parent and os.environ.get("FM_TASK"):
-        sys.exit("fm: subtasks are filed by the owner, not from an agent's session")
+    status = "triage" if a.triage or (a.parent and os.environ.get("FM_TASK")) else "backlog"  # a parent agent's waits for a Go
     tasks = backlog.tasks(backlog.load(p))
     ids = blockers.ids(a.blocked_by or [])
-    if why := (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids):
+    by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FM_TASK", ""), a.parent, "subtasks are filed")
+    if why := by_agent or (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids):
         sys.exit(f"fm: {why}")
     tid = backlog.add(
         p,
@@ -60,15 +49,14 @@ def cmd_add(a: argparse.Namespace) -> None:
 
 
 def cmd_edit(a: argparse.Namespace) -> None:
-    if os.environ.get("FM_TASK"):
-        sys.exit("fm: tasks are edited by the owner, not from an agent's session")
     p = home(a)
     fields: dict[str, Any] = {f: v for f in editing.FIELDS if (v := getattr(a, f))}
     if a.blocked_by:
         fields["blocked_by"] = blockers.ids(a.blocked_by)
     with backlog.edit(p) as d:
         i = backlog.get(d, a.id)
-        if why := editing.refusal(i, fields, backlog.tasks(d)):
+        by_agent = subtasks.agent_refusal(backlog.tasks(d), os.environ.get("FM_TASK", ""), i.get("parent", ""), "tasks are edited")
+        if why := by_agent or editing.refusal(i, fields, backlog.tasks(d)):
             sys.exit(f"fm: {why}")
         old = dict(i)
         new = editing.edited(i, fields)
@@ -105,7 +93,7 @@ def cmd_show(a: argparse.Namespace) -> None:
     if wait := blockers.pending(i, backlog.tasks(d)):
         i = {**i, "waiting_for": wait}
     if subs := subtasks.of(backlog.tasks(d), a.id):
-        i = {**i, "subtasks": [{"id": s["id"], "status": s["status"], "title": s["title"]} for s in subs]}
+        i = {**i, "subtasks": [subtasks.summary(s, backlog.open_questions(d, s["id"]), backlog.tasks(d)) for s in subs]}
     print(json.dumps(i, indent=2, ensure_ascii=False))
 
 
@@ -248,7 +236,7 @@ def cmd_panel(a: argparse.Namespace) -> None:
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
-    fm_bin = str(Path(__file__).resolve().parent.parent / "bin/fm")
+    fm_bin = str(homesetup.FM_BIN)
     jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
     for job, args in jobs.items():
         text = loop.launchd_plist(fm_bin, job, args)

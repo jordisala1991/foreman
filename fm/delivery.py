@@ -259,10 +259,11 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
 
 
 def settle_parent(p: Project, tid: str) -> None:
-    """A parent closes by itself once its subtasks have: done if any is done, else canceled."""
+    """A parent closes by itself once its subtasks have: done if any is done, else canceled. One with an agent closes
+    only by that agent's `fm done`."""
     d = backlog.load(p)
     parent = backlog.get(d, tid).get("parent")
-    if not parent or backlog.get(d, parent)["status"] in backlog.CLOSED:
+    if not parent or backlog.get(d, parent)["status"] in backlog.CLOSED or backlog.get(d, parent).get("agent"):
         return
     if status := subtasks.outcome(subtasks.of(backlog.tasks(d), parent)):
         backlog.set_status(p, parent, status, "its subtasks are closed")

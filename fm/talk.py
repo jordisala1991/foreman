@@ -11,7 +11,7 @@ NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this lon
 
 def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
     """What an agent is told about a delivered answer, by its kind."""
-    if q.get("kind") in ("conflict", "failing", "review"):
+    if q.get("kind") in ("conflict", "failing", "review", "subtask"):
         return q["answer"]
     elif q.get("kind") == "rejection":
         return f"The owner rejected task {i['id']}: «{q['answer']}». Fix it, review again if you change much, and run `fm done` again."

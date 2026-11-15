@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import backlog, diagnosis, util
+from . import backlog, diagnosis, parents, util
 from .cli_common import home, mine
 
 
@@ -19,6 +19,10 @@ def cmd_ask(a: argparse.Namespace) -> None:
 def cmd_done(a: argparse.Namespace) -> None:
     p = home(a)
     tid = mine(a)
+    agent: dict[str, str] = backlog.get(backlog.load(p), tid).get("agent") or {}
+    if agent.get("kind") == "parent":
+        print(f"{tid} is closed as {parents.finish(p, tid, a.summary)}. End your turn.")
+        return
     report = {"summary": a.summary, "file": a.report or "", "confused": a.misled or "", "at": util.now()}
     backlog.set_status(p, tid, "in review", a.summary, report=report, blocked="")
     backlog.record_misled(p, tid, "responsible", a.misled)

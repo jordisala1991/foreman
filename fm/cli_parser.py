@@ -22,7 +22,7 @@ def _filing(c: Command) -> None:
     s.add_argument("--detail")
     s.add_argument("--goal")
     s.add_argument("--criteria")
-    s.add_argument("--parent", help="file it as a subtask of this task (owner only, before it starts)")
+    s.add_argument("--parent", help="file it as a subtask of this task (the owner, or the parent's own agent; before it starts)")
     blocked_by(s)
     s.add_argument("--ready", action="store_true")
     s.add_argument("--triage", action="store_true")
