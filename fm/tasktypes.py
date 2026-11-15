@@ -9,7 +9,7 @@ TYPES = ("change", "bug", "mechanical", "definition")
 DEFAULT = "change"
 
 PARAGRAPHS = {
-    "bug": "First reproduce the bug with a test that fails, and name its cause in the report. The plan orders the work that way and the review checks both.",
+    "bug": "First reproduce the bug with a test that fails, and name its cause in the report.",
     "mechanical": "No design decisions: the diff is the proof.",
     "definition": "The PR changes only documents: the definition goes in DESIGN.md and the drafts of the subtasks go in the report, without filing them.",
 }
