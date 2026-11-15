@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, delivery, health, homesetup, lock, loop, metrics, providers, schedule, sessions, util
+from . import agents_running, delivery, health, homesetup, lock, loop, metrics, providers, schedule, sessions, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -119,7 +119,7 @@ def cmd_review(a: argparse.Namespace) -> None:
             sys.exit(f"fm: {a.id} is not in review")
         if i.get("accepted"):
             sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
-        if agents.review_running(i):
+        if agents_running.review_running(i):
             sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
         for k in ("review", "hunter", "reviewer", "check", "review_for"):
             i.pop(k, None)

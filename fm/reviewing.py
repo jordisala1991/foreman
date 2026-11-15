@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from . import delivery, scratch, sessions
-from .agents import Scope, idle_s, launch_reviewer, running
+from .agents import Scope, launch_reviewer
+from .agents_running import idle_s, running
 from .core.project.config import Project
 from .core.review import reviews
 from .core.rules import decide

@@ -80,6 +80,9 @@ layer = "steps"
 path = "fm.agents"
 layer = "services"
 [[modules]]
+path = "fm.agents_running"
+layer = "services"
+[[modules]]
 path = "fm.scratch"
 layer = "services"
 [[modules]]

@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from . import agents, proc, sessions, util
-from .agents import idle_s
+from . import agents, agents_running, proc, sessions, util
+from .agents_running import idle_s
 from .core.oversight import diagnosis
 from .core.project.config import Project
 from .core.tasks import backlog
@@ -56,7 +56,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
 
 def run(p: Project, rows: dict[str, Any]) -> None:
     for i in backlog.tasks(backlog.load(p)):
-        if agents.diagnosing(i) and (why := missing_why(i["mechanic"], rows)):
+        if agents_running.diagnosing(i) and (why := missing_why(i["mechanic"], rows)):
             note_missing(p, i["id"], why)
     d = backlog.load(p)
     for i in backlog.tasks(d):
@@ -64,7 +64,7 @@ def run(p: Project, rows: dict[str, Any]) -> None:
             sessions.stop_live(p, i["id"], i["mechanic"], rows)
     if (p.state / "paused").exists():
         return
-    free = int(p.get("agents", "slots")) - agents.running(d)
+    free = int(p.get("agents", "slots")) - agents_running.running(d)
     health = (i for i in backlog.tasks(d) if i["status"] == "triage" and str(i.get("source", "")).startswith("health:"))
     todo = [i for i in health if not i.get("mechanic") and not i.get("diagnosis")]
     for i in todo[: max(0, free)]:

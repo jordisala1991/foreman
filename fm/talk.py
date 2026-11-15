@@ -3,7 +3,8 @@
 from typing import Any
 
 from . import sessions, util
-from .agents import idle_s, send, update_agent
+from .agents import send, update_agent
+from .agents_running import idle_s
 from .core.project.config import Project
 from .core.tasks import backlog, questions
 

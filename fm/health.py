@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from . import delivery, launcher, login, util
-from .agents import idle_s
+from .agents_running import idle_s
 from .core.project import registry
 from .core.project.config import Project
 from .core.tasks import backlog, questions

@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Any
 
 from . import delivery, health, launcher, mechanic, mergecheck, parents, providers, pulls, release, sessions, sources, util
-from .agents import fill_sessions, launch, running
+from .agents import fill_sessions, launch
+from .agents_running import running
 from .core.project.config import Project
 from .core.project.registry import registered
 from .core.rules import decide
