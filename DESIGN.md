@@ -555,7 +555,7 @@ Layers, outside in (`tach.toml`; a module imports its own layer and the ones bel
 | registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
 | ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `decide`, `subtasks`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
+| core | `risk`, `decide`, `subtasks`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `repos`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
 
 Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
