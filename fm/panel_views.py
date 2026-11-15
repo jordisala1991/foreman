@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import health, launcher, metrics, schedule, util
+from . import launcher, util
 from .core.oversight import costs
 from .core.project import registry
 from .core.project.config import Project
@@ -13,6 +13,8 @@ from .core.tasks import backlog, recurring, tasktypes
 from .services import lock
 from .services.claude import sessions
 from .services.delivery import pulls
+from .steps import metrics, schedule
+from .steps.health import checks, main_tests
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
 Obj = dict[str, Any]
@@ -36,7 +38,7 @@ def project(q: dict[str, list[str]]) -> Project:
 
 def loop_beat(p: Project) -> Obj:
     hb = util.read_json(p.state / "loop.json", {})
-    return {"time": hb.get("time"), "alive": not health.loop_dead(p)}
+    return {"time": hb.get("time"), "alive": not checks.loop_dead(p)}
 
 
 def paused(p: Project) -> str | None:
@@ -100,7 +102,7 @@ def task(p: Project, tid: str) -> Obj:
 
 
 def system(p: Project) -> Obj:
-    found = health.findings(p, sessions.listing(p), outside=True)
+    found = main_tests.findings(p, sessions.listing(p), outside=True)
     rows = metrics.per_task(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     entries = schedule.rows(p)

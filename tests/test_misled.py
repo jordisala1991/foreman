@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from helpers import fm
 
-from fm import loop
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.agents import brief
 
 BRIEFS = Path(__file__).resolve().parent.parent / "fm" / "briefs"
@@ -25,7 +25,7 @@ class TestMisled:
     def set_up(self, env):
         self.e = env
         self.tid = backlog.add(self.e.p, "x", status="ready", criteria="y")
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
 
     def misled(self):
         return self.e.task(self.tid).get("misled")

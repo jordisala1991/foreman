@@ -5,9 +5,11 @@ from pathlib import Path
 import pytest
 from helpers import git
 
-from fm import loop, sources, util
+from fm import util
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.delivery import check
+from fm.steps import sources
 
 
 class TestSignals:
@@ -29,7 +31,7 @@ class TestSignals:
     def running(self):
         """A task with a launched agent."""
         tid = backlog.add(self.p, "work", status="ready", criteria="x")
-        loop.tick(self.p)
+        tick.tick(self.p)
         assert self.e.task(tid)["status"] == "in progress"
         return tid
 
@@ -55,7 +57,7 @@ class TestSignals:
         self.emit({"key": "n1", "task": tid, "action": "note", "text": "approved by Ana"})
         self.emit({"key": "n1", "task": tid, "action": "note", "text": "approved by Ana"})  # once
         self.e.set_state(tid.lower(), "done")
-        loop.tick(self.p)
+        tick.tick(self.p)
         resumes = [c for c in self.e.calls() if "--resume" in c["argv"]]
         assert len(resumes) == 1
         assert "approved by Ana" in resumes[0]["argv"][-1]
@@ -74,7 +76,7 @@ class TestSignals:
         check.check(self.p, tid)
         self.emit({"key": "a1", "task": tid, "action": "accept"})
         assert self.e.task(tid)["accepted"]  # as `fm accept`: the decision; the loop merges
-        loop.tick(self.p)
+        tick.tick(self.p)
         assert self.e.task(tid)["status"] == "done"
         assert self.e.task(tid)["commit"]
 
@@ -118,7 +120,7 @@ class TestSignals:
         check.check(self.p, tid)
         self.emit(sig)
         assert self.e.task(tid)["accepted"]
-        loop.tick(self.p)  # the loop's merge step closes it
+        tick.tick(self.p)  # the loop's merge step closes it
         assert self.e.task(tid)["status"] == "done"
         n = len(self.errors())
         self.emit(sig)  # once

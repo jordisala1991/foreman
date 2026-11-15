@@ -200,11 +200,11 @@ class Env:
 
     def hunt_then_review(self, tid: str) -> None:
         """A tick launches the hunter; it writes its file and ends; the next tick launches the reviewer."""
-        from fm import loop
+        from fm.loop import tick
 
-        loop.tick(self.p)
+        tick.tick(self.p)
         self.hunter_done(tid)
-        loop.tick(self.p)
+        tick.tick(self.p)
 
     def review(self, tid: str, open_findings: int = 0) -> None:
         """One tick launches the hunter, which writes its file; the next the reviewer; then its verdict, as `fm verdict` gives it."""

@@ -5,14 +5,17 @@ import json
 import pytest
 from helpers import Env
 
-from fm import health, loop, proc, talk, util
+from fm import proc, util
 from fm.core.tasks import backlog, questions
+from fm.loop import tick
 from fm.services.claude import sessions
+from fm.steps import talk
+from fm.steps.health import checks
 
 
 def launched(e: Env) -> str:
     tid = backlog.add(e.p, "x", status="ready", criteria="y")
-    loop.tick(e.p)
+    tick.tick(e.p)
     return tid
 
 
@@ -31,7 +34,7 @@ class TestResume:
         sid = e.task(tid)["agent"]["session"]
         e.set_state(tid.lower(), "done")  # idle but alive: the fake copies it unless it was stopped first
         answer(e, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["agent"]["session"] == sid
         assert len(rows(e)) == 1
         assert questions.undelivered(backlog.load(e.p)) == []
@@ -45,7 +48,7 @@ class TestResume:
         (e.bin / "copy_next").write_text("")
         e.set_state(tid.lower(), "done")
         answer(e, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["agent"]["session"], i["undelivered"]) == (sid, 1)
         assert any("started a copy" in ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl"))
@@ -67,7 +70,7 @@ class TestResume:
         answer(e, tid)
         old, sessions.STOP_WAIT_TRIES = sessions.STOP_WAIT_TRIES, tries
         try:
-            loop.tick(e.p)
+            tick.tick(e.p)
         finally:
             sessions.STOP_WAIT_TRIES = old
         assert e.task(tid)["undelivered"] == 1
@@ -96,10 +99,10 @@ class TestResume:
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         (e.bin / "copy_next").write_text("")
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["agent"]["nudged"]
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert "even after a nudge" in e.task(tid)["blocked"]
         assert len([r for r in rows(e) if "-mechanic" not in r["name"]]) == 2  # health files the block: a mechanic follows
 
@@ -109,13 +112,13 @@ class TestResume:
         e.set_state(tid.lower(), "done")
         answer(e, tid, "B")
         answer(e, tid, "C")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 2
         assert len(questions.undelivered(backlog.load(e.p))) == 1
-        loop.tick(e.p)  # the session is working now
+        tick.tick(e.p)  # the session is working now
         assert len(e.calls()) == 2
         e.set_state(tid.lower(), "done")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 3
         assert questions.undelivered(backlog.load(e.p)) == []
         assert len(rows(e)) == 1
@@ -138,7 +141,7 @@ class TestResume:
         (e.bin / "fail_resume").write_text("")
         answer(e, tid, "B")
         answer(e, tid, "C")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 2
         assert e.task(tid)["undelivered"] == 1
 
@@ -149,9 +152,9 @@ class TestResume:
         (e.bin / "fail_resume").write_text("")
         answer(e, tid)
         for _ in range(4):
-            loop.tick(e.p)
+            tick.tick(e.p)
         assert len(questions.undelivered(backlog.load(e.p))) == 1
         assert e.task(tid)["blocked"] == ""
         with backlog.edit(e.p) as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
-        assert len(health.answers_undelivered(e.p)) == 1
+        assert len(checks.answers_undelivered(e.p)) == 1

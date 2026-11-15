@@ -7,8 +7,9 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import loop, util
+from fm import util
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.delivery import git as delivery_git
 
 
@@ -21,7 +22,7 @@ def commit(wt: str, name: str, text: str, msg: str = "change") -> None:
 
 def deliver(e: Env, open_findings: int = 0) -> str:
     tid = backlog.add(e.p, "x", status="ready", criteria="y")
-    loop.tick(e.p)
+    tick.tick(e.p)
     commit(e.task(tid)["worktree"], "app.py", "# change\n")
     backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
     e.review(tid, open_findings)
@@ -42,7 +43,7 @@ def main_moves(e: Env) -> None:
 def take_note(e: Env, tid: str) -> None:
     """The agent's turn ends and the next tick delivers the note the loop left for it."""
     e.set_state(tid.lower(), "done")
-    loop.tick(e.p)
+    tick.tick(e.p)
 
 
 def auto_tree(repo: Path, tip: str) -> str:
@@ -99,9 +100,9 @@ class TestRules:
     def test_a_waiting_task_that_conflicts_stays_and_says_so(self):
         e = Env(test="true")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         main_conflicts(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert i["status"] == "in review"
         assert "conflicts" not in i
@@ -111,12 +112,12 @@ class TestRules:
     def accept_into_conflict(self, e: Env) -> tuple[str, str]:
         """Delivered and checked; main conflicts; the owner accepts; the merge sends it back. Returns (task, old tip)."""
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         main_conflicts(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         fm(e.home, "accept", tid)
         old = head(e, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["conflicts"], i["resolving"]) == ("in progress", 1, "owner")
         take_note(e, tid)
@@ -138,7 +139,7 @@ class TestRules:
         assert f"git diff {auto} {head(e, tid)}" in e.calls()[-1]["argv"][-1]
         assert launched(e, tid)[-1].endswith("rule: conflict resolution"), launched(e, tid)
         e.verdict(tid, 0)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["acceptance"]["verdict"]) == ("done", "accepted by owner")
         assert "Merge TY-1" in git(e.repo, "log", "--oneline", "-1")
@@ -149,13 +150,13 @@ class TestRules:
         self.resolve(e, tid)
         e.hunt_then_review(tid)
         e.verdict(tid, 1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "in progress"  # round 1 of the resolution: back to its agent
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# fixed\n")
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert i["status"] == "in review"
         assert not i.get("accepted")
@@ -165,13 +166,13 @@ class TestRules:
     def test_a_clean_merge_of_main_launches_nothing(self):
         e = Env(test="true")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert launched(e, tid)[0].endswith("rule: rounds 1-2"), launched(e, tid)
         before = len(e.calls())
         main_moves(e)
         git(e.repo.parent / e.task(tid)["worktree"], "merge", "-q", "--no-edit", "main")
-        loop.tick(e.p)
-        loop.tick(e.p)
+        tick.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert len(e.calls()) == before
         assert (i["review"]["holds"], i["check"]["head"]) == (head(e, tid), head(e, tid))
@@ -180,17 +181,17 @@ class TestRules:
     def test_after_round_two_later_tips_launch_no_review(self):
         e = Env(test="true")
         tid = deliver(e, open_findings=1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# fix\n")
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert (e.task(tid)["status"], e.task(tid)["review_for"]) == ("in review", "none")
         before = len(e.calls())
         commit(e.task(tid)["worktree"], "app.py", "# again\n")
-        loop.tick(e.p)
-        loop.tick(e.p)
+        tick.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert len(e.calls()) == before
         assert i["review"]["holds"] == head(e, tid)
@@ -199,33 +200,33 @@ class TestRules:
     def test_a_new_tip_after_a_clean_verdict_gets_a_review(self):
         e = Env(test="true")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid).get("review_for", "") == ""
         commit(e.task(tid)["worktree"], "app.py", "# more\n")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["hunter"]["tip"] == head(e, tid)
         assert launched(e, tid)[-1].endswith("rule: rounds 1-2"), launched(e, tid)
 
     def test_after_two_clean_rounds_a_new_tip_launches_nothing(self):
         e = Env(test="true")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         commit(e.task(tid)["worktree"], "app.py", "# more\n")
         e.review(tid, 0)
         assert "Round: 2" in e.calls()[-1]["argv"][-1]
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["review_for"] == "none"
         before = len(e.calls())
         commit(e.task(tid)["worktree"], "app.py", "# again\n")
-        loop.tick(e.p)
-        loop.tick(e.p)
+        tick.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == before
         assert e.task(tid)["review"]["holds"] == head(e, tid)
 
     def test_reject_gets_a_review_of_the_fix_and_open_findings_go_back(self):
         e = Env(test="true")
         tid = deliver(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         old = head(e, tid)
         fm(e.home, "reject", tid, "name it better")
         take_note(e, tid)
@@ -236,6 +237,6 @@ class TestRules:
         assert f"git diff {old} {head(e, tid)}" in brief
         assert "Round: 1" in brief
         assert launched(e, tid)[-1].endswith("rule: owner reject"), launched(e, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["status"] == "in progress"
         assert "leaves 1 open" in " ".join(events(e, tid))

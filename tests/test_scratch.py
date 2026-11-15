@@ -1,7 +1,7 @@
 import re
 
-from fm import loop
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.agents import launch
 from tests.helpers import Env, fm
 
@@ -29,29 +29,29 @@ class TestScratch:
     def test_gone_with_its_verdict(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.review(tid)
-        loop.tick(e.p)
-        loop.tick(e.p)
+        tick.tick(e.p)
+        tick.tick(e.p)
         assert list((e.home / "scratch").iterdir()) == []
 
     def test_gone_when_canceled(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.hunt_then_review(tid)
         fm(e.home, "cancel", tid)
-        loop.tick(e.p)
-        loop.tick(e.p)
+        tick.tick(e.p)
+        tick.tick(e.p)
         assert list((e.home / "scratch").iterdir()) == []
 
     def test_a_folder_no_review_owns_is_swept(self):
         e = Env(test="true")
         dead = e.home / "scratch" / "TY-9-r1-abc123-reviewer"
         dead.mkdir(parents=True)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert not dead.exists()
 
     def test_a_session_unlisted_at_launch_is_swept_with_its_round(self):
@@ -61,8 +61,8 @@ class TestScratch:
         launch.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
         launch.launch_reviewer(e.p, e.task(tid), "abc123")
         mine = e.home / "scratch" / f"{tid}-r1-abc123-reviewer"
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert mine.exists()  # round 1 is not over
         backlog.update(e.p, tid, reviews=[{"tip": "abc123"}])
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert not mine.exists()

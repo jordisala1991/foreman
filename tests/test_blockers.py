@@ -5,8 +5,9 @@ import json
 import pytest
 from helpers import Env, fm
 
-from fm import loop, util
+from fm import util
 from fm.core.tasks import backlog, blockers
+from fm.loop import tick
 from fm.services.delivery import merge
 
 
@@ -55,22 +56,22 @@ class TestBlockers:
     def test_not_launched_until_the_last_blocker_is_done(self, status, started):
         y = self.y("--blocked-by", self.X1, self.X2)
         backlog.set_status(self.e.p, y, status)
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         assert (self.e.calls(), self.e.task(y)["status"]) == ([], status)
         merge.close(self.e.p, self.X1, "done", "x")
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         assert self.e.calls() == []
         merge.close(self.e.p, self.X2, "done", "x")
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         assert (len(self.e.calls()), self.e.task(y)["status"]) == (1, started)
         assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
 
     def test_a_task_filed_with_a_done_blocker_launches_at_once(self):
         merge.close(self.e.p, self.X1, "done", "x")
         y = self.y("--blocked-by", self.X1)
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         assert len(self.e.calls()) == 1
         assert self.e.task(y)["status"] == "refining"
 
@@ -79,20 +80,20 @@ class TestBlockers:
             self.fresh()
             y = self.y("--blocked-by", self.X1)
             backlog.set_status(self.e.p, self.X1, status)
-            loop.tick(self.e.p)
+            tick.tick(self.e.p)
             assert self.e.calls() == []
             assert self.X1 in self.e.task(y)["blocked"]
             n = len(events(self.e, y))
-            loop.tick(self.e.p)
+            tick.tick(self.e.p)
             assert len(events(self.e, y)) == n
             fm(self.e.home, "edit", y, "--blocked-by", "none")
             fm(self.e.home, "unblock", y)
-            loop.tick(self.e.p)
+            tick.tick(self.e.p)
             assert len(self.e.calls()) == 1
         self.fresh()
         y = self.y("--blocked-by", self.X1)
         backlog.set_status(self.e.p, self.X1, "canceled")
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         fm(self.e.home, "cancel", y)
         assert self.e.task(y)["status"] == "canceled"
 

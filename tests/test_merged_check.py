@@ -11,8 +11,8 @@ from helpers import Env, fm, git
 from test_failing import fix
 from test_review_rules import commit, events, take_note
 
-from fm import loop
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.delivery import check, merge, mergecheck
 from fm.services.delivery.git import DeliveryError
 
@@ -34,14 +34,14 @@ class TestMerged:
         """One task per file, launched together (so each branch starts from the same main), committed, delivered and
         reviewed; a last tick checks them."""
         tids = [backlog.add(e.p, f"x {name}", status="ready", criteria="y") for name in files]
-        loop.tick(e.p)
+        tick.tick(e.p)
         for tid, (name, text) in zip(tids, files.items(), strict=True):
             commit(e.task(tid)["worktree"], name, text)
         for tid in tids:
             backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
         for tid in tids:
             e.review(tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         return tids
 
     def main(self, e: Env) -> str:
@@ -52,7 +52,7 @@ class TestMerged:
         (tid,) = self.deliver(e, {"a.py": "a\n"})
         merge.accept(e.p, tid)
         before = self.main(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert i["status"] == "done"
         assert i["check"]["merged_with"] == before
@@ -65,7 +65,7 @@ class TestMerged:
         assert "merged_with" not in e.task(b)["check"]
         merge.accept(e.p, a)
         merge.accept(e.p, b)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(a)["status"] == "done"
         i = e.task(b)
         assert (i["status"], i["failures"], i["failure_streak"]) == ("in progress", 1, 1)
@@ -80,7 +80,7 @@ class TestMerged:
     def test_autonomy_path_checks_merged_too(self):
         e = self.env(autonomy="low")
         a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(a)["status"] == "done"
         i = e.task(b)
         assert (i["status"], i["failures"]) == ("in progress", 1)
@@ -95,7 +95,7 @@ class TestMerged:
         commit(str(e.repo), "other.py", "o\n")
         merge.accept(e.p, tid)
         moved = self.main(e)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert self.runs() == 3
         i = e.task(tid)
         assert (i["status"], i["check"]["merged_with"]) == ("done", moved)
@@ -106,7 +106,7 @@ class TestMerged:
         mergecheck.merged_check(e.p, tid)
         merge.accept(e.p, tid)
         runs = self.runs()
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert (e.task(tid)["status"], self.runs()) == ("done", runs)
 
     def test_conflict_goes_back_without_a_merged_run(self):
@@ -115,11 +115,11 @@ class TestMerged:
         commit(e.task(b)["worktree"], "app.py", "# from B\n")
         backlog.set_status(e.p, b, "in review")
         e.review(b)
-        loop.tick(e.p)
+        tick.tick(e.p)
         merge.accept(e.p, a)
         merge.accept(e.p, b)
         runs = self.runs()
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(a)["status"] == "done"
         i = e.task(b)
         assert (i["status"], i["conflicts"]) == ("in progress", 1)
@@ -130,7 +130,7 @@ class TestMerged:
         e = self.env("")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
         merge.accept(e.p, tid)
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(tid)
         assert i["status"] == "done"
         assert "merged_with" not in i["check"]
@@ -139,19 +139,19 @@ class TestMerged:
         e = self.env()
         a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
         merge.accept(e.p, a)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.task(a)["status"] == "done"
         for n in (1, 2):
             merge.accept(e.p, b)
-            loop.tick(e.p)
+            tick.tick(e.p)
             i = e.task(b)
             assert (i["status"], i["failures"], i["failure_streak"]) == ("in progress", n, n)
             fix(e, b)
-            loop.tick(e.p)  # its branch alone passes: the row goes on
+            tick.tick(e.p)  # its branch alone passes: the row goes on
             assert e.task(b)["failure_streak"] == n
         merge.accept(e.p, b)
         before = len(e.calls())
-        loop.tick(e.p)
+        tick.tick(e.p)
         i = e.task(b)
         assert (i["status"], i["failures"], i["check"]["tests"]) == ("in review", 2, "fail")
         assert i.get("accepted") is None

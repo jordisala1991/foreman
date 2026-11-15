@@ -4,15 +4,15 @@ what that step said (`apply_review`). The decisions themselves are in fm/core/ru
 from pathlib import Path
 from typing import Any
 
-from .core.project.config import Project
-from .core.review import reviews
-from .core.rules import decide
-from .core.tasks import backlog
-from .services import scratch
-from .services.agents.launch import Scope, launch_reviewer
-from .services.agents.running import idle_s, running
-from .services.claude import sessions
-from .services.delivery import git
+from ..core.project.config import Project
+from ..core.review import reviews
+from ..core.rules import decide
+from ..core.tasks import backlog
+from ..services import scratch
+from ..services.agents.launch import Scope, launch_reviewer
+from ..services.agents.running import idle_s, running
+from ..services.claude import sessions
+from ..services.delivery import git
 from .talk import NUDGE_IDLE_S, return_to_agent
 
 

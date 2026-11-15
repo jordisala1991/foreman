@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import loop
 from fm.core.oversight import diagnosis
 from fm.core.tasks import backlog
+from fm.loop import tick
 
 FULL = "\n".join(f"## {s}\nx" for s in diagnosis.SECTIONS)
 
@@ -32,7 +32,7 @@ class TestMechanic:
         request.addfinalizer(self.env.stop)
 
     def tick(self):
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
 
     def diagnose(self, text=FULL, tid=None):
         f = self.e.tmp / "d.md"
@@ -57,20 +57,20 @@ class TestMechanic:
     def test_non_health_triage_gets_none(self):
         e = Env()
         backlog.add(e.p, "t", status="triage")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert e.calls() == []
 
     def test_within_slots(self):
         e = Env(slots=1)
         a = backlog.add(e.p, "a", status="triage", source="health:a")
         backlog.add(e.p, "b", status="triage", source="health:b")
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 1
         os.environ["FM_TASK"] = a
         f = e.tmp / "d.md"
         f.write_text(FULL)
         fm(e.home, "diagnose", "--file", str(f))
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert len(e.calls()) == 2
         assert "ty-2-mechanic" in str(e.calls()[1])
 

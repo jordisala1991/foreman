@@ -4,12 +4,12 @@ already told), and closes only by its own `fm done` after the owner's yes."""
 
 from typing import Any
 
-from . import util
-from .core.project.config import Project
-from .core.tasks import backlog, blockers, questions, subtasks
-from .services.agents.brief import agent_name, brief
-from .services.agents.launch import record_session
-from .services.claude import sessions
+from .. import util
+from ..core.project.config import Project
+from ..core.tasks import backlog, blockers, questions, subtasks
+from ..services.agents.brief import agent_name, brief
+from ..services.agents.launch import record_session
+from ..services.claude import sessions
 
 
 def launch(p: Project, i: dict[str, Any]) -> None:

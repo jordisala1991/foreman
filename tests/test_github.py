@@ -9,8 +9,9 @@ import textwrap
 import pytest
 from helpers import Env, fm, git
 
-from fm import cli, loop, providers, util
+from fm import cli, providers, util
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.providers import registry
 from fm.providers.github import provider, types
 from fm.services.delivery import merge
@@ -181,7 +182,7 @@ class GH:
         """A running task with one commit, pushed or not."""
         e = self.e
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         wt = e.repo.parent / e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# change\n")
@@ -238,14 +239,14 @@ class TestPulls:
         g = self.make(test="true")
         tid = g.work(push=False)
         assert self.origin_tip(g, tid) == ""
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.origin_tip(g, tid) == self.local_tip(g, tid)
         wt = g.e.repo.parent / g.e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# second\n")
         git(wt, "commit", "-qam", "second")
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.origin_tip(g, tid) == self.local_tip(g, tid)
         assert len(g.calls("pr", "create")) == 1  # once
         assert "--draft" in g.calls("pr", "create")[0]
@@ -254,36 +255,36 @@ class TestPulls:
     def test_nothing_is_pushed_before_the_task_has_commits_and_main_never(self):
         g = self.make(test="true")
         tid = backlog.add(g.e.p, "x", status="ready", criteria="y")
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.origin_tip(g, tid) == ""
         assert g.calls("pr", "create") == []
 
     def test_pr_done_pushes_early_but_opens_the_pr_only_at_fm_done(self):
         g = self.make('pr = "done"', test="true")
         tid = g.work(push=False)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.origin_tip(g, tid) == self.local_tip(g, tid)
         assert g.calls("pr", "create") == []
 
     def test_pr_done_opens_nothing_until_fm_done_and_then_a_ready_pr(self):
         g = self.make('pr = "done"', test="true")
         tid = g.work()
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.calls("pr", "create") == []
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         (create,) = g.calls("pr", "create")
         assert "--draft" not in create
 
     def test_fm_done_readies_the_draft_and_reviews_the_verdict_once(self):
         g = self.make(test="true")
         tid = g.work()
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.state["prs"]["1"]["draft"]
         g.deliver(tid)
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
         pr = g.state["prs"]["1"]
         assert not pr["draft"]
         assert pr["comments"] == []
@@ -294,7 +295,7 @@ class TestPulls:
     def test_cancel_closes_the_pr_with_the_reason_and_a_task_without_one_is_canceled_as_before(self):
         g = self.make(test="true")
         tid = g.work()
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         fm(g.e.home, "cancel", tid, "not needed")
         pr = g.state["prs"]["1"]
         assert pr["state"] == "CLOSED"
@@ -308,7 +309,7 @@ class TestPulls:
     def test_cancel_with_a_failing_gh_changes_nothing_and_a_closed_pr_is_left_alone(self):
         g = self.make(test="true")
         tid = g.work()
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         wt = g.e.task(tid)["worktree"]
         g.set(fail_always=["pr", "close"])
         with pytest.raises(SystemExit):
@@ -327,7 +328,7 @@ class TestPulls:
     def test_cancel_of_a_pr_merged_by_hand_with_no_merge_commit_just_cancels(self):
         g = self.make(test="true")
         tid = g.work()
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         pr = g.state["prs"]["1"]
         pr["state"] = "MERGED"
         g.set(prs={"1": pr}, no_oid=True)
@@ -340,14 +341,14 @@ class TestPulls:
         g = self.make(f'strategy = "{strategy}"' if strategy else "", test="true")
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         merge.accept(g.e.p, tid)
         return g, tid
 
     def test_the_configured_merge_type_is_used(self):
         for strategy, used in ((None, "squash"), ("merge", "merge"), ("rebase", "rebase")):
             g, tid = self.merged(strategy)
-            loop.tick(g.e.p)
+            tick.tick(g.e.p)
             assert g.state["prs"]["1"]["strategy"] == used
             assert g.e.task(tid)["status"] == "done"
             assert g.e.task(tid)["commit"] == "c0ffee"
@@ -361,7 +362,7 @@ class TestPulls:
         g, tid = self.merged(None)
         self.main_changes_app(g)
         g.set(refuse_merge="Pull Request has merge conflicts")
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         i = g.e.task(tid)
         assert i["status"] == "in progress"
         assert i["conflicts"] == 1
@@ -374,7 +375,7 @@ class TestPulls:
     def test_a_pr_refused_for_another_reason_still_blocks(self):
         g, tid = self.merged(None)
         g.set(refuse_merge="Pull request is closed")
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         i = g.e.task(tid)
         assert i["blocked"]
         assert i["status"] == "in review"
@@ -383,7 +384,7 @@ class TestPulls:
     def test_a_refusal_the_local_check_cannot_reproduce_stays_blocked(self):
         g, tid = self.merged(None)
         g.set(refuse_merge="Pull Request has merge conflicts")
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         i = g.e.task(tid)
         assert i["blocked"]
         assert i["status"] == "in review"
@@ -400,31 +401,31 @@ class TestPulls:
         s["prs"]["1"]["draft"] = True
         g.set(prs=s["prs"])
         backlog.update(g.e.p, tid, pr={**g.e.task(tid)["pr"], "draft": True})
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["status"] == "done"
         assert len(g.calls("pr", "ready")) == 1
 
     def test_the_task_closes_only_once_the_pr_is_seen_merged(self):
         g, tid = self.merged(None)
         g.set(lag=True)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["status"] == "in review"
-        loop.tick(g.e.p)  # not merged twice
+        tick.tick(g.e.p)  # not merged twice
         assert len(g.calls("pr", "merge")) == 1
         s = g.state
         s["prs"]["1"]["state"] = "MERGED"
         g.set(prs=s["prs"])
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["status"] == "done"
 
     def test_a_pr_closed_unmerged_blocks_the_task(self):
         g, tid = self.merged(None)
         g.set(lag=True)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         s = g.state
         s["prs"]["1"]["state"] = "CLOSED"
         g.set(prs=s["prs"])
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert "closed without merging" in g.e.task(tid)["blocked"]
 
     def test_failing_ci_is_high_risk(self):
@@ -432,7 +433,7 @@ class TestPulls:
         g.set(ci="fail")
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         c = g.e.task(tid)["check"]
         assert (c["risk"], c["ci"]) == ("high", "fail")
         assert "CI fails [ci]" in c["reasons"]
@@ -444,7 +445,7 @@ class TestPulls:
             g.set(ci=ci)
             tid = g.work()
             g.deliver(tid)
-            loop.tick(g.e.p)
+            tick.tick(g.e.p)
             assert g.e.task(tid)["check"]["tests"] == tests
 
     def test_pending_ci_waits_for_the_result(self):
@@ -452,10 +453,10 @@ class TestPulls:
         g.set(ci="pending")
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert "check" not in g.e.task(tid)
         g.set(ci="pass")
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["check"]["ci"] == "pass"
 
     def test_autonomy_merges_only_with_green_ci(self):
@@ -464,8 +465,8 @@ class TestPulls:
             g.set(ci=ci)
             tid = g.work()
             g.deliver(tid)
-            loop.tick(g.e.p)
-            loop.tick(g.e.p)
+            tick.tick(g.e.p)
+            tick.tick(g.e.p)
             assert g.e.task(tid)["status"] == status, ci
 
     def test_ci_is_read_again_at_every_decision_not_cached_with_the_check(self):
@@ -473,10 +474,10 @@ class TestPulls:
         g.set(ci="none")
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert (g.e.task(tid)["status"], g.e.task(tid)["check"]["ci"]) == ("in review", "none")
         g.set(ci="pass")  # the CI registered later: no new push needed
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["status"] == "done"
 
     def graphql(self, g: GH) -> int:
@@ -486,10 +487,10 @@ class TestPulls:
         g = self.make(test="true", autonomy="manual")
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert (g.e.task(tid)["check"]["ci"], self.graphql(g)) == ("pass", 1)
         for _ in range(3):
-            loop.tick(g.e.p)
+            tick.tick(g.e.p)
         assert self.graphql(g) == 1
         wt = g.e.repo.parent / g.e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
@@ -497,7 +498,7 @@ class TestPulls:
         git(wt, "commit", "-qam", "fix")
         g.set(ci="fail")
         g.e.review(tid)  # the new tip is reviewed first
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert (g.e.task(tid)["check"]["ci"], self.graphql(g)) == ("fail", 2)
 
     def test_a_pr_missing_from_the_open_list_is_read_on_its_own_and_kept(self):
@@ -505,10 +506,10 @@ class TestPulls:
         g.set(hidden=["1"])  # still there, but not in the open list (closed outside fm, or past the first 100)
         tid = g.work()
         g.deliver(tid)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["check"]["ci"] == "pass"
         before = self.graphql(g)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.graphql(g) == before
 
     def test_pending_ci_of_several_tasks_is_one_call_per_poll(self):
@@ -518,8 +519,8 @@ class TestPulls:
         ids = [g.work(), g.work()]
         for tid in ids:
             g.deliver(tid)
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
         assert self.graphql(g) == 1
         assert all("check" not in g.e.task(tid) for tid in ids)
 
@@ -530,9 +531,9 @@ class TestPulls:
             tid = g.work()
             g.deliver(tid)
             g.set(ci="pass", fail_once=failing)
-            loop.tick(g.e.p)
-            loop.tick(g.e.p)
-            loop.tick(g.e.p)
+            tick.tick(g.e.p)
+            tick.tick(g.e.p)
+            tick.tick(g.e.p)
             i = g.e.task(tid)
             assert not i.get("blocked"), failing
             assert i["status"] == "done", failing
@@ -548,7 +549,7 @@ class TestPulls:
             assert text in events[0]
             assert not g.e.task(first).get("blocked")
             g.set(flaky="")
-            loop.tick(g.e.p)
+            tick.tick(g.e.p)
             assert "pr" in g.e.task(second)  # the failure did not stop the next task
             assert "pr" in g.e.task(first)
             assert g.e.task(first)["retry_error"] == ""
@@ -577,12 +578,12 @@ class TestPulls:
     def test_a_merged_pr_without_a_merge_commit_is_read_from_the_api_or_fails_clearly(self):
         g, tid = self.merged(None)
         g.set(no_oid=True)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert g.e.task(tid)["status"] == "in review"  # no sha anywhere: retried, no invented reference
         assert "merge" not in g.e.task(tid)
         assert "no merge commit" in g.e.task(tid)["retry_error"]
         g.set(api_sha="feed01")
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         assert (g.e.task(tid)["status"], g.e.task(tid)["commit"]) == ("done", "feed01")
 
     def test_the_provider_never_tags_releases_or_forces(self):

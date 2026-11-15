@@ -4,9 +4,9 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm import loop
 from fm.core.review.inline import Review
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.providers import Change, registry
 from fm.services.delivery import pulls
 
@@ -19,8 +19,8 @@ def tip(g: GH, iid: str, text: str, open: int = 0) -> None:
     g.e.review(iid, open)
     (g.e.home / "reviews" / f"{iid}.md").write_text(text)
     backlog.update(g.e.p, iid, review={**g.e.task(iid)["review"], "returned": True})
-    loop.tick(g.e.p)
-    loop.tick(g.e.p)
+    tick.tick(g.e.p)
+    tick.tick(g.e.p)
 
 
 def commit(g: GH, iid: str) -> str:
@@ -48,7 +48,7 @@ class TestReview_:
     def test_a_delivered_tip_posts_one_review_and_no_comment(self):
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", 1)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         pr = self.pr(g)
         assert len(pr["reviews"]) == 1
         r = pr["reviews"][0]
@@ -86,15 +86,15 @@ class TestReview_:
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})
-        loop.tick(g.e.p)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
         assert len(self.pr(g)["reviews"]) == 1
 
     def test_a_failed_diff_read_posts_the_review_without_inline_comments(self):
         g, iid = self.make()
         g.set(fail_always=["pr", "diff"])
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         (r,) = self.pr(g)["reviews"]
         assert r["comments"] == []
 
@@ -102,7 +102,7 @@ class TestReview_:
         g, iid = self.make()
         g.set(reject_inline=True)
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         (r,) = self.pr(g)["reviews"]
         assert r["comments"] == []
 

@@ -12,10 +12,10 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import loop
 from fm.core.oversight import guard
 from fm.core.review import evidence
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.providers import Change, registry
 from fm.providers.github import types
 from fm.services.delivery import pulls
@@ -59,7 +59,7 @@ class TestOnGitHub:
 
     def ticks(self, n=3):
         for _ in range(n):
-            loop.tick(self.g.e.p)
+            tick.tick(self.g.e.p)
 
     def body(self):
         return self.g.state["prs"]["1"]["body"]
@@ -241,7 +241,7 @@ class TestLocal:
     def test_local_tick_pushes_nothing(self):
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        loop.tick(e.p)
+        tick.tick(e.p)
         wt = e.repo.parent / e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
             f.write("# change\n")
@@ -254,8 +254,8 @@ class TestLocal:
         backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
         backlog.update(e.p, tid, pr={"number": 1})  # so the tick reaches the description and its images
         e.review(tid)
-        loop.tick(e.p)
-        loop.tick(e.p)
+        tick.tick(e.p)
+        tick.tick(e.p)
         assert e.task(tid)["pr"].get("described")
         assert not e.task(tid).get("pr_error")
         assert git(e.repo, "branch", "--list", "fm-evidence") == ""

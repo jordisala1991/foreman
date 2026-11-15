@@ -3,8 +3,9 @@ from unittest import mock
 
 from helpers import Env
 
-from fm import metrics, util
+from fm import util
 from fm.core.tasks import backlog
+from fm.steps import metrics
 
 
 def ev(*pairs):

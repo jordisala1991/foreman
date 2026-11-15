@@ -7,11 +7,12 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm import loop, metrics
 from fm.core.oversight import costs
 from fm.core.project import config
 from fm.core.tasks import backlog
+from fm.loop import tick
 from fm.services.agents import brief
+from fm.steps import metrics
 
 
 def flags(c: dict) -> tuple[str, str]:
@@ -74,7 +75,7 @@ class TestChoice:
             fm(self.e.home, "ready", "--no-plan", "x", *flags)
 
     def launched_with(self, tid: str) -> tuple:
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         got = {tuple(x["argv"][-1].split("\n")[0].strip("[]").split(" ")[1:]): flags(x) for x in self.e.calls()}
         return got[("responsible", tid)]
 
@@ -105,7 +106,7 @@ class TestChoice:
         a = backlog.add(self.e.p, "a", status="ready", criteria="c", model="fable", effort="xhigh")
         b = backlog.add(self.e.p, "b", status="backlog", criteria="c", model="opus", effort="max")
         c = backlog.add(self.e.p, "c", status="ready", criteria="c")
-        loop.tick(self.e.p)
+        tick.tick(self.e.p)
         got = {tuple(x["argv"][-1].split("\n")[0].strip("[]").split(" ")[1:]): flags(x) for x in self.e.calls()}
         assert got[("responsible", a)] == ("fable", "xhigh")
         assert got[("planning", b)] == ("sonnet", "high")

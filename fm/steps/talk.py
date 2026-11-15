@@ -2,11 +2,11 @@
 
 from typing import Any
 
-from . import util
-from .core.project.config import Project
-from .core.tasks import backlog, questions
-from .services.agents.running import idle_s, send, update_agent
-from .services.claude import sessions
+from .. import util
+from ..core.project.config import Project
+from ..core.tasks import backlog, questions
+from ..services.agents.running import idle_s, send, update_agent
+from ..services.claude import sessions
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
 

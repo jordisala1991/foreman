@@ -45,31 +45,7 @@ layer = "loop"
 
 # steps: one step of a tick, or a view over several pieces.
 [[modules]]
-path = "fm.sources"
-layer = "steps"
-[[modules]]
-path = "fm.release"
-layer = "steps"
-[[modules]]
-path = "fm.talk"
-layer = "steps"
-[[modules]]
-path = "fm.reviewing"
-layer = "steps"
-[[modules]]
-path = "fm.mechanic"
-layer = "steps"
-[[modules]]
-path = "fm.parents"
-layer = "steps"
-[[modules]]
-path = "fm.health"
-layer = "steps"
-[[modules]]
-path = "fm.metrics"
-layer = "steps"
-[[modules]]
-path = "fm.schedule"
+path = "fm.steps"
 layer = "steps"
 
 # services: git, claude and the lock: the outside world, called by the steps.

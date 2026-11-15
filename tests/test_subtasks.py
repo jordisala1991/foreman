@@ -8,8 +8,8 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm import loop
 from fm.core.tasks import backlog, subtasks
+from fm.loop import tick
 from fm.services.delivery import merge
 
 
@@ -102,11 +102,11 @@ class TestLoop:
         e = Env()
         P = backlog.add(e.p, "parent", status="backlog", criteria="c")
         s1 = fm(e.home, "add", "s1", "--parent", P, "--triage", "--criteria", "c").strip()
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert [c["argv"][c["argv"].index("-n") + 1] for c in e.calls()] == ["TY-1 parent · parent"]
         assert (e.task(P)["status"], e.task(P)["agent"]["kind"]) == ("backlog", "parent")
         fm(e.home, "go", s1)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert [c["argv"][c["argv"].index("-n") + 1] for c in e.calls()] == ["TY-1 parent · parent", "TY-2 planning · s1"]
         assert (e.task(s1)["status"], e.task(P)["status"]) == ("refining", "backlog")
 
@@ -133,16 +133,16 @@ class TestClosing:
         P = backlog.add(e.p, "parent", status="triage")
         s = fm(e.home, "add", "one", "--parent", P, "--criteria", "c").strip()
         backlog.set_status(e.p, s, "ready")
-        loop.tick(e.p)
+        tick.tick(e.p)
         wt = e.task(s)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
             f.write("# 0\n")
         git(e.repo.parent / wt, "commit", "-qam", "change")
         backlog.set_status(e.p, s, "in review", report={"summary": "s", "confused": ""})
         e.review(s, 0)
-        loop.tick(e.p)
+        tick.tick(e.p)
         merge.accept(e.p, s)
-        loop.tick(e.p)
+        tick.tick(e.p)
         assert (e.task(s)["status"], e.task(P)["status"]) == ("done", "done")
 
     def test_parent_canceled_when_all_subtasks_are(self):
@@ -163,7 +163,7 @@ class TestClosing:
         P = backlog.add(g.e.p, "parent", status="triage")
         tid = g.work()
         backlog.update(g.e.p, tid, parent=P)
-        loop.tick(g.e.p)
+        tick.tick(g.e.p)
         fm(g.e.home, "cancel", P)
         assert g.state["prs"]["1"]["state"] == "CLOSED"
         assert (g.e.task(tid)["status"], g.e.task(P)["status"]) == ("canceled", "canceled")
