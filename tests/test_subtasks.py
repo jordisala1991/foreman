@@ -87,7 +87,7 @@ class Showing(unittest.TestCase):
         s = fm(e.home, "add", "s", "--parent", a).strip()
         delivery.close(e.p, a, "done", "x")
         line = fm(e.home, "list").rstrip("\n")
-        self.assertEqual(line, f"{s:8} {'triage':12} {'':14} s")
+        self.assertEqual(line, f"{s:8} {'triage':12} {'change':10} {'':14} s")
 
 
 class Outcome(unittest.TestCase):

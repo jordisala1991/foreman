@@ -7,7 +7,7 @@ $detail
 Acceptance criteria (settled with the owner):
 $criteria
 
-# Vocabulary
+$type_section# Vocabulary
 Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
 
 # How

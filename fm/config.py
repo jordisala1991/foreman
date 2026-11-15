@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
-from . import util
+from . import repos, util
 
 MODELS = ("haiku", "sonnet", "opus", "fable")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -55,6 +55,10 @@ def registry_file() -> Path:
     return Path(os.environ.get("FM_REGISTRY") or Path.home() / ".config/fm/projects.json")
 
 
+def python_note_file() -> Path:
+    return Path(str(registry_file()) + ".python")
+
+
 def registered() -> list[Path]:
     return [Path(p) for p in util.read_json(registry_file(), [])]
 
@@ -83,13 +87,30 @@ class Project:
             raw = tomllib.loads(f.read_text(encoding="utf-8"))
         cfg: dict[str, dict[str, Any]] = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
         cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: fm/lock.py
-        cfg["repos"] = _repos(raw)
+        try:
+            cfg["repos"] = repos.parse(raw, cfg)
+        except ValueError as e:
+            raise ProjectError(str(e)) from None
         if cfg["repos"]:  # several repos: tasks run in the first one listed
             first = next(iter(cfg["repos"].values()))
             cfg["project"]["repo"], cfg["project"]["main"] = first["path"], first["main"]
         if not cfg["project"]["name"]:
             cfg["project"]["name"] = home.name
-        return cls(home, cfg)
+        p = cls(home, cfg)
+        if len(cfg["repos"]) > 1:
+            p._check_layout()
+        return p
+
+    def _check_layout(self) -> None:
+        """Several repos: the home, state/ and every worktrees folder stay outside every repo (the umbrella is fine)."""
+        project_wt = self.get("project", "worktrees")
+        folders = [("the home", self.home), ("state/", self.state), ("the worktrees folder", self.path("worktrees"))]
+        for key, r in self.cfg["repos"].items():
+            if r["worktrees"] != project_wt:
+                folders.append((f"the worktrees folder of repo {key}", self._abs(r["worktrees"])))
+        paths = {key: self._abs(r["path"]).resolve() for key, r in self.cfg["repos"].items()}
+        if msg := repos.layout_error([(what, f.resolve()) for what, f in folders], paths):
+            raise ProjectError(msg)
 
     def get(self, section: str, key: str) -> Any:
         return self.cfg[section][key]
@@ -130,20 +151,6 @@ class Project:
     @property
     def backlog_file(self) -> Path:
         return self.home / "backlog.json"
-
-
-def _repos(raw: dict[str, Any]) -> dict[str, dict[str, str]]:
-    if not isinstance(raw.get("repos", {}), dict):
-        raise ProjectError("[repos] holds [repos.<key>] tables (path, main)")
-    tables: dict[str, Any] = raw.get("repos", {})
-    if tables and "repo" in raw.get("project", {}):
-        raise ProjectError("fm.toml has both [project] repo and [repos.<key>] tables: use one of the two forms")
-    out: dict[str, dict[str, str]] = {}
-    for key in tables:
-        if not isinstance(tables[key], dict) or not isinstance(tables[key].get("path"), str):
-            raise ProjectError(f"[repos.{key}] needs a path")
-        out[key] = {"path": tables[key]["path"], "main": str(tables[key].get("main", "main"))}
-    return out
 
 
 def loaded() -> list[Project]:

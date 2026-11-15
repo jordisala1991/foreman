@@ -4,7 +4,7 @@ what that step said (`apply_review`). The decisions themselves are in fm/decide.
 from pathlib import Path
 from typing import Any
 
-from . import backlog, decide, delivery, sessions
+from . import backlog, decide, delivery, reviews, sessions
 from .agents import Scope, idle_s, launch_reviewer, running
 from .config import Project
 from .talk import NUDGE_IDLE_S, return_to_agent
@@ -16,7 +16,7 @@ def seen_of(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> d
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
-    tip = backlog.verdict_tip(v)
+    tip = reviews.verdict_tip(v)
     merge, auto = delivery.merge_of(p, tip, head) if tip and tip != head else ("", "")
     return decide.Seen(
         head=head,

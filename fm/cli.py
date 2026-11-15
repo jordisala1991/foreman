@@ -2,18 +2,35 @@
 the owner and the panel use the rest; launchd runs `fm loop`; Claude Code runs `fm guard` as the agents' hook."""
 
 import argparse
-import json
 import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, backlog, blockers, config, decide, delivery, editing, guard, health, homesetup, lock, loop, metrics, providers, sessions, subtasks, util
+from . import (
+    agents,
+    backlog,
+    blockers,
+    config,
+    delivery,
+    editing,
+    guard,
+    health,
+    homesetup,
+    lock,
+    loop,
+    metrics,
+    providers,
+    sessions,
+    subtasks,
+    util,
+)
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
 from .cli_plugin import cmd_project, cmd_session_context
+from .cli_view import cmd_list, cmd_show
 from .config import Project, register
 
 
@@ -45,6 +62,7 @@ def cmd_add(a: argparse.Namespace) -> None:
         blocked_by=ids,
         model=a.model or "",
         effort=a.effort or "",
+        type=a.type or "",
     )
     print(tid)
 
@@ -67,35 +85,6 @@ def cmd_edit(a: argparse.Namespace) -> None:
     backlog.event(p, a.id, "edited by the owner: " + ", ".join(fields) + ("; plan dropped, back to backlog" if reset else ""))
     after = "; it stays blocked until fm unblock" if new.get("blocked") else "; it will be planned again"
     print(f"{a.id} edited" + (after if reset else ""))
-
-
-def cmd_list(a: argparse.Namespace) -> None:
-    p = home(a)
-    d = backlog.load(p)
-    all_ = backlog.tasks(d)
-    status = {i["id"]: i["status"] for i in all_}
-    for i in subtasks.ordered(all_):
-        if i["status"] in backlog.CLOSED and not a.all:
-            continue
-        agent: backlog.Agent = i.get("agent") or {}
-        ag = agent.get("name", "")
-        title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
-        note = (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
-        print(f"{i['id']:8} {i['status']:12} {ag:14} {title}{note}")
-    for q in backlog.open_questions(d):
-        print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
-
-
-def cmd_show(a: argparse.Namespace) -> None:
-    p = home(a)
-    d = backlog.load(p)
-    i = backlog.get(d, a.id)
-    i = {**i, "checked_on": decide.ran_on(i["check"])} if i.get("check") else i
-    if wait := blockers.pending(i, backlog.tasks(d)):
-        i = {**i, "waiting_for": wait}
-    if subs := subtasks.of(backlog.tasks(d), a.id):
-        i = {**i, "subtasks": [subtasks.summary(s, backlog.open_questions(d, s["id"]), backlog.tasks(d)) for s in subs]}
-    print(json.dumps(i, indent=2, ensure_ascii=False))
 
 
 # --- the owner's side ---------------------------------------------------------------------------------------------
@@ -192,6 +181,8 @@ def cmd_loop(a: argparse.Namespace) -> None:
 
 
 def cmd_health(a: argparse.Namespace) -> None:
+    for line in health.python_note():
+        print(line)
     for line in health.shared_folders(config.loaded()):
         print(line)
     p = home(a)

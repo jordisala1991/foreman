@@ -26,6 +26,9 @@ layer = "ui"
 path = "fm.cli_plugin"
 layer = "ui"
 [[modules]]
+path = "fm.cli_view"
+layer = "ui"
+[[modules]]
 path = "fm.panel"
 layer = "ui"
 [[modules]]
@@ -140,6 +143,9 @@ layer = "core"
 path = "fm.config"
 layer = "core"
 [[modules]]
+path = "fm.repos"
+layer = "core"
+[[modules]]
 path = "fm.util"
 layer = "core"
 [[modules]]
@@ -156,6 +162,12 @@ path = "fm.evidence"
 layer = "core"
 [[modules]]
 path = "fm.subtasks"
+layer = "core"
+[[modules]]
+path = "fm.reviews"
+layer = "core"
+[[modules]]
+path = "fm.tasktypes"
 layer = "core"
 [[modules]]
 path = "fm.editing"
