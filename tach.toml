@@ -54,6 +54,9 @@ layer = "steps"
 path = "fm.mechanic"
 layer = "steps"
 [[modules]]
+path = "fm.parents"
+layer = "steps"
+[[modules]]
 path = "fm.health"
 layer = "steps"
 [[modules]]
