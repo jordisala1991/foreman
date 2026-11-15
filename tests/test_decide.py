@@ -1,4 +1,4 @@
-"""The loop's review and merge decisions (fm/decide.py): one test per row of DESIGN.md's table "What the loop does with a
+"""The loop's review and merge decisions (fm/core/rules/decide.py): one test per row of DESIGN.md's table "What the loop does with a
 task in review", none launches a program. `Pure` keeps the module free of programs and files."""
 
 import ast

@@ -131,7 +131,6 @@ layer = "proc"
 
 # core: vocabulary and pure rules (risk, autonomy, guard), plus the plain files that do not vary (backlog.json, config).
 # Packages under fm/core/ (a package path gives all its files); no subprocess here (ruff, TID251 in pyproject.toml).
-# decide: the loop's review and merge decisions; runs no program and touches no file, so it may import only risk.
 [[modules]]
 path = "fm.core.project"
 layer = "core"
@@ -148,6 +147,7 @@ depends_on = ["fm.util"]
 path = "fm.core.rules.risk"
 layer = "core"
 depends_on = ["fm.core.project"]
+# decide: the loop's review and merge decisions; runs no program and touches no file, so it may import only risk.
 [[modules]]
 path = "fm.core.rules.decide"
 layer = "core"
