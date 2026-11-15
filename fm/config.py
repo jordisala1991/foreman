@@ -6,6 +6,7 @@ them works on it (the deepest folder wins)."""
 
 import os
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
@@ -150,23 +151,48 @@ def loaded() -> list[Project]:
     return load_all()[0]
 
 
-def load_all() -> tuple[list[Project], list[str]]:
-    """Every registered project, and one line per home whose fm.toml cannot be read (its home and why)."""
+@dataclass
+class Unreadable:
+    """A registered home whose fm.toml cannot be loaded: it still claims its home and the folders it names
+    ([project] repo and umbrella, [repos.<key>] path) when those can be read, so fm refuses there with its reason."""
+
+    home: Path
+    reason: str
+    folders: list[Path]
+
+    @property
+    def name(self) -> str:
+        return str(self.home)
+
+
+def _named_folders(home: Path) -> list[Path]:
+    try:
+        raw = tomllib.loads((home / "fm.toml").read_text(encoding="utf-8"))
+        named = [raw.get("project", {}).get(k) for k in ("repo", "umbrella")]
+        named += [t.get("path") for t in raw.get("repos", {}).values()]
+    except Exception:  # an fm.toml that cannot be read names no folder
+        return [home]
+    paths = [Path(n).expanduser() for n in named if isinstance(n, str) and n]
+    return list(dict.fromkeys([home, *((p if p.is_absolute() else home / p).resolve() for p in paths)]))
+
+
+def load_all() -> tuple[list[Project], list[Unreadable]]:
+    """Every registered project, and every home whose fm.toml cannot be loaded."""
     out: list[Project] = []
-    broken: list[str] = []
+    broken: list[Unreadable] = []
     for home in registered():
         try:
             out.append(Project.load(home))
         except Exception as e:  # a broken fm.toml leaves the others served
-            broken.append(f"{home}: {e}")
+            broken.append(Unreadable(home.resolve(), str(e), _named_folders(home.resolve())))
     return out, broken
 
 
-def owners(projects: list[Project], here: Path) -> list[tuple[Project, Path]]:
+def owners(projects: Sequence[Project | Unreadable], here: Path) -> list[tuple[Project | Unreadable, Path]]:
     """The projects owning `here` through their deepest folder, only the deepest of all: none, one, or several
     claiming the same folder."""
     here = here.resolve()
-    found: list[tuple[Project, Path]] = []
+    found: list[tuple[Project | Unreadable, Path]] = []
     for p in projects:
         mine = [f for f in p.folders if f == here or f in here.parents]
         if mine:

@@ -115,6 +115,20 @@ class FindProjectTest(unittest.TestCase):
             self.assertIn("[repos.<key>]", msg)
         self.assertIn("Beta work", self.run_fm(self.elsewhere, "--project", "beta", "list"))
 
+    def test_unreadable_project_still_claims_its_folders(self) -> None:
+        other = self.project("other")
+        inner = self.dir("other/sub")
+        home = self.project("alpha", f'repo = "{inner}"\n', repo=False)
+        with (home / "fm.toml").open("a", encoding="utf-8") as f:
+            f.write(f'\n[repos.x]\npath = "{inner}"\n')
+        for cwd in (inner, home):
+            msg = self.refused(cwd, "list")
+            self.assertIn("[repos.<key>]", msg)
+            self.assertIn(str(home), msg)
+            self.assertNotIn("no registered project", msg)
+        self.assertIn("Other work", self.run_fm(other, "list"))
+        self.assertNotIn("no registered project", self.refused(self.elsewhere, "list"))
+
     def test_repos_entry_not_a_table_refused(self) -> None:
         for tail in ("\n[repos]\nx = 3\n", 'repos = "x"\n'):
             home = self.project("alpha", repo=False)

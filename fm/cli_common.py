@@ -21,9 +21,9 @@ def home(args: argparse.Namespace) -> Project:
     return here()
 
 
-def _names(projects: list[Project], broken: list[str]) -> str:
+def _names(projects: list[Project], broken: list[config.Unreadable]) -> str:
     names = ", ".join(sorted(p.name for p in projects)) or "none"
-    return names + "".join(f"; unreadable: {b}" for b in broken)
+    return names + "".join(f"; unreadable: {b.home}: {b.reason}" for b in broken)
 
 
 def named(name: str) -> Project:
@@ -38,14 +38,17 @@ def named(name: str) -> Project:
 
 def here() -> Project:
     (projects, broken), cwd = config.load_all(), Path.cwd()
-    found = config.owners(projects, cwd)
+    found = config.owners([*projects, *broken], cwd)
     if len(found) == 1:
-        return found[0][0]
+        p, folder = found[0]
+        if isinstance(p, config.Unreadable):
+            sys.exit(f"fm: {folder} belongs to the project at {p.home}, whose fm.toml cannot be loaded: {p.reason}")
+        return p
     if found:
         sys.exit(f"fm: {found[0][1]} belongs to {' and '.join(p.name for p, _ in found)}; pass --project NAME")
     h = next((d for d in (cwd, *cwd.parents) if (d / "fm.toml").exists()), None)
     if h is None:
-        sys.exit(f"fm: no project here: {cwd} belongs to no registered project (registered: {_names(projects, broken)}); pass --project NAME")
+        sys.exit(f"fm: no project here: {cwd} is in none of the registered projects' folders (registered: {_names(projects, broken)}); pass --project NAME")
     return Project.load(h)
 
 
