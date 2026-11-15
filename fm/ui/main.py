@@ -4,10 +4,11 @@ CLI's functions, so the CLI cannot import the panel)."""
 import argparse
 
 from .cli.main import main as cli_main
-from .panel import server
 
 
 def panel(a: argparse.Namespace) -> None:
+    from .panel import server
+
     server.serve(a.port, a.host)
 
 
