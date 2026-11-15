@@ -55,15 +55,16 @@ Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, b
 A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `worktrees/`, optional `sources/`.
 `fm.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
 (`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Several repos are
-`[repos.<key>]` tables (`path`, `main`) instead of `[project] repo` (both forms: fm refuses); tasks run in the first
-one listed until `## Several repos` is built (FN-144 subtask 4). A project owns its home, every repo, its worktrees folder and the umbrella folder set in
-`[project] umbrella` (explicit, never guessed). A command finds its project by `--project NAME`, `--home`, `FM_HOME`,
-`FM_PROJECT`, then the registered project owning the current folder (paths resolved, the deepest folder wins; two
-projects claiming it: fm refuses and `fm health` names them), then the nearest `fm.toml` above it. Every setting is per
-project: `[agents] slots` (how many at once), models, extra session settings; `[merge] autonomy`, `provider`, `strategy`, `test`,
-`[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`; `[health]` timings.
-`fm init` links `.claude/fm.md` and `.claude/skills/define-task` to `fm/shared/` of the checkout it runs from, adds
-`[project] fm` (path of `bin/fm`), and never overwrites a file of the home.
+`[repos.<key>]` tables (`path`, `main`) instead of `[project] repo` (both forms: fm refuses); tasks run in the first one
+listed until `## Several repos` is built (FN-144 subtask 4). A project owns its home, every repo, its worktrees folder
+and the umbrella folder set in `[project] umbrella` (explicit, never guessed). A command finds its project by `--project
+NAME`, `--home`, `FM_HOME`, `FM_PROJECT`, then the registered project owning the current folder (paths resolved, the
+deepest folder wins; two projects claiming it: fm refuses and `fm health` names them), then the nearest `fm.toml` above
+it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings; `[merge]
+autonomy`, `provider`, `strategy`, `test`, `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`;
+`[health]` timings. With several repos, `[merge]` and `[risk]` are the defaults a repo's own tables override (see
+Several repos). `fm init` links `.claude/fm.md` and `.claude/skills/define-task` to `fm/shared/` of the checkout it
+runs from, adds `[project] fm` (path of `bin/fm`), and never overwrites a file of the home.
 
 ## The states of a task
 
@@ -381,8 +382,9 @@ post_create = ["cp -c -R {main}/deps {wt}/", "cp {main}/.env {wt}/"]   # copy de
 strategy = "squash"
 test = "make lint test"
 
-[repos.app.risk.high]
+[repos.app.risk.high]                # replaces the default high table: list again what stays high
 release = ["app.config", ".github/workflows/"]
+secrets = ["*secret*", "*.env"]
 
 [repos.api]
 path = "~/src/shop/api"
@@ -425,7 +427,8 @@ test = "make build"
   `[risk]` stay as the defaults for every repo.
 - **A setting given at both levels: the repo's wins, key by key; absent there, the project's; absent there, fm's
   default.** A `high` or `medium` table in a repo replaces the project's table of that level whole, never label by
-  label (as a project table replaces fm's default one today).
+  label (as a project table replaces fm's default one today). So a repo's `high` table also drops fm's default one
+  (`fm.toml`, `.github/`, `*secret*`, `*.env`): a repo that wants those paths high lists them again.
 - Repo tables are strict: a project-wide key or an unknown key in one is a config error naming table and key
   (`fm: [repos.api] has no setting 'slots'`). No other table changes.
 - `path` and `worktrees` are relative to the home, `~` expanded. `[project] repo` alone stays the one-repo form, with
@@ -448,7 +451,8 @@ test = "make build"
 - Choosing: `fm add TITLE --repo KEY`; `fm edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops
   the plan and returns to backlog, as criteria do, because a plan is about one repo). With several repos, `fm add` of
   a task with criteria and `fm go` refuse one without repo: `fm: FN-3: choose its repo first (fm edit FN-3 --repo
-  app|api|site|emails)`; in triage it may have none. An unknown key is refused, naming the keys. A health finding
+  app|api|site|emails)`; in triage it may have none. A parent needs no repo (each subtask has its own): `fm go` lets
+  it in without one, and it shows `-` as its repo. An unknown key is refused, naming the keys. A health finding
   about one repo carries it (main's tests, an orphan worktree); the loop's own findings carry none and are never let
   in as they are (the mechanic diagnoses, the owner files the real task).
 - Showing: `fm show` prints `repo`; `fm list` adds a repo column between status and agent; the panel's `state` and
@@ -468,30 +472,34 @@ test = "make build"
 | PR | per repo: provider (`auto` looks at that repo's `remote`; `"none"` is `local`), `pr` mode, push to that `remote`; draft PR, description, review comments and `fm-evidence` go to the task's repo |
 | Merge | per repo `strategy`; the local provider merges into that repo's main checkout; the merged check runs on that repo's main. Merges stay one at a time for the whole project |
 | Tests and CI | per repo `test`, in a detached tree of that repo (`state/trees/<id>`); no `test`: the PR's CI stands in and the doubt is medium, as today. Main's tests (health) run per repo that has a test command: `state/ci-<key>.json`, tree `main-<key>`, finding key `ci:<key>:<since>` (one repo keeps `ci.json` and `ci:<since>`) |
-| Risk | the repo's tables and `large_lines`. `publish_on_merge` makes the impact high with the reason `merging publishes [repo]` (a fact of the score, `publishes`), so only the owner's accept merges it. fm still never tags or releases |
+| Risk | the repo's tables and `large_lines`. `publish_on_merge` makes the impact high with the reason `merging publishes this repo (KEY)` (a fact of the score, `publishes`), so only the owner's accept merges it. fm still never tags or releases |
 | Autonomy | the repo's, else the project's; `high` never merges alone, as today |
 | Review | unchanged: hunter and reviewer start in the task's worktree, so they are per repo by their cwd |
 | Health checks | orphan worktrees in every repo's worktree list; main's tests per repo; new: a repo path that is not a git checkout, a task whose repo key left fm.toml (blocked at launch with that reason), fm or Claude files in a repo or the umbrella (below). `fm health`'s «runs in the first one» note goes |
-| Slots | one count for the project (`[agents] slots`), one queue by priority then id, whatever the repo; no per-repo cap. Checks and merged checks stay one at a time for the project |
+| Slots | one count for the project (`[agents] slots`), one queue by priority, then ready before backlog, then id, as today, whatever the repo; no per-repo cap. Checks and merged checks stay one at a time for the project |
 | Locks | `[resources.*]` stay project-wide and machine-wide: a simulator or a port is shared by every repo; the brief lists them for every task |
 | Guard | `push-main` covers every repo's `main`; the rest as today |
-| A project with one repo | nothing above shows: the `[project] repo` form is untouched; a project with one `[repos.K]` table has an implicit repo (no key stored); same files, names, columns and text |
+| A project with one repo | nothing above shows: the `[project] repo` form is untouched; a project with one `[repos.K]` table has an implicit repo (no key stored) whose `[repos.K]` settings every task gets; same files, names, columns and text, and no umbrella check unless it sets an umbrella |
 
 ### The umbrella and files kept out of repos
 
 - The umbrella (`[project] umbrella`) holds repos cloned inside it. No fm or Claude file goes in it or in a repo.
-  Checked at load for a project with `[repos.*]` or an umbrella (`fm: the home is inside repo app: …`): the home,
-  `state/`, every worktrees folder and the registry file are outside the umbrella and outside every repo. A one-repo
-  `[project] repo` project is not checked (unchanged).
-- fm writes into a repo only what git keeps out of `git status`: `.git/worktrees/<id>`, the refs
-  `<branch_prefix><id>`, and the local provider's merges into main. Everything else lives in the home: agent settings
-  inline on the command line, plans, reports, reviews, `state/trees/`. Evidence goes to `fm-evidence` by git plumbing,
-  without touching a checkout.
+  Checked at load for a project with more than one `[repos.*]` table or an umbrella (`fm: the home is inside repo
+  app: …`): the home, `state/`, every worktrees folder and the registry file are outside the umbrella and outside
+  every repo. A one-repo project (`[project] repo` or one `[repos.K]` table) without umbrella is not checked
+  (unchanged).
+- fm writes into a repo only what git keeps out of `git status`: the entries in `.git/worktrees/` of task worktrees
+  and of the detached test trees (`state/trees/<name>`, in the home), the refs `<branch_prefix><id>` and
+  `fm-evidence` (written by git plumbing, without touching a checkout), the local provider's merges into main, and
+  after a GitHub merge a `git fetch` and `merge --ff-only` of main when the checkout is clean on main. Everything
+  else lives in the home: agent settings inline on the command line, plans, reports, reviews, the test trees.
 - Safety net, because fm cannot prove that a Claude session started in a repo (planning, parent, mechanic) writes
-  nothing there: a health check lists, per repo and at the umbrella's top level, untracked entries named `.claude`,
-  `CLAUDE.md`, `CLAUDE.local.md` or `fm.toml` (a repo's `??` lines of `git status --porcelain`; a tracked
-  `CLAUDE.md` is the repo's own and is not reported), and files one finding. The matching is a pure function over
-  names, in `fm/repos.py`.
+  nothing there: a health check lists, per repo, the untracked and ignored paths (`??` and `!!` lines of
+  `git status --porcelain --ignored=matching --untracked-files=all`, so a file a global ignore hides is seen) with a
+  component named `.claude`, `CLAUDE.md`, `CLAUDE.local.md` or `fm.toml`, and at the umbrella's top level (a plain
+  folder listing) the entries with those names; it files one finding. Tracked files are the repo's own and are not
+  reported; a folder ignored whole (dependencies) is not looked into. The matching is a pure function over paths, in
+  `fm/repos.py`.
 - The owner's own chat in the umbrella is the plugin's (FN-144 subtask 2), not this.
 
 ### Left out on purpose
@@ -521,6 +529,7 @@ test = "make build"
 | the folder of repos found by rule, with the home inside it | the umbrella is explicit and the home stays outside it |
 | the backlog's projects with `repos` lists, `launch --repo` | a task has one repo and `fm go` launches it |
 | `import-gh` and `Closes #n` | fm imports nothing from GitHub |
+| `remote = "none"` merging by fast-forward after the local CI | the local provider merges with the repo's `strategy`, as today; the merged check has already run the tests on the branch merged with main |
 
 ## Architecture
 
