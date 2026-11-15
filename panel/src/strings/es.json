@@ -138,6 +138,7 @@
   "loop_dead": "El bucle no está en marcha",
   "loop_last": "Última pasada {when}",
   "loop_never": "Nunca ha pasado",
+  "versions": "Bucle {loop} · panel {panel}",
   "paused_since": "Lanzar en pausa desde {when}",
   "pause": "Pausar lanzamientos",
   "resume": "Reanudar lanzamientos",

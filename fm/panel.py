@@ -18,6 +18,9 @@ POST  /api/add  /api/answer  /api/allow  /api/deny  /api/accept  /api/reject  /a
 import json
 import os
 import secrets
+import sys
+import threading
+import time
 from collections.abc import Callable
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,7 +28,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import backlog, evidence, pulls
+from . import backlog, evidence, launcher, pulls
 from .panel_actions import Refused, act
 from .panel_views import Obj, project, projects, state, summary, system, task
 
@@ -165,8 +168,21 @@ def make_server(port: int = 7788, token: str | None = None, host: str = "127.0.0
     return ThreadingHTTPServer((host, port), Handler), Handler.token
 
 
+def watch_version(srv: ThreadingHTTPServer, every_s: float = 30, stale: Callable[[], str] = launcher.stale) -> None:
+    """A panel started by the launcher stops when another fm@fm version is installed (launchd starts the new one)."""
+
+    def watch() -> None:
+        while not (why := stale()):
+            time.sleep(every_s)
+        print(f"fm: {why}", file=sys.stderr, flush=True)
+        srv.shutdown()
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def serve(port: int = 7788, host: str = "127.0.0.1") -> None:
     srv, tok = make_server(port, host=host)
+    watch_version(srv)
     names = ", ".join(p.name for p in projects()) or "none (fm init registers one)"
     shown = host
     if host in ("0.0.0.0", ""):

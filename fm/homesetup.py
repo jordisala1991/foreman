@@ -7,7 +7,6 @@ from pathlib import Path
 from . import backlog, util
 from .config import Project
 
-FM_BIN = Path(__file__).resolve().parent.parent / "bin/fm"
 INSTALL = ("claude plugin marketplace add jordisala1991/foreman#foreman-next", "claude plugin install fm@fm")
 
 

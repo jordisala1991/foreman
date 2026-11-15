@@ -3,9 +3,11 @@ import os
 import time
 import unittest
 
-from helpers import Env, fm, git
+from unittest import mock
 
-from fm import backlog, delivery, loop, proc, providers, util
+from helpers import Env, fm, git, install_fm, version_folder
+
+from fm import backlog, delivery, launcher, loop, proc, providers, util
 
 
 class Launch(unittest.TestCase):
@@ -535,6 +537,32 @@ class Queue(unittest.TestCase):
         loop.tick(e.p)
         i = e.task(tid)
         self.assertEqual((i["status"], i["check"]["risk"]), ("in review", "low"))
+
+
+class Version(unittest.TestCase):
+    """A loop started by the launcher (FM_PINNED) exits as soon as another fm@fm version is installed."""
+
+    def setUp(self):
+        self.e = Env()
+        self.p = self.e.p
+        cache = self.e.tmp / "cache/fm/fm"
+        self.a, self.b = version_folder(cache, "aaa"), version_folder(cache, "bbb")
+        env = mock.patch.dict(os.environ, {"FM_PINNED": self.a["installPath"]})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_a_new_install_stops_the_loop_before_its_tick(self):
+        install_fm(self, self.b)
+        with self.assertRaises(SystemExit) as e:
+            loop.forever([str(self.p.home)], once=True)
+        self.assertEqual(str(e.exception), "fm: fm@fm bbb is installed now; this runs aaa")
+        self.assertFalse((self.p.state / "loop.json").exists())
+
+    def test_the_same_install_ticks_and_the_heartbeat_names_the_version(self):
+        install_fm(self, self.a)
+        loop.forever([str(self.p.home)], once=True)
+        hb = util.read_json(self.p.state / "loop.json", {})
+        self.assertEqual((hb["version"], hb["pinned"]), (launcher.ROOT.name, True))
 
 
 if __name__ == "__main__":

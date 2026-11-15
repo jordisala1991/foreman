@@ -11,7 +11,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
-from fm import backlog, panel, util
+from fm import backlog, launcher, panel, util
 from fm.config import Project, register
 
 
@@ -94,6 +94,9 @@ class PanelTest(unittest.TestCase):
         self.assertFalse(d["loop"]["alive"])
         self.assertIn("loop-dead", [f["key"] for f in d["findings"]])
         self.assertEqual(len(d["metrics"]), 2)
+        self.assertEqual(d["versions"], {"loop": None, "panel": launcher.ROOT.name, "installed": None})
+        util.write_json(self.p.state / "loop.json", {"version": "aaa"})
+        self.assertEqual(self.call("/api/system?p=demo")[1]["versions"]["loop"], "aaa")
         self.assertEqual(self.call("/api/state?p=nope")[0], 404)
 
     def test_answer_and_go(self) -> None:
@@ -120,6 +123,25 @@ class PanelTest(unittest.TestCase):
         evil = {"Origin": "http://127.0.0.1:1"}
         self.assertEqual(self.call("/api/pause?p=demo&on=0", "", headers=evil)[0], 403)
         self.assertTrue((self.p.state / "paused").exists())
+
+
+class WatchVersion(unittest.TestCase):
+    def serving(self, stale) -> threading.Thread:
+        srv, _ = panel.make_server(0, token="k")
+        self.addCleanup(srv.server_close)
+        th = threading.Thread(target=srv.serve_forever, daemon=True)
+        th.start()
+        panel.watch_version(srv, 0.05, stale=stale)
+        th.join(2)
+        if th.is_alive():
+            self.addCleanup(srv.shutdown)
+        return th
+
+    def test_a_new_version_stops_the_panel(self) -> None:
+        self.assertFalse(self.serving(lambda: "fm@fm bbb is installed now; this runs aaa").is_alive())
+
+    def test_the_same_version_keeps_it_serving(self) -> None:
+        self.assertTrue(self.serving(lambda: "").is_alive())
 
 
 if __name__ == "__main__":

@@ -111,7 +111,7 @@ instructions with the project's values plus `<home>/instructions.md` (the Sessio
 
 ## The loop
 
-A plain process, no model (`fm loop`; `fm launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Agents use the normal claude.ai login, so they show in the Claude app; the loop removes `CLAUDE_CODE_OAUTH_TOKEN` from every agent it launches. `fm health` warns 3 days before the login expires and files a finding when it does not work (`claude auth status`)); one per registry (a lock file).
+A plain process, no model (`fm loop`; `fm launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Run from the installed plugin, a job's command names no version: at each start it runs the version of `fm@fm` Claude Code records as installed (`~/.claude/plugins/installed_plugins.json`, `fm/launcher.py`), and it exits when another version is installed so launchd starts the new one (the loop before its next tick, the panel within 30 s); each version folder never changes, so a job never mixes two versions. Run from a plain checkout, the jobs name that checkout. Agents use the normal claude.ai login, so they show in the Claude app; the loop removes `CLAUDE_CODE_OAUTH_TOKEN` from every agent it launches. `fm health` warns 3 days before the login expires and files a finding when it does not work (`claude auth status`)); one per registry (a lock file).
 Each tick, per project, each step isolated (an exception goes to `state/errors.jsonl`, which a health check turns
 into a finding), and inside a step each task isolated (a failure blocks that task with the reason; the others go
 on). The heartbeat is written before every step, so a long test run does not look like a dead loop.

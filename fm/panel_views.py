@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import backlog, config, costs, evidence, health, lock, metrics, pulls, sessions, util
+from . import backlog, config, costs, evidence, health, launcher, lock, metrics, pulls, sessions, util
 from .config import Project
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
@@ -102,4 +102,13 @@ def system(p: Project) -> Obj:
         "metrics": rows,
         "total": round(sum(r["usd"] for r in rows), 2),
         "locks": locks,
+        "versions": versions(p),
     }
+
+
+def versions(p: Project) -> Obj:
+    try:
+        now: str | None = launcher.installed().version
+    except launcher.LauncherError:
+        now = None
+    return {"loop": util.read_json(p.state / "loop.json", {}).get("version"), "panel": launcher.ROOT.name, "installed": now}

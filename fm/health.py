@@ -17,7 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import backlog, config, delivery, login, util
+from . import backlog, config, delivery, launcher, login, util
 from .agents import idle_s
 from .config import Project
 
@@ -219,3 +219,15 @@ def old_links(p: Project) -> list[str]:
 def repos_note(p: Project) -> str:
     n = len(p.repos)
     return f"note: {p.name} has {n} repos; its tasks run in the first one, {p.repo}" if n > 1 else ""
+
+
+def versions(p: Project) -> list[str]:
+    """Which fm this command, the loop and Claude Code's install are; and, for a loop started by the launcher, that
+    fm@fm cannot start it again."""
+    hb = util.read_json(p.state / "loop.json", {})
+    try:
+        now, why = launcher.installed().version, ""
+    except launcher.LauncherError as e:
+        now, why = "none", str(e)
+    out = [f"versions: this command {launcher.ROOT.name} · the loop {hb.get('version') or 'unknown'} · installed {now}"]
+    return out + [f"! fm@fm cannot start the loop and the panel: {why}"] if why and hb.get("pinned") else out
