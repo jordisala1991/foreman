@@ -4,10 +4,10 @@ from fm import util
 
 
 class SessionTitle(unittest.TestCase):
-    def test_worked_example_is_cut_with_an_ellipsis(self):
+    def test_a_long_title_is_cut_at_the_limit_with_an_ellipsis(self):
         self.assertEqual(
             util.session_title("FN-106", "review", "Failing tests or CI send the task back to its agent"),
-            "FN-106 review · Failing tests or CI send the task back…",
+            "FN-106 review · Failing tests or CI send the task back t…",
         )
 
     def test_a_title_of_the_limit_is_whole_and_one_more_is_cut(self):

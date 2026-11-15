@@ -126,8 +126,5 @@ def session_title(tid: str, role: str, title: str) -> str:
     """The name an agent shows in Claude Code: «ID role · title». Only the title is cut; the id and role never are."""
     t = " ".join(title.split())
     if len(t) > TITLE_MAX:
-        head = t[:TITLE_MAX]
-        if t[TITLE_MAX] != " " and " " in head:  # do not leave half a word
-            head = head.rsplit(" ", 1)[0]
-        t = head.rstrip() + "…"
+        t = t[:TITLE_MAX].rstrip() + "…"
     return f"{tid} {role} · {t}"
