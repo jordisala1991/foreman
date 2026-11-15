@@ -3,7 +3,7 @@ loop does with a task in review" that this adds. The owner only sees branches th
 
 import unittest
 
-from helpers import Env, git
+from helpers import Env
 from test_github import GH
 from test_review_rules import commit, head, launched, take_note
 
@@ -77,19 +77,23 @@ class Failing(unittest.TestCase):
         self.assertIn("tests fail [tests]", i["check"]["reasons"])
         self.assertEqual(len(e.calls()), before)
 
-    def test_a_green_check_ends_the_row(self):
-        e = Env(test="test ! -e bad")
-        tid = deliver(e, "bad")
-        loop.tick(e.p)
-        self.assertEqual(e.task(tid)["failure_streak"], 1)
-        take_note(e, tid)
-        wt = e.task(tid)["worktree"]
-        git(e.repo.parent / wt, "rm", "-q", "bad")
-        git(e.repo.parent / wt, "commit", "-qm", "fix")
-        backlog.set_status(e.p, tid, "in review")
-        e.review(tid)
-        loop.tick(e.p)
-        i = e.task(tid)
+    def test_a_green_check_ends_the_row_without_a_test_command(self):
+        """With a test command only the merge ends the row (FN-113, tests/test_merged_check.py); without one, the PR's
+        CI stands in and a green check ends it."""
+        g = GH(test="")
+        self.addCleanup(g.close)
+        g.set(ci="fail")
+        tid = g.work()
+        g.deliver(tid)
+        loop.tick(g.e.p)
+        self.assertEqual(g.e.task(tid)["failure_streak"], 1)
+        take_note(g.e, tid)
+        commit(g.e.task(tid)["worktree"], "app.py", "# fix\n")
+        g.set(ci="pass")
+        backlog.set_status(g.e.p, tid, "in review")
+        g.e.review(tid)
+        loop.tick(g.e.p)
+        i = g.e.task(tid)
         self.assertEqual((i["status"], i["failure_streak"], i["failures"]), ("in review", 0, 1))
 
     def test_failing_ci_goes_back_with_each_check(self):

@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import agents, backlog, blockers, delivery, editing, guard, health, lock, loop, metrics, providers, sessions, subtasks, util
+from . import agents, backlog, blockers, decide, delivery, editing, guard, health, lock, loop, metrics, providers, sessions, subtasks, util
 from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .cli_common import home
 from .cli_parser import parser
@@ -101,6 +101,7 @@ def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
     i = backlog.get(d, a.id)
+    i = {**i, "checked_on": decide.ran_on(i["check"])} if i.get("check") else i
     if wait := blockers.pending(i, backlog.tasks(d)):
         i = {**i, "waiting_for": wait}
     if subs := subtasks.of(backlog.tasks(d), a.id):

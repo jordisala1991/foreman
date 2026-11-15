@@ -7,7 +7,7 @@ from typing import Any
 
 from helpers import ROOT
 
-from fm.decide import Seen, Step, after_check, checks_again, closes_review, conflict_note, failing_note, review_step, waits_for_ci
+from fm.decide import Seen, Step, after_check, checks_again, closes_review, conflict_note, failing_note, merge_gate, ran_on, review_step, waits_for_ci
 
 
 def seen(**kw: Any) -> Seen:
@@ -142,6 +142,35 @@ class Check(unittest.TestCase):
         for c, autonomy, has_ci in rows:
             self.assertEqual(after_check(c, autonomy, has_ci), "owner", (c, autonomy, has_ci))
         self.assertEqual(after_check(check(ci="fail"), "low", True, failed=2), "owner")  # failing, past its returns
+
+
+class MergeGate(unittest.TestCase):
+    """At the merge step (FN-113): merge, check it merged with main, back to its agent, or the owner decides."""
+
+    def test_the_table(self):
+        merged = check(merged_with="m", tests="pass")
+        rows = [
+            (check(), "h", "m", 0, True, "merge"),  # no test command or a conflict: as today
+            (merged, "h2", "m", 0, False, "merge"),  # the branch moved: the merge step refuses it itself
+            (merged, "h", "m", 0, False, "merge"),  # nothing moved since a passing merged check
+            (check(merged_with="m", tests="fail"), "h", "m", 0, False, "failing"),
+            (check(merged_with="m", tests="fail"), "h", "m", 1, False, "failing"),
+            (check(merged_with="m", tests="fail"), "h", "m", 2, False, "owner"),
+            (merged, "h", "m2", 0, False, "check"),  # main moved after a passing merged check
+            (check(tests="pass"), "h", "m", 0, False, "check"),  # only checked on the branch alone
+        ]
+        for c, head, main, failed, as_today, want in rows:
+            self.assertEqual(merge_gate(c, head, main, failed, as_today), want, (c, head, main, failed, as_today))
+
+    def test_what_the_check_ran_on(self):
+        self.assertEqual(ran_on(check()), "branch alone")
+        self.assertEqual(ran_on(check(merged_with="abcdef1234567")), "merged with main abcdef123")
+
+    def test_a_merged_failure_says_so(self):
+        note = failing_note(check(tests="fail", tests_output="L9", merged_with="abcdef1234567"), "")
+        for s in ("abcdef123", "not on its branch alone", "L9"):
+            self.assertIn(s, note)
+        self.assertNotIn("not on its branch alone", failing_note(check(tests="fail", tests_output="L9"), ""))
 
 
 ALLOWED = {"collections.abc", "dataclasses", "typing", ".risk"}

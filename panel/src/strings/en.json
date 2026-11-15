@@ -89,6 +89,8 @@
   "tests_fail": "fail",
   "tests_none": "none",
   "check_figs": "Tests {tests} · {files} files · {lines} lines",
+  "check_on_merged": "Checked merged with main {sha}",
+  "check_on_branch": "Checked on the branch alone",
   "see_files": "See the files",
   "not_checked": "Not checked yet: the loop checks it on its next tick.",
   "rep_summary": "Summary",

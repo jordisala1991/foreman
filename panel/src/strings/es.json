@@ -89,6 +89,8 @@
   "tests_fail": "fallan",
   "tests_none": "no hay",
   "check_figs": "Tests: {tests} · {files} ficheros · {lines} líneas",
+  "check_on_merged": "Comprobado con main fusionado ({sha})",
+  "check_on_branch": "Comprobado solo en la rama",
   "see_files": "Ver los ficheros",
   "not_checked": "Aún sin comprobar: el bucle lo hace en su próxima pasada.",
   "rep_summary": "Resumen",

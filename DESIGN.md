@@ -26,6 +26,7 @@ Nothing needs keeping alive but the loop, which has no model.
 | `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
 | `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
 || `fm/delivery.py` | ~200 | check a delivered branch, risk score, autonomy, accept (records), merge step ||
+| `fm/mergecheck.py` | ~30 | the merged check: tests on an accepted branch merged with main as it is at the merge (FN-113) |
 | `fm/verdict.py` | ~100 | the verdict as a review body and the `Findings:` line parser (pure text) |
 | `fm/inline.py` | ~80 | the diff's visible lines and findings as line comments (pure) |
 | `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
@@ -115,7 +116,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
    filled in from its short id on a later tick.
 4. **agents**: an agent whose session ended its turn without `fm done`/`ready`/`ask`/`block`, and whose transcript
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
-5. **queue**: accepted tasks are merged first. Then a branch in review whose head or main's head changed is checked,
+5. **queue**: accepted tasks are merged first, one at a time; with a test command, each only once its tests pass on it
+   merged with main as main is at that moment (the merged check, `loop.gate_merge`: see below). Then a branch in review whose head or main's head changed is checked,
    one at a time, in the background (a tick waits for it only `BACKGROUND_WAIT_S`, so answers, launches and merges keep
    flowing; each task is read again just before its turn): tests on exactly its committed head
    (a fresh detached worktree, never uncommitted files), diff, deleted files,
@@ -165,12 +167,34 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 | Head, main or CI moved since the last check | checks it again (in the background) | `checks_again` | `test_moved_branch_is_checked_again` |
 | It conflicts with main and nobody said it should merge | waits for the owner; `fm show` and the panel say it conflicts and goes back when accepted | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_waiting_task_that_conflicts_stays_and_says_so` |
 | It conflicts and the owner accepted it (also a merge refused for a conflict) or the autonomy would merge it | back to its agent for the conflict, keeping that accept (`resolving`) | `after_check` → `conflict`, `conflict_note` | `test_conflict_goes_back`, `test_conflict_waits_unless_someone_wants_the_merge` |
-| Tests or CI fail, returned fewer than 2 times in a row (`failure_streak`; a check without failures ends the row) | returned to its agent with the failing output or checks, whoever wants the merge; keeps its check (the panel shows why) and counts `failures` | `after_check` → `failing`, `failing_note` | `test_failing_tests_or_ci_go_back_up_to_the_cap`, `test_failing_note_names_the_output_and_the_checks`, `test_failing_tests_go_back_with_the_output`, `test_failing_ci_goes_back_with_each_check`, `test_a_green_check_ends_the_row` |
+| Tests or CI fail, returned fewer than 2 times in a row (`failure_streak`; without a test command a check without failures ends the row, with one only the merge does) | returned to its agent with the failing output or checks, whoever wants the merge; keeps its check (the panel shows why) and counts `failures` | `after_check` → `failing`, `failing_note` | `test_failing_tests_or_ci_go_back_up_to_the_cap`, `test_failing_note_names_the_output_and_the_checks`, `test_failing_tests_go_back_with_the_output`, `test_failing_ci_goes_back_with_each_check`, `test_a_green_check_ends_the_row_without_a_test_command` |
 | Tests or CI fail a third time in a row | waits for the owner, the failure shown in its check | `after_check` → `owner` | `test_failing_tests_or_ci_go_back_up_to_the_cap`, `test_the_third_failure_waits_for_the_owner` |
 | Resolved, no findings open, checks green, with the owner's accept kept | merges without a new accept (an accept the autonomy made is decided again: high never merges alone) | `after_check` → `merge` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
 | The resolution's review leaves findings open, tests fail or CI is not green | the kept accept lapses; waits for the owner | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_resolution_left_open_waits_for_the_owner` |
 | Autonomy allows the risk, no open findings, CI green where the provider has CI | merges alone | `after_check` → `merge` | `test_autonomy_merges_alone` |
 | Anything else | waits for the owner (`fm accept` / `fm reject`) | `after_check` → `owner` | `test_everything_else_waits_for_the_owner` |
+
+### The merged check (FN-113)
+
+A branch's own check runs its tests on the branch alone. Just before an accepted branch merges (the owner's accept or
+the autonomy's, `loop.gate_merge` on both paths), the test command runs again on the branch merged with main as main
+is at that moment (`fm/mergecheck.py`, in the background like the check). The result goes in the task's `check`
+(`merged_with` = that main commit); `fm show` (`checked_on`) and the panel say what the last check ran on. A task not
+about to merge (in review, waiting for the owner) never runs it. Accepted tasks merge one at a time, so of two waiting,
+the second is checked with the first already in main.
+
+| Situation at the merge step | What the loop does | Function | Test |
+|---|---|---|---|
+| No test command | merges as today: the PR's CI stands in | `merge_gate` → `merge` | `test_without_a_test_command_it_merges_as_today` |
+| It conflicts with main | as today: the merge returns it to its agent (FN-133), no merged run | `merge_gate` → `merge` | `test_conflict_goes_back_without_a_merged_run` |
+| No merged check on this head and main as it is now (never run, or main moved since) | runs the merged check, then decides | `merge_gate` → `check` | `test_passes_alone_and_merged_merges`, `test_main_moved_after_a_pass_checks_again` |
+| Passed merged, neither main nor the branch moved since | merges without running the tests again | `merge_gate` → `merge` | `test_nothing_moved_merges_without_a_run` |
+| Fails merged, fewer than 2 returns in a row | back to its agent with the output, saying it failed merged with main `<sha>`, not on its branch alone; counts in `failures` and `failure_streak` | `merge_gate` → `failing`, `failing_note` | `test_fails_merged_goes_back_saying_so`, `test_autonomy_path_checks_merged_too` |
+| Fails merged a third time in a row | its accept lapses; waits for the owner, the failure shown in its check | `merge_gate` → `owner` | `test_third_merged_failure_waits_for_the_owner` |
+
+With a test command, a green check of the branch alone no longer ends a row of failures (`failure_streak`): only the
+merge does, otherwise each fix passing alone would reset the count. Without one, a green check ends it, as before
+(`test_a_green_check_ends_the_row_without_a_test_command`).
 
 The decision tests are in `tests/test_decide.py` and launch no program; the loop's in `tests/test_review_rules.py`. How
 a tip follows the reviewed one is `delivery.merge_of`: a merge of the reviewed tip and a main commit whose tree equals

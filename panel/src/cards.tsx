@@ -148,6 +148,7 @@ export function CheckView({ c }: { c: NonNullable<Task["check"]> }) {
       <div className="checkline">
         <Risk risk={c.risk} />
         <span>{t("check_figs", { tests: t(`tests_${c.tests}` as Key), files: c.files, lines: c.lines })}</span>
+        <span>{c.merged_with ? t("check_on_merged", { sha: c.merged_with.slice(0, 9) }) : t("check_on_branch")}</span>
       </div>
       <ul className="reasons">
         {c.reasons.map((r) => (

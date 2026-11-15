@@ -68,6 +68,9 @@ layer = "services"
 path = "fm.delivery"
 layer = "services"
 [[modules]]
+path = "fm.mergecheck"
+layer = "services"
+[[modules]]
 path = "fm.pulls"
 layer = "services"
 [[modules]]
