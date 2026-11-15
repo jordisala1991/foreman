@@ -137,6 +137,9 @@ layer = "core"
 path = "fm.config"
 layer = "core"
 [[modules]]
+path = "fm.repos"
+layer = "core"
+[[modules]]
 path = "fm.util"
 layer = "core"
 [[modules]]
