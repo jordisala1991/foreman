@@ -130,6 +130,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
    never launched here: just before, a let-in parent gets its parent agent regardless of slots (`fm/parents.py`).
+   An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
+   an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
 9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
