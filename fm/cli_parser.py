@@ -3,7 +3,7 @@
 import argparse
 from collections.abc import Callable
 
-from . import backlog, config
+from . import backlog, config, tasktypes
 
 Command = Callable[[str, str], argparse.ArgumentParser]
 
@@ -11,6 +11,10 @@ Command = Callable[[str, str], argparse.ArgumentParser]
 def _model_effort(s: argparse.ArgumentParser) -> None:
     s.add_argument("--model", choices=config.MODELS, help="the model of the task's responsible agent (default: the project's)")
     s.add_argument("--effort", choices=config.EFFORTS, help="the effort of the task's responsible agent (default: the project's)")
+
+
+def _type(s: argparse.ArgumentParser) -> None:
+    s.add_argument("--type", choices=tasktypes.TYPES, help="change (default), bug, mechanical or definition: the instructions of the task's agents")
 
 
 def _filing(c: Command) -> None:
@@ -28,6 +32,7 @@ def _filing(c: Command) -> None:
     s.add_argument("--triage", action="store_true")
     s.add_argument("--priority", default="none", choices=backlog.PRIORITIES)
     _model_effort(s)
+    _type(s)
     s = c("list", "the backlog and the open questions")
     s.add_argument("--all", action="store_true")
     s = c("show", "one task, as stored")
@@ -85,6 +90,7 @@ def _owner_side(c: Command) -> None:
     s.add_argument("--criteria", help="one criterion per line, as in fm add")
     blocked_by(s)
     _model_effort(s)
+    _type(s)
     s = c("cancel", "cancel a task (stops its agent)")
     s.add_argument("id")
     s.add_argument("why", nargs="?")

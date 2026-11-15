@@ -12,7 +12,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
-from . import backlog, proc, providers, pulls, sessions, subtasks, util
+from . import backlog, proc, providers, pulls, reviews, sessions, subtasks, util
 from .config import Project
 from .providers import Change, registry
 from .risk import Facts, score
@@ -121,7 +121,7 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
         tests = ci
     files = diff_stat(p, branch)
     deleted = deleted_files(p, branch)
-    v: backlog.Review | None = i.get("review")
+    v: reviews.Review | None = i.get("review")
     review = "" if not v else "clean" if v["open"] == 0 else f"open after round {v['round']}: {v['open']}"
     conflict = conflicts(p, branch)
     risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci))
