@@ -22,6 +22,7 @@ from . import (
     loop,
     metrics,
     providers,
+    schedule,
     sessions,
     subtasks,
     util,
@@ -186,6 +187,8 @@ def cmd_health(a: argparse.Namespace) -> None:
     p = home(a)
     if note := health.repos_note(p):
         print(note)
+    for r in schedule.rows(p):
+        print(schedule.line(r))
     for line in [*health.versions(p), *health.old_links(p)]:
         print(line)
     rows = sessions.listing(p)

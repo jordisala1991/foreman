@@ -3,7 +3,7 @@
 import argparse
 import json
 
-from . import backlog, blockers, decide, subtasks, tasktypes
+from . import backlog, blockers, decide, recurring, subtasks, tasktypes
 from .cli_common import home
 
 
@@ -19,6 +19,7 @@ def cmd_list(a: argparse.Namespace) -> None:
         ag = agent.get("name", "")
         title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
         note = (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
+        note += f"  [recurring: {name}]" if (name := recurring.name_of(i)) else ""
         print(f"{i['id']:8} {i['status']:12} {tasktypes.of(i, all_):10} {ag:14} {title}{note}")
     for q in backlog.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
@@ -27,7 +28,7 @@ def cmd_list(a: argparse.Namespace) -> None:
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
-    i = tasktypes.shown(backlog.get(d, a.id), backlog.tasks(d))
+    i = recurring.shown(tasktypes.shown(backlog.get(d, a.id), backlog.tasks(d)))
     i = {**i, "checked_on": decide.ran_on(i["check"])} if i.get("check") else i
     if wait := blockers.pending(i, backlog.tasks(d)):
         i = {**i, "waiting_for": wait}

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import backlog, config, costs, evidence, health, launcher, lock, metrics, pulls, sessions, tasktypes, util
+from . import backlog, config, costs, evidence, health, launcher, lock, metrics, pulls, recurring, schedule, sessions, tasktypes, util
 from .config import Project
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
@@ -67,7 +67,8 @@ def state(p: Project) -> Obj:
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     rows = sessions.listing(p)
     all_tasks = backlog.tasks(d)
-    shown = [tasktypes.shown(with_session(p, i, rows), all_tasks) for i in all_tasks if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
+    recent = [i for i in all_tasks if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
+    shown = [recurring.shown(tasktypes.shown(with_session(p, i, rows), all_tasks)) for i in recent]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
     return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "tasks": shown, "questions": d["decisions"], "events": events}
 
@@ -77,7 +78,7 @@ def task(p: Project, tid: str) -> Obj:
     i = backlog.get(d, tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
-    shown = tasktypes.shown(with_session(p, i, sessions.listing(p)), backlog.tasks(d))
+    shown = recurring.shown(tasktypes.shown(with_session(p, i, sessions.listing(p)), backlog.tasks(d)))
     if i.get("report"):
         check: Obj = i.get("check") or {}
         text = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
@@ -95,6 +96,7 @@ def system(p: Project) -> Obj:
     found = health.findings(p, sessions.listing(p), outside=True)
     rows = metrics.per_task(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
+    entries = schedule.rows(p)
     return {
         "name": p.name,
         "paused": paused(p),
@@ -103,6 +105,7 @@ def system(p: Project) -> Obj:
         "metrics": rows,
         "total": round(sum(r["usd"] for r in rows), 2),
         "locks": locks,
+        **({"recurring": entries} if entries else {}),
         "versions": versions(p),
     }
 

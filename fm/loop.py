@@ -1,7 +1,7 @@
 """The loop: a plain process, no model. Each tick, for each registered project:
 
 1. heartbeat (state/loop.json), read by the health check «loop dead» and by the panel
-2. sources: plug-in signals become triage tasks (sources.py; none shipped yet)
+2. sources: plug-in signals, and recurring entries that fell due, become tasks (sources.py, schedule.py)
 3. answers: the owner's answers go back to its agent (its own session, resumed)
 4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
 5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
