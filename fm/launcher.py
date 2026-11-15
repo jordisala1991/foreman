@@ -14,7 +14,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 ROOT = Path(globals().get("__file__", ".")).resolve().parent.parent  # under `python3 -c` (the plist) there is no __file__
 PINNED = "FM_PINNED"
@@ -42,12 +42,10 @@ def installed() -> Installed:
         data: Any = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise LauncherError(f"{PLUGIN} is not installed in Claude Code ({f}: {e})") from None
-    top = _object(data)
-    if top.get("version") != 2:
-        raise LauncherError(f"{f} has format version {top.get('version')}, fm reads 2: update fm")
-    entries: Any = _object(top.get("plugins")).get(PLUGIN)
-    listed = cast(list[Any], entries) if isinstance(entries, list) else []
-    users = [u for u in map(_object, listed) if u.get("scope") == "user"]
+    if _get(data, "version") != 2:
+        raise LauncherError(f"{f} has format version {_get(data, 'version')}, fm reads 2: update fm")
+    entries: Any = _get(_get(data, "plugins"), PLUGIN) or []
+    users = [u for u in entries if _get(u, "scope") == "user"]
     if not users:
         raise LauncherError(f"{PLUGIN} is not installed in Claude Code: run claude plugin install {PLUGIN}")
     if len(users) > 1:
@@ -60,9 +58,12 @@ def installed() -> Installed:
     return Installed(Path(path).resolve(), version)
 
 
-def _object(v: object) -> dict[str, Any]:
-    """The JSON value as an object, or {} (as util.json_object, which this file cannot import: it runs alone)."""
-    return cast(dict[str, Any], v) if isinstance(v, dict) else {}
+def _get(o: Any, key: str) -> Any:
+    """A key of a JSON object, or None when the value is not an object."""
+    try:
+        return o.get(key)
+    except AttributeError:
+        return None
 
 
 def pinned() -> str:

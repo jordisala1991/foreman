@@ -2,7 +2,6 @@ import json
 import os
 import time
 import unittest
-
 from unittest import mock
 
 from helpers import Env, fm, git, install_fm, version_folder
