@@ -10,7 +10,7 @@ from unittest import mock
 
 from helpers import Env, git
 
-from fm import backlog, delivery, health, login, loop, util
+from fm import backlog, config, delivery, health, login, loop, util
 
 
 class Health(unittest.TestCase):
@@ -20,6 +20,13 @@ class Health(unittest.TestCase):
 
     def triage(self):
         return [i for i in backlog.tasks(backlog.load(self.p)) if i["status"] == "triage"]
+
+    def test_the_python_note_is_shown_by_health(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"FM_REGISTRY": f"{d}/projects.json"}):
+            self.assertEqual(health.python_note(), [])
+            line = "fm: needs Python 3.12 or newer; the python3 found is 3.9.6 (/usr/bin/python3)"
+            config.python_note_file().write_text(line + "\n")
+            self.assertEqual(health.python_note(), ["! " + line])
 
     def test_dead_loop_is_seen_from_outside(self):
         self.assertEqual(health.loop_dead(self.p)[0]["key"], "loop-dead")

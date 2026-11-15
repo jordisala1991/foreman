@@ -95,6 +95,12 @@ class PluginTest(unittest.TestCase):
             cli.main(["session-context"])
         self.assertEqual(out.getvalue(), "")
 
+    def test_a_session_start_on_a_good_python_clears_the_python_note(self):
+        note = config.python_note_file()
+        note.write_text("fm: needs Python 3.12 or newer\n")
+        self.hook(self.root, self.root / "env")
+        self.assertFalse(note.exists())
+
     def hook(self, cwd: Path, env_file: Path) -> str:
         out = io.StringIO()
         stdin = io.StringIO(json.dumps({"cwd": str(cwd)}))

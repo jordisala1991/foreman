@@ -1,6 +1,7 @@
 """The plugin's commands: `fm session-context` (Claude Code's SessionStart hook) and `fm project` (the skill's values)."""
 
 import argparse
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -15,6 +16,8 @@ def cmd_session_context(a: argparse.Namespace) -> None:
     """In a project's folder: the instructions, and this bin/ first on the session's PATH (Claude Code appends it last,
     after macOS's own /usr/bin/fm). Whatever fails prints nothing: a hook's error would be a message in a session that
     should get none."""
+    with contextlib.suppress(OSError):
+        config.python_note_file().unlink(missing_ok=True)
     try:
         projects, broken = config.load_all()
         out = plugin.session_context(sys.stdin.read(), os.environ, [*projects, *broken])
