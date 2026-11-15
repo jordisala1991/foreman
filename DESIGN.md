@@ -56,6 +56,8 @@ A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `wo
 (`~/.config/fm/projects.json` or `$FM_REGISTRY`) lists the homes the loop and the panel serve. Every setting is per
 project: `[agents] slots` (how many at once), models, extra session settings; `[merge] autonomy`, `provider`, `strategy`, `test`,
 `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`; `[health]` timings.
+`fm init` links `.claude/fm.md` and `.claude/skills/define-task` to `fm/shared/` of the checkout it runs from, adds
+`[project] fm` (path of `bin/fm`), and never overwrites a file of the home.
 
 ## The states of a task
 
