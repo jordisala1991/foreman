@@ -218,7 +218,7 @@ def diagnosing(i: dict[str, Any]) -> bool:
 
 
 def running(d: dict[str, Any]) -> int:
-    return sum(1 for i in backlog.tasks(d) if (i["status"] in backlog.RUNNING and not i.get("blocked")) or reviewer_active(i) or diagnosing(i))
+    return sum(1 for i in backlog.tasks(d) if backlog.holds_slot(d, i) or reviewer_active(i) or diagnosing(i))
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:

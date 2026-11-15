@@ -9,8 +9,8 @@
    the background, one at a time, and the autonomy may merge it. A check slower than util.BACKGROUND_WAIT_S does not hold
    the tick up: it finishes on its own and the next ticks go on.
 7. health: broken states become triage tasks, deduplicated (health.py)
-8. launch: while there are free slots, a planning agent for a `backlog` task, the responsible agent for a `ready`
-   one; a task whose blockers are not all done waits. The loop never plans, never reviews, never talks to the owner.
+8. launch: while there are free slots (an agent waiting for the owner holds none), a planning agent for a `backlog` task,
+   the responsible agent for a `ready` one; a task whose blockers are not all done waits. The loop never plans, never reviews, never talks to the owner.
    Before it, a let-in parent gets its parent agent outside the slots, told of each subtask merged or canceled (parents.py).
 9. mechanic: a diagnosing helper for each health finding in triage, in the slots launch left free (mechanic.py)
 10. scratch: right after sessions, removes the scratch folder of every review round that is over (reviewing.py)
