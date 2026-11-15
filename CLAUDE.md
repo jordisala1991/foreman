@@ -3,7 +3,8 @@
 Each rule ends with who enforces it: `(make check)` fails the build; `(reviewer)` is checked in review.
 
 - Before writing code, read the Architecture section of `DESIGN.md`: layers, packages, where new code goes. (reviewer)
-- A module sits in the package of its layer and imports its own layer or below; core areas import only their `depends_on`. (make check: tach)
+- A module sits in the package of its layer. (reviewer)
+- A module imports its own layer or below; core areas import only their `depends_on`. (make check: tach)
 - Only `fm/proc.py` runs programs; `lock.py` is the one exception. (make check: ruff TID251)
 - Only provider adapters talk to the platform (`git push`, `gh`); services orchestrate through the port. (reviewer)
 - Retrying and blocking a failed platform call lives only in `loop.guarded`. (reviewer)

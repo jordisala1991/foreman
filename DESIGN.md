@@ -236,6 +236,7 @@ so what it could not refute stays in To fix. What was dropped goes under Noted a
 decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`decide.review_step`);
 round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
 round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
+Each review session gets its own `<home>/scratch/ID-rN-<tip>-ROLE/`, told in its brief as `$scratch`; the loop removes it on the first tick where no live session owns it.
 
 The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health finding and changes nothing else: read-only by its
 brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/diagnosis.py`)
@@ -513,7 +514,7 @@ the questions below, in the flat module that will move there.
 Core areas, in their `depends_on` order: `project` (fm.toml, the registry of homes, repos, the plugin's text) →
 `tasks` (the backlog file, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
 inline comments, the description, evidence) → `rules` (`risk` on `project`; `decide` on `risk` only) → `oversight`
-(the guard, diagnosis, costs). `scratch` (FN-158), `schedule`, `recurring` and `recurring_table` (FN-162) are in flight.
+(the guard, diagnosis, costs). `schedule`, `recurring` and `recurring_table` (FN-162) are in flight.
 
 ### tach rules
 
