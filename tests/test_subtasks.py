@@ -113,11 +113,11 @@ class Loop(unittest.TestCase):
         P = backlog.add(e.p, "parent", status="backlog", criteria="c")
         s1 = fm(e.home, "add", "s1", "--parent", P, "--triage", "--criteria", "c").strip()
         loop.tick(e.p)
-        self.assertEqual([c["argv"][c["argv"].index("-n") + 1] for c in e.calls()], ["ty-1"])
+        self.assertEqual([c["argv"][c["argv"].index("-n") + 1] for c in e.calls()], ["TY-1 parent · parent"])
         self.assertEqual((e.task(P)["status"], e.task(P)["agent"]["kind"]), ("backlog", "parent"))
         fm(e.home, "go", s1)
         loop.tick(e.p)
-        self.assertEqual([c["argv"][c["argv"].index("-n") + 1] for c in e.calls()], ["ty-1", "ty-2-planning"])
+        self.assertEqual([c["argv"][c["argv"].index("-n") + 1] for c in e.calls()], ["TY-1 parent · parent", "TY-2 planning · s1"])
         self.assertEqual((e.task(s1)["status"], e.task(P)["status"]), ("refining", "backlog"))
 
 

@@ -82,10 +82,11 @@ FAKE = textwrap.dedent("""\
             save("agents.json", rows)
             print(f"backgrounded · {sid[:8]} · {row['name']}")
         sys.exit(0)
-    name = a[a.index("-n") + 1]
+    title = a[a.index("-n") + 1]
+    name = json.loads(a[a.index("--settings") + 1])["env"]["FM_AGENT"]
     short = hashlib.sha1(name.encode()).hexdigest()[:8]
     rows = rows_of("agents.json")
-    rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "state": "working", "pid": 1})
+    rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "title": title, "state": "working", "pid": 1})
     save("agents.json", rows)
     print(f"backgrounded · {short} · {name}")
 """)

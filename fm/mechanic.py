@@ -31,7 +31,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     brief = agents.brief(p, i, "mechanic", {"state": str(p.state), "diagnosis": str(out)})
     try:
-        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort), brief, p.repo)
+        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, util.session_title(tid, "mechanic", i["title"])), brief, p.repo)
     except sessions.SessionError as e:
         note_missing(p, tid, f"could not launch: {e}")
         return

@@ -13,7 +13,8 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     name = agents.agent_name(p, tid, "parent")
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
     try:
-        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort), agents.brief(p, i, "parent"), p.repo)
+        title = util.session_title(tid, "parent", i["title"])
+        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, title), agents.brief(p, i, "parent"), p.repo)
     except sessions.SessionError as e:
         backlog.update(p, tid, blocked=f"could not launch its agent: {e}")
         backlog.event(p, tid, f"launch failed: {e}")

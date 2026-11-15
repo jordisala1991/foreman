@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import unittest
@@ -26,11 +27,21 @@ class Launch(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         argv = calls[0]["argv"]
         self.assertIn("--bg", argv)
-        self.assertEqual(argv[argv.index("-n") + 1], b.lower())
+        self.assertEqual(argv[argv.index("-n") + 1], "TY-2 responsible · clear one")
+        self.assertEqual(self.e.task(b)["agent"]["name"], b.lower())  # identity unchanged
+        self.assertEqual(json.loads(argv[argv.index("--settings") + 1])["env"]["FM_AGENT"], b.lower())
         self.assertIn("[fm responsible TY-2]", argv[-1])
         self.assertTrue(calls[0]["cwd"].endswith("worktrees/ty-2"))
         self.assertIn("fm/ty-2", git(self.e.repo, "branch"))
         self.assertTrue(self.e.task(b)["agent"]["session"])
+
+    def test_a_title_edited_before_launch_shows_in_the_new_agent(self):
+        e = Env()
+        tid = backlog.add(e.p, "old title", status="ready", criteria="c")
+        fm(e.home, "edit", tid, "--title", "new title")
+        loop.tick(e.p)
+        argv = e.calls()[0]["argv"]
+        self.assertEqual(argv[argv.index("-n") + 1], "TY-1 responsible · new title")
 
     def flags(self, e: Env) -> dict[str, tuple[str, str]]:
         """(model, effort) of every launched command, by the kind in its prompt."""
@@ -319,7 +330,7 @@ class Queue(unittest.TestCase):
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         loop.tick(e.p)
         call = e.calls()[-1]
-        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{tid.lower()}-hunt")
+        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], "TY-1 hunter · x")
         hunter = call["argv"][-1]
         self.assertIn("[fm hunter TY-1]", hunter)
         self.assertEqual(call["cwd"], e.task(tid)["worktree"])
@@ -330,7 +341,7 @@ class Queue(unittest.TestCase):
         e.hunter_done(tid)
         loop.tick(e.p)
         call = e.calls()[-1]
-        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], f"{tid.lower()}-review")
+        self.assertEqual(call["argv"][call["argv"].index("-n") + 1], "TY-1 review · x")
         reviewer = call["argv"][-1]
         self.assertIn("[fm reviewer TY-1]", reviewer)
         self.assertIn("Round: 1", reviewer)
