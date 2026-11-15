@@ -6,7 +6,7 @@ Nothing needs keeping alive but the loop, which has no model.
 ## Pieces
 
 ```
-            owner ──── panel (React, today's /next/ panel adapted) ── fm/panel.py (JSON API, local, key)
+            owner ──── panel (React) ── the panel server (JSON API, local, key)
               │  └─── claude attach / agent view / Claude app: talks to any agent directly
               │
    backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, loop heartbeat)
@@ -20,36 +20,7 @@ Nothing needs keeping alive but the loop, which has no model.
       hunter, then reviewer (launched by the loop, read only) → hunter file, review file, fm verdict
 ```
 
-| File | Lines | What |
-|---|---|---|
-| `fm/backlog.py` | ~190 | the backlog file (today's schema 5, new statuses and keys), questions tied to a task and agent ||
-| `fm/loop.py` | ~250 | the loop and the launch of agents (briefs, worktrees) |
-| `fm/sessions.py` | ~120 | `claude --bg` start / resume / list (from foreman's sessionlaunch.py) |
-|| `fm/delivery.py` | ~200 | check a delivered branch, risk score, autonomy, accept (records), merge step ||
-| `fm/mergecheck.py` | ~30 | the merged check: tests on an accepted branch merged with main as it is at the merge (FN-113) |
-| `fm/verdict.py` | ~100 | the verdict as a review body and the `Findings:` line parser (pure text) |
-| `fm/inline.py` | ~80 | the diff's visible lines and findings as line comments (pure) |
-| `fm/describe.py` | ~50 | the report as a description: marked block, footer, folded review rounds (pure text) |
-| `fm/evidence.py` | ~35 | the images a report names: bare names, relink, size and kinds (pure text) |
-| `fm/subtasks.py` | ~80 | subtasks: which belong to a parent, listing order, when and by whom a subtask may be filed or edited, how the parent closes, what its agent reads and is told (pure) |
-| `fm/parents.py` | ~85 | the parent agent: the tick step that launches it on a let-in parent, tells it of each subtask merged or canceled (`notified`, message kind `subtask`) and stops it once the parent closes; `fm done` of a parent |
-| `fm/blockers.py` | ~50 | which tasks a task waits for (`blocked_by`): pending, dead, refusals incl. cycles (pure) |
-| `fm/release.py` | ~25 | the loop's blockers step: marks a task unblocked once, or blocks it when a blocker closed undone |
-| `fm/risk.py` | ~80 | risk score and autonomy: pure functions of the facts a check found |
-| `fm/decide.py` | ~110 | what the loop does with a branch in review: review steps, send-back notes, check again, merge alone or wait (pure) |
-| `fm/reviewing.py` | ~60 | the loop's review step: what it sees of a branch's review, and launching, holding, blocking or sending back as `decide` says |
-| `fm/providers/` | ~100 | one module per platform behind a small interface (`registry.py` picks it); `local` (git merge into the main checkout), `github` (pull requests with `gh`); `fm/pulls.py`: the loop's PR steps |
-| `fm/guard.py` | ~150 | the PreToolUse hook: a handful of actions by name |
-| `fm/health.py` | ~150 | checks that find broken states and file triage tasks, deduplicated |
-| `fm/diagnosis.py`, `fm/mechanic.py` | ~100 | the mechanic: required sections of a diagnosis and how it is stored; the tick step that launches, times out and stops mechanics |
-| `fm/costs.py`, `fm/metrics.py` | ~150 | cost from transcripts (from foreman's costs.py), per-task metrics |
-| `fm/sources.py` | ~50 | the plug-in contract for tool signals (none shipped) |
-| `fm/plugin.py`, `fm/cli_plugin.py` | ~80 | the Claude Code plugin: the SessionStart context of a session in a project's folder, `fm project`'s values; manifests in `.claude-plugin/`, the hook in `hooks/hooks.json` |
-| `fm/cli.py`, `fm/cli_view.py` | ~300 | `fm`: the agents' commands, the owner's commands, `loop`, `guard`, `panel`; `cli_view`: `list` and `show` |
-|| `fm/briefs/*.md` | ~80 | the briefs: `planning.md`, `responsible.md`, `hunter.md`, `reviewer.md`, `mechanic.md` (from the old foreman's briefs) ||
-| `fm/panel.py`, `panel/src` | | the panel server and today's panel, adapted |
-
-Python stdlib only (3.11+, `tomllib`); the panel is today's React/Vite source, built to `panel/dist`.
+Python stdlib only (3.11+, `tomllib`); the panel is React/Vite source in `panel/src`, built to `panel/dist`.
 
 ## A project
 
@@ -229,7 +200,7 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-pl
 
 - `M` and `E` are the project's, except for the responsible agent: the task's own `model`/`effort` (optional task keys, chosen by the planning agent with the rubric in `planning.md`) win; the planner fills only the keys the owner left empty (`fm ready` never overwrites one).
 - `S` sets `FM_HOME`, `FM_TASK`, `FM_AGENT` and `PATH` (so `fm` works), `worktree.bgIsolation: none`, the guard as
-  a PreToolUse hook, and the project's extra settings (the demo turns off today's foreman plugin for its agents).
+  a PreToolUse hook, and the project's extra settings.
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
   that agent.
 
@@ -238,14 +209,12 @@ are settled with the owner when the task is filed; the planning agent never writ
 the owner if one cannot be met as written. It reads the repo (read only), asks the owner only what only he can decide
 (`fm ask`, then ends its turn), and ends with `fm ready --detail --plan PATH` (or `--no-plan "why trivial"`). It writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
-risk); the task gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold.
+risk); the task gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold. Its statements of scope cite their search; its questions stand alone (context, options, recommendation and why).
 
 `fm done`, `fm ready` and `fm verdict` take `--misled`; the text (not «none») is kept on the task under `misled`, per
 agent, once; `fm metrics` shows it.
 
-**Planning agent** also: statements of scope cite their search, questions stand alone (context, options, recommendation and why).
-
-**Responsible agent** (`fm/briefs/responsible.md`, from the old foreman's agent brief and procedure): owns the whole task in its
+**Responsible agent** (`fm/briefs/responsible.md`): owns the whole task in its
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
 (`<home>/reports/ID.md`: the task's description, each acceptance criterion with its evidence; fm sets it as the description
@@ -272,13 +241,9 @@ The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health fin
 brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/diagnosis.py`)
 and appends the diagnosis to the task's `detail`, so `fm show` has it. The task stays in triage; the owner decides next.
 
-What was dropped from the old foreman because only its central session needed it: memory renewal, session marking,
-interface mods and band, catch-up summaries, the review round as a message, plans written by someone else, subtasks
-assigned from outside, its skills. The responsible agent keeps: its brief, `fm`, its own subagents; the review is its own sessions.
-
 ## Shared resources
 
-`fm/lock.py`, the lean version of foreman's lock. A resource is declared in fm.toml (`[resources.NAME]`, optional
+`fm/lock.py`. A resource is declared in fm.toml (`[resources.NAME]`, optional
 `slots = [...]` and `max_minutes`, default 20). `fm lock NAME run "what" command…` waits its turn, runs the command
 holding the resource (with `FM_SLOT`), stops it at the time limit and always releases it; `fm lock NAME status`.
 
@@ -288,9 +253,6 @@ holding the resource (with `FM_SLOT`), stops it at the time limit and always rel
   it; every use is logged (`uses.jsonl`: who, task, what, waited, held, exit code, timeout) for the metrics
   (`lock_wait_min` per task) and the panel (System: who holds each resource and who waits).
 - The responsible agent's brief lists the project's resources and the rule. No hook enforces it.
-
-Left out from today's: the «busy» detector, short jobs jumping the queue, the turn file, the «who am I» chain, the
-enforcing hook, machine tables merged with the project's.
 
 ## The guard
 
@@ -522,70 +484,129 @@ test = "make build"
 - Merges across repos at once and PR links across repos: subtasks with `--blocked-by` order them.
 - Moving a task to another repo after its plan: `fm edit --repo` does it and the plan is redone.
 
-### Not kept from the old foreman
-
-| Old | Why not |
-|---|---|
-| `github = "owner/repo"` | `gh` runs in the repo and reads its remote |
-| `local_ci`, `ci_runs`, `ci_summary`, `main_ci` | tests run on the committed head at the check, not before a push; the setting is `test` |
-| `remote_checks` | CI is the provider's |
-| `require_approval` | it is autonomy `manual`, the default |
-| `risky_paths` as one list with `file:text` entries | labelled path tables; the file is the unit, text in a line is not matched (`package.json` goes in a medium table) |
-| `review`, `review_paths`, `review_lines` | every branch is reviewed; size is `large_lines` |
-| `public`, `privacy_scan`, `pre_merge_report`, `post_merge`, `plan_check_heading` | nobody asked; each can be its own task |
-| the `worktree` template with `{repo}-{name}` | a folder key is enough: names carry no repo |
-| `post_create` placeholders `{repo}`, `{name}`, `{branch}` | `{main}` and `{wt}` suffice |
-| the folder of repos found by rule, with the home inside it | the umbrella is explicit; the home may sit in it, never in a repo |
-| the backlog's projects with `repos` lists, `launch --repo` | a task has one repo and `fm go` launches it |
-| `import-gh` and `Closes #n` | fm imports nothing from GitHub |
-| `remote = "none"` merging by fast-forward after the local CI | the local provider merges with the repo's `strategy`, as today; when the repo has a test command, the merged check has already run the tests on the branch merged with main |
-
 ## Architecture
 
 Hexagonal-lite: a small core, ports only where something external varies, everything else outside. Not Clean Architecture
 nor full DDD; what is shared is a vocabulary: *task* (a unit of work in the backlog), *review round* (one review of a tip), *risk* (low,
 medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act). The whole vocabulary is in `GLOSSARY.md`; it changes only by the owner's decision.
 
-Layers, outside in (`tach.toml`; a module imports its own layer and the ones below, never above):
+### Layers and packages (target; moves in FN-160)
 
-| Layer | Modules | Role |
-|---|---|---|
-| ui | `cli*`, `panel*` | the owner's and the agents' entry points; call the loop and below |
-| loop | `loop` | the process that ticks: does the I/O, calls the core |
-| steps | `sources`, `talk`, `mechanic`, `health`, `metrics` | one step of a tick, or a view over several pieces |
-|| services | `agents`, `delivery`, `pulls`, `sessions`, `lock` || the outside world: git, gh, claude, processes |
-| registry | `providers/registry` | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `providers/github`, `providers/local` | one per platform; they see the port, never the loop or each other |
-| ports | `providers/__init__` (the `Provider` interface) | |
-| core | `risk`, `decide`, `subtasks`, `tasktypes`, `reviews`, `blockers`, `diagnosis`, `guard`, `backlog`, `costs`, `config`, `repos`, `util` | vocabulary and pure rules; `risk` (score, autonomy) and `decide` (what the loop does with a branch in review) have no I/O at all |
+Layer = folder: the package says the layer, its sub-packages (areas) say which part of fm. Outside in; a module imports
+its own layer and the ones below, never above. Three leaf files stay at `fm/`'s root, for everyone to import: `proc.py`
+(layer proc), `util.py` and `launcher.py` (layer core; `launcher` imports nothing of fm, as it runs alone under
+`python3 -c`). Until FN-160's moves land the files stay flat in `fm/` (`tach.toml` lists each one): place new code by
+the questions below, in the flat module that will move there.
 
-Ports: only where there is an external system or two real implementations: `providers/` (local, github), and the
+| Layer | Package | Areas → modules | Responsibility |
+|---|---|---|---|
+| ui | `fm/ui/` | `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
+| loop | `fm/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
+| steps | `fm/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
+| services | `fm/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: git, claude, processes, the lock; called by steps |
+| registry | `fm/providers/registry.py` | | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
+| adapters | `fm/providers/` | local · `github/`: provider, types, checks, review | one per platform; they see the port, never the loop or each other |
+| ports | `fm/providers/__init__.py` | | the `Provider` interface |
+| proc | `fm/proc.py` | | the one module that runs programs |
+| core | `fm/core/` | `project/`: config, registry, repos, plugin · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, editing, recurring, recurring_table · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+
+Core areas, in their `depends_on` order: `project` (fm.toml, the registry of homes, repos, the plugin's text) →
+`tasks` (the backlog file, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
+inline comments, the description, evidence) → `rules` (`risk` on `project`; `decide` on `risk` only) → `oversight`
+(the guard, diagnosis, costs). `scratch` (FN-158), `schedule`, `recurring` and `recurring_table` (FN-162) are in flight.
+
+### tach rules
+
+`tach.toml` after the moves (the settings above `layers` stay; `layers` is unchanged). A package path gives all its files
+its layer. A module with `depends_on` may import, in its own layer, only what it lists (lower layers stay open): that
+fixes the order of the core areas, so no cycle can form among them, as tach does not see a cycle inside one layer
+otherwise. `ui` is one module on purpose: `cli` and `panel` import each other (`cmd_panel`; the panel's actions run
+the owner's commands). Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
+`agents` is the reviewer's.
+
+```toml
+layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
+modules = [
+  { path = "fm.ui", layer = "ui" },                    # one module: cli and panel import each other
+  { path = "fm.loop", layer = "loop" },
+  { path = "fm.steps", layer = "steps" },
+  { path = "fm.services.agents", layer = "services" },
+  { path = "fm.services.claude", layer = "services" },
+  { path = "fm.services.delivery", layer = "services" },
+  { path = "fm.services.lock", layer = "services" },
+  { path = "fm.services.launchd", layer = "services" },
+  { path = "fm.services.scratch", layer = "services" },
+  { path = "fm.providers.registry", layer = "registry" },
+  { path = "fm.providers.github", layer = "adapters", depends_on = ["fm.providers"] },
+  { path = "fm.providers.local", layer = "adapters", depends_on = ["fm.providers"] },
+  { path = "fm.providers", layer = "ports" },
+  { path = "fm.proc", layer = "proc" },
+  { path = "fm.util", layer = "core" },
+  { path = "fm.launcher", layer = "core" },
+  { path = "fm.core.project", layer = "core", depends_on = ["fm.util"] },
+  { path = "fm.core.tasks", layer = "core", depends_on = ["fm.core.project", "fm.util"] },
+  { path = "fm.core.review", layer = "core", depends_on = ["fm.util"] },
+  { path = "fm.core.rules.risk", layer = "core", depends_on = ["fm.core.project"] },
+  { path = "fm.core.rules.decide", layer = "core", depends_on = ["fm.core.rules.risk"] },
+  { path = "fm.core.oversight", layer = "core", depends_on = ["fm.core.project", "fm.core.tasks", "fm.core.review", "fm.util"] },
+]
+```
+
+### Where new code goes
+
+Ask in this order; the first yes places it:
+1. Runs a program, or talks to claude, git or gh? → `services/` (through `proc`); a platform call → a `providers/` adapter.
+2. A decision from facts, reading no file and running no program? → `core/rules/`, or the core area it is about.
+3. The shape of a plain file (backlog, fm.toml, the registry)? → `core/<area>`.
+4. One step of the tick? → `steps/`. 5. A command or a panel route? → `ui/`.
+
+A module that grows past its size is split along its area's seams, inside its area.
+
+- **Per-repo settings and execution (FN-150..154):** the repo key rules, `Project.for_task` and the strict tables →
+  `core/project/repos.py` and `config.py`; `--repo` → `ui/cli/parser.py` and `owner.py`, shown by `view.py` and
+  `ui/panel/views.py`; dropping the plan on edit → `core/tasks/editing.py`; worktree and `post_create` →
+  `services/agents/worktree.py`; check, merged check, PR and merge in the task's repo → `services/delivery/*` and
+  `providers/registry.py`; the `publishes` fact → `core/rules/risk.py`; per-repo health checks → `steps/health/`
+  (a new `repos.py`), the path matching pure in `core/project/repos.py`; the loop calls `for_task` once per task step,
+  in `loop/queue.py`.
+- **Task types (FN-157, built):** the type names and rules → `core/tasks/tasktypes.py`; each type's paragraph stays data
+  in `fm/briefs/*.md`, read by `services/agents/brief.py`; `--type` → `ui/cli/parser.py`. A new type is one entry and
+  one paragraph, no other layer.
+- **Plugin entry points (FN-146, FN-159):** the SessionStart hook and `fm project` → `ui/cli/plugin.py`; the session's
+  context text → `core/project/plugin.py`; the installed version's start → `fm/launcher.py`; the launchd jobs' text →
+  `services/launchd.py`; `bin/fm` and `hooks/hooks.json` stay at the repo root.
+
+### Ports
+
+Only where there is an external system or two real implementations: `providers/` (local, github), and the
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
 the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
 task.
 
-Rules (enforced by `make check`):
-- The core imports nothing above it. **One module runs programs**: `fm/proc.py` (`run`, `run_json`; it knows
-  nothing of git, gh or claude; a missing program or a timeout is a `ProcError`). Everything else calls it; ruff bans
-  `import subprocess` elsewhere (not `os.system`/`os.popen`). `proc` sits just above the core in the layers: the loop,
-  the services and the adapters use it, the core does not. The only other exceptions in `per-file-ignores`
-  (`pyproject.toml`) are the tests and `fm/lock.py`, which needs a process group and signals to stop a whole job at its
-  time limit (`start_new_session`, `killpg`).
-- Data from outside is typed at the border: `providers/github.py` turns `gh`'s JSON into its own types
-  (`PullRequest`, the check buckets) with a small converter per shape, and a shape that does not fit is a
-  `ProviderError`; only those types go inward, never `gh`'s dicts. The port's own operations take a `Change` and
-  return `Published` / `ChangeState`: no dict crosses it.
-  The ratchet also counts `pylint: disable`, `pyright: basic|off` and `fmt: off|skip`.
-- An adapter imports neither the loop nor another adapter (tach).
-- Pure decisions (risk, autonomy, state rules) go in the core as functions of their inputs; the loop and the services
-  gather the facts (git, gh, claude) and apply the result. New decisions go there, not into `delivery` or `loop`.
-- `fm/decide.py` runs no program and touches no file: tach lets it import only `risk`, and `tests/test_decide.py` rejects
-  any other import and any `open`/`exec`/`eval` in it.
-- Files stay under 300 lines (`make size`, no exceptions): a module that grows is split along these layers.
-- Suppressions do not work: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments = false`, and `make suppressions` fails on `pyright: ignore` and `pylint: disable`.
-- Loosening a rule (`tach.toml`, the ruff ignores, `pyproject.toml`, the `suppressions` target) is the owner's call.
+### Rules
 
-The panel's TypeScript is out of this (a dependency check there can come later).
+The rules, one line each, are in `CLAUDE.md`, each marked as checked by `make check` or by the reviewer. What they need
+said once:
+- **One module runs programs**: `fm/proc.py` (`run`, `run_json`; it knows nothing of git, gh or claude; a missing
+  program or a timeout is a `ProcError`). ruff bans `import subprocess` elsewhere (TID251; not `os.system`/`os.popen`).
+  The only other exceptions in `per-file-ignores` (`pyproject.toml`) are the tests and `lock.py`, which needs a process
+  group and signals to stop a whole job at its time limit (`start_new_session`, `killpg`).
+- **Typed at the border**: the github adapter turns `gh`'s JSON into its own types (`PullRequest`, the check buckets)
+  with a small converter per shape; a shape that does not fit is a `ProviderError`. The port's operations take a
+  `Change` and return `Published` / `ChangeState`: no dict crosses it.
+- **`decide` runs no program and touches no file**: tach lets it import only `risk`, and `tests/test_decide.py` rejects
+  any other import and any `open`/`exec`/`eval` in it. New decisions go in the core, not in `delivery` or the loop.
+- **Suppressions do not work**: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments =
+  false`, and `make suppressions` fails on `pyright: ignore|basic|off` and `pylint: disable`.
+- The panel's TypeScript is outside these rules.
+
+### Size
+
+Modules stay at most 300 lines (`max-module-lines` in `pyproject.toml`, `make size`, no exceptions); tests 600. The
+limit stays: it did its job (it forced FN-157 and others to split); what failed was that a split had no obvious place,
+and packages by area give one. When FN-160 ends no module should pass 270 lines (a 10% margin): 270 is a target for
+its splits, not a new limit (changing `pyproject.toml` is the owner's call).
+
 
 ## Watching itself
 
