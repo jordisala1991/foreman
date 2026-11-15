@@ -200,20 +200,25 @@ def shared_folders(projects: list[Project]) -> list[str]:
 
 
 def old_links(p: Project) -> list[str]:
-    """The links `fm init` made before the plugin (FN-143): the plugin replaces them, so they are to be deleted."""
-    out = [
-        f"! the home still has the old link {rel} (FN-143): the plugin replaces it; delete it"
-        for rel in (".claude/fm.md", ".claude/skills/define-task")
-        if (p.home / rel).is_symlink()
-    ]
-    if out and out[0].endswith(".claude/fm.md (FN-143): the plugin replaces it; delete it"):
-        try:
-            lines = (p.home / "CLAUDE.md").read_text(encoding="utf-8").splitlines()
-        except (OSError, UnicodeDecodeError):  # no CLAUDE.md, or one fm cannot read: the link is still named
-            lines = []
-        if "@.claude/fm.md" in (line.strip() for line in lines):
-            out[0] += ", and remove the line @.claude/fm.md from CLAUDE.md"
+    """The links `fm init` made before the plugin (FN-143), in the home or a repo: the plugin replaces them, so they
+    are to be deleted."""
+    out: list[str] = []
+    for folder in dict.fromkeys([p.home, *p.repos]):
+        where = "the home" if folder == p.home else str(folder)
+        found = [rel for rel in (".claude/fm.md", ".claude/skills/define-task") if (folder / rel).is_symlink()]
+        lines = [f"! {where} still has the old link {rel} (FN-143): the plugin replaces it; delete it" for rel in found]
+        if folder == p.home and found[:1] == [".claude/fm.md"] and _includes_fm_md(p.home / "CLAUDE.md"):
+            lines[0] += ", and remove the line @.claude/fm.md from CLAUDE.md"
+        out += lines
     return out
+
+
+def _includes_fm_md(claude_md: Path) -> bool:
+    try:
+        lines = claude_md.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):  # no CLAUDE.md, or one fm cannot read: the link is still named
+        return False
+    return "@.claude/fm.md" in (line.strip() for line in lines)
 
 
 def repos_note(p: Project) -> str:
