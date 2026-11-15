@@ -132,26 +132,34 @@ class Project:
 
 
 def _repos(raw: dict[str, Any]) -> dict[str, dict[str, str]]:
-    tables: dict[str, dict[str, Any]] = raw.get("repos", {})
+    if not isinstance(raw.get("repos", {}), dict):
+        raise ProjectError("[repos] holds [repos.<key>] tables (path, main)")
+    tables: dict[str, Any] = raw.get("repos", {})
     if tables and "repo" in raw.get("project", {}):
         raise ProjectError("fm.toml has both [project] repo and [repos.<key>] tables: use one of the two forms")
     out: dict[str, dict[str, str]] = {}
-    for key, t in tables.items():
-        if not isinstance(t.get("path"), str):
+    for key in tables:
+        if not isinstance(tables[key], dict) or not isinstance(tables[key].get("path"), str):
             raise ProjectError(f"[repos.{key}] needs a path")
-        out[key] = {"path": t["path"], "main": str(t.get("main", "main"))}
+        out[key] = {"path": tables[key]["path"], "main": str(tables[key].get("main", "main"))}
     return out
 
 
 def loaded() -> list[Project]:
     """Every registered project; one whose fm.toml cannot be read is left out so the others are served."""
+    return load_all()[0]
+
+
+def load_all() -> tuple[list[Project], list[str]]:
+    """Every registered project, and one line per home whose fm.toml cannot be read (its home and why)."""
     out: list[Project] = []
+    broken: list[str] = []
     for home in registered():
         try:
             out.append(Project.load(home))
-        except Exception:  # a broken fm.toml leaves the others served
-            continue
-    return out
+        except Exception as e:  # a broken fm.toml leaves the others served
+            broken.append(f"{home}: {e}")
+    return out, broken
 
 
 def owners(projects: list[Project], here: Path) -> list[tuple[Project, Path]]:

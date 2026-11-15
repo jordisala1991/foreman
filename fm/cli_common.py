@@ -21,22 +21,23 @@ def home(args: argparse.Namespace) -> Project:
     return here()
 
 
-def _names(projects: list[Project]) -> str:
-    return ", ".join(sorted(p.name for p in projects)) or "none"
+def _names(projects: list[Project], broken: list[str]) -> str:
+    names = ", ".join(sorted(p.name for p in projects)) or "none"
+    return names + "".join(f"; unreadable: {b}" for b in broken)
 
 
 def named(name: str) -> Project:
-    projects = config.loaded()
+    projects, broken = config.load_all()
     found = [p for p in projects if p.name == name]
     if not found:
-        sys.exit(f"fm: no project named {name!r}; registered: {_names(projects)}")
+        sys.exit(f"fm: no project named {name!r}; registered: {_names(projects, broken)}")
     if len(found) > 1:
         sys.exit(f"fm: {len(found)} projects are named {name!r}: {', '.join(str(p.home) for p in found)}")
     return found[0]
 
 
 def here() -> Project:
-    projects, cwd = config.loaded(), Path.cwd()
+    (projects, broken), cwd = config.load_all(), Path.cwd()
     found = config.owners(projects, cwd)
     if len(found) == 1:
         return found[0][0]
@@ -44,7 +45,7 @@ def here() -> Project:
         sys.exit(f"fm: {found[0][1]} belongs to {' and '.join(p.name for p, _ in found)}; pass --project NAME")
     h = next((d for d in (cwd, *cwd.parents) if (d / "fm.toml").exists()), None)
     if h is None:
-        sys.exit(f"fm: no project here: {cwd} belongs to no registered project (registered: {_names(projects)}); pass --project NAME")
+        sys.exit(f"fm: no project here: {cwd} belongs to no registered project (registered: {_names(projects, broken)}); pass --project NAME")
     return Project.load(h)
 
 

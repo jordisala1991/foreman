@@ -105,6 +105,23 @@ class FindProjectTest(unittest.TestCase):
         self.assertIn("[project] repo", msg)
         self.assertIn("[repos.<key>]", msg)
 
+    def test_both_forms_refused_when_registered(self) -> None:
+        home = self.project("alpha")
+        self.project("beta")
+        with (home / "fm.toml").open("a", encoding="utf-8") as f:
+            f.write(f'\n[repos.x]\npath = "{self.dir("x")}"\n')
+        for msg in (self.refused(self.elsewhere, "--project", "alpha", "list"), self.refused(self.root / "alpha-repo", "list")):
+            self.assertIn("[project] repo", msg)
+            self.assertIn("[repos.<key>]", msg)
+        self.assertIn("Beta work", self.run_fm(self.elsewhere, "--project", "beta", "list"))
+
+    def test_repos_entry_not_a_table_refused(self) -> None:
+        for tail in ("\n[repos]\nx = 3\n", 'repos = "x"\n'):
+            home = self.project("alpha", repo=False)
+            text = (home / "fm.toml").read_text(encoding="utf-8")
+            (home / "fm.toml").write_text(tail + text if tail.startswith("repos") else text + tail, encoding="utf-8")
+            self.assertIn("[repos", self.refused(self.elsewhere, "--home", str(home), "list"))
+
     def test_health_says_first_repo(self) -> None:
         api, web = self.dir("api"), self.dir("web")
         self.project("multi", tail=f'\n[repos.api]\npath = "{api}"\n\n[repos.web]\npath = "{web}"\n', repo=False)
