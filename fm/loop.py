@@ -1,7 +1,7 @@
 """The loop: a plain process, no model. Each tick, for each registered project:
 
 1. heartbeat (state/loop.json), read by the health check «loop dead» and by the panel
-2. sources: plug-in signals become triage tasks (sources.py; none shipped yet)
+2. sources: plug-in signals, and recurring entries that fell due, become tasks (sources.py, schedule.py)
 3. answers: the owner's answers go back to its agent (its own session, resumed)
 4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
 5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
@@ -29,6 +29,7 @@ from .agents import fill_sessions, launch, running
 from .config import Project, registered
 from .providers import registry
 from .reviewing import apply_review, seen_of, working
+from .schedule import run as recurring_run
 from .talk import deliver_answers, return_to_agent, watch_agents
 
 PRIORITY = {p: n for n, p in enumerate(backlog.PRIORITIES)}
@@ -240,6 +241,7 @@ def tick(p: Project) -> None:
     steps = [
         ("sessions", lambda: fill_sessions(p, rows)),
         ("sources", lambda: sources.run(p)),
+        ("recurring", lambda: recurring_run(p)),
         ("answers", lambda: deliver_answers(p, rows)),
         ("agents", lambda: watch_agents(p, rows)),
         ("pulls", lambda: run_pulls(p)),

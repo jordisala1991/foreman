@@ -68,6 +68,9 @@ layer = "steps"
 [[modules]]
 path = "fm.metrics"
 layer = "steps"
+[[modules]]
+path = "fm.schedule"
+layer = "steps"
 
 # services: git, claude and the lock: the outside world, called by the steps.
 [[modules]]
@@ -168,6 +171,12 @@ path = "fm.reviews"
 layer = "core"
 [[modules]]
 path = "fm.tasktypes"
+layer = "core"
+[[modules]]
+path = "fm.recurring"
+layer = "core"
+[[modules]]
+path = "fm.recurring_table"
 layer = "core"
 [[modules]]
 path = "fm.editing"

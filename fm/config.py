@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
-from . import repos, util
+from . import recurring_table, repos, util
 
 MODELS = ("haiku", "sonnet", "opus", "fable")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -89,6 +89,7 @@ class Project:
         cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: fm/lock.py
         try:
             cfg["repos"] = repos.parse(raw, cfg)
+            cfg["recurring"] = recurring_table.parse(raw)
         except ValueError as e:
             raise ProjectError(str(e)) from None
         if cfg["repos"]:  # several repos: tasks run in the first one listed
