@@ -8,7 +8,7 @@ from collections.abc import Callable
 from ...core.project import config
 from ...core.tasks import backlog
 from .agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
-from .ops import cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics, cmd_panel
+from .ops import cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics
 from .owner import (
     cmd_accept,
     cmd_add,
@@ -27,7 +27,9 @@ from .parser import parser
 from .plugin import cmd_project, cmd_session_context
 from .view import cmd_list, cmd_show
 
-HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
+Handler = Callable[[argparse.Namespace], object]
+
+HANDLERS: dict[str, Handler] = {
     "init": cmd_init,
     "add": cmd_add,
     "edit": cmd_edit,
@@ -54,16 +56,16 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
     "metrics": cmd_metrics,
     "lock": cmd_lock,
     "guard": cmd_guard,
-    "panel": cmd_panel,
     "launchd": cmd_launchd,
     "project": cmd_project,
     "session-context": cmd_session_context,
 }
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None, outside: dict[str, Handler] | None = None) -> None:
+    """`outside`: commands the CLI does not own (`panel`), given by what runs it."""
     a = parser(__doc__).parse_args(argv)
     try:
-        HANDLERS[a.cmd](a)
+        ({**HANDLERS, **(outside or {})})[a.cmd](a)
     except (backlog.BacklogError, config.ProjectError) as e:
         sys.exit(f"fm: {e}")

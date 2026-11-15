@@ -9,9 +9,14 @@ root_module = "ignore"
 exclude = ["tests", "panel/**", "demo", ".venv", "**/__pycache__"]
 layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
 
-# ui: the owner's and the agents' entry points; they call the loop and everything below. One module: cli and panel import each other.
+# ui: the owner's and the agents' entry points; they call the loop and everything below. cli and panel are two modules: the
+# panel imports the CLI's functions, the CLI never imports the panel (`fm/ui/main.py`, above both, starts `fm panel`).
 [[modules]]
-path = "fm.ui"
+path = "fm.ui.cli"
+layer = "ui"
+
+[[modules]]
+path = "fm.ui.panel"
 layer = "ui"
 
 # loop: the process that ticks; does the I/O and calls the core.

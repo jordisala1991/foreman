@@ -1,4 +1,4 @@
-"""What the loop does with a branch in review: pure functions, no I/O. The loop (fm/loop.py) reads the facts (sessions,
+"""What the loop does with a branch in review: pure functions, no I/O. The loop (fm/loop/queue.py) reads the facts (sessions,
 files, git, CI, the check) and acts on what these return. The table is in DESIGN.md, "What the loop does with a task in
 review". Runs no program and touches no file: tach lets it import only `risk`, tests/test_decide.py rejects the rest."""
 
