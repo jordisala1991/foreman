@@ -155,6 +155,11 @@ class Merged(unittest.TestCase):
         self.assertEqual(len(e.calls()), before)
         self.assertFalse((e.repo / "b.py").exists())
 
+    def test_a_git_failure_at_the_merge_is_not_a_test_failure(self):
+        e = self.env("true")
+        with self.assertRaises(delivery.DeliveryError):
+            delivery.tests_at(e.p, self.main(e), "x", merge="no-such-commit")
+
     def test_show_says_what_the_check_ran_on(self):
         e = self.env("true")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
