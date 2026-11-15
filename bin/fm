@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def _minimum():
     try:
-        m = re.search(r'requires-python\s*=\s*">=\s*(\d+)\.(\d+)"', (ROOT / "pyproject.toml").read_text())
+        m = re.search(r'requires-python\s*=\s*">=\s*(\d+)\.(\d+)', (ROOT / "pyproject.toml").read_text())
     except OSError:
         return None
     return (int(m.group(1)), int(m.group(2))) if m else None
@@ -21,7 +21,7 @@ def _probe(cand):
 
     try:
         out = subprocess.run([cand, "-c", "import sys;print('.'.join(map(str,sys.version_info[:3])))"],
-                             capture_output=True, text=True, timeout=10).stdout.strip()
+                             capture_output=True, text=True, timeout=2).stdout.strip()
         return out if re.fullmatch(r"\d+\.\d+\.\d+", out) else None
     except (OSError, subprocess.SubprocessError):
         return None

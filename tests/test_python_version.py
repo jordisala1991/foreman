@@ -65,7 +65,7 @@ class PythonVersion(unittest.TestCase):
 
     def test_a_new_enough_python_is_not_searched_for(self):
         marker = self.t / "ran"
-        fake(self.t / "spy", "3.99.1", f"touch {marker}")
+        (self.t / "spy").mkdir()
         (self.t / "spy/python3").write_text(f"#!/bin/sh\ntouch {marker}\n")
         r = self.run_fm(f"{self.t}/spy", "--help", bin=ROOT / "bin/fm")
         self.assertEqual(r.returncode, 0, r.stderr)
