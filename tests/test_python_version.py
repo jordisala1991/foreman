@@ -56,6 +56,14 @@ class PythonVersion(unittest.TestCase):
         self.assertEqual(len(r.stderr.splitlines()), 1)
         self.assertIn("timed out", r.stderr)
 
+    def test_the_hook_writes_its_note_before_its_own_timeout_when_pythons_hang(self):
+        for n in ("a", "b"):
+            fake(self.t / n, "3.99.1", "echo hang")
+            (self.t / n / "python3").write_text("#!/bin/sh\nexec /bin/sleep 30\n")
+        r = self.run_fm(f"{self.t}/a:{self.t}/b", "session-context", stdin='{"cwd": "/"}')
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+        self.assertIn("timed out", Path(f"{self.reg}.python").read_text())
+
     def test_no_python3_at_all_is_said(self):
         r = self.run_fm(f"{self.t}/empty", "list")
         self.assertNotEqual(r.returncode, 0)
