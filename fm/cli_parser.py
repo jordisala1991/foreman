@@ -106,6 +106,8 @@ def _operations(c: Command) -> None:
     s.add_argument("what", nargs="?", default="")
     s.add_argument("command", nargs=argparse.REMAINDER)
     c("guard", "(hook) the agents' PreToolUse guard")
+    c("project", "this project's values: name, prefix, home, repos, main, slots")
+    c("session-context", "(hook) Claude Code's SessionStart: the project's instructions for a session in one of its folders")
     s = c("panel", "serve the panel")
     s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from other devices (the key is required)")
     s.add_argument("--port", type=int, default=7788)
