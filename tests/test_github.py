@@ -9,12 +9,13 @@ import textwrap
 import pytest
 from helpers import Env, fm, git
 
-from fm import cli, providers, util
+from fm import providers, util
 from fm.core.tasks import backlog
 from fm.loop import tick
 from fm.providers import registry
 from fm.providers.github import provider, types
 from fm.services.delivery import merge
+from fm.ui.cli import main
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -313,7 +314,7 @@ class TestPulls:
         wt = g.e.task(tid)["worktree"]
         g.set(fail_always=["pr", "close"])
         with pytest.raises(SystemExit):
-            cli.main(["--home", str(g.e.home), "cancel", tid])
+            main.main(["--home", str(g.e.home), "cancel", tid])
         assert g.e.task(tid)["status"] == "in progress"
         assert (g.e.repo.parent / wt).exists()
         g.set(fail_always=None)

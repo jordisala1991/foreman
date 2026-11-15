@@ -1,37 +1,27 @@
-"""`fm`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their task comes from FM_TASK);
-the owner and the panel use the rest; launchd runs `fm loop`; Claude Code runs `fm guard` as the agents' hook."""
+"""The owner's commands: set up a project, file and edit tasks, answer, allow, accept, reject, go, cancel, unblock, pause."""
 
 import argparse
 import os
 import sys
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import homesetup, providers, util
-from .cli_agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
-from .cli_common import home
-from .cli_parser import parser
-from .cli_plugin import cmd_project, cmd_session_context
-from .cli_view import cmd_list, cmd_show
-from .core.oversight import guard
-from .core.project import config, registry
-from .core.project.config import Project
-from .core.project.registry import register
-from .core.tasks import backlog, blockers, editing, questions, subtasks
-from .loop import tick
-from .services import lock
-from .services.agents.running import review_running
-from .services.claude import sessions
-from .services.delivery import merge
-from .services.delivery.git import DeliveryError
-from .steps import metrics, schedule, talk
-from .steps.health import main_tests, notes
+from ... import providers, util
+from ...core.oversight import guard
+from ...core.project.config import Project
+from ...core.project.registry import register
+from ...core.tasks import backlog, blockers, editing, questions, subtasks
+from ...services.agents.running import review_running
+from ...services.delivery import merge
+from ...services.delivery.git import DeliveryError
+from ...steps import talk
+from . import init
+from .common import home
 
 
 def cmd_init(a: argparse.Namespace) -> None:
     h = Path(a.home or ".").resolve()
-    for line in homesetup.init(h, a.prefix, a.repo):
+    for line in init.init(h, a.prefix, a.repo):
         print(line)
     register(h)
     print(f"project {Project.load(h).name} at {h} (registered)")
@@ -80,9 +70,6 @@ def cmd_edit(a: argparse.Namespace) -> None:
     backlog.event(p, a.id, "edited by the owner: " + ", ".join(fields) + ("; plan dropped, back to backlog" if reset else ""))
     after = "; it stays blocked until fm unblock" if new.get("blocked") else "; it will be planned again"
     print(f"{a.id} edited" + (after if reset else ""))
-
-
-# --- the owner's side ---------------------------------------------------------------------------------------------
 
 
 def cmd_answer(a: argparse.Namespace) -> None:
@@ -172,116 +159,3 @@ def cmd_pause(a: argparse.Namespace) -> None:
         print("launching resumed")
     else:
         print(f"launching paused; tasks still in flight: {backlog.in_flight(backlog.load(p))}")
-
-
-def cmd_loop(a: argparse.Namespace) -> None:
-    tick.forever([a.home] if a.home else None, once=a.once)
-
-
-def cmd_health(a: argparse.Namespace) -> None:
-    for line in [*notes.python_note(), *notes.shared_folders(registry.loaded())]:
-        print(line)
-    p = home(a)
-    if note := notes.repos_note(p):
-        print(note)
-    for r in schedule.rows(p):
-        print(schedule.line(r))
-    for line in [*notes.versions(p), *notes.old_links(p)]:
-        print(line)
-    rows = sessions.listing(p)
-    for f in main_tests.findings(p, rows, outside=True):
-        print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
-
-
-def cmd_metrics(a: argparse.Namespace) -> None:
-    rows = metrics.per_task(home(a))
-    print(metrics.text(rows))
-
-
-def cmd_guard(a: argparse.Namespace) -> None:
-    out = guard.hook(sys.stdin.read())
-    if out:
-        print(out)
-
-
-def cmd_lock(a: argparse.Namespace) -> None:
-    p = home(a)
-    res = lock.declared(p.cfg)
-    if a.name not in res:
-        sys.exit(f"fm: unknown resource {a.name!r} (declared: {', '.join(res) or 'none'}; [resources.NAME] in fm.toml)")
-    r = res[a.name]
-    if a.action == "status":
-        s = r.status()
-        for slot, h in s["held"].items():
-            print(f"{slot}: {h['who']} ({h['task'] or '-'}): {h['what']} since {h['since']}")
-        for t in s["queue"]:
-            print(f"queued: {t['who']} ({t['task'] or '-'}): {t['what']} since {t['since']}")
-        if not s["held"] and not s["queue"]:
-            print("free")
-        return
-    if not a.command:
-        sys.exit('fm: fm lock NAME run "what" command…')
-    who = os.environ.get("FM_AGENT") or "owner"
-    sys.exit(r.run(who, a.what, a.command, os.environ.get("FM_TASK", ""), say=lambda m: print(m, file=sys.stderr)))
-
-
-def cmd_panel(a: argparse.Namespace) -> None:
-    from . import panel
-
-    panel.serve(a.port, a.host)
-
-
-def cmd_launchd(a: argparse.Namespace) -> None:
-    from .services import launchd
-
-    jobs = {"loop": (), "panel": ("--host", a.panel_host, "--port", "7788")}
-    for job, args in jobs.items():
-        text = launchd.plist(job, args)
-        if a.dir:
-            out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
-            out.write_text(text, encoding="utf-8")
-            print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
-        else:
-            print(f"<!-- dev.fm.{job}.plist -->\n{text}")
-
-
-HANDLERS: dict[str, Callable[[argparse.Namespace], object]] = {
-    "init": cmd_init,
-    "add": cmd_add,
-    "edit": cmd_edit,
-    "list": cmd_list,
-    "show": cmd_show,
-    "ask": cmd_ask,
-    "done": cmd_done,
-    "verdict": cmd_verdict,
-    "ready": cmd_ready,
-    "block": cmd_block,
-    "diagnose": cmd_diagnose,
-    "answer": cmd_answer,
-    "allow": lambda a: cmd_allow(a, True),
-    "deny": lambda a: cmd_allow(a, False),
-    "accept": cmd_accept,
-    "reject": cmd_reject,
-    "review": cmd_review,
-    "go": cmd_go,
-    "cancel": cmd_cancel,
-    "unblock": cmd_unblock,
-    "pause": cmd_pause,
-    "loop": cmd_loop,
-    "health": cmd_health,
-    "metrics": cmd_metrics,
-    "lock": cmd_lock,
-    "guard": cmd_guard,
-    "panel": cmd_panel,
-    "launchd": cmd_launchd,
-    "project": cmd_project,
-    "session-context": cmd_session_context,
-}
-
-
-def main(argv: list[str] | None = None) -> None:
-    a = parser(__doc__).parse_args(argv)
-    try:
-        HANDLERS[a.cmd](a)
-    except (backlog.BacklogError, config.ProjectError) as e:
-        sys.exit(f"fm: {e}")

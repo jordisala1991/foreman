@@ -6,9 +6,9 @@ import os
 import sys
 from pathlib import Path
 
-from . import launcher
-from .cli_common import home
-from .core.project import plugin, registry
+from ... import launcher
+from ...core.project import plugin, registry
+from .common import home
 
 
 def cmd_session_context(a: argparse.Namespace) -> None:

@@ -11,10 +11,12 @@ from unittest import mock
 
 import pytest
 
-from fm import cli, panel_views, util
+from fm import util
 from fm.core.project import registry
 from fm.core.project.config import Project
 from fm.core.tasks import backlog
+from fm.ui.cli import main
+from fm.ui.panel import views
 
 
 class TestFindProjectTest:
@@ -53,7 +55,7 @@ class TestFindProjectTest:
         os.chdir(cwd)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            cli.main(list(argv))
+            main.main(list(argv))
         return out.getvalue()
 
     def refused(self, cwd: Path, *argv: str) -> str:
@@ -205,4 +207,4 @@ class TestFindProjectTest:
         self.project("alpha")
         self.project("beta")
         os.chdir(self.root / "alpha-repo")
-        assert [p.name for p in panel_views.projects()] == ["alpha", "beta"]
+        assert [p.name for p in views.projects()] == ["alpha", "beta"]

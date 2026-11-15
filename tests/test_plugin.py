@@ -14,11 +14,13 @@ from unittest import mock
 import pytest
 from helpers import ROOT, fm
 
-from fm import cli, cli_plugin, launcher, util
+from fm import launcher, util
 from fm.core.project import plugin, registry
 from fm.core.project.config import Project
 from fm.core.tasks import backlog
 from fm.services.claude import sessions
+from fm.ui.cli import main
+from fm.ui.cli import plugin as cli_plugin
 
 
 class TestPluginTest:
@@ -98,7 +100,7 @@ class TestPluginTest:
     def test_a_failing_hook_prints_nothing_and_exits_zero(self) -> None:
         out = io.StringIO()
         with mock.patch.object(registry, "load_all", side_effect=RuntimeError("boom")), contextlib.redirect_stdout(out):
-            cli.main(["session-context"])
+            main.main(["session-context"])
         assert out.getvalue() == ""
 
     def test_a_session_start_on_a_good_python_clears_the_python_note(self):
@@ -143,7 +145,7 @@ class TestPluginTest:
         os.chdir(a / "src")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            cli.main(["project"])
+            main.main(["project"])
         assert out.getvalue() == f"project: alpha\nprefix: AL\nhome: {self.home}\nrepos: {a}, {b}\nmain: trunk\nslots: 3\n"
 
     def test_agents_launch_with_the_plugin_disabled(self) -> None:

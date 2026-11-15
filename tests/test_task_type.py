@@ -10,9 +10,10 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import cli_parser, panel_views
 from fm.core.tasks import backlog, tasktypes
 from fm.services.agents import brief
+from fm.ui.cli import parser
+from fm.ui.panel import views
 
 KINDS = ("responsible", "planning", "reviewer", "hunter")
 BUG = ("reproduce the bug with a test that fails", "name its cause in the report")
@@ -44,7 +45,7 @@ class TestTaskType:
         for argv in (["edit", self.tid, "--type", "x"], ["add", "n", "--type", "x"]):
             err = io.StringIO()
             with contextlib.redirect_stderr(err), pytest.raises(SystemExit):
-                cli_parser.parser(None).parse_args(argv)
+                parser.parser(None).parse_args(argv)
             for t in tasktypes.TYPES:
                 assert t in err.getvalue()
             with pytest.raises(SystemExit):
@@ -62,8 +63,8 @@ class TestTaskType:
         fm(self.e.home, "edit", self.tid, "--type", "bug")
         assert self.shown(self.tid)["type"] == "bug"
         assert "bug" in self.line(self.tid)
-        assert panel_views.task(self.e.p, self.tid)["task"]["type"] == "bug"
-        assert {i["id"]: i["type"] for i in panel_views.state(self.e.p)["tasks"]} == {self.tid: "bug"}
+        assert views.task(self.e.p, self.tid)["task"]["type"] == "bug"
+        assert {i["id"]: i["type"] for i in views.state(self.e.p)["tasks"]} == {self.tid: "bug"}
 
     def test_a_parent_has_no_type(self):
         sub = fm(self.e.home, "add", "s", "--criteria", "a", "--parent", self.tid).strip()
@@ -74,9 +75,9 @@ class TestTaskType:
         backlog.update(self.e.p, self.tid, type="bug")  # stored earlier: ignored on read
         assert "type" not in self.shown(self.tid)
         assert "bug" not in self.line(self.tid)
-        by_id = {i["id"]: i for i in panel_views.state(self.e.p)["tasks"]}
+        by_id = {i["id"]: i for i in views.state(self.e.p)["tasks"]}
         assert "type" not in by_id[self.tid]
-        assert "type" not in panel_views.task(self.e.p, self.tid)["task"]
+        assert "type" not in views.task(self.e.p, self.tid)["task"]
         assert (self.shown(sub)["type"], by_id[sub]["type"]) == ("change", "change")
 
 

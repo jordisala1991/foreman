@@ -14,10 +14,11 @@ from urllib.parse import quote
 import pytest
 from helpers import install_fm, version_folder
 
-from fm import launcher, panel, util
+from fm import launcher, util
 from fm.core.project.config import Project
 from fm.core.project.registry import register
 from fm.core.tasks import backlog, questions
+from fm.ui.panel import server
 
 
 def start_panel(t) -> None:
@@ -38,7 +39,7 @@ def start_panel(t) -> None:
     backlog.set_status(t.p, t.work, "in progress", agent={"name": "de-2", "short": "abc123"})
     t.qid = questions.ask(t.p, t.work, "de-2", "Which colour?")
     t.perm = questions.ask(t.p, t.work, "de-2", "push the tag", kind="permission", action="publish")
-    t.srv, t.key = panel.make_server(0, token="test-key")
+    t.srv, t.key = server.make_server(0, token="test-key")
     t.base = f"http://127.0.0.1:{t.srv.server_address[1]}"
     threading.Thread(target=t.srv.serve_forever, daemon=True).start()
 
@@ -151,11 +152,11 @@ class TestWatchVersion:
         self.request = request  # for the cleanups of helpers
 
     def serving(self, stale) -> threading.Thread:
-        srv, _ = panel.make_server(0, token="k")
+        srv, _ = server.make_server(0, token="k")
         self.request.addfinalizer(srv.server_close)
         th = threading.Thread(target=srv.serve_forever, daemon=True)
         th.start()
-        panel.watch_version(srv, 0.05, stale=stale)
+        server.watch_version(srv, 0.05, stale=stale)
         th.join(2)
         if th.is_alive():
             self.request.addfinalizer(srv.shutdown)

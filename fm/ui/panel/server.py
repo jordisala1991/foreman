@@ -28,14 +28,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import launcher
-from .core.review import evidence
-from .core.tasks import backlog
-from .panel_actions import Refused, act
-from .panel_views import Obj, project, projects, state, summary, system, task
-from .services.delivery import pulls
+from ... import launcher
+from ...core.review import evidence
+from ...core.tasks import backlog
+from ...services.delivery import pulls
+from .actions import Refused, act
+from .views import Obj, project, projects, state, summary, system, task
 
-DIST = Path(__file__).resolve().parent.parent / "panel" / "dist"
+DIST = Path(__file__).resolve().parents[3] / "panel" / "dist"
 STATIC = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8")}
 COOKIE = "fm_key"
 

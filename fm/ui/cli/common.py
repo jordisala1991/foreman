@@ -5,8 +5,8 @@ import os
 import sys
 from pathlib import Path
 
-from .core.project import config, registry
-from .core.project.config import Project
+from ...core.project import config, registry
+from ...core.project.config import Project
 
 
 def home(args: argparse.Namespace) -> Project:

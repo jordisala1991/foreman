@@ -11,9 +11,9 @@ from unittest import mock
 import pytest
 from helpers import REAL_REGISTRY, SANDBOX, fm
 
-from fm import panel
 from fm.core.project import registry
 from fm.services import lock
+from fm.ui.panel import server
 
 
 def leaked(registry: Path) -> list[str]:
@@ -37,7 +37,7 @@ class TestSandbox:
 
     def test_home_files_live_in_the_sandbox(self) -> None:
         self.unset("FM_REGISTRY", "FM_LOCKS")
-        for path in (Path.home(), registry.registry_file(), panel.token_file(), lock.root()):
+        for path in (Path.home(), registry.registry_file(), server.token_file(), lock.root()):
             assert path.is_relative_to(SANDBOX), path
 
     def test_init_registers_in_the_sandbox(self, request) -> None:

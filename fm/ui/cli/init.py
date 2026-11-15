@@ -4,9 +4,9 @@ fm command reach Claude Code through the plugin `fm@fm`: init prints the two lin
 
 from pathlib import Path
 
-from . import util
-from .core.project.config import Project
-from .core.tasks import backlog
+from ... import util
+from ...core.project.config import Project
+from ...core.tasks import backlog
 
 INSTALL = ("claude plugin marketplace add jordisala1991/foreman#foreman-next", "claude plugin install fm@fm")
 

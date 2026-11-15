@@ -17,7 +17,7 @@ dev = [
 [tool.ruff]
 line-length = 160
 target-version = "py312"
-extend-exclude = ["panel"]
+extend-exclude = ["./panel"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PLR0912", "PLR0913", "PLR0915", "TID251"]

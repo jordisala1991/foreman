@@ -7,11 +7,12 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import panel_views, util
+from fm import util
 from fm.core.project.config import Project, ProjectError
 from fm.core.tasks import backlog
 from fm.loop import tick
 from fm.steps import schedule, sources
+from fm.ui.panel import views
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
 SEEN = "2026-11-15 00:00:00"
@@ -181,10 +182,10 @@ class TestRecurring:
             assert "[recurring: cleanup]" in line
             assert json.loads(fm(self.e.home, "show", tid))["recurring"] == "cleanup"
             assert "recurring" not in json.loads(fm(self.e.home, "show", plain))
-            tasks = {i["id"]: i for i in panel_views.state(self.p)["tasks"]}
+            tasks = {i["id"]: i for i in views.state(self.p)["tasks"]}
             assert tasks[tid]["recurring"] == "cleanup"
             assert "recurring" not in tasks[plain]
-            assert panel_views.task(self.p, tid)["task"]["recurring"] == "cleanup"
+            assert views.task(self.p, tid)["task"]["recurring"] == "cleanup"
 
         check()
         self.entries("")
@@ -198,7 +199,7 @@ class TestRecurring:
         out = fm(self.e.home, "health")
         assert "recurring cleanup: every 10 merges; 7 merges left" in out
         assert "recurring weekly: every 7d; next due 2026-11-08" in out
-        rows = {r["name"]: r for r in panel_views.system(self.p)["recurring"]}
+        rows = {r["name"]: r for r in views.system(self.p)["recurring"]}
         assert rows["cleanup"]["left"] == 7
         assert rows["weekly"]["next"].startswith("2026-11-08")
         schedule.run(self.p, datetime(2026, 11, 20))
@@ -246,7 +247,7 @@ class TestRecurring:
         assert schedule.run(self.p, T0) == []
         assert not (self.p.state / "recurring.json").exists()
         assert "recurring" not in fm(self.e.home, "health")
-        assert "recurring" not in panel_views.system(self.p)
+        assert "recurring" not in views.system(self.p)
 
     def test_tick_files_a_due_entry(self) -> None:
         self.entries(CLEANUP.replace("every_merges = 2", "every_merges = 1"))
