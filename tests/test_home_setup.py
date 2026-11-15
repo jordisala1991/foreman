@@ -90,7 +90,7 @@ class HomeSetup(unittest.TestCase):
     def test_shared_files_are_generic(self) -> None:
         for f in SHARED_FILES:
             text = f.read_text()
-            for word in ("Jordi", "foreman", "/Users/", "FN-", "ZZ", *"áéíóúñ¿¡"):
+            for word in ("Jordi", "foreman", "/Users/", "FN-", "ZZ", "English", "Spanish", "Catalan", *"áéíóúñ¿¡"):
                 self.assertNotIn(word, text, f"{f.name}: {word}")
             self.assertLessEqual(set(re.findall(r"\{(\w+)\}", text)), PLACEHOLDERS, f.name)
             self.assertNotRegex(text, r"\{(?!(?:" + "|".join(PLACEHOLDERS) + r")\})[^}]*\}", f.name)

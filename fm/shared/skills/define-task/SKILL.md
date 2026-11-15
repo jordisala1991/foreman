@@ -24,7 +24,7 @@ nobody defines it later, and the planning agent never changes what is written he
 
 From the conversation (and `fm show {prefix}-n` when defining an existing task), collect:
 
-- **Title**: short, in English, says the outcome ("fm edit: change a task before its agent starts").
+- **Title**: short, says the outcome ("fm edit: change a task before its agent starts").
 - **Goal** (`--goal`): one line, what is true when it is done.
 - **Acceptance criteria** (`--criteria`, one per line): product, checkable from outside: visible behaviour, a
   command and its output, a table input → result when there are cases, what must NOT change. Never the how: no
