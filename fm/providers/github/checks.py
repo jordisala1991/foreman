@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from .. import util
-from . import ProviderError
+from ... import util
+from .. import ProviderError
 
 ROLLUP = {"SUCCESS": "pass", "FAILURE": "fail", "ERROR": "fail", "PENDING": "pending", "EXPECTED": "pending"}
 FAILED_RUN = ("FAILURE", "TIMED_OUT", "STARTUP_FAILURE")  # a CheckRun's conclusion

@@ -10,7 +10,8 @@ import unittest
 from helpers import Env, fm, git
 
 from fm import backlog, cli, delivery, loop, providers, util
-from fm.providers import github, registry
+from fm.providers import registry
+from fm.providers.github import provider, types
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -155,11 +156,11 @@ class GH:
         toml = e.home / "fm.toml"
         toml.write_text(toml.read_text().replace("[merge]", f'[merge]\nprovider = "github"\n{extra}'))
         e.p = type(e.p).load(e.home)
-        self.poll, github.POLL = github.POLL, 0  # a pending answer is read again at every call, unless a test says otherwise
+        self.poll, provider.POLL = provider.POLL, 0  # a pending answer is read again at every call, unless a test says otherwise
 
     def close(self) -> None:
         os.environ["PATH"] = self.path
-        github.POLL = self.poll
+        provider.POLL = self.poll
 
     @property
     def state(self) -> dict:
@@ -383,9 +384,9 @@ class Pulls(unittest.TestCase):
         self.assertNotIn("conflicts", i)
 
     def test_only_merge_conflict_text_is_a_conflict(self):
-        self.assertIsInstance(github.failure("gh", "Pull Request has merge conflicts"), providers.Conflict)
+        self.assertIsInstance(types.failure("gh", "Pull Request has merge conflicts"), providers.Conflict)
         for text in ("pull request is closed", "Pull request #3 is not mergeable", "error on branch fix-conflict-ui"):
-            self.assertNotIsInstance(github.failure("gh", text), providers.Conflict)
+            self.assertNotIsInstance(types.failure("gh", text), providers.Conflict)
 
     def test_an_accepted_task_whose_pr_is_still_a_draft_is_readied_then_merged(self):
         g, tid = self.merged(None)
@@ -507,7 +508,7 @@ class Pulls(unittest.TestCase):
     def test_pending_ci_of_several_tasks_is_one_call_per_poll(self):
         g = self.make(test="true", autonomy="manual")
         g.set(ci="pending")
-        github.POLL = 3600
+        provider.POLL = 3600
         ids = [g.work(), g.work()]
         for tid in ids:
             g.deliver(tid)
@@ -547,21 +548,19 @@ class Pulls(unittest.TestCase):
             self.assertEqual(g.e.task(first)["retry_error"], "")
 
     def test_only_known_permanent_errors_are_permanent_and_unblock_clears_the_errors(self):
-        from fm.providers import github
-
         cases = (
-            ("Head sha can't be blank", github.TransientError),
-            ("something new", github.TransientError),
-            ("pull request is closed", github.PermanentError),
-            ("merge conflict", github.PermanentError),
-            ("Pull request #3 is not mergeable", github.PermanentError),
-            ("the pull request cannot be merged", github.PermanentError),
-            ("read tcp: use of closed network connection", github.TransientError),
-            ("connection closed by remote host", github.TransientError),
-            ("error on branch fix-conflict-ui", github.TransientError),
+            ("Head sha can't be blank", types.TransientError),
+            ("something new", types.TransientError),
+            ("pull request is closed", types.PermanentError),
+            ("merge conflict", types.PermanentError),
+            ("Pull request #3 is not mergeable", types.PermanentError),
+            ("the pull request cannot be merged", types.PermanentError),
+            ("read tcp: use of closed network connection", types.TransientError),
+            ("connection closed by remote host", types.TransientError),
+            ("error on branch fix-conflict-ui", types.TransientError),
         )
         for text, kind in cases:
-            self.assertIsInstance(github.failure("gh", text), kind, text)
+            self.assertIsInstance(types.failure("gh", text), kind, text)
         g = self.make(test="true")
         tid = g.work()
         backlog.update(g.e.p, tid, blocked="x", pr_error="a", retry_error="b")
@@ -583,9 +582,9 @@ class Pulls(unittest.TestCase):
     def test_the_provider_never_tags_releases_or_forces(self):
         import inspect
 
-        from fm.providers import github
+        from fm.providers.github import checks, review
 
-        src = inspect.getsource(github)
+        src = "".join(inspect.getsource(m) for m in (provider, types, checks, review))
         for word in ('"tag"', '"release"', "--force", "--tags", "+refs"):
             self.assertNotIn(word, src)
 
