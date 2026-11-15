@@ -11,7 +11,8 @@ from helpers import Env, git
 from test_github import GH
 
 from fm import backlog, evidence, guard, loop, pulls
-from fm.providers import Change, github, registry
+from fm.providers import Change, registry
+from fm.providers.github import types
 
 PNG = b"\x89PNG\r\n\x1a\n-evidence"
 BODY = "Did X\n\n![the home](x.png)\n"
@@ -150,7 +151,7 @@ class OnGitHub(unittest.TestCase):
         hook.chmod(0o755)
         tid = self.deliver()
         reg = registry.get(g.e.p)
-        with self.assertRaises(github.TransientError):
+        with self.assertRaises(types.TransientError):
             reg.evidence(Change(id=tid), {"x.png": g.e.home / "reports" / tid / "x.png"})
         self.ticks(2)
         self.assertIn("![the home](x.png)", self.body())  # written, unlinked

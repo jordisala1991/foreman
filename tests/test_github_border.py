@@ -8,7 +8,8 @@ from typing import Any
 from test_github import GH
 
 from fm import providers
-from fm.providers import github, local, registry
+from fm.providers import local, registry
+from fm.providers.github import checks, provider
 
 
 class Border(unittest.TestCase):
@@ -17,9 +18,9 @@ class Border(unittest.TestCase):
     GOOD = {"number": 7, "url": "https://github.com/o/r/pull/7", "isDraft": True, "state": "OPEN", "mergeCommit": None}
 
     def test_a_pull_request_becomes_a_typed_value(self):
-        pr = github.pull_request(self.GOOD)
+        pr = provider.pull_request(self.GOOD)
         self.assertEqual((pr.number, pr.url, pr.draft, pr.state, pr.merge_commit), (7, "https://github.com/o/r/pull/7", True, "OPEN", ""))
-        merged = github.pull_request({**self.GOOD, "state": "MERGED", "mergeCommit": {"oid": "abc"}})
+        merged = provider.pull_request({**self.GOOD, "state": "MERGED", "mergeCommit": {"oid": "abc"}})
         self.assertEqual((merged.state, merged.merge_commit), ("MERGED", "abc"))
 
     def test_a_pull_request_of_the_wrong_shape_is_a_provider_error(self):
@@ -35,7 +36,7 @@ class Border(unittest.TestCase):
             {k: v for k, v in self.GOOD.items() if k != "url"},
         ):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.pull_request(bad)
+                provider.pull_request(bad)
 
     def test_the_open_prs_answer_becomes_head_and_ci_or_a_provider_error(self):
         def node(state):
@@ -44,18 +45,18 @@ class Border(unittest.TestCase):
         def answer(*nodes):
             return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
 
-        self.assertEqual(github.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass", "failed": []}})
+        self.assertEqual(checks.open_prs(answer(node({"state": "SUCCESS"}))), {"1": {"head": "abc", "ci": "pass", "failed": []}})
         runs = [
             {"__typename": "CheckRun", "name": "lint", "conclusion": "FAILURE", "detailsUrl": "https://ci/lint"},
             {"__typename": "StatusContext", "context": "deploy", "state": "ERROR", "targetUrl": "https://ci/deploy"},
             {"__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "detailsUrl": "https://ci/build"},
         ]
-        failed = github.open_prs(answer(node({"state": "FAILURE", "contexts": {"nodes": runs}})))["1"]["failed"]
+        failed = checks.open_prs(answer(node({"state": "FAILURE", "contexts": {"nodes": runs}})))["1"]["failed"]
         self.assertEqual(failed, [{"name": "lint", "url": "https://ci/lint"}, {"name": "deploy", "url": "https://ci/deploy"}])
-        self.assertEqual(github.open_prs(answer(node(None)))["1"]["ci"], "none")
+        self.assertEqual(checks.open_prs(answer(node(None)))["1"]["ci"], "none")
         for bad in (answer({"number": "1"}), answer("x")):
             with self.assertRaises(providers.ProviderError, msg=repr(bad)):
-                github.open_prs(bad)
+                checks.open_prs(bad)
 
     def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self):
         g = GH()
@@ -66,7 +67,7 @@ class Border(unittest.TestCase):
 
     def test_no_operation_of_the_port_takes_or_returns_a_dict_of_any(self):
         bad = dict[str, Any]
-        for cls in (providers.Provider, github.GitHub, local.Local):
+        for cls in (providers.Provider, provider.GitHub, local.Local):
             for name, fn in inspect.getmembers(cls, callable):
                 if name.startswith("_"):
                     continue

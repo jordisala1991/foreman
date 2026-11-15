@@ -5,7 +5,7 @@ import re
 from .. import proc
 from ..config import Project
 from . import ConfigError, Provider, merge_strategy, pr_mode
-from .github import GitHub
+from .github.provider import GitHub
 from .local import Local
 
 
