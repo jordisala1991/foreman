@@ -65,6 +65,33 @@ class HomeSetup(unittest.TestCase):
         (h / "CLAUDE.md").write_bytes(b"\xff\xfe\x00bad")
         self.assertEqual(len(health.old_links(p)), 2)
 
+    def test_health_names_old_links_in_a_repo(self) -> None:
+        h = self.home()
+        code = h / "code"
+        (h / "fm.toml").write_text(f'[project]\nrepo = "{code}"\n')
+        p = Project.load(h)
+        code.mkdir()
+        self.assertEqual(health.old_links(p), [])
+        (code / ".claude/skills").mkdir(parents=True)
+        (code / ".claude/fm.md").write_text("a copy, not a link\n")
+        (code / ".claude/skills/define-task").mkdir()
+        self.assertEqual(health.old_links(p), [])
+        (code / ".claude/fm.md").unlink()
+        (code / ".claude/skills/define-task").rmdir()
+        (code / ".claude/fm.md").symlink_to(SHARED_FILES[0])
+        (code / ".claude/skills/define-task").symlink_to(SHARED_FILES[1].parent)
+        (code / "CLAUDE.md").write_text("@.claude/fm.md\n")
+        (h / ".claude/skills").mkdir(parents=True)
+        (h / ".claude/fm.md").symlink_to(SHARED_FILES[0])
+        self.assertEqual(
+            health.old_links(p),
+            [
+                "! the home still has the old link .claude/fm.md (FN-143): the plugin replaces it; delete it",
+                f"! {code} still has the old link .claude/fm.md (FN-143): the plugin replaces it; delete it",
+                f"! {code} still has the old link .claude/skills/define-task (FN-143): the plugin replaces it; delete it",
+            ],
+        )
+
     def test_shared_files_are_generic(self) -> None:
         for f in SHARED_FILES:
             text = f.read_text()
