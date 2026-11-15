@@ -223,6 +223,16 @@ class Recurring(unittest.TestCase):
         self.assertEqual(list(util.read_json(self.p.state / "recurring.json", {})), ["other"])
         self.assertEqual([i["id"] for i in self.mine()], [before[0]["id"]])
 
+    def test_last_entry_removed_then_re_added_starts_afresh(self) -> None:
+        daily = '[[recurring]]\nname = "cleanup"\ntitle = "Prune"\nevery = "1d"\n'
+        self.entries(daily)
+        self.seen("2026-01-01 00:00:00")
+        self.entries("")
+        self.assertEqual(schedule.run(self.p, datetime(2026, 11, 15)), [])
+        self.entries(daily)
+        self.assertEqual(schedule.run(self.p, datetime(2026, 11, 15)), [])
+        self.assertEqual(util.read_json(self.p.state / "recurring.json", {}), {"cleanup": SEEN})
+
     def test_no_recurring_sees_nothing(self) -> None:
         self.assertEqual(schedule.run(self.p, T0), [])
         self.assertFalse((self.p.state / "recurring.json").exists())

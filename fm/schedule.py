@@ -15,8 +15,8 @@ def _context(p: Project) -> tuple[list[backlog.Task], dict[str, str]]:
 def run(p: Project, now: datetime | None = None) -> list[str]:
     """Files one task for each due entry; the ids filed."""
     entries: dict[str, dict[str, Any]] = p.cfg["recurring"]
-    if not entries:
-        return []
+    if not entries and not (p.state / "recurring.json").exists():
+        return []  # never had one: nothing is read or written
     now = now or datetime.now()
     with util.locked_json(p.state / "recurring.json", {}) as seen:
         for name in [n for n in seen if n not in entries]:
