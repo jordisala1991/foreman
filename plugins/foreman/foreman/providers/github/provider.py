@@ -1,6 +1,6 @@
 """The GitHub provider: every task is a pull request, driven with `gh`. Only the loop runs it (the guard stops `gh pr`
 for agents); the loop also pushes the task branches. Nothing here publishes: no tag, no release, no push to main. The other
-push fm makes is the `fm-evidence` branch (images of the reports, never forced, built with git plumbing so the checkout
+push fm makes is the `foreman-evidence` branch (images of the reports, never forced, built with git plumbing so the checkout
 and the task branch are untouched)."""
 
 import json
@@ -117,7 +117,7 @@ class GitHub(Provider):
         return self.run("git", "mktree", input="".join(f"{r}\n" for r in rows.values())).out.strip()
 
     def evidence(self, change: Change, files: dict[str, Path]) -> dict[str, str]:
-        """Puts the images in `ID/` of the orphan branch `fm-evidence` (added to what is there, one commit, a plain push
+        """Puts the images in `ID/` of the orphan branch `foreman-evidence` (added to what is there, one commit, a plain push
         that origin refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
         files = {n: f for n, f in files.items() if evidence.bare(n) and f.stat().st_size <= evidence.MAX_BYTES}
         if not files:

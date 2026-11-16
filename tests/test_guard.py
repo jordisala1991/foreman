@@ -33,7 +33,7 @@ class TestBash:
         assert self.check("git push --force origin foreman/ty-1") == "push-main"
         assert self.check("git -C /w/ty-1 push origin main") == "push-main"
         assert self.check("git push origin foreman/ty-1") is None
-        assert self.check("git push origin HEAD:fm-evidence") == "push-evidence"
+        assert self.check("git push origin HEAD:foreman-evidence") == "push-evidence"
         assert self.check("git push") is None  # the current branch is the task's
         assert self.check("git push", branch="main") == "push-main"
         assert self.check("git push origin --delete other") == "delete"
@@ -44,7 +44,7 @@ class TestBash:
             "git push origin +HEAD:main",
             "git push origin +refs/heads/main",
             "git push origin +foreman/ty-1",
-            "git push origin +HEAD:fm-evidence",
+            "git push origin +HEAD:foreman-evidence",
             "git push origin foreman/ty-1 +main",
             "git push -o -o origin +main",
         ):

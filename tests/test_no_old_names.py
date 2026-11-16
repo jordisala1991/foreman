@@ -12,9 +12,10 @@ import pytest
 from helpers import fm
 
 from foreman import launcher, util
-from foreman.core.oversight import costs
+from foreman.core.oversight import costs, guard
 from foreman.core.project import registry
 from foreman.core.project.config import Project
+from foreman.core.review import describe, evidence, inline
 from foreman.core.tasks import backlog
 from foreman.services import lock
 from foreman.ui.cli import common
@@ -155,13 +156,34 @@ class TestOldInstallNames:
         root = Path(__file__).resolve().parent.parent
         skip = ("GLOSSARY.md", "tests/test_no_old_names.py", "uv.lock", "panel/package-lock.json", "plugins/foreman/panel/dist/")  # prefixes
         files = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True).stdout.split("\n")
-        old = re.compile(r"\bFM_|fm\.toml|\.config/fm\b|\.local/state/fm\b|dev\.fm\.|\bfm@fm|fm_key|fm-(loop|panel|\{job\})\.log")
+        old = re.compile(
+            r"\bFM_|fm\.toml|\.config/fm\b|\.local/state/fm\b|dev\.fm\.|\bfm@fm|fm_key|fm-(loop|panel|\{job\})\.log"
+            r"|<!-- /?fm:|fm-link|fm-evidence|fm-project|^name = \x22fm\x22$"
+        )
         found = []
         for name in files:
             if name and not name.startswith(skip) and (root / name).is_file():
                 text = (root / name).read_text(encoding="utf-8", errors="ignore")
                 found += [f"{name}:{n}" for n, line in enumerate(text.splitlines(), 1) if old.search(line)]
         assert found == []
+
+
+class TestOldGitHubNames:
+    """What foreman posts to GitHub and pushes there says foreman: the old markers and links are not ours."""
+
+    def test_old_description_block_is_not_ours(self):
+        body = "<!-- fm:description -->x<!-- /fm:description -->"
+        assert describe.merge_body(body, "new") == body + "\n\n" + describe.wrap("new")
+        assert describe.wrap("new").startswith("<!-- foreman:description -->")
+
+    def test_old_link_is_not_resolved(self):
+        text = "[`a.py:3`](fm-link:a.py%3A3) x"
+        assert inline.resolve_links(text, "https://github.com/o/r", "SHA", {}) == text
+
+    def test_the_evidence_branch(self):
+        assert evidence.BRANCH == "foreman-evidence"
+        sc = guard.Scope("/w", [Path("/w")], "foreman/ty-1", Path("/h/foreman.toml"), [])
+        assert guard.check_bash("git push origin HEAD:foreman-evidence", sc) == "push-evidence"
 
 
 def test_the_command_is_called_foreman() -> None:

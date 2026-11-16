@@ -225,3 +225,4 @@ Not read by any code; `tests/test_no_old_names.py` proves it.
 - Plugin `fm@fm`, marketplace `fm`: now `foreman@foreman`, marketplace `foreman`.
 - Panel cookie `fm_key`: now `foreman_key`.
 - Default branch prefix `fm/`: now `foreman/`.
+- GitHub markers `<!-- fm:KEY -->` and `fm-link:`, the evidence branch `fm-evidence`, the project name `fm` in both `pyproject.toml`, the panel's saved project `fm-project`: now `<!-- foreman:KEY -->`, `foreman-link:`, `foreman-evidence`, `foreman`, `foreman-project` (the branch `fm-evidence` already on GitHub is left as it is).

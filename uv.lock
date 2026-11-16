@@ -39,7 +39,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fm"
+name = "foreman"
 version = "0.0.0"
 source = { virtual = "." }
 

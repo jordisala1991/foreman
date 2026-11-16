@@ -1,5 +1,5 @@
 """A PR review through `gh api`: one review per commit, one comment per finding, each found again by a hidden
-`<!-- fm:KEY -->` marker so nothing is posted twice. `run` is the provider's own `GitHub.run` (same errors)."""
+`<!-- foreman:KEY -->` marker so nothing is posted twice. `run` is the provider's own `GitHub.run` (same errors)."""
 
 import json
 from collections.abc import Callable
@@ -12,13 +12,13 @@ Run = Callable[..., proc.Result]
 
 
 def marker(key: str) -> str:
-    return f"<!-- fm:{key} -->"
+    return f"<!-- foreman:{key} -->"
 
 
 def markers(run: Run, change: Change, what: str) -> set[str]:
     """The markers in the bodies of the PR's reviews or review comments."""
     url = f"repos/{{owner}}/{{repo}}/pulls/{change.pr}/{what}"
-    r = run("gh", "api", url, "--paginate", "--jq", '.[] | (.body // "") | scan("<!-- fm:[a-z0-9-]+ -->")')
+    r = run("gh", "api", url, "--paginate", "--jq", '.[] | (.body // "") | scan("<!-- foreman:[a-z0-9-]+ -->")')
     return set(r.out.split("\n")) - {""}
 
 
@@ -46,12 +46,12 @@ def link_comments(run: Run, change: Change, review: Review, new: list[LineCommen
     """Best effort: the body's links to findings that got an inline comment point at that comment instead of the
     file. A failure leaves the file links, which are right too."""
     base, out = posted
-    if not new or "fm-link:" not in review.body:
+    if not new or "foreman-link:" not in review.body:
         return
     try:
         rid = json.loads(out)["id"]
         listing = f"repos/{{owner}}/{{repo}}/pulls/{change.pr}/reviews/{rid}/comments"
-        r = run("gh", "api", listing, "--jq", r'.[] | "\(.id) \(.body | scan("<!-- fm:[a-z0-9-]+ -->"))"')
+        r = run("gh", "api", listing, "--jq", r'.[] | "\(.id) \(.body | scan("<!-- foreman:[a-z0-9-]+ -->"))"')
         ids: dict[str, str] = {}
         for line in r.out.splitlines():
             num, _, mark = line.partition(" ")

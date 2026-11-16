@@ -25,7 +25,7 @@ class TestInline:
 
     def test_a_finding_link_works_for_any_place_the_reviewer_writes(self):
         def link(place: str) -> str:
-            return inline.resolve_links(f"[`{place}`](fm-link:{link_target(place)}) x", "https://github.com/o/r", "SHA", {})
+            return inline.resolve_links(f"[`{place}`](foreman-link:{link_target(place)}) x", "https://github.com/o/r", "SHA", {})
 
         base = "https://github.com/o/r/blob/SHA"
         assert link("a.py:3-5") == f"[`a.py:3-5`]({base}/a.py#L3) x"
