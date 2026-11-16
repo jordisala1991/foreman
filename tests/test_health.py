@@ -16,7 +16,6 @@ from fm.core.tasks import backlog, questions
 from fm.loop import tick
 from fm.services.claude import login
 from fm.services.delivery import check
-from fm.services.delivery import git as delivery_git
 from fm.steps.health import checks, main_tests, notes
 
 
@@ -166,7 +165,7 @@ class TestEvidence:
         e = Env(test="echo lint ok; echo boom 1>&2; exit 1")
         main_tests.run(e.p, {})
         (i,) = self.triage(e)
-        head = delivery_git.git(e.repo, "rev-parse", "main").out.strip()[:12]
+        head = git(e.repo, "rev-parse", "main").strip()[:12]
         for text in (head, "echo lint ok", "boom"):
             assert text in i["detail"]
 

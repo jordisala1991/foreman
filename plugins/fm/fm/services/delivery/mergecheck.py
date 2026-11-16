@@ -7,7 +7,8 @@ from typing import Any
 from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog
-from . import check, git, pulls
+from ...providers import registry
+from . import check, pulls
 
 
 def merged_check(p: Project, tid: str) -> None:
@@ -15,8 +16,9 @@ def merged_check(p: Project, tid: str) -> None:
     merge step returns it, as today) or when the branch moved meanwhile (its new head is checked first)."""
     i = backlog.get(backlog.load(p), tid)
     head = pulls.head_of(p, i["branch"])
-    main_head = git.git(p.repo, "rev-parse", p.get("project", "main")).out.strip()
-    if git.git(p.repo, "merge-tree", "--write-tree", main_head, head, check=False).code != 0:
+    r = registry.repo(p)
+    main_head = r.head(p.get("project", "main"))
+    if r.conflicts(main_head, head):
         return
     tests, out = check.tests_at(p, main_head, tid.lower(), merge=head)
     c: dict[str, Any] = backlog.get(backlog.load(p), tid).get("check") or {}

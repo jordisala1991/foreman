@@ -54,9 +54,12 @@ layer = "services"
 path = "fm.providers.registry"
 layer = "registry"
 
-# ports: the provider interface.
+# ports: the provider interface, and the repo interface (every git operation on a repo).
 [[modules]]
 path = "fm.providers"
+layer = "ports"
+[[modules]]
+path = "fm.providers.repo"
 layer = "ports"
 
 # adapters: one per platform. Layer "adapters" keeps the core from importing them; a layer rule keeps them from the loop, and their `depends_on` from each other.
@@ -68,6 +71,11 @@ depends_on = ["fm.providers"]
 path = "fm.providers.local"
 layer = "adapters"
 depends_on = ["fm.providers"]
+# gitrepo: the one module that runs git on a repo, behind fm.providers.repo.
+[[modules]]
+path = "fm.providers.gitrepo"
+layer = "adapters"
+depends_on = ["fm.providers.repo"]
 
 # proc: the one module that runs programs; used by the loop, the services and the adapters, never by the core.
 [[modules]]

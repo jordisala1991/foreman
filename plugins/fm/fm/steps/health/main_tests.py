@@ -5,7 +5,8 @@ from ... import util
 from ...core.project.config import Project
 from ...core.rules import decide
 from ...core.tasks import backlog
-from ...services.delivery import check, git
+from ...providers import registry
+from ...services.delivery import check
 from .checks import Finding, agents, answers_undelivered, finding, login_check, loop_dead, loop_errors, orphan_worktrees
 
 
@@ -28,7 +29,7 @@ def main_tests(p: Project, run: bool = True) -> list[Finding]:
     cmd = p.get("merge", "test")
     if not cmd:
         return []
-    head = git.git(p.repo, "rev-parse", p.get("project", "main"), check=False).out.strip()
+    head = registry.repo(p).find(p.get("project", "main"))
     ci = util.read_json(p.state / "ci.json", {})
     due = decide.main_tests_due(ci.get("head"), head, util.age_s(ci.get("at")), int(p.get("health", "ci_every_minutes")))
     if due and run:  # slow: in the background, the tick waits a little and goes on; the result lands in ci.json

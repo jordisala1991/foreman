@@ -1,7 +1,7 @@
 """The local provider: the branch is merged into the main checkout of the repo with git. Nothing is pushed."""
 
-from .. import proc
 from . import Change, ChangeState, Conflict, Provider, ProviderError
+from .repo import RepoError
 
 
 class Local(Provider):
@@ -9,39 +9,25 @@ class Local(Provider):
     merges = ("squash", "merge")
     has_ci = False  # no CI: merged here, in the repo
 
-    def git(self, *args: str, check: bool = True) -> proc.Result:
-        try:
-            r = proc.run(["git", "-C", str(self.p.repo), *args])
-        except proc.ProcError as e:
-            raise ProviderError(str(e)) from e
-        if check and r.code != 0:
-            raise ProviderError(f"git {' '.join(args)}: {(r.err or r.out).strip()[:300]}")
-        return r
-
     def merge(self, change: Change, strategy: str) -> str:
         main, branch = self.p.get("project", "main"), change.branch
-        if self.git("rev-parse", "--abbrev-ref", "HEAD").out.strip() != main:
-            raise ProviderError(f"the main checkout {self.p.repo} is not on {main}")
-        if self.git("status", "--porcelain", "--untracked-files=no").out.strip():
-            raise ProviderError(f"the main checkout {self.p.repo} has uncommitted changes")
-        msg = f"Merge {change.id}: {change.title}"
-        if strategy == "squash":
-            r = self.git("merge", "--squash", branch, check=False)
-            if r.code == 0:
-                r = self.git("commit", "-q", "--allow-empty", "-m", msg, check=False)
-        else:
-            r = self.git("merge", "--no-ff", "-m", msg, branch, check=False)
-        if r.code != 0:
-            self.git("merge", "--abort", check=False)
-            self.git("reset", "--hard", "-q", "HEAD", check=False)  # a failed squash leaves no merge to abort
-            why = f"merge failed: {(r.err or r.out).strip()[:300]}"
-            if self.git("merge-tree", "--write-tree", main, branch, check=False).code == 1:  # 1 = conflicts
-                raise Conflict(why)
-            raise ProviderError(why)
-        return self.git("rev-parse", "HEAD").out.strip()
+        try:
+            if self.repo.current_branch() != main:
+                raise ProviderError(f"the main checkout {self.p.repo} is not on {main}")
+            if self.repo.dirty():
+                raise ProviderError(f"the main checkout {self.p.repo} has uncommitted changes")
+            out = self.repo.merge(main, branch, f"Merge {change.id}: {change.title}", strategy == "squash")
+        except RepoError as e:
+            raise ProviderError(str(e)) from e
+        if not out.commit:
+            why = f"merge failed: {out.why}"
+            raise Conflict(why) if out.conflict else ProviderError(why)
+        return out.commit
 
     def state(self, change: Change) -> ChangeState:
-        main = self.p.get("project", "main")
         ref = change.merge
-        merged = bool(ref) and self.git("merge-base", "--is-ancestor", ref, main, check=False).code == 0
+        try:
+            merged = bool(ref) and self.repo.is_ancestor(ref, self.p.get("project", "main"))
+        except RepoError as e:
+            raise ProviderError(str(e)) from e
         return ChangeState(merged, merged)

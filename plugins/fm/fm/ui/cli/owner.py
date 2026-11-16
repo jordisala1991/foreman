@@ -11,6 +11,7 @@ from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
 from ...core.tasks import backlog, blockers, editing, questions, subtasks
+from ...providers.repo import RepoError
 from ...services.agents.running import review_running
 from ...services.delivery import merge
 from ...services.delivery.git import DeliveryError
@@ -95,7 +96,7 @@ def cmd_accept(a: argparse.Namespace) -> None:
     try:
         merge.accept(p, a.id)
         print(f"{a.id} accepted: the loop merges it next")
-    except (DeliveryError, providers.ConfigError) as e:
+    except (DeliveryError, RepoError, providers.ConfigError) as e:
         sys.exit(f"fm: {e}")
 
 
@@ -136,7 +137,7 @@ def cmd_go(a: argparse.Namespace) -> None:
 def cmd_cancel(a: argparse.Namespace) -> None:
     try:
         merge.close(home(a), a.id, "canceled", a.why or "by the owner")
-    except DeliveryError as e:
+    except (DeliveryError, RepoError) as e:
         sys.exit(f"fm: {e}")
 
 

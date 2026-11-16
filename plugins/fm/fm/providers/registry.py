@@ -1,19 +1,25 @@
-"""Picks the project's provider: the one place that knows the adapters (github, local) and how to tell which applies."""
+"""Picks the project's provider and hands out its repo: the one place that knows the adapters (github, local, gitrepo) and
+how to tell which provider applies."""
 
 import re
 
-from .. import proc
 from ..core.project.config import Project
 from ..core.rules import decide
 from . import MERGES, PRS, ConfigError, Provider
 from .github.provider import GitHub
+from .gitrepo import GitRepo
 from .local import Local
+from .repo import Repo
+
+
+def repo(p: Project) -> Repo:
+    """The project's repo, behind the `Repo` port."""
+    return GitRepo(p.repo)
 
 
 def detect(p: Project) -> str:
     """github when the repo's origin is on GitHub, else local."""
-    r = proc.run(["git", "-C", str(p.repo), "remote", "get-url", "origin"])
-    return "github" if r.code == 0 and re.search(r"github\.com[:/]", r.out) else "local"
+    return "github" if re.search(r"github\.com[:/]", repo(p).origin_url()) else "local"
 
 
 def get(p: Project) -> Provider:
@@ -26,4 +32,4 @@ def get(p: Project) -> Provider:
     m = decide.MergeConfig(name, p.get("merge", "strategy"), p.get("merge", "pr"))
     if err := decide.provider_error(m, merges, MERGES, PRS):
         raise ConfigError(err)
-    return providers[name](p)
+    return providers[name](p, repo(p))

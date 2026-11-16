@@ -6,6 +6,7 @@ from ..core.project.config import Project
 from ..core.rules import decide
 from ..core.tasks import backlog
 from ..providers import registry
+from ..providers.repo import RepoError
 from ..services.claude import sessions
 from ..services.delivery import git, merge, pulls
 from ..services.delivery.git import DeliveryError, MergeConflict
@@ -76,7 +77,7 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
     for first in (True, False):
         i = backlog.get(backlog.load(p), tid)
         c: dict[str, Any] = i.get("check") or {}
-        head, main_head = (git.git(p.repo, "rev-parse", r).out.strip() for r in (i["branch"], p.get("project", "main")))
+        head, main_head = (registry.repo(p).head(r) for r in (i["branch"], p.get("project", "main")))
         has_test = bool(p.get("merge", "test"))
         as_today = decide.as_today(has_test, has_test and git.conflicts(p, i["branch"]))
         step = decide.merge_gate(c, head, main_head, int(i.get("failure_streak") or 0), as_today)
@@ -99,8 +100,9 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
 
 def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
     """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
-    head = git.git(p.repo, "rev-parse", "--verify", i.get("branch", "HEAD")).out.strip()
-    main_head = git.git(p.repo, "rev-parse", main, check=False).out.strip()
+    r = registry.repo(p)
+    head = r.head(i.get("branch", "HEAD"))
+    main_head = r.find(main)
     step = decide.review_step(seen_of(p, i, head, rows), i.get("review") or {}, MAX_ROUNDS)
     if step.do != "go":  # no verdict on this tip yet (a review first, or the last one holds), or its findings go back
         apply_review(p, i, head, step)
@@ -146,7 +148,7 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
             backlog.update(p, i["id"], resolving="")
             if gate_merge(p, backlog.get(backlog.load(p), i["id"])):
                 merge.merge_accepted(p, i["id"])
-        except DeliveryError as e:
+        except (DeliveryError, RepoError) as e:
             backlog.event(p, i["id"], f"automatic merge failed: {e}")
     elif i.get("resolving"):
         backlog.update(p, i["id"], resolving="")
