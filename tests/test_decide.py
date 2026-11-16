@@ -1,4 +1,4 @@
-"""The loop's decisions (fm/core/rules/decide.py): one test per row of DESIGN.md's table "What the loop does with a task in
+"""The loop's decisions (foreman/core/rules/decide.py): one test per row of DESIGN.md's table "What the loop does with a task in
 review", then the queue, the retry, the provider's config and main's tests; none launches a program. `Pure` keeps the module free of programs and files."""
 
 import ast
@@ -6,8 +6,8 @@ from typing import Any
 
 from helpers import PLUGIN
 
-from fm.core.rules import decide
-from fm.core.rules.decide import (
+from foreman.core.rules import decide
+from foreman.core.rules.decide import (
     MergeConfig,
     Retry,
     Seen,
@@ -303,4 +303,4 @@ class TestPure:
         assert impurities(source) == []
 
     def test_decide_is_pure(self):
-        assert impurities((PLUGIN / "fm" / "core" / "rules" / "decide.py").read_text()) == []
+        assert impurities((PLUGIN / "foreman" / "core" / "rules" / "decide.py").read_text()) == []

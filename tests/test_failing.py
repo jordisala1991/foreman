@@ -5,8 +5,8 @@ from helpers import Env
 from test_github import GH
 from test_review_rules import commit, head, launched, take_note
 
-from fm.core.tasks import backlog
-from fm.loop import tick
+from foreman.core.tasks import backlog
+from foreman.loop import tick
 
 
 def deliver(e: Env, name: str = "app.py") -> str:

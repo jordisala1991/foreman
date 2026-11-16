@@ -7,10 +7,10 @@ from pathlib import Path
 
 from helpers import Env, fm, git
 
-from fm import util
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services.delivery import git as delivery_git
+from foreman import util
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services.delivery import git as delivery_git
 
 
 def commit(wt: str, name: str, text: str, msg: str = "change") -> None:

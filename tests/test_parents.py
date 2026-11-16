@@ -7,8 +7,8 @@ import pytest
 from helpers import Env, fm
 from test_misled import run_as
 
-from fm.core.tasks import backlog, questions, subtasks
-from fm.loop import tick
+from foreman.core.tasks import backlog, questions, subtasks
+from foreman.loop import tick
 
 
 def resumes(e: Env, sid: str) -> list[dict]:

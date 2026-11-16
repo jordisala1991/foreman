@@ -7,12 +7,12 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import util
-from fm.core.project.config import Project, ProjectError
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.steps import schedule, sources
-from fm.ui.panel import views
+from foreman import util
+from foreman.core.project.config import Project, ProjectError
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.steps import schedule, sources
+from foreman.ui.panel import views
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
 SEEN = "2026-11-15 00:00:00"
@@ -42,7 +42,7 @@ class TestRecurring:
         return tid
 
     def close(self, tid: str, status: str, at: str) -> None:
-        with mock.patch("fm.util.now", return_value=at):
+        with mock.patch("foreman.util.now", return_value=at):
             backlog.set_status(self.p, tid, status)
 
     def mine(self) -> list[dict]:
@@ -238,7 +238,7 @@ class TestRecurring:
         src.parent.mkdir()
         src.write_text('#!/bin/sh\necho \'{"key": "k", "title": "from a source"}\'\n')
         src.chmod(0o755)
-        with mock.patch("fm.steps.schedule.run", side_effect=OverflowError("boom")):
+        with mock.patch("foreman.steps.schedule.run", side_effect=OverflowError("boom")):
             sources.run(self.p)
         assert [i["title"] for i in backlog.tasks(backlog.load(self.p))] == ["from a source"]
         assert [e["step"] for e in util.read_jsonl(self.p.state / "errors.jsonl")] == ["recurring"]

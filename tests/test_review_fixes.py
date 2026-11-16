@@ -5,13 +5,13 @@ from pathlib import Path
 
 from helpers import PLUGIN, Env, fm, git
 
-from fm.core.oversight import guard
-from fm.core.tasks import backlog, questions
-from fm.loop import tick
-from fm.services.agents import brief, launch
-from fm.services.claude import sessions
-from fm.steps import talk
-from fm.steps.health import checks
+from foreman.core.oversight import guard
+from foreman.core.tasks import backlog, questions
+from foreman.loop import tick
+from foreman.services.agents import brief, launch
+from foreman.services.claude import sessions
+from foreman.steps import talk
+from foreman.steps.health import checks
 
 
 class TestGuardFalsePositives:

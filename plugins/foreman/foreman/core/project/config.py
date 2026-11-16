@@ -32,7 +32,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "merge": {
         "autonomy": "manual",
-        "provider": "auto",  # auto (github if origin is on GitHub, else local) | local | github (fm/providers/)
+        "provider": "auto",  # auto (github if origin is on GitHub, else local) | local | github (foreman/providers/)
         "strategy": "squash",  # squash | merge (--no-ff) | rebase (github only)
         "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `foreman done`
         "test": "",
@@ -66,7 +66,7 @@ class Project:
         if f.exists():
             raw = tomllib.loads(f.read_text(encoding="utf-8"))
         cfg: dict[str, dict[str, Any]] = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
-        cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: fm/services/lock.py
+        cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: foreman/services/lock.py
         try:
             cfg["repos"] = repos.parse(raw, cfg)
             cfg["recurring"] = recurring_table.parse(raw)

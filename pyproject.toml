@@ -17,7 +17,7 @@ dev = [
 [tool.ruff]
 line-length = 160
 target-version = "py312"
-src = [".", "plugins/fm"]
+src = [".", "plugins/foreman"]
 extend-exclude = ["./panel"]
 
 [tool.ruff.lint]
@@ -25,28 +25,28 @@ select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PLR0912", "PLR0913", "PLR0915
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "__future__.annotations".msg = "not needed on Python 3.11+"
-"subprocess".msg = "run programs through fm/proc.py: see DESIGN.md, Architecture"
+"subprocess".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
 
-# Only fm/proc.py runs processes. lock.py is the one exception (process groups and signals, see DESIGN.md), and the tests.
+# Only foreman/proc.py runs processes. lock.py is the one exception (process groups and signals, see DESIGN.md), and the tests.
 # Adding one here is the owner's call.
 [tool.ruff.lint.per-file-ignores]
-"plugins/fm/fm/proc.py" = ["TID251"]
-"plugins/fm/fm/services/lock.py" = ["TID251"]
+"plugins/foreman/foreman/proc.py" = ["TID251"]
+"plugins/foreman/foreman/services/lock.py" = ["TID251"]
 "tests/*.py" = ["TID251"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
 [tool.pyright]
-include = ["plugins/fm/fm"]
-extraPaths = ["plugins/fm"]
+include = ["plugins/foreman/foreman"]
+extraPaths = ["plugins/foreman"]
 typeCheckingMode = "strict"
 enableTypeIgnoreComments = false  # a `type: ignore` comment does not silence anything
 pythonVersion = "3.12"
 
-# The tests import fm from the plugin folder.
+# The tests import foreman from the plugin folder.
 [tool.pytest.ini_options]
-pythonpath = ["plugins/fm"]
+pythonpath = ["plugins/foreman"]
 
 # File length is the one thing ruff has no rule for: pylint, with only that check on. Tests get a larger limit (`make size`).
 [tool.pylint.main]

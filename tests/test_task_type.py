@@ -10,10 +10,10 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm.core.tasks import backlog, tasktypes
-from fm.services.agents import brief
-from fm.ui.cli import parser
-from fm.ui.panel import views
+from foreman.core.tasks import backlog, tasktypes
+from foreman.services.agents import brief
+from foreman.ui.cli import parser
+from foreman.ui.panel import views
 
 KINDS = ("responsible", "planning", "reviewer", "hunter")
 BUG = ("reproduce the bug with a test that fails", "name its cause in the report")

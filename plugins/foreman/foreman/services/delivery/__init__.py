@@ -4,6 +4,6 @@ The project's autonomy decides which risks merge without the owner: `manual` (no
 `medium`. High never merges alone. Everything else waits for the owner's accept in the panel (`foreman accept`), or is
 rejected: it goes back to its agent with his note (`foreman reject`).
 
-Accepting only records the decision; the merge step (`merge_accepted`, through the project's provider, fm/providers/) merges,
+Accepting only records the decision; the merge step (`merge_accepted`, through the project's provider, foreman/providers/) merges,
 and the task closes once the merge is seen in main. The local provider merges into the main checkout (`squash` by
 default, or `merge` = `--no-ff`); nothing is ever pushed or released."""

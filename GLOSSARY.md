@@ -88,7 +88,7 @@ The reviewer's recorded result for a tip: how many findings stay open.
 _Chat_: veredicto
 
 **Report**
-The file the responsible agent fills at `<home>/reports/ID.md`, from `fm/briefs/report.md`.
+The file the responsible agent fills at `<home>/reports/ID.md`, from `foreman/briefs/report.md`.
 _Chat_: informe
 _Avoid_: write-up
 

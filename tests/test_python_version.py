@@ -10,7 +10,7 @@ from unittest import mock
 import pytest
 from helpers import PLUGIN, ROOT
 
-from fm.core.project import registry
+from foreman.core.project import registry
 
 
 def fake(d: Path, version: str, body: str) -> None:
@@ -90,7 +90,7 @@ class TestPythonVersion:
         assert not marker.exists()
 
     def test_the_plugin_requires_the_python_the_repo_does(self):
-        """bin/foreman reads plugins/fm/pyproject.toml; the repo's dev project declares the same minimum."""
+        """bin/foreman reads plugins/foreman/pyproject.toml; the repo's dev project declares the same minimum."""
 
         def minimum(path: Path) -> str:
             return tomllib.loads(path.read_text())["project"]["requires-python"]

@@ -11,10 +11,10 @@ from helpers import Env, fm, git
 from test_failing import fix
 from test_review_rules import commit, events, take_note
 
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services.delivery import check, merge, mergecheck
-from fm.services.delivery.git import DeliveryError
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services.delivery import check, merge, mergecheck
+from foreman.services.delivery.git import DeliveryError
 
 TOGETHER_FAIL = "test ! -e a.py -o ! -e b.py"
 

@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 from helpers import fm
 
-from fm.core.project import plugin
-from fm.core.project.config import Project
-from fm.steps.health import notes
+from foreman.core.project import plugin
+from foreman.core.project.config import Project
+from foreman.steps.health import notes
 
 SHARED_FILES = (plugin.SHARED / "instructions.md", plugin.SHARED / "skills/define-task/SKILL.md")
 

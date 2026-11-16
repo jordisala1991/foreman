@@ -12,8 +12,8 @@ from unittest import mock
 import pytest
 from helpers import install_fm, version_folder
 
-from fm import launcher, util
-from fm.services import launchd
+from foreman import launcher, util
+from foreman.services import launchd
 
 
 class TestLauncher:

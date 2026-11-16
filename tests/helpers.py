@@ -17,14 +17,14 @@ from pathlib import Path
 
 import pytest
 
-from fm import util
-from fm.core.project.config import Project
-from fm.core.tasks import backlog
-from fm.services.claude import sessions
+from foreman import util
+from foreman.core.project.config import Project
+from foreman.core.tasks import backlog
+from foreman.services.claude import sessions
 
 sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent
-PLUGIN = ROOT / "plugins/fm"  # the folder the marketplace installs
+PLUGIN = ROOT / "plugins/foreman"  # the folder the marketplace installs
 
 # A test run must not write the owner's real ~/.config/fm (registry, panel token, locks): HOME and FM_REGISTRY point
 # at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
@@ -108,7 +108,7 @@ def git(repo: Path, *args: str) -> str:
 def fm(home: Path, *args: str) -> str:
     """Run an `fm` command in-process with its output captured and returned, so the test run stays quiet.
     If the command fails, its output is printed with the error: a failure is never buried."""
-    from fm.ui.cli import main
+    from foreman.ui.cli import main
 
     out = io.StringIO()
     try:
@@ -204,7 +204,7 @@ class Env:
 
     def hunt_then_review(self, tid: str) -> None:
         """A tick launches the hunter; it writes its file and ends; the next tick launches the reviewer."""
-        from fm.loop import tick
+        from foreman.loop import tick
 
         tick.tick(self.p)
         self.hunter_done(tid)
@@ -229,7 +229,7 @@ class Env:
 
 def install_fm(request: pytest.FixtureRequest, *entries: dict, version: int = 2) -> Path:
     """Write Claude Code's record of installed plugins in the sandbox HOME with these fm@fm entries; removed after the test."""
-    from fm import launcher
+    from foreman import launcher
 
     f = launcher.record()
     f.parent.mkdir(parents=True, exist_ok=True)

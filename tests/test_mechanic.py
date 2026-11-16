@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm.core.oversight import diagnosis
-from fm.core.tasks import backlog
-from fm.loop import tick
+from foreman.core.oversight import diagnosis
+from foreman.core.tasks import backlog
+from foreman.loop import tick
 
 FULL = "\n".join(f"## {s}\nx" for s in diagnosis.SECTIONS)
 

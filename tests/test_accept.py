@@ -3,7 +3,7 @@
 import pytest
 from helpers import Env, fm
 
-from fm.core.tasks import backlog
+from foreman.core.tasks import backlog
 
 
 def test_accept_of_a_missing_branch_exits_with_foreman_message():

@@ -9,13 +9,13 @@ import textwrap
 import pytest
 from helpers import Env, fm, git
 
-from fm import providers, util
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.providers import registry
-from fm.providers.github import provider, types
-from fm.services.delivery import merge
-from fm.ui.cli import main
+from foreman import providers, util
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.providers import registry
+from foreman.providers.github import provider, types
+from foreman.services.delivery import merge
+from foreman.ui.cli import main
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -590,7 +590,7 @@ class TestPulls:
     def test_the_provider_never_tags_releases_or_forces(self):
         import inspect
 
-        from fm.providers.github import checks, review
+        from foreman.providers.github import checks, review
 
         src = "".join(inspect.getsource(m) for m in (provider, types, checks, review))
         for word in ('"tag"', '"release"', "--force", "--tags", "+refs"):

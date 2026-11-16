@@ -3,11 +3,11 @@ import os
 import pytest
 from helpers import PLUGIN, fm
 
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services.agents import brief
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services.agents import brief
 
-BRIEFS = PLUGIN / "fm" / "briefs"
+BRIEFS = PLUGIN / "foreman" / "briefs"
 
 
 def run_as(e, tid, agent, *args):

@@ -15,12 +15,12 @@ One responsible agent per task, a loop without a model, a short guard, and a sys
 - **Shared resources**: `foreman lock NAME run "what" command…`.
 - **Health and metrics**: broken states become triage tasks; cost, time, rework and what misled agents per task.
 
-Python 3.12+ standard library only; the panel is React + Vite, built into `plugins/fm/panel/dist`.
+Python 3.12+ standard library only; the panel is React + Vite, built into `plugins/foreman/panel/dist`.
 
 ```sh
-plugins/fm/bin/foreman --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
-plugins/fm/bin/foreman loop            # or: plugins/fm/bin/foreman launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die; from the installed plugin they follow `claude plugin update fm@fm`, from a checkout they run that checkout)
-plugins/fm/bin/foreman panel --port 7788
+plugins/foreman/bin/foreman --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
+plugins/foreman/bin/foreman loop            # or: plugins/foreman/bin/foreman launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die; from the installed plugin they follow `claude plugin update fm@fm`, from a checkout they run that checkout)
+plugins/foreman/bin/foreman panel --port 7788
 make check            # (needs uv) everything CI runs, in order: lint, format, types, arch (tach), suppressions, size, test (make fix: the mechanical fixes)
 make test             # just the tests
 ```

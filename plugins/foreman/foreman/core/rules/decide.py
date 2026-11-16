@@ -1,4 +1,4 @@
-"""What the loop decides: pure functions, no I/O. The loop (fm/loop/, the steps, the providers' registry) reads the facts
+"""What the loop decides: pure functions, no I/O. The loop (foreman/loop/, the steps, the providers' registry) reads the facts
 (sessions, files, git, CI, the check, the backlog) and acts on what these return. The table is in DESIGN.md, "What the loop does with a task in
 review". Runs no program and touches no file: tach lets it import only `risk`, tests/test_decide.py rejects the rest."""
 

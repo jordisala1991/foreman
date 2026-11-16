@@ -11,12 +11,12 @@ from unittest import mock
 
 import pytest
 
-from fm import util
-from fm.core.project import registry
-from fm.core.project.config import Project
-from fm.core.tasks import backlog
-from fm.ui.cli import main
-from fm.ui.panel import views
+from foreman import util
+from foreman.core.project import registry
+from foreman.core.project.config import Project
+from foreman.core.tasks import backlog
+from foreman.ui.cli import main
+from foreman.ui.panel import views
 
 
 class TestFindProjectTest:

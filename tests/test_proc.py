@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from fm import proc
+from foreman import proc
 
 
 class TestRun:

@@ -1,7 +1,7 @@
 """The diff's visible lines and findings as line comments: pure."""
 
-from fm.core.review import inline
-from fm.core.review.verdict import Finding, link_target
+from foreman.core.review import inline
+from foreman.core.review.verdict import Finding, link_target
 
 
 class TestInline:

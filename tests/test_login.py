@@ -7,12 +7,12 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, install_fm, version_folder
 
-from fm import launcher, proc
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services import launchd
-from fm.services.claude import login, sessions
-from fm.steps.health import checks
+from foreman import launcher, proc
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services import launchd
+from foreman.services.claude import login, sessions
+from foreman.steps.health import checks
 
 
 class TestLogin:
@@ -51,14 +51,14 @@ class TestLogin:
 
     def test_fm_never_reads_the_keychain(self):
         self.set_login(False)
-        with mock.patch("fm.proc.run", wraps=proc.run) as run:
+        with mock.patch("foreman.proc.run", wraps=proc.run) as run:
             self.launch()
             checks.login_check(self.p)
         assert not [c for c in run.call_args_list if c.args[0][0] == "security"]
 
     def test_no_claude_command_gets_the_token(self):
         os.environ[login.ENV] = "from-env"
-        with mock.patch("fm.proc.run", wraps=proc.run) as run:
+        with mock.patch("foreman.proc.run", wraps=proc.run) as run:
             sessions.listing(self.p)
             sessions.stop(self.p, "abc")
             login.login_status(self.p.get("agents", "claude"))

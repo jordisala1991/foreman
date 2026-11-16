@@ -7,9 +7,9 @@ from typing import Any
 import pytest
 from test_github import GH
 
-from fm import providers
-from fm.providers import local, registry
-from fm.providers.github import checks, provider
+from foreman import providers
+from foreman.providers import local, registry
+from foreman.providers.github import checks, provider
 
 
 class TestBorder:
