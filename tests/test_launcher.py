@@ -3,6 +3,7 @@ by it exiting when another version is installed."""
 
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -84,17 +85,17 @@ class TestLauncher:
     def test_a_checkout_plist_names_the_checkout(self, request) -> None:
         install_fm(request, self.a)
         argv = plistlib.loads(launchd.plist("panel", ("--port", "1")).encode())["ProgramArguments"]
-        assert argv[1:] == [str(launcher.ROOT / "bin/fm"), "panel", "--port", "1"]
+        assert argv[1:] == [str(launcher.ROOT / "bin/foreman"), "panel", "--port", "1"]
 
     def run_plist(self, *args: str) -> subprocess.CompletedProcess[str]:
         """What launchd runs for the plugin plist: python3 -c <launcher> JOB ARGS."""
-        (self.cache / "aaa/bin/fm").write_text("import os, sys\nprint(os.path.realpath(__file__), sys.argv[1:], os.environ['FM_PINNED'])\n")
+        (self.cache / "aaa/bin/foreman").write_text("import os, sys\nprint(os.path.realpath(__file__), sys.argv[1:], os.environ['FM_PINNED'])\n")
         return subprocess.run([sys.executable, "-c", launcher.source(), *args], capture_output=True, text=True, timeout=30, check=False)
 
     def test_the_launcher_runs_the_installed_folder_pinned(self, request) -> None:
         install_fm(request, self.a)
         r = self.run_plist("panel", "--port", "7788")
-        bin_fm = self.cache / "aaa/bin/fm"
+        bin_fm = self.cache / "aaa/bin/foreman"
         assert r.stdout.strip() == f"{bin_fm} ['panel', '--port', '7788'] {self.cache / 'aaa'}"
 
     def test_without_an_install_the_job_exits_with_one_line(self, request) -> None:
@@ -106,3 +107,13 @@ class TestLauncher:
             assert len(r.stderr.strip().splitlines()) == 1, r.stderr
             assert "fm@fm" in r.stderr
             assert r.stdout == ""
+
+    def test_a_plist_written_before_the_rename_still_starts_the_installed_version(self) -> None:
+        """The old launcher text runs `<installPath>/bin/fm` with python and FM_PINNED set: the bridge hands it to foreman."""
+        folder = self.cache / "old"
+        (folder / "bin").mkdir(parents=True)
+        shutil.copy(launcher.ROOT / "bin/fm", folder / "bin/fm")
+        (folder / "bin/foreman").write_text("import os, sys\nprint(sys.argv[1:], os.environ['FM_PINNED'])\n")
+        env = {**os.environ, "FM_PINNED": str(folder)}
+        r = subprocess.run([sys.executable, str(folder / "bin/fm"), "loop"], env=env, capture_output=True, text=True, timeout=30, check=False)
+        assert r.stdout.strip() == f"['loop'] {folder}"

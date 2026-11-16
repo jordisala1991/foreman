@@ -1,20 +1,17 @@
-"""The plugin's commands: `fm session-context` (Claude Code's SessionStart hook) and `fm project` (the skill's values)."""
+"""The plugin's commands: `foreman session-context` (Claude Code's SessionStart hook) and `foreman project` (the skill's values)."""
 
 import argparse
 import contextlib
 import os
 import sys
-from pathlib import Path
 
-from ... import launcher
 from ...core.project import plugin, registry
 from .common import home
 
 
 def cmd_session_context(a: argparse.Namespace) -> None:
-    """In a project's folder: the instructions, and this bin/ first on the session's PATH (Claude Code appends it last,
-    after macOS's own /usr/bin/fm). Whatever fails prints nothing: a hook's error would be a message in a session that
-    should get none."""
+    """In a project's folder: the instructions. Whatever fails prints nothing: a hook's error would be a message in a
+    session that should get none."""
     with contextlib.suppress(OSError):
         registry.python_note_file().unlink(missing_ok=True)
     try:
@@ -25,12 +22,6 @@ def cmd_session_context(a: argparse.Namespace) -> None:
     if not out:
         return
     print(out)
-    try:
-        if env_file := os.environ.get("CLAUDE_ENV_FILE"):
-            with Path(env_file).open("a", encoding="utf-8") as f:
-                f.write(f'export PATH="{launcher.ROOT / "bin"}:$PATH"\n')
-    except OSError:  # the instructions are out; fm stays reachable by its full path
-        pass
 
 
 def cmd_project(a: argparse.Namespace) -> None:

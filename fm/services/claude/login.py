@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from ... import proc, util
 
 ENV = "CLAUDE_CODE_OAUTH_TOKEN"
-SOON = timedelta(days=3)  # `fm health` warns this long before the login expires
+SOON = timedelta(days=3)  # `foreman health` warns this long before the login expires
 
 
 @dataclass(frozen=True)

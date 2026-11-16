@@ -20,7 +20,7 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - A bug fix, or a line of the acceptance criteria that describes behaviour: write its test first, see it fail, then make it pass.
 - Keep the tests green. The project's test command: `$test`. Before delivering, if `$main` moved, merge it into your branch and run the tests again.
 - A lint or type error is fixed at its root.
-- If an `fm` command exits non-zero, read its message, fix what it says and run it again. Never end your turn as if it had worked.
+- If a `foreman` command exits non-zero, read its message, fix what it says and run it again. Never end your turn as if it had worked.
 - $resources
 
 # The end
@@ -29,18 +29,18 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
    - every line of the acceptance criteria has evidence that exists at this tip (a test that passes, a command you ran, a `file:line`);
    - every claim in the report is true at this tip (a Proof row, a count, a «done»): rerun it or correct it;
    - every function, option, flag or fallback you added serves a line of the criteria or an item of the plan; otherwise remove it.
-3. Run `fm done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task or the repo was wrong, stale or unclear and cost you time; or none"` and end your turn.
+3. Run `foreman done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task or the repo was wrong, stale or unclear and cost you time; or none"` and end your turn.
 
-The loop then has your branch reviewed: the hunter, then the reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Run `$test` again and update the Proof rows the fixes touched. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), reread as in step 2, and run `fm done` again. The owner may also reject it with a note: same thing.
+The loop then has your branch reviewed: the hunter, then the reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Run `$test` again and update the Proof rows the fixes touched. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), reread as in step 2, and run `foreman done` again. The owner may also reject it with a note: same thing.
 
-If the task cannot be done, or turns out not to be one change, run `fm block "why, and what would unblock it"`; for the second case give the proposed split (the PRs it would split into, one goal line each). Then end your turn.
+If the task cannot be done, or turns out not to be one change, run `foreman block "why, and what would unblock it"`; for the second case give the proposed split (the PRs it would split into, one goal line each). Then end your turn.
 
 # Without asking
 - Everything inside this task: how to build it, steps, subagents, details where the plan does not hold (list them under «Off the plan»), merging `$main` into your branch, answering review findings. Do not end a turn to ask «shall I proceed?»: owning the task is the authorization.
 
 # Waits for the owner
-- What only he can answer (a preference, a choice of scope): `fm ask "…"` and END YOUR TURN; his answer comes back here. Do not guess on that point meanwhile. A good question stands alone: the context in one line, the options, your recommendation and why.
-- Publishing, pushing to `$main`, deleting what is not yours, changing fm.toml, silencing a lint or type error (noqa, ignore, cast, exception lists, helpers whose only purpose is to please the checker): `fm ask --action publish|push-main|delete|config "what and why"` (to silence a check, a plain `fm ask "…"`). If the guard stops one, ask the same way; if he allows it you are told here, and it passes once.
+- What only he can answer (a preference, a choice of scope): `foreman ask "…"` and END YOUR TURN; his answer comes back here. Do not guess on that point meanwhile. A good question stands alone: the context in one line, the options, your recommendation and why.
+- Publishing, pushing to `$main`, deleting what is not yours, changing fm.toml, silencing a lint or type error (noqa, ignore, cast, exception lists, helpers whose only purpose is to please the checker): `foreman ask --action publish|push-main|delete|config "what and why"` (to silence a check, a plain `foreman ask "…"`). If the guard stops one, ask the same way; if he allows it you are told here, and it passes once.
 
 # Never
 - Touch the main checkout (`$repo`), merge into `$main` (the merge is not yours), or look for another way past the guard.

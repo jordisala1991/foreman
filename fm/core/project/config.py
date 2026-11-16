@@ -1,7 +1,7 @@
 """A project: a home folder holding `fm.toml` (the owner's settings), `backlog.json` and `state/`; the code lives in
 the repo `fm.toml` points to (`[project] repo`, or several `[repos.<key>]` tables: tasks run in the first). The
 registry (`~/.config/fm/projects.json`, or $FM_REGISTRY) lists the homes the loop and the panel serve. A project owns
-its home, its repos, its worktrees folder and the umbrella folder set in `[project] umbrella`: `fm` run in any of
+its home, its repos, its worktrees folder and the umbrella folder set in `[project] umbrella`: `foreman` run in any of
 them works on it (the deepest folder wins)."""
 
 import tomllib
@@ -34,7 +34,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "autonomy": "manual",
         "provider": "auto",  # auto (github if origin is on GitHub, else local) | local | github (fm/providers/)
         "strategy": "squash",  # squash | merge (--no-ff) | rebase (github only)
-        "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `fm done`
+        "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `foreman done`
         "test": "",
     },
     # risk: label -> path patterns; the label is what the reason says. [risk.high] replaces the default table whole.

@@ -581,7 +581,7 @@ class TestVersion:
         install_fm(request, self.b)
         with pytest.raises(SystemExit) as e:
             tick.forever([str(self.p.home)], once=True)
-        assert str(e.value) == "fm: fm@fm bbb is installed now; this runs aaa"
+        assert str(e.value) == "foreman: fm@fm bbb is installed now; this runs aaa"
         assert not (self.p.state / "loop.json").exists()
 
     def test_the_same_install_ticks_and_the_heartbeat_names_the_version(self, request):

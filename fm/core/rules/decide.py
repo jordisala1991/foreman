@@ -84,7 +84,7 @@ def review_step(seen: Seen, v: Mapping[str, Any], max_rounds: int) -> Step:
             return Step("block", "its hunter ended without its findings file")
         return Step("wait", rule, base)
     if seen.reviewer_ended:
-        return Step("block", "its reviewer ended without a verdict (`fm verdict`)")
+        return Step("block", "its reviewer ended without a verdict (`foreman verdict`)")
     return Step("wait", rule, base)
 
 
@@ -99,14 +99,14 @@ def back_note(v: Mapping[str, Any]) -> str:
         f"The review of your branch (round {v['round']}) leaves {v['open']} open: read {v['file']}. "
         "For each one, make the smallest change that settles it, or answer it in one line if you think it is wrong; add "
         "nothing it does not ask for. Add one `### Round N` to the «Review rounds» section of your report, one line per "
-        "finding, and run `fm done` again."
+        "finding, and run `foreman done` again."
     )
 
 
 def conflict_note(main: str) -> str:
     return (
         f"{main} moved and your branch conflicts with it. Merge {main} into your branch with a merge commit, not a rebase, "
-        "resolve keeping both changes, run the tests, and run `fm done` again."
+        "resolve keeping both changes, run the tests, and run `foreman done` again."
     )
 
 
@@ -118,7 +118,7 @@ def failing_note(c: Mapping[str, Any], pr_url: str) -> str:
         note = (
             f"Your branch passes its tests alone but fails them merged with main {c['merged_with'][:9]}, not on its branch "
             "alone. Merge main into your branch with a merge commit, not a rebase, fix what breaks, run the tests there, "
-            "and run `fm done` again.\n"
+            "and run `foreman done` again.\n"
         )
     if c.get("tests_output"):
         note += f"The test command fails; last lines of its output:\n```\n{c['tests_output']}\n```\n"
@@ -129,7 +129,7 @@ def failing_note(c: Mapping[str, Any], pr_url: str) -> str:
         note += "The PR's CI fails:\n" + "".join(f"- {f['name']}: {f['url']}\n" for f in failed)
     elif c.get("ci") == "fail":
         note += f"The PR's CI fails and GitHub names no failing check: see {pr_url}\n"
-    return note + "Fix it, run the tests, and run `fm done` again."
+    return note + "Fix it, run the tests, and run `foreman done` again."
 
 
 def failing(c: Mapping[str, Any]) -> bool:
@@ -182,7 +182,7 @@ def merge_gate(c: Mapping[str, Any], head: str, main_head: str, failed: int, as_
 
 
 def ran_on(c: Mapping[str, Any]) -> str:
-    """What the last check ran on, for `fm show`."""
+    """What the last check ran on, for `foreman show`."""
     return f"merged with main {c['merged_with'][:9]}" if c.get("merged_with") else "branch alone"
 
 

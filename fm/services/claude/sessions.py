@@ -40,7 +40,7 @@ def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
         "FM_AGENT": agent,
         "PATH": f"{bin_}{os.pathsep}{os.environ.get('PATH', '')}",
     }
-    guard = f"{sys.executable} {bin_ / 'fm'} guard"
+    guard = f"{sys.executable} {bin_ / 'foreman'} guard"
     s: dict[str, Any] = {
         "worktree": {"bgIsolation": "none"},
         "env": env,

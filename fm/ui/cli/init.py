@@ -1,6 +1,6 @@
-"""`fm init`: a home with fm.toml, backlog.json and an empty instructions.md (the owner's own rules for the project,
+"""`foreman init`: a home with fm.toml, backlog.json and an empty instructions.md (the owner's own rules for the project,
 given to every session in it). What already exists is never changed. The define-task skill, fm's instructions and the
-fm command reach Claude Code through the plugin `fm@fm`: init prints the two lines that install it."""
+foreman command reach Claude Code through the plugin `fm@fm`: init prints the two lines that install it."""
 
 from pathlib import Path
 
@@ -19,7 +19,7 @@ def init(home: Path, prefix: str, repo: str) -> list[str]:
         util.write_json(p.backlog_file, backlog.empty())
     if not (home / "instructions.md").exists():
         (home / "instructions.md").touch()  # empty: the owner writes the project's rules in it
-    return ["To get the define-task skill, fm's instructions and the fm command in your Claude Code sessions, run:", *INSTALL]
+    return ["To get the define-task skill, fm's instructions and the foreman command in your Claude Code sessions, run:", *INSTALL]
 
 
 def _fm_toml(home: Path, prefix: str, repo: str) -> None:

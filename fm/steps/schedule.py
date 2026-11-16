@@ -68,7 +68,7 @@ def rows(p: Project, now: datetime | None = None) -> list[dict[str, Any]]:
 
 
 def line(r: dict[str, Any]) -> str:
-    """One entry for `fm health`."""
+    """One entry for `foreman health`."""
     head = f"recurring {r['name']}: {r['trigger']}"
     if r["open"]:
         return f"{head}; waits for {r['open']} to close"

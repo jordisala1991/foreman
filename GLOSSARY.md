@@ -178,6 +178,11 @@ _Avoid_: human, operator, boss
 A repo plus its home, served by fm.
 _Chat_: proyecto
 
+**foreman**
+The command that runs fm (`bin/foreman` of the plugin). Not `fm`: macOS ships its own /usr/bin/fm.
+_Chat_: foreman
+_Avoid_: fm (as the command)
+
 **Home**
 The project's folder: `fm.toml`, `backlog.json`, `state/`, `plans/`, `worktrees/`.
 _Chat_: casa

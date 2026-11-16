@@ -1,5 +1,5 @@
 """fm as a Claude Code plugin (`fm@fm`, from this repo's marketplace `fm`): what a session opened in a folder of a
-registered project is given at its start (the hook `fm session-context`), and the values `fm project` shows the skill.
+registered project is given at its start (the hook `foreman session-context`), and the values `foreman project` shows the skill.
 A session in no project's folder, or one of fm's own agents, is given nothing."""
 
 import json

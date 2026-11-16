@@ -11,13 +11,13 @@ Nothing needs keeping alive but the loop, which has no model.
               │
    backlog.json (schema 5) + state/ (events, guard log, grants, seen, ci, loop heartbeat)
               │
-   fm loop (plain process, launchd KeepAlive) ── every N s, per registered project:
+   foreman loop (plain process, launchd KeepAlive) ── every N s, per registered project:
       sources → answers → agents → queue → health → blockers → launch
               │
    claude --bg -n NAME --settings {env, guard hook}   (one session per task, plus one per review round)
-      planning agent  (cwd: the repo, read only)     → fm ready / fm ask / fm block
-      responsible agent (cwd: its worktree, branch)  → subagents, fm ask, fm done / fm block
-      hunter, then reviewer (launched by the loop, read only) → hunter file, review file, fm verdict
+      planning agent  (cwd: the repo, read only)     → foreman ready / foreman ask / foreman block
+      responsible agent (cwd: its worktree, branch)  → subagents, foreman ask, foreman done / foreman block
+      hunter, then reviewer (launched by the loop, read only) → hunter file, review file, foreman verdict
 ```
 
 Python stdlib only (3.11+, `tomllib`); the panel is React/Vite source in `panel/src`, built to `panel/dist`.
@@ -31,62 +31,62 @@ A *home* folder: `fm.toml` (the owner's settings), `backlog.json`, `state/`, `wo
 listed until `## Several repos` is built (FN-144 subtask 4). A project owns its home, every repo, its worktrees folder
 and the umbrella folder set in `[project] umbrella` (explicit, never guessed). A command finds its project by `--project
 NAME`, `--home`, `FM_HOME`, `FM_PROJECT`, then the registered project owning the current folder (paths resolved, the
-deepest folder wins; two projects claiming it: fm refuses and `fm health` names them), then the nearest `fm.toml` above
+deepest folder wins; two projects claiming it: fm refuses and `foreman health` names them), then the nearest `fm.toml` above
 it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings; `[merge]
 autonomy`, `provider`, `strategy`, `test`, `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`;
 `[health]` timings; `[[recurring]]` entries (see Recurring tasks). With several repos, `[merge]` and `[risk]` are the defaults a repo's own tables override (see
 Several repos).
-`fm init` makes `fm.toml`, `backlog.json` and `instructions.md` (the owner's own rules), never overwrites a file of the
+`foreman init` makes `fm.toml`, `backlog.json` and `instructions.md` (the owner's own rules), never overwrites a file of the
 home, and prints the two lines that install the plugin. The plugin (`fm@fm`, marketplace `fm`, from this repo's branch
 `foreman-next`; no `version` anywhere, so Claude Code's version is the commit and every merge reaches it) gives a
-session in any folder of a registered project the skill `fm:define-task` (its values from `fm project`), the shared
-instructions with the project's values plus `<home>/instructions.md` (the SessionStart hook `fm session-context`; `bin/fm` re-executes under a newer `python3` from PATH or names the minimum, and the hook leaves that line for `fm health`), and
-`fm` on the PATH; a session elsewhere gets no context. Agents run with it disabled (`enabledPlugins` in their settings).
+session in any folder of a registered project the skill `fm:define-task` (its values from `foreman project`), the shared
+instructions with the project's values plus `<home>/instructions.md` (the SessionStart hook `foreman session-context`; `bin/foreman` re-executes under a newer `python3` from PATH or names the minimum, and the hook leaves that line for `foreman health`), and
+`foreman` on the Bash tool's PATH (Claude Code adds the plugin's `bin/`, which ships `foreman` and no executable `fm`: macOS's `/usr/bin/fm` stays macOS's; no hook writes PATH; a non-executable bridge file of the old command's name in `bin/` serves launchd plists written before the rename, to delete once `foreman launchd` was re-run); a session elsewhere gets no context. Agents run with it disabled (`enabledPlugins` in their settings).
 
 A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and `~/Projects/<name>/home`.
 
 ## The states of a task
 
 ```
- triage ──go──▶ backlog ──loop──▶ refining ──fm ready──▶ ready ──loop──▶ in progress ──fm done──▶ in review
+ triage ──go──▶ backlog ──loop──▶ refining ──foreman ready──▶ ready ──loop──▶ in progress ──foreman done──▶ in review
  (health,        (to plan)        (planning agent)                       (responsible agent)      (check, review,
   sources)                                                                      ▲                    risk score)
-                                                                                └──── fm reject ─────┤
+                                                                                └──── foreman reject ─────┤
                                                                                                      ▼
-                                                                                  done ◀── fm accept / autonomy,
+                                                                                  done ◀── foreman accept / autonomy,
                                                                                   then the merge step
- any open state ── fm cancel ──▶ canceled          `blocked` (a reason) on any state: the loop leaves it alone
+ any open state ── foreman cancel ──▶ canceled          `blocked` (a reason) on any state: the loop leaves it alone
 ```
 
 - `triage`: filed by a health check, a source, or without acceptance criteria (the only state such a task can be in).
-  Never launched until the owner says «go»; `fm go` refuses a task without acceptance criteria.
+  Never launched until the owner says «go»; `foreman go` refuses a task without acceptance criteria.
 - `backlog`: to plan (it has acceptance criteria, set with the owner). `refining`: its planning agent works. It ends
-  with `fm ready --plan|--no-plan`.
+  with `foreman ready --plan|--no-plan`.
 - `ready`: has acceptance criteria and a plan (or none, if trivial). `in progress`: its responsible agent works, in its own worktree and branch.
 - `in review`: delivered. The loop checks and reviews the branch; the owner accepts it or rejects it with a note.
-- `blocked`: a reason set by an agent (`fm block`), by the loop (could not launch; stopped without finishing after a
-  nudge). The owner clears it (`fm unblock [--relaunch]`).
-- `blocked_by` (`fm add/edit --blocked-by FN-n …`; `none` clears): the task is never planned or launched until every
+- `blocked`: a reason set by an agent (`foreman block`), by the loop (could not launch; stopped without finishing after a
+  nudge). The owner clears it (`foreman unblock [--relaunch]`).
+- `blocked_by` (`foreman add/edit --blocked-by FN-n …`; `none` clears): the task is never planned or launched until every
   blocker is `done`, then the loop marks it unblocked in the history. A canceled or duplicate blocker blocks the task
-  with a reason: the owner edits `--blocked-by` or cancels, then `fm unblock`.
-- `type` (`fm add/edit --type change|bug|mechanical|definition`; default and every task without one: change) only
+  with a reason: the owner edits `--blocked-by` or cancels, then `foreman unblock`.
+- `type` (`foreman add/edit --type change|bug|mechanical|definition`; default and every task without one: change) only
   changes the instructions of the task's agents, one paragraph per type; a parent has none.
-- `fm edit` changes title, goal, criteria, detail, model, effort, type or blockers of a task in triage, backlog or ready (never one with an agent,
+- `foreman edit` changes title, goal, criteria, detail, model, effort, type or blockers of a task in triage, backlog or ready (never one with an agent,
   nor a closed one); criteria or detail on a backlog or ready task drops its plan and returns it to backlog.
-- A task too big for one PR is a parent with subtasks (`fm add --parent FN-n`, only while the parent is in triage or
+- A task too big for one PR is a parent with subtasks (`foreman add --parent FN-n`, only while the parent is in triage or
   backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent. A parent in triage
   closes by itself when every subtask has (done if any is done, else canceled). Once let in (backlog) it gets a parent
   agent (`agent.kind` `parent`, no worktree, status stays backlog): it is told each subtask merged or canceled and
   nothing else (`notified` lists those told; message kind `subtask`), proposes the next Go and changes to the owner, may
-  file (`--triage`) and edit only its own subtasks, and closes the parent with `fm done` (refused while a subtask is
-  open) after the owner's yes. `fm cancel` of a parent cancels its open subtasks and closes their PRs.
-- A question (`fm ask`) does not change the state: it is a decision tied to the task and its agent. Its agent ends
+  file (`--triage`) and edit only its own subtasks, and closes the parent with `foreman done` (refused while a subtask is
+  open) after the owner's yes. `foreman cancel` of a parent cancels its open subtasks and closes their PRs.
+- A question (`foreman ask`) does not change the state: it is a decision tied to the task and its agent. Its agent ends
   its turn; the owner answers in the panel (or talks to that agent directly); the loop resumes *that* session with the
   answer.
 
 ## The loop
 
-A plain process, no model (`fm loop`; `fm launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Run from the installed plugin, a job's command names no version: at each start it runs the version of `fm@fm` Claude Code records as installed (`~/.claude/plugins/installed_plugins.json`, `fm/launcher.py`), and it exits when another version is installed so launchd starts the new one (the loop before its next tick, the panel within 30 s); each version folder never changes, so a job never mixes two versions. Run from a plain checkout, the jobs name that checkout. Agents use the normal claude.ai login, so they show in the Claude app; the loop removes `CLAUDE_CODE_OAUTH_TOKEN` from every agent it launches. `fm health` warns 3 days before the login expires and files a finding when it does not work (`claude auth status`)); one per registry (a lock file).
+A plain process, no model (`foreman loop`; `foreman launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Run from the installed plugin, a job's command names no version: at each start it runs the version of `fm@fm` Claude Code records as installed (`~/.claude/plugins/installed_plugins.json`, `fm/launcher.py`), and it exits when another version is installed so launchd starts the new one (the loop before its next tick, the panel within 30 s); each version folder never changes, so a job never mixes two versions. Run from a plain checkout, the jobs name that checkout. Agents use the normal claude.ai login, so they show in the Claude app; the loop removes `CLAUDE_CODE_OAUTH_TOKEN` from every agent it launches. `foreman health` warns 3 days before the login expires and files a finding when it does not work (`claude auth status`)); one per registry (a lock file).
 Each tick, per project, each step isolated (an exception goes to `state/errors.jsonl`, which a health check turns
 into a finding), and inside a step each task isolated (a failure blocks that task with the reason; the others go
 on). The heartbeat is written before every step, so a long test run does not look like a dead loop.
@@ -95,8 +95,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
 2. **sources**: every executable in `<home>/sources/` prints JSON lines, each with a `key` (dedup). Without `task`,
    `{key, title, detail}` becomes a triage task, deduplicated by source and key. With `task` (a task id),
    `{key, task, action, text}` acts on that open task through the owner's own commands: `note` (text reaches its
-   agent like an answer), `reject` (text; as `fm reject`), `accept` (as `fm accept`), `done` (closed as done, merged
-   outside fm), `cancel` (as `fm cancel`). Applied once per source and key (`state/applied/`). Unknown or closed
+   agent like an answer), `reject` (text; as `foreman reject`), `accept` (as `foreman accept`), `done` (closed as done, merged
+   outside fm), `cancel` (as `foreman cancel`). Applied once per source and key (`state/applied/`). Unknown or closed
    task, unknown action, missing key, or an action invalid for the task's state: nothing changes, logged in
    `state/errors.jsonl`, not retried. A transient failure (accept before its check, busy checkout, hung stop) is
    logged and the same key is tried again next tick.
@@ -106,9 +106,9 @@ on). The heartbeat is written before every step, so a long test run does not loo
    (`claude --bg --resume SID MESSAGE`, no other flag: a flag or a live process makes claude start a copy), when that
    session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
    one answer per task per tick; a copy (different short id) or an unreadable `claude agents` fails the send; dropped if the task closed meanwhile;
-   a failed try is retried next tick; the answer stays not delivered and `fm health` shows it after 10 minutes. A session id not listed yet at launch is
+   a failed try is retried next tick; the answer stays not delivered and `foreman health` shows it after 10 minutes. A session id not listed yet at launch is
    filled in from its short id on a later tick.
-4. **agents**: an agent whose session ended its turn without `fm done`/`ready`/`ask`/`block`, and whose transcript
+4. **agents**: an agent whose session ended its turn without `foreman done`/`ready`/`ask`/`block`, and whose transcript
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
 5. **queue**: accepted tasks are merged first, one at a time; with a test command, each only once its tests pass on it
    merged with main as main is at that moment (the merged check, `loop.gate_merge`: see below). Then a branch in review whose head or main's head changed is checked,
@@ -137,7 +137,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
    that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.
 
-`fm cancel` stops its agent, closes its open questions and removes its worktree (the branch stays).
+`foreman cancel` stops its agent, closes its open questions and removes its worktree (the branch stays).
 
 ### What the loop does with a task in review
 
@@ -158,26 +158,26 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 | Verdict with findings open before the last round | back to its agent for review: its note, once | `review_step` → `back` | `test_open_findings_go_back_once` |
 | A new tip that only merges main, with no conflict | no review: the verdict holds (`review.holds`) | `launch_rule` → `hold` | `test_a_clean_merge_or_a_closed_review_holds`, `test_a_clean_merge_of_main_launches_nothing` |
 | A new tip after the loop acted on a verdict of the last round, open or clean (`review_for` none) | no review: the verdict holds; what is open stays for the owner; no round 3 runs by itself (after a round-1 verdict, a new tip gets round 2) | `closes_review`, `launch_rule` → `hold` | `test_a_review_closes_after_the_last_round`, `test_after_two_clean_rounds_a_new_tip_launches_nothing`, `test_a_clean_merge_or_a_closed_review_holds`, `test_after_round_two_later_tips_launch_no_review`, `test_a_new_tip_after_a_clean_verdict_gets_a_review` |
-| The agent's fix after `fm reject` | one review of the fix only (`git diff` reviewed tip..new tip), from round 1; open findings back to its agent | `launch_rule` → `reject`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_reject_gets_a_review_of_the_fix_and_open_findings_go_back` |
+| The agent's fix after `foreman reject` | one review of the fix only (`git diff` reviewed tip..new tip), from round 1; open findings back to its agent | `launch_rule` → `reject`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_reject_gets_a_review_of_the_fix_and_open_findings_go_back` |
 | A new tip that merges main resolving a conflict | one review of the resolution only (`git diff` git's automatic merge..new tip), from round 1; open findings back to its agent | `launch_rule` → `conflict`, `review_base` | `test_reject_and_conflict_launch_with_their_base`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
 | The agent's fix after failing tests or CI | one review of the fix only (`git diff` failing tip..new tip), from round 1; open findings back to its agent | `launch_rule` → `failing`, `review_base` | `test_the_fix_of_a_failure_gets_a_review_of_only_that_fix`, `test_the_fix_gets_a_review_of_only_that_fix` |
 | CI pending | waits | `waits_for_ci` | `test_pending_ci_waits` |
 | Head, main or CI moved since the last check | checks it again (in the background) | `checks_again` | `test_moved_branch_is_checked_again` |
-| It conflicts with main and nobody said it should merge | waits for the owner; `fm show` and the panel say it conflicts and goes back when accepted | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_waiting_task_that_conflicts_stays_and_says_so` |
+| It conflicts with main and nobody said it should merge | waits for the owner; `foreman show` and the panel say it conflicts and goes back when accepted | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_waiting_task_that_conflicts_stays_and_says_so` |
 | It conflicts and the owner accepted it (also a merge refused for a conflict) or the autonomy would merge it | back to its agent for the conflict, keeping that accept (`resolving`) | `after_check` → `conflict`, `conflict_note` | `test_conflict_goes_back`, `test_conflict_waits_unless_someone_wants_the_merge` |
 | Tests or CI fail, returned fewer than 2 times in a row (`failure_streak`; without a test command a check without failures ends the row, with one only the merge does) | returned to its agent with the failing output or checks, whoever wants the merge; keeps its check (the panel shows why) and counts `failures` | `after_check` → `failing`, `failing_note` | `test_failing_tests_or_ci_go_back_up_to_the_cap`, `test_failing_note_names_the_output_and_the_checks`, `test_failing_tests_go_back_with_the_output`, `test_failing_ci_goes_back_with_each_check`, `test_a_green_check_ends_the_row_without_a_test_command` |
 | Tests or CI fail a third time in a row | waits for the owner, the failure shown in its check | `after_check` → `owner` | `test_failing_tests_or_ci_go_back_up_to_the_cap`, `test_the_third_failure_waits_for_the_owner` |
 | Resolved, no findings open, checks green, with the owner's accept kept | merges without a new accept (an accept the autonomy made is decided again: high never merges alone) | `after_check` → `merge` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_accept_then_conflict_resolves_and_merges_without_a_new_accept` |
 | The resolution's review leaves findings open, tests fail or CI is not green | the kept accept lapses; waits for the owner | `after_check` → `owner` | `test_conflict_waits_unless_someone_wants_the_merge`, `test_a_resolution_left_open_waits_for_the_owner` |
 | Autonomy allows the risk, no open findings, CI green where the provider has CI | merges alone | `after_check` → `merge` | `test_autonomy_merges_alone` |
-| Anything else | waits for the owner (`fm accept` / `fm reject`) | `after_check` → `owner` | `test_everything_else_waits_for_the_owner` |
+| Anything else | waits for the owner (`foreman accept` / `foreman reject`) | `after_check` → `owner` | `test_everything_else_waits_for_the_owner` |
 
 ### The merged check (FN-113)
 
 A branch's own check runs its tests on the branch alone. Just before an accepted branch merges (the owner's accept or
 the autonomy's, `loop.gate_merge` on both paths), the test command runs again on the branch merged with main as main
 is at that moment (`fm/services/delivery/mergecheck.py`, in the background like the check). The result goes in the task's `check`
-(`merged_with` = that main commit); `fm show` (`checked_on`) and the panel say what the last check ran on. A task not
+(`merged_with` = that main commit); `foreman show` (`checked_on`) and the panel say what the last check ran on. A task not
 about to merge (in review, waiting for the owner) never runs it. Accepted tasks merge one at a time, so of two waiting,
 the second is checked with the first already in main.
 
@@ -215,21 +215,21 @@ rebase) is neither, and in a conflict episode its whole branch is reviewed.
 Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-planning`), started with
 `claude --bg -n NAME --model M --effort E --permission-mode bypassPermissions --settings S PROMPT` in its cwd:
 
-- `M` and `E` are the project's, except for the responsible agent: the task's own `model`/`effort` (optional task keys, chosen by the planning agent with the rubric in `planning.md`) win; the planner fills only the keys the owner left empty (`fm ready` never overwrites one).
-- `S` sets `FM_HOME`, `FM_TASK`, `FM_AGENT` and `PATH` (so `fm` works), `worktree.bgIsolation: none`, the guard as
+- `M` and `E` are the project's, except for the responsible agent: the task's own `model`/`effort` (optional task keys, chosen by the planning agent with the rubric in `planning.md`) win; the planner fills only the keys the owner left empty (`foreman ready` never overwrites one).
+- `S` sets `FM_HOME`, `FM_TASK`, `FM_AGENT` and `PATH` (so `foreman` works), `worktree.bgIsolation: none`, the guard as
   a PreToolUse hook, and the project's extra settings.
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
   that agent.
 
 **Planning agent** (`fm/briefs/planning.md`): the acceptance criteria are product (observable behaviour, never how) and
-are settled with the owner when the task is filed; the planning agent never writes, rewrites or splits them, and `fm ask`s
+are settled with the owner when the task is filed; the planning agent never writes, rewrites or splits them, and `foreman ask`s
 the owner if one cannot be met as written. It reads the repo (read only), asks the owner only what only he can decide
-(`fm ask`, then ends its turn), and ends with `fm ready --detail --plan PATH` (or `--no-plan "why trivial"`). It writes a
+(`foreman ask`, then ends its turn), and ends with `foreman ready --detail --plan PATH` (or `--no-plan "why trivial"`). It writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
-risk); the task gets `plan_file`, and the responsible agent follows it and `fm ask`s when it does not hold. Its statements of scope cite their search; its questions stand alone (context, options, recommendation and why).
+risk); the task gets `plan_file`, and the responsible agent follows it and `foreman ask`s when it does not hold. Its statements of scope cite their search; its questions stand alone (context, options, recommendation and why).
 
-`fm done`, `fm ready` and `fm verdict` take `--misled`; the text (not «none») is kept on the task under `misled`, per
-agent, once; `fm metrics` shows it.
+`foreman done`, `foreman ready` and `foreman verdict` take `--misled`; the text (not «none») is kept on the task under `misled`, per
+agent, once; `foreman metrics` shows it.
 
 **Responsible agent** (`fm/briefs/responsible.md`): owns the whole task in its
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
@@ -238,8 +238,8 @@ main before delivering if it moved, asks the owner only what only he can answer,
 inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
 section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when it launches) and ends with
-`fm done --summary --report --misled`. If the review returns it or the owner rejects it, the note arrives in the same
-conversation: each finding gets the smallest change that settles it, or a one-line answer if it thinks the finding is wrong; add a `### Round N` to the report's «Review rounds» section, `fm done` again.
+`foreman done --summary --report --misled`. If the review returns it or the owner rejects it, the note arrives in the same
+conversation: each finding gets the smallest change that settles it, or a one-line answer if it thinks the finding is wrong; add a `### Round N` to the report's «Review rounds» section, `foreman done` again.
 
 **Review: hunter, then reviewer** (`fm/briefs/hunter.md`, `fm/briefs/reviewer.md`): launched by the loop, not by the responsible agent, each as
 its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail
@@ -249,21 +249,21 @@ the **reviewer** starts; it sees only the file, never the hunter's reasoning. It
 (confirmed, refuted, or neither) and each Too much item; a finding leaves only with a cited line or output that refutes it,
 so what it could not refute stays in To fix. What was dropped goes under Noted and is not sent to the responsible agent. It writes
 `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`, N = items under To fix) and runs
-`fm verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but
+`foreman verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but
 decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`decide.review_step`);
 round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
 round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
 Each review session gets its own `<home>/scratch/ID-rN-<tip>-ROLE/`, told in its brief as `$scratch`; the loop removes it on the first tick where no live session owns it.
 
 The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health finding and changes nothing else: read-only by its
-brief (as the hunter's), its only write is `fm diagnose --file`, which checks the required `##` headings (`fm/core/oversight/diagnosis.py`)
-and appends the diagnosis to the task's `detail`, so `fm show` has it. The task stays in triage; the owner decides next.
+brief (as the hunter's), its only write is `foreman diagnose --file`, which checks the required `##` headings (`fm/core/oversight/diagnosis.py`)
+and appends the diagnosis to the task's `detail`, so `foreman show` has it. The task stays in triage; the owner decides next.
 
 ## Shared resources
 
 `fm/services/lock.py`. A resource is declared in fm.toml (`[resources.NAME]`, optional
-`slots = [...]` and `max_minutes`, default 20). `fm lock NAME run "what" command…` waits its turn, runs the command
-holding the resource (with `FM_SLOT`), stops it at the time limit and always releases it; `fm lock NAME status`.
+`slots = [...]` and `max_minutes`, default 20). `foreman lock NAME run "what" command…` waits its turn, runs the command
+holding the resource (with `FM_SLOT`), stops it at the time limit and always releases it; `foreman lock NAME status`.
 
 - Fair queue: first come, first served; a holder or waiter whose process died is cleaned up whenever anyone looks.
 - Slots: one holder per slot, one queue.
@@ -276,8 +276,8 @@ holding the resource (with `FM_SLOT`), stops it at the time limit and always rel
 
 A reminder, not a cage (`fm/core/oversight/guard.py`). It runs only in agent sessions (the hook comes in `--settings`), looks at
 the program each shell segment runs (never at words inside strings or messages), and denies a handful of actions
-with a reason that says: do not look for another way; `fm ask --action NAME "what and why"`, end your turn. The
-owner allows it once from the panel (`fm allow QID`); the loop tells its agent; it passes once.
+with a reason that says: do not look for another way; `foreman ask --action NAME "what and why"`, end your turn. The
+owner allows it once from the panel (`foreman allow QID`); the loop tells its agent; it passes once.
 
 | Action | Recognised by |
 |---|---|
@@ -306,8 +306,8 @@ Every delivered branch gets a risk score:
   when accepted [git]`), and it goes back to its agent only when the owner accepts or the autonomy would merge it.
 
 The project's `[merge] autonomy` decides what merges without the owner: `manual` (nothing; the default),
-`low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`fm accept`), or rejects it with a note
-(`fm reject`, counted as rework).
+`low`, `medium`. `high` always waits. Where the provider `has_ci` (github yes, local no), autonomy merges only on a green CI. The owner accepts in the panel (`foreman accept`), or rejects it with a note
+(`foreman reject`, counted as rework).
 
 ### Provider, accepted → merged
 
@@ -315,7 +315,7 @@ The merge goes through a *provider* module (`fm/providers/`), one per platform; 
 Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `diff` (its unified diff; empty locally), `review` (post the verdict as one PR review with its inline comments; no-op locally), `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
 in fm: a future queue is just another strategy) and `state` (merged? closed?). Operations take a `Change` and return `Published` / `ChangeState`: no dict crosses the port. Steps:
 
-1. **accepted**: `fm accept` (or autonomy) only records `accepted` on the task (it stays `in review`).
+1. **accepted**: `foreman accept` (or autonomy) only records `accepted` on the task (it stays `in review`).
 2. **merge**: the loop's queue step asks the provider to merge once, and stores the merge reference.
 3. **merged**: the task closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
@@ -332,7 +332,7 @@ The responsible agent only commits; the **loop** pushes the task branches (`prov
 never forced, never main, 20 s timeout; a failure is `Transient` with git's error) and, never an agent, opens, readies,
 comments on and merges PRs through `gh` (the guard keeps stopping `gh pr` for agents). `[merge] pr = "draft"`
 (default): a task in progress has its commits pushed and gets a **draft PR** as soon as it has its first commit; `pr = "done"`: no PR until
-`fm done`. In review, after the hunter and the reviewer: the branch is pushed at its tip if it is not yet, the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
+`foreman done`. In review, after the hunter and the reviewer: the branch is pushed at its tip if it is not yet, the PR exists, and the loop waits while CI is pending. Then the check runs: **failing CI is high risk**, and
 with no `[merge] test` the PR's CI **replaces the local test**. Then the draft is marked **ready** and a pull request review
 (event COMMENT) carries the verdict (decision, risk and its reasons, checks); each finding inside the diff is also a comment on its line. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
@@ -345,11 +345,11 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Recurring tasks
 
-`[[recurring]]` tables in `fm.toml` (strict: `fm/core/project/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `fm add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
+`[[recurring]]` tables in `fm.toml` (strict: `fm/core/project/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `foreman add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
 - Trigger: `every_merges = N` (N merged tasks) or `every = "12h" | "7d" | "2w"` (plain durations: h, d, w, at most 100 years; no cron).
 - Each tick (the `sources` step, which calls `fm/steps/schedule.py` over the pure rules of `fm/core/tasks/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
 - Anchor: the count or period starts when the entry's last task closed (done, canceled or duplicate), else when fm first saw the entry (`state/recurring.json`, the one store). A time trigger that fell due while fm was off files once. Merges are `done` tasks not filed by an entry and not parents; their closing time is that of the `→ done` event.
-- `fm list`, `fm show` and the panel's data mark an entry's task (`recurring`: the name); `fm health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it.
+- `foreman list`, `foreman show` and the panel's data mark an entry's task (`recurring`: the name); `foreman health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it.
 
 ## Several repos (defined in FN-148; not built yet)
 
@@ -420,14 +420,14 @@ test = "make build"
 | `large_lines`, `[repos.K.risk.high]`, `[repos.K.risk.medium]` | `[repos.K.risk]` | as `[risk]` | as `[risk]`; patterns relative to the repo's root, as diff paths are |
 
 - Project-wide only, never in a repo table: `[project]` (`name`, `prefix`, `branch_prefix`, `worktrees`, `umbrella`,
-  `fm`), `[agents]` (slots, models, `claude`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
+  `foreman`), `[agents]` (slots, models, `claude`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
   `[risk]` stay as the defaults for every repo.
 - **A setting given at both levels: the repo's wins, key by key; absent there, the project's; absent there, fm's
   default.** A `high` or `medium` table in a repo replaces the project's table of that level whole, never label by
   label (as a project table replaces fm's default one today). So a repo's `high` table also drops fm's default one
   (`fm.toml`, `.github/`, `*secret*`, `*.env`): a repo that wants those paths high lists them again.
 - Repo tables are strict: a project-wide key or an unknown key in one is a config error naming table and key
-  (`fm: [repos.api] has no setting 'slots'`). No other table changes.
+  (`foreman: [repos.api] has no setting 'slots'`). No other table changes.
 - `path` and `worktrees` are relative to the home, `~` expanded. `[project] repo` alone stays the one-repo form, with
   none of these tables.
 - `post_create`: each command runs with `sh -c`, cwd the new worktree, `{main}` (the repo's main checkout) and `{wt}`
@@ -445,20 +445,20 @@ test = "make build"
   code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls `for_task` once per
   task step. A task with no repo (a task that has subtasks, a loop finding) gets the project as it is, that is the first
   repo.
-- Choosing: `fm add TITLE --repo KEY`; `fm edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops the
-  plan and returns to backlog, as criteria do, because a plan is about one repo). With several repos, `fm add` of a task
-  with criteria and `fm go` refuse one without repo: `fm: FN-3: choose its repo first (fm edit FN-3 --repo
+- Choosing: `foreman add TITLE --repo KEY`; `foreman edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops the
+  plan and returns to backlog, as criteria do, because a plan is about one repo). With several repos, `foreman add` of a task
+  with criteria and `foreman go` refuse one without repo: `foreman: FN-3: choose its repo first (foreman edit FN-3 --repo
   app|api|site|emails)`; in triage it may have none. A task that has subtasks needs no repo (each subtask has its own):
-  `fm go` lets it in without one, and it shows `-` as its repo. An unknown key is refused, naming the keys. A health
+  `foreman go` lets it in without one, and it shows `-` as its repo. An unknown key is refused, naming the keys. A health
   finding about one repo carries it (main's tests, an orphan worktree); the loop's own findings carry none and are never
   let in as they are (the mechanic diagnoses, the owner files the real task).
-- Showing: `fm show` prints `repo`; `fm list` adds a repo column between status and agent; the panel's `state` and
+- Showing: `foreman show` prints `repo`; `foreman list` adds a repo column between status and agent; the panel's `state` and
   `task` data carry `repo` per task, and `state` carries `repos` (the keys).
 - **Only with more than one repo.** With one repo the key is never stored, asked, listed or sent, and `--repo` is
-  refused (`fm: this project has one repo`).
-- A change across repos is a parent with one subtask per repo (`fm add --parent`), ordered with `--blocked-by`: the
+  refused (`foreman: this project has one repo`).
+- A change across repos is a parent with one subtask per repo (`foreman add --parent`), ordered with `--blocked-by`: the
   dependent subtask launches once the first is merged. No PR links across repos, no merge of several repos at once.
-  A planning agent that finds a task needs two repos runs `fm block` with that split proposed.
+  A planning agent that finds a task needs two repos runs `foreman block` with that split proposed.
 
 ### Each moving part
 
@@ -472,7 +472,7 @@ test = "make build"
 | Risk | the repo's tables and `large_lines`. `publish_on_merge` makes the impact high with the reason `merging publishes this repo (KEY)` (a fact of the score, `publishes`), so only the owner's accept merges it. fm still never tags or releases |
 | Autonomy | the repo's, else the project's; `high` never merges alone, as today |
 | Review | unchanged: hunter and reviewer start in the task's worktree, so they are per repo by their cwd |
-| Health checks | orphan worktrees in every repo's worktree list; main's tests per repo; new: a repo path that is not a git checkout, a task whose repo key left fm.toml (blocked at launch with that reason), fm or Claude files in a repo (below). `fm health`'s «runs in the first one» note goes |
+| Health checks | orphan worktrees in every repo's worktree list; main's tests per repo; new: a repo path that is not a git checkout, a task whose repo key left fm.toml (blocked at launch with that reason), fm or Claude files in a repo (below). `foreman health`'s «runs in the first one» note goes |
 | Slots | one count for the project (`[agents] slots`), one queue by priority, then ready before backlog, then id, as today, whatever the repo; no per-repo cap. Checks and merged checks stay one at a time for the project |
 | Locks | `[resources.*]` stay project-wide and machine-wide: a simulator or a port is shared by every repo; the brief lists them for every task |
 | Guard | `push-main` covers every repo's `main`; the rest as today |
@@ -483,7 +483,7 @@ test = "make build"
 - The umbrella (`[project] umbrella`) holds repos cloned inside it. It is the owner's own folder: it may be a git repo
   of its own, with its own `.claude/` and `CLAUDE.md`, and may hold the home and the worktrees folder (for instance
   as ignored top-level folders). What stays clean is each repo of `[repos.*]`: no fm or Claude file goes in one.
-  Checked at load for a project with more than one `[repos.*]` table (`fm: the home is inside repo app: …`): the
+  Checked at load for a project with more than one `[repos.*]` table (`foreman: the home is inside repo app: …`): the
   home, `state/`, every worktrees folder and the registry file are outside every repo; being inside the umbrella is
   fine. A one-repo project (`[project] repo` or one `[repos.K]` table) is not checked (unchanged).
 - fm writes into a repo only what git keeps out of `git status`: the entries in `.git/worktrees/` of task worktrees
@@ -503,12 +503,12 @@ test = "make build"
 
 - Per-repo slots or locks: one queue is simpler, and the machine is what is shared.
 - A check queue per repo (checks in parallel): one at a time is enough for one owner.
-- Repos found by their git remote, and `fm init` for several repos: the owner writes the tables.
+- Repos found by their git remote, and `foreman init` for several repos: the owner writes the tables.
 - A repo's own brief or agent models: the project's serve every repo.
 - A setting for a GitHub repo with no CI: under autonomy `low`/`medium` it never merges alone and waits for the owner,
   as today; a `ci = "none"` key can come if needed.
 - Merges across repos at once and PR links across repos: subtasks with `--blocked-by` order them.
-- Moving a task to another repo after its plan: `fm edit --repo` does it and the plan is redone.
+- Moving a task to another repo after its plan: `foreman edit --repo` does it and the plan is redone.
 
 ## Architecture
 
@@ -525,7 +525,7 @@ its own layer and the ones below, never above. Three leaf files stay at `fm/`'s 
 
 | Layer | Package | Areas → modules | Responsibility |
 |---|---|---|---|
-| ui | `fm/ui/` | `main.py` (starts `fm panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
+| ui | `fm/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `fm/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
 | steps | `fm/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
 | services | `fm/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: git, claude, processes, the lock; called by steps |
@@ -546,7 +546,7 @@ inline comments, the description, evidence) → `rules` (`risk` on `project`; `d
 its layer. A module with `depends_on` may import, in its own layer, only what it lists (lower layers stay open): that
 fixes the order of the core areas, so no cycle can form among them, as tach does not see a cycle inside one layer
 otherwise. `cli` and `panel` are two modules: the panel imports the CLI's functions (its actions run the
-owner's commands), the CLI never imports the panel; `fm/ui/main.py` starts `fm panel`. Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
+owner's commands), the CLI never imports the panel; `fm/ui/main.py` starts `foreman panel`. Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
 `agents` is the reviewer's.
 
 ```toml
@@ -598,9 +598,9 @@ A module that grows past its size is split along its area's seams, inside its ar
 - **Task types (FN-157, built):** the type names and rules → `core/tasks/tasktypes.py`; each type's paragraph stays data
   in `fm/briefs/*.md`, read by `services/agents/brief.py`; `--type` → `ui/cli/parser.py`. A new type is one entry and
   one paragraph, no other layer.
-- **Plugin entry points (FN-146, FN-159):** the SessionStart hook and `fm project` → `ui/cli/plugin.py`; the session's
+- **Plugin entry points (FN-146, FN-159):** the SessionStart hook and `foreman project` → `ui/cli/plugin.py`; the session's
   context text → `core/project/plugin.py`; the installed version's start → `fm/launcher.py`; the launchd jobs' text →
-  `services/launchd.py`; `bin/fm` and `hooks/hooks.json` stay at the repo root.
+  `services/launchd.py`; `bin/foreman` and `hooks/hooks.json` stay at the repo root.
 
 ### Ports
 
@@ -636,12 +636,12 @@ its splits, not a new limit (changing `pyproject.toml` is the owner's call).
 
 ## Watching itself
 
-Metrics per task (`fm metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; planning_usd of planning sessions and responsible_usd of responsible sessions, from `session_kinds`; review rounds), time to review and to
+Metrics per task (`foreman metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; planning_usd of planning sessions and responsible_usd of responsible sessions, from `session_kinds`; review rounds), time to review and to
 done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (stopped without finishing),
 questions to the owner, guard stops, risk, and what misled its agents (their `--misled` words, per agent).
 
 Health checks (`fm/steps/health/`), each finding a triage task, deduplicated by key while open or while it persists:
-loop dead (heartbeat older than 3 ticks; from outside the loop: `fm health`, the panel), agent stuck (working, its
+loop dead (heartbeat older than 3 ticks; from outside the loop: `foreman health`, the panel), agent stuck (working, its
 transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
 tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing
 episode, from the first failing run until a pass, with the commit, the failing step and the output tail), loop step errors.

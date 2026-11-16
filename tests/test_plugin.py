@@ -19,7 +19,7 @@ from fm.core.project import plugin, registry
 from fm.core.project.config import Project
 from fm.core.tasks import backlog
 from fm.services.claude import sessions
-from fm.ui.cli import main
+from fm.ui.cli import main, parser
 from fm.ui.cli import plugin as cli_plugin
 
 
@@ -105,7 +105,7 @@ class TestPluginTest:
 
     def test_a_session_start_on_a_good_python_clears_the_python_note(self):
         note = registry.python_note_file()
-        note.write_text("fm: needs Python 3.12 or newer\n")
+        note.write_text("foreman: needs Python 3.12 or newer\n")
         self.hook(self.root, self.root / "env")
         assert not note.exists()
 
@@ -116,20 +116,21 @@ class TestPluginTest:
             cli_plugin.cmd_session_context(mock.Mock())
         return out.getvalue()
 
-    def test_the_hook_prints_the_context_and_puts_fm_first_on_the_path(self) -> None:
-        """macOS has its own /usr/bin/fm, ahead of the plugin's bin/ that Claude Code appends to PATH."""
+    def test_the_hook_prints_the_context_and_writes_no_path(self) -> None:
         self.alpha(f'repo = "{self.repo}"')
         env_file = self.root / "env.sh"
         assert json.loads(self.hook(self.repo, env_file))["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-        assert env_file.read_text() == f'export PATH="{ROOT / "bin"}:$PATH"\n'
-        env_file.unlink()
+        assert not env_file.exists()
         assert self.hook(self.root, env_file) == ""
         assert not env_file.exists()
 
-    def test_a_failing_path_write_still_gives_the_instructions(self) -> None:
-        self.alpha(f'repo = "{self.repo}"')
-        out = self.hook(self.repo, self.root / "no/such/dir/env.sh")
-        assert "# fm: the project alpha" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    def test_the_plugin_ships_foreman_and_no_executable_fm(self) -> None:
+        """macOS has its own /usr/bin/fm: the plugin's bin/ may hold no executable of that name."""
+        assert os.access(ROOT / "bin/foreman", os.X_OK)
+        assert not [f for f in (ROOT / "bin").iterdir() if f.name == "fm" and os.access(f, os.X_OK)]
+
+    def test_the_command_is_called_foreman(self) -> None:
+        assert parser.parser(None).format_usage().startswith("usage: foreman")
 
     def test_a_new_home_adds_no_rules_until_the_owner_writes_them(self) -> None:
         self.home.mkdir(parents=True)
@@ -154,13 +155,13 @@ class TestPluginTest:
         p = self.alpha(f'repo = "{self.repo}"', '[agents.settings]\nenabledPlugins = {"foreman@foreman" = false}\n')
         assert sessions.settings(p, "AL-1", "al-1")["enabledPlugins"] == {"fm@fm": False, "foreman@foreman": False}
 
-    def test_agents_run_the_loops_fm(self) -> None:
+    def test_agents_run_the_loops_foreman(self) -> None:
         """Their PATH and their guard hook name the folder the loop runs from."""
         p = self.alpha(f'repo = "{self.repo}"')
         with mock.patch.object(launcher, "ROOT", self.root / "v1"):
             s = sessions.settings(p, "AL-1", "al-1")
         assert s["env"]["PATH"].startswith(f"{self.root / 'v1/bin'}{os.pathsep}")
-        assert f"{self.root / 'v1/bin/fm'} guard" in s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        assert f"{self.root / 'v1/bin/foreman'} guard" in s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
 
     def test_the_manifests_name_fm_and_declare_no_version(self) -> None:
         market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
@@ -171,9 +172,9 @@ class TestPluginTest:
             assert '"version"' not in json.dumps(data)
         assert (ROOT / manifest["skills"] / "define-task/SKILL.md").is_file()
         hook = json.loads((ROOT / "hooks/hooks.json").read_text())["hooks"]["SessionStart"][0]["hooks"][0]
-        assert hook["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/fm" session-context'
+        assert hook["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/foreman" session-context'
 
     def test_the_skill_reads_the_values_from_fm(self) -> None:
         text = (plugin.SHARED / "skills/define-task/SKILL.md").read_text()
-        assert '!`"${CLAUDE_PLUGIN_ROOT}/bin/fm" project`' in text
+        assert '!`"${CLAUDE_PLUGIN_ROOT}/bin/foreman" project`' in text
         assert "fm.toml" not in text

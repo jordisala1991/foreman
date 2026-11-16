@@ -3,7 +3,7 @@
 1. heartbeat (state/loop.json), read by the health check «loop dead» and by the panel
 2. sources: plug-in signals, and recurring entries that fell due, become tasks (sources.py, schedule.py)
 3. answers: the owner's answers go back to its agent (its own session, resumed)
-4. agents: one that ended its turn without finishing (no fm done / ready / ask / block) is nudged once, then blocked
+4. agents: one that ended its turn without finishing (no foreman done / ready / ask / block) is nudged once, then blocked
 5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
 6. queue: accepted tasks are merged first; then a branch whose head or main's moved is checked (tests, diff, risk) in
    the background, one at a time, and the autonomy may merge it. A check slower than util.BACKGROUND_WAIT_S does not hold
@@ -81,10 +81,10 @@ def forever(homes: list[str] | None = None, once: bool = False) -> None:
         try:
             fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise SystemExit("fm: another loop is running for this registry") from None
+            raise SystemExit("foreman: another loop is running for this registry") from None
         while True:
             if why := launcher.stale():  # another version installed: exit, launchd starts the new one
-                raise SystemExit(f"fm: {why}")
+                raise SystemExit(f"foreman: {why}")
             projects = [Project.load(h) for h in (homes or registered())]
             for p in projects:
                 tick(p)

@@ -1,4 +1,4 @@
-"""fm list and fm show: the backlog and one task, as read."""
+"""foreman list and foreman show: the backlog and one task, as read."""
 
 import argparse
 import json

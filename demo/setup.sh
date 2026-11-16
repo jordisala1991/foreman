@@ -60,8 +60,8 @@ git add -A
 git commit -qm "textkit: word_count, shout and a tiny CLI"
 
 export FM_REGISTRY="$run/registry.json"
-fm="$root/bin/fm"
-"$fm" --home "$run/home" init --repo "$run/repo" --prefix TK >/dev/null
+foreman="$root/bin/foreman"
+"$foreman" --home "$run/home" init --repo "$run/repo" --prefix TK >/dev/null
 cat > "$run/home/fm.toml" <<TOML
 [project]
 name = "textkit"
@@ -85,13 +85,13 @@ test = "python3 -m unittest -q"
 loop_seconds = 20
 stuck_minutes = 30
 TOML
-"$fm" --home "$run/home" add --ready "word_count counts wrong on empty text and repeated spaces" \
+"$foreman" --home "$run/home" add --ready "word_count counts wrong on empty text and repeated spaces" \
   --goal "word_count gives the number of words for any text" \
   --criteria "word_count('') == 0 and word_count('  a   b ') == 2, with tests for both; all tests pass" \
   --detail "textkit.word_count splits on a single space."
-"$fm" --home "$run/home" add --ready "Add slugify(text)" \
+"$foreman" --home "$run/home" add --ready "Add slugify(text)" \
   --goal "textkit has slugify: lowercase words joined by hyphens, punctuation dropped" \
   --criteria "slugify('Hello, World!') == 'hello-world' and slugify('  Many   spaces ') == 'many-spaces', tested; all tests pass"
-"$fm" --home "$run/home" add "The CLI should be friendlier" \
+"$foreman" --home "$run/home" add "The CLI should be friendlier" \
   --detail "Running cli.py with no arguments or with an unknown function crashes with a traceback."
 echo "demo ready in $run"

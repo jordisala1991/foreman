@@ -34,7 +34,7 @@ def cmd_add(a: argparse.Namespace) -> None:
     ids = blockers.ids(a.blocked_by or [])
     by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FM_TASK", ""), a.parent, "subtasks are filed")
     if why := by_agent or (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids):
-        sys.exit(f"fm: {why}")
+        sys.exit(f"foreman: {why}")
     tid = backlog.add(
         p,
         a.title,
@@ -61,14 +61,14 @@ def cmd_edit(a: argparse.Namespace) -> None:
         i = backlog.get(d, a.id)
         by_agent = subtasks.agent_refusal(backlog.tasks(d), os.environ.get("FM_TASK", ""), i.get("parent", ""), "tasks are edited")
         if why := by_agent or editing.refusal(i, fields, backlog.tasks(d)):
-            sys.exit(f"fm: {why}")
+            sys.exit(f"foreman: {why}")
         old = dict(i)
         new = editing.edited(i, fields)
         i.clear()
         i.update(new)
     reset = old["status"] != new["status"] or ("plan_file" in old and "plan_file" not in new)
     backlog.event(p, a.id, "edited by the owner: " + ", ".join(fields) + ("; plan dropped, back to backlog" if reset else ""))
-    after = "; it stays blocked until fm unblock" if new.get("blocked") else "; it will be planned again"
+    after = "; it stays blocked until foreman unblock" if new.get("blocked") else "; it will be planned again"
     print(f"{a.id} edited" + (after if reset else ""))
 
 
@@ -82,7 +82,7 @@ def cmd_allow(a: argparse.Namespace, allowed: bool = True) -> None:
     p = home(a)
     q = next((q for q in backlog.load(p)["decisions"] if q["id"] == a.qid), None)
     if not q or q.get("kind") != "permission":
-        sys.exit(f"fm: {a.qid} is not an open permission request")
+        sys.exit(f"foreman: {a.qid} is not an open permission request")
     if allowed:
         guard.grant(p, q["task"], q["action"])
     questions.answer(p, a.qid, a.text or ("allowed once" if allowed else "not allowed"))
@@ -96,13 +96,13 @@ def cmd_accept(a: argparse.Namespace) -> None:
         merge.accept(p, a.id)
         print(f"{a.id} accepted: the loop merges it next")
     except (DeliveryError, providers.ConfigError) as e:
-        sys.exit(f"fm: {e}")
+        sys.exit(f"foreman: {e}")
 
 
 def cmd_reject(a: argparse.Namespace) -> None:
     p = home(a)
     if backlog.get(backlog.load(p), a.id)["status"] != "in review":
-        sys.exit(f"fm: {a.id} is not in review")
+        sys.exit(f"foreman: {a.id} is not in review")
     talk.return_to_agent(p, a.id, "rejection", a.note)
 
 
@@ -111,11 +111,11 @@ def cmd_review(a: argparse.Namespace) -> None:
     with backlog.edit(p) as d:
         i = backlog.get(d, a.id)
         if i["status"] != "in review":
-            sys.exit(f"fm: {a.id} is not in review")
+            sys.exit(f"foreman: {a.id} is not in review")
         if i.get("accepted"):
-            sys.exit(f"fm: {a.id} is accepted: the loop merges it next")
+            sys.exit(f"foreman: {a.id} is accepted: the loop merges it next")
         if review_running(i):
-            sys.exit(f"fm: {a.id} has a review running: wait for its verdict")
+            sys.exit(f"foreman: {a.id} has a review running: wait for its verdict")
         for k in ("review", "hunter", "reviewer", "check", "review_for"):
             i.pop(k, None)
         i["blocked"] = ""
@@ -129,7 +129,7 @@ def cmd_go(a: argparse.Namespace) -> None:
     i = backlog.get(backlog.load(p), a.id)
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
     if not acceptance.get("criteria"):
-        sys.exit(f"fm: {a.id}: define its acceptance criteria with the owner first")
+        sys.exit(f"foreman: {a.id}: define its acceptance criteria with the owner first")
     backlog.set_status(p, a.id, "backlog", "let in by the owner", blocked="")
 
 
@@ -137,7 +137,7 @@ def cmd_cancel(a: argparse.Namespace) -> None:
     try:
         merge.close(home(a), a.id, "canceled", a.why or "by the owner")
     except DeliveryError as e:
-        sys.exit(f"fm: {e}")
+        sys.exit(f"foreman: {e}")
 
 
 def cmd_unblock(a: argparse.Namespace) -> None:

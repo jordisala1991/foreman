@@ -1,6 +1,6 @@
 """The guard: a short reminder, not a cage. A PreToolUse hook in every agent session that stops a handful of actions,
 recognised by the name of the program run (never by a word inside a string or a message), and tells its agent to ask
-the owner with `fm ask`. The owner allows it once from the panel (`fm allow QID`).
+the owner with `foreman ask`. The owner allows it once from the panel (`foreman allow QID`).
 
 The list (DESIGN.md): publish · push to main · delete what is not yours · change the project's config · the owner's
 own rules (`[guard] ask` in fm.toml). Agents work for the owner: a way around this list is not a hole to close, the
@@ -231,10 +231,10 @@ def hook(stdin: str) -> str:
         why = WHY.get(action, "the owner asked to be asked first")
         msg = (
             f"The owner asked to be asked before this ({action}: {why}). Do not look for another way to do it. "
-            f'If it is needed, run `fm ask --action {action} "what you want to run and why"` and end your turn; '
+            f'If it is needed, run `foreman ask --action {action} "what you want to run and why"` and end your turn; '
             "if he allows it, you will be told, and it passes once."
         )
         return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": msg}})
     except Exception as e:  # a broken guard must not stop the work
-        print(f"fm guard error (allowed): {e}", file=sys.stderr)
+        print(f"foreman guard error (allowed): {e}", file=sys.stderr)
         return ""

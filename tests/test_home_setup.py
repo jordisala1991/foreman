@@ -95,7 +95,7 @@ class TestHomeSetup:
     def test_shared_files_are_generic(self) -> None:
         for f in SHARED_FILES:
             text = f.read_text()
-            for word in ("Jordi", "foreman", "/Users/", "FN-", "ZZ", "English", "Spanish", "Catalan", *"áéíóúñ¿¡"):
+            for word in ("Jordi", "/Users/", "FN-", "ZZ", "English", "Spanish", "Catalan", *"áéíóúñ¿¡"):
                 assert word not in text, f"{f.name}: {word}"
             assert set(re.findall(r"(?<!\$)\{(\w+)\}", text)) <= set(plugin.PLACEHOLDERS), f.name
             assert not re.search(r"(?<!\$)\{(?!(?:" + "|".join(plugin.PLACEHOLDERS) + r")\})[^}]*\}", text), f.name

@@ -26,7 +26,7 @@ class TestPythonVersion:
         request.addfinalizer(tmp.cleanup)
         self.t = Path(tmp.name).resolve()
         (self.t / "bin").mkdir()
-        shutil.copy(ROOT / "bin/fm", self.t / "bin/fm")
+        shutil.copy(ROOT / "bin/foreman", self.t / "bin/foreman")
         (self.t / "pyproject.toml").write_text('requires-python = ">=3.99"\n')
         fake(self.t / "old", "3.9.6", "echo old")
         fake(self.t / "new", "3.99.1", 'echo "new: $@"')
@@ -35,11 +35,11 @@ class TestPythonVersion:
 
     def run_fm(self, path: str, *args: str, bin: Path | None = None, stdin: str = ""):
         env = {"PATH": path, "FM_REGISTRY": str(self.reg)}
-        return subprocess.run([sys.executable, str(bin or self.t / "bin/fm"), *args], env=env, input=stdin, capture_output=True, text=True)
+        return subprocess.run([sys.executable, str(bin or self.t / "bin/foreman"), *args], env=env, input=stdin, capture_output=True, text=True)
 
     def test_an_old_python3_first_defers_to_a_newer_one_on_the_path(self):
         r = self.run_fm(f"{self.t}/old:{self.t}/new", "list")
-        assert (r.returncode, r.stdout) == (0, f"new: {self.t}/bin/fm list\n")
+        assert (r.returncode, r.stdout) == (0, f"new: {self.t}/bin/foreman list\n")
 
     def test_without_a_new_enough_python_fm_exits_with_one_line(self):
         r = self.run_fm(f"{self.t}/old", "list")
@@ -84,6 +84,6 @@ class TestPythonVersion:
         marker = self.t / "ran"
         (self.t / "spy").mkdir()
         (self.t / "spy/python3").write_text(f"#!/bin/sh\ntouch {marker}\n")
-        r = self.run_fm(f"{self.t}/spy", "--help", bin=ROOT / "bin/fm")
+        r = self.run_fm(f"{self.t}/spy", "--help", bin=ROOT / "bin/foreman")
         assert r.returncode == 0, r.stderr
         assert not marker.exists()
