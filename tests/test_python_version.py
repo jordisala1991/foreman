@@ -35,7 +35,7 @@ class TestPythonVersion:
         self.reg = self.t / "projects.json"
 
     def run_fm(self, path: str, *args: str, bin: Path | None = None, stdin: str = ""):
-        env = {"PATH": path, "FM_REGISTRY": str(self.reg)}
+        env = {"PATH": path, "FOREMAN_REGISTRY": str(self.reg)}
         return subprocess.run([sys.executable, str(bin or self.t / "bin/foreman"), *args], env=env, input=stdin, capture_output=True, text=True)
 
     def test_an_old_python3_first_defers_to_a_newer_one_on_the_path(self):
@@ -76,7 +76,7 @@ class TestPythonVersion:
     def test_the_hook_adds_nothing_and_leaves_the_line_for_health(self):
         r = self.run_fm(f"{self.t}/old", "session-context", stdin='{"cwd": "/"}')
         assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
-        with mock.patch.dict(os.environ, {"FM_REGISTRY": str(self.reg)}):
+        with mock.patch.dict(os.environ, {"FOREMAN_REGISTRY": str(self.reg)}):
             text = registry.python_note_file().read_text()
         assert "3.99" in text
         assert "3.9.6" in text

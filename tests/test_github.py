@@ -157,7 +157,7 @@ class GH:
         (e.bin / "gh").chmod(0o755)
         self.path = os.environ["PATH"]
         os.environ["PATH"] = f"{e.bin}:{self.path}"
-        toml = e.home / "fm.toml"
+        toml = e.home / "foreman.toml"
         toml.write_text(toml.read_text().replace("[merge]", f'[merge]\nprovider = "github"\n{extra}'))
         e.p = type(e.p).load(e.home)
         self.poll, provider.POLL = provider.POLL, 0  # a pending answer is read again at every call, unless a test says otherwise
@@ -541,7 +541,7 @@ class TestPulls:
 
     def test_one_tasks_failure_never_blocks_it_nor_stops_the_next_task_getting_its_pr(self):
         # "Head sha can't be blank" (once, then fine) and a 502 are both retried; neither blocks the task
-        for flag, text in (({"reject": "fm/ty-1"}, "Head sha"), ({"flaky": "fm/ty-1"}, "HTTP 502")):
+        for flag, text in (({"reject": "foreman/ty-1"}, "Head sha"), ({"flaky": "foreman/ty-1"}, "HTTP 502")):
             g = self.make(test="true")
             g.set(**flag)
             first, second = g.work(), g.work()  # each work() ticks: the first one fails there, once

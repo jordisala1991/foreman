@@ -25,10 +25,10 @@ class TestFindProjectTest:
         tmp = tempfile.TemporaryDirectory()
         request.addfinalizer(tmp.cleanup)
         self.root = Path(tmp.name).resolve()
-        env = mock.patch.dict(os.environ, {"FM_REGISTRY": str(self.root / "projects.json")})
+        env = mock.patch.dict(os.environ, {"FOREMAN_REGISTRY": str(self.root / "projects.json")})
         env.start()
         request.addfinalizer(env.stop)
-        for k in ("FM_HOME", "FM_PROJECT", "FM_TASK"):
+        for k in ("FOREMAN_HOME", "FOREMAN_PROJECT", "FOREMAN_TASK"):
             os.environ.pop(k, None)
         cwd = Path.cwd()
         request.addfinalizer(functools.partial(os.chdir, cwd))
@@ -45,7 +45,7 @@ class TestFindProjectTest:
         lines = f'name = "{name}"\nprefix = "{name[:2].upper()}"\n'
         if repo:
             lines += f'repo = "{self.dir(name + "-repo")}"\n'
-        (h / "fm.toml").write_text(f'[project]\n{lines}{project_lines}\n[agents]\nclaude = "/usr/bin/false"\n{tail}', encoding="utf-8")
+        (h / "foreman.toml").write_text(f'[project]\n{lines}{project_lines}\n[agents]\nclaude = "/usr/bin/false"\n{tail}', encoding="utf-8")
         util.write_json(h / "backlog.json", backlog.empty())
         backlog.add(Project.load(h), f"{name.capitalize()} work", criteria="x")
         registry.register(h)
@@ -106,7 +106,7 @@ class TestFindProjectTest:
 
     def test_both_forms_refused(self) -> None:
         home = self.project("alpha")
-        with (home / "fm.toml").open("a", encoding="utf-8") as f:
+        with (home / "foreman.toml").open("a", encoding="utf-8") as f:
             f.write(f'\n[repos.x]\npath = "{self.dir("x")}"\n')
         msg = self.refused(self.elsewhere, "--home", str(home), "list")
         assert "[project] repo" in msg
@@ -115,7 +115,7 @@ class TestFindProjectTest:
     def test_both_forms_refused_when_registered(self) -> None:
         home = self.project("alpha")
         self.project("beta")
-        with (home / "fm.toml").open("a", encoding="utf-8") as f:
+        with (home / "foreman.toml").open("a", encoding="utf-8") as f:
             f.write(f'\n[repos.x]\npath = "{self.dir("x")}"\n')
         for msg in (self.refused(self.elsewhere, "--project", "alpha", "list"), self.refused(self.root / "alpha-repo", "list")):
             assert "[project] repo" in msg
@@ -126,7 +126,7 @@ class TestFindProjectTest:
         other = self.project("other")
         inner = self.dir("other/sub")
         home = self.project("alpha", f'repo = "{inner}"\n', repo=False)
-        with (home / "fm.toml").open("a", encoding="utf-8") as f:
+        with (home / "foreman.toml").open("a", encoding="utf-8") as f:
             f.write(f'\n[repos.x]\npath = "{inner}"\n')
         for cwd in (inner, home):
             msg = self.refused(cwd, "list")
@@ -140,7 +140,7 @@ class TestFindProjectTest:
         self.project("other")
         inner = self.dir("other/sub")
         home = self.project("alpha", 'repo = "../other/sub"\numbrella = "~nosuchuser_zz/x"\n', repo=False)
-        with (home / "fm.toml").open("a", encoding="utf-8") as f:
+        with (home / "foreman.toml").open("a", encoding="utf-8") as f:
             f.write("\n[repos]\nx = 3\n")
         msg = self.refused(inner, "list")
         assert str(home) in msg
@@ -149,8 +149,8 @@ class TestFindProjectTest:
     def test_repos_entry_not_a_table_refused(self) -> None:
         for tail in ("\n[repos]\nx = 3\n", 'repos = "x"\n'):
             home = self.project("alpha", repo=False)
-            text = (home / "fm.toml").read_text(encoding="utf-8")
-            (home / "fm.toml").write_text(tail + text if tail.startswith("repos") else text + tail, encoding="utf-8")
+            text = (home / "foreman.toml").read_text(encoding="utf-8")
+            (home / "foreman.toml").write_text(tail + text if tail.startswith("repos") else text + tail, encoding="utf-8")
             assert "[repos" in self.refused(self.elsewhere, "--home", str(home), "list")
 
     def test_health_says_first_repo(self) -> None:
@@ -193,14 +193,14 @@ class TestFindProjectTest:
         alpha, beta = self.project("alpha"), self.project("beta")
         in_alpha, in_beta = self.root / "alpha-repo", self.root / "beta-repo"
         assert "Beta work" in self.run_fm(in_alpha, "--project", "beta", "--home", str(alpha), "list")
-        with mock.patch.dict(os.environ, {"FM_HOME": str(alpha)}):
+        with mock.patch.dict(os.environ, {"FOREMAN_HOME": str(alpha)}):
             assert "Alpha work" in self.run_fm(in_beta, "list")
             assert "Beta work" in self.run_fm(in_alpha, "--home", str(beta), "list")
-        with mock.patch.dict(os.environ, {"FM_PROJECT": "beta"}):
+        with mock.patch.dict(os.environ, {"FOREMAN_PROJECT": "beta"}):
             assert "Beta work" in self.run_fm(in_alpha, "list")
-        with mock.patch.dict(os.environ, {"FM_HOME": str(alpha), "FM_PROJECT": "beta"}):
+        with mock.patch.dict(os.environ, {"FOREMAN_HOME": str(alpha), "FOREMAN_PROJECT": "beta"}):
             assert "Alpha work" in self.run_fm(in_beta, "list")
-        with mock.patch.dict(os.environ, {"FM_HOME": str(alpha), "FM_TASK": "AL-1"}):  # an agent session
+        with mock.patch.dict(os.environ, {"FOREMAN_HOME": str(alpha), "FOREMAN_TASK": "AL-1"}):  # an agent session
             assert "Alpha work" in self.run_fm(in_beta, "list")
 
     def test_loop_and_panel_serve_all(self) -> None:

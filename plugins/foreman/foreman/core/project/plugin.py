@@ -1,4 +1,4 @@
-"""fm as a Claude Code plugin (`fm@fm`, from this repo's marketplace `fm`): what a session opened in a folder of a
+"""fm as a Claude Code plugin (`foreman@foreman`, from this repo's marketplace `foreman`): what a session opened in a folder of a
 registered project is given at its start (the hook `foreman session-context`), and the values `foreman project` shows the skill.
 A session in no project's folder, or one of fm's own agents, is given nothing."""
 
@@ -11,7 +11,7 @@ from . import registry
 from .config import Project, Unreadable
 
 SHARED = Path(__file__).parents[2] / "shared"
-PLUGIN = "fm@fm"
+PLUGIN = "foreman@foreman"
 PLACEHOLDERS = ("project", "prefix", "home", "repos", "main", "slots")
 
 
@@ -42,7 +42,7 @@ def instructions(p: Project) -> str:
 
 def session_context(stdin: str, env: Mapping[str, str], projects: Sequence[Project | Unreadable]) -> str:
     """The SessionStart hook's output for a session in exactly one registered project's folder; "" otherwise."""
-    if "FM_TASK" in env:  # an agent fm launched: its brief is its only instructions
+    if "FOREMAN_TASK" in env:  # an agent fm launched: its brief is its only instructions
         return ""
     try:
         cwd: Any = json.loads(stdin)["cwd"]

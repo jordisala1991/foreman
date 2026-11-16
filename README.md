@@ -11,7 +11,7 @@ One responsible agent per task, a loop without a model, a short guard, and a sys
 - **Review and merge**: the loop has every delivered branch reviewed (the hunter, then the reviewer), scores its merge
   risk, and leaves it in review. The owner accepts in the panel; the project's autonomy may let low risks merge alone.
 - **Guard**: a short reminder in agent sessions; publishing, pushing to the main branch, deleting what is not yours and
-  changing `fm.toml` ask the owner first.
+  changing `foreman.toml` ask the owner first.
 - **Shared resources**: `foreman lock NAME run "what" command…`.
 - **Health and metrics**: broken states become triage tasks; cost, time, rework and what misled agents per task.
 
@@ -19,7 +19,7 @@ Python 3.12+ standard library only; the panel is React + Vite, built into `plugi
 
 ```sh
 plugins/foreman/bin/foreman --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
-plugins/foreman/bin/foreman loop            # or: plugins/foreman/bin/foreman launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die; from the installed plugin they follow `claude plugin update fm@fm`, from a checkout they run that checkout)
+plugins/foreman/bin/foreman loop            # or: plugins/foreman/bin/foreman launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die; from the installed plugin they follow `claude plugin update foreman@foreman`, from a checkout they run that checkout)
 plugins/foreman/bin/foreman panel --port 7788
 make check            # (needs uv) everything CI runs, in order: lint, format, types, arch (tach), suppressions, size, test (make fix: the mechanical fixes)
 make test             # just the tests

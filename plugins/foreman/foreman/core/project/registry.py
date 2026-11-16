@@ -1,4 +1,4 @@
-"""The registry of projects (`~/.config/fm/projects.json`, or $FM_REGISTRY): the homes the loop and the panel serve, and
+"""The registry of projects (`~/.config/foreman/projects.json`, or $FOREMAN_REGISTRY): the homes the loop and the panel serve, and
 who owns a folder."""
 
 import os
@@ -12,7 +12,7 @@ from .config import Project, Unreadable
 
 
 def registry_file() -> Path:
-    return Path(os.environ.get("FM_REGISTRY") or Path.home() / ".config/fm/projects.json")
+    return Path(os.environ.get("FOREMAN_REGISTRY") or Path.home() / ".config/foreman/projects.json")
 
 
 def python_note_file() -> Path:
@@ -30,14 +30,14 @@ def register(home: Path) -> None:
 
 
 def loaded() -> list[Project]:
-    """Every registered project; one whose fm.toml cannot be read is left out so the others are served."""
+    """Every registered project; one whose foreman.toml cannot be read is left out so the others are served."""
     return load_all()[0]
 
 
 def _named_folders(home: Path) -> list[Path]:
     try:
-        raw: dict[str, Any] = tomllib.loads((home / "fm.toml").read_text(encoding="utf-8"))
-    except Exception:  # an fm.toml that cannot be read names no folder
+        raw: dict[str, Any] = tomllib.loads((home / "foreman.toml").read_text(encoding="utf-8"))
+    except Exception:  # an foreman.toml that cannot be read names no folder
         return [home]
     try:
         keys: list[Any] = list(raw["repos"])
@@ -48,7 +48,7 @@ def _named_folders(home: Path) -> list[Path]:
 
 
 def _folder_at(home: Path, raw: dict[str, Any], at: tuple[Any, ...]) -> list[Path]:
-    """The folder at that place of fm.toml, or none when it is missing or cannot be read as a path."""
+    """The folder at that place of foreman.toml, or none when it is missing or cannot be read as a path."""
     try:
         v: Any = raw
         for k in at:
@@ -60,13 +60,13 @@ def _folder_at(home: Path, raw: dict[str, Any], at: tuple[Any, ...]) -> list[Pat
 
 
 def load_all() -> tuple[list[Project], list[Unreadable]]:
-    """Every registered project, and every home whose fm.toml cannot be loaded."""
+    """Every registered project, and every home whose foreman.toml cannot be loaded."""
     out: list[Project] = []
     broken: list[Unreadable] = []
     for home in registered():
         try:
             out.append(Project.load(home))
-        except Exception as e:  # a broken fm.toml leaves the others served
+        except Exception as e:  # a broken foreman.toml leaves the others served
             broken.append(Unreadable(home.resolve(), str(e), _named_folders(home.resolve())))
     return out, broken
 

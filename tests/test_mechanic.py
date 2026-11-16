@@ -27,7 +27,7 @@ class TestMechanic:
     def set_up(self, request, env):
         self.e = env
         self.tid = backlog.add(self.e.p, "t", detail="evidence", status="triage", source="health:k")
-        self.env = mock.patch.dict(os.environ, {"FM_TASK": self.tid})
+        self.env = mock.patch.dict(os.environ, {"FOREMAN_TASK": self.tid})
         self.env.start()
         request.addfinalizer(self.env.stop)
 
@@ -37,7 +37,7 @@ class TestMechanic:
     def diagnose(self, text=FULL, tid=None):
         f = self.e.tmp / "d.md"
         f.write_text(text)
-        os.environ["FM_TASK"] = tid or self.tid
+        os.environ["FOREMAN_TASK"] = tid or self.tid
         return fm(self.e.home, "diagnose", "--file", str(f))
 
     def test_launched_once_and_stays_in_triage(self):
@@ -66,7 +66,7 @@ class TestMechanic:
         backlog.add(e.p, "b", status="triage", source="health:b")
         tick.tick(e.p)
         assert len(e.calls()) == 1
-        os.environ["FM_TASK"] = a
+        os.environ["FOREMAN_TASK"] = a
         f = e.tmp / "d.md"
         f.write_text(FULL)
         fm(e.home, "diagnose", "--file", str(f))

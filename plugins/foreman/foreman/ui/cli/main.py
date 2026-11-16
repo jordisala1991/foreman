@@ -1,4 +1,4 @@
-"""`foreman`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their task comes from FM_TASK);
+"""`foreman`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their task comes from FOREMAN_TASK);
 the owner and the panel use the rest; launchd runs `foreman loop`; Claude Code runs `foreman guard` as the agents' hook."""
 
 import argparse

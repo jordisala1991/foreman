@@ -25,12 +25,12 @@ def start_panel(t) -> None:
     """A demo project with a task in progress, a question and a permission, and the panel serving it, on `t`."""
     t.tmp = tempfile.TemporaryDirectory()
     root = Path(t.tmp.name)
-    t.env = {k: os.environ.get(k) for k in ("FM_REGISTRY",)}
-    os.environ["FM_REGISTRY"] = str(root / "projects.json")
+    t.env = {k: os.environ.get(k) for k in ("FOREMAN_REGISTRY",)}
+    os.environ["FOREMAN_REGISTRY"] = str(root / "projects.json")
     home = root / "demo"
     home.mkdir()
     # `claude` is /usr/bin/false: no real sessions are listed or stopped
-    (home / "fm.toml").write_text('[project]\nname = "demo"\nprefix = "DE"\nrepo = "repo"\n\n[agents]\nclaude = "/usr/bin/false"\n', encoding="utf-8")
+    (home / "foreman.toml").write_text('[project]\nname = "demo"\nprefix = "DE"\nrepo = "repo"\n\n[agents]\nclaude = "/usr/bin/false"\n', encoding="utf-8")
     util.write_json(home / "backlog.json", backlog.empty())
     register(home)
     t.p = Project.load(home)
@@ -88,8 +88,10 @@ class TestPanel:
         assert self.call("/api/state", key=False)[0] == 403
         assert self.call("/api/state?key=wrong", key=False)[0] == 403
         assert self.call("/api/go?id=" + self.triage, "", key=False)[0] == 403
-        code, _ = self.call("/api/state", key=False, headers={"Cookie": "fm_key=test-key"})
+        code, _ = self.call("/api/state", key=False, headers={"Cookie": "foreman_key=test-key"})
         assert code == 200
+        code, _ = self.call("/api/state", key=False, headers={"Cookie": "fm" + "_key=test-key"})
+        assert code == 403
 
     def test_state(self, request) -> None:
         code, d = self.call("/api/projects")
@@ -163,7 +165,7 @@ class TestWatchVersion:
         return th
 
     def test_a_new_version_stops_the_panel(self) -> None:
-        assert not self.serving(lambda: "fm@fm bbb is installed now; this runs aaa").is_alive()
+        assert not self.serving(lambda: "foreman@foreman bbb is installed now; this runs aaa").is_alive()
 
     def test_the_same_version_keeps_it_serving(self) -> None:
         assert self.serving(lambda: "").is_alive()

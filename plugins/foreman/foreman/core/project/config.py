@@ -1,6 +1,6 @@
-"""A project: a home folder holding `fm.toml` (the owner's settings), `backlog.json` and `state/`; the code lives in
-the repo `fm.toml` points to (`[project] repo`, or several `[repos.<key>]` tables: tasks run in the first). The
-registry (`~/.config/fm/projects.json`, or $FM_REGISTRY) lists the homes the loop and the panel serve. A project owns
+"""A project: a home folder holding `foreman.toml` (the owner's settings), `backlog.json` and `state/`; the code lives in
+the repo `foreman.toml` points to (`[project] repo`, or several `[repos.<key>]` tables: tasks run in the first). The
+registry (`~/.config/foreman/projects.json`, or $FOREMAN_REGISTRY) lists the homes the loop and the panel serve. A project owns
 its home, its repos, its worktrees folder and the umbrella folder set in `[project] umbrella`: `foreman` run in any of
 them works on it (the deepest folder wins)."""
 
@@ -15,7 +15,7 @@ MODELS = ("haiku", "sonnet", "opus", "fable")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 DEFAULTS: dict[str, dict[str, Any]] = {
-    "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees", "branch_prefix": "fm/", "umbrella": ""},
+    "project": {"name": "", "prefix": "FM", "repo": "repo", "main": "main", "worktrees": "worktrees", "branch_prefix": "foreman/", "umbrella": ""},
     # slots: how many agents of this project run at once (planning and responsible agents alike)
     # every agent kind gets an explicit model and effort (claude --effort), never the machine's Claude settings
     "agents": {
@@ -41,7 +41,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # large_lines: a change over this many counted lines (tests, generated and lock files excluded) is at least medium
     "risk": {
         "large_lines": 400,
-        "high": {"config, secrets or CI": ["fm.toml", ".github/", "*secret*", "*.env"]},
+        "high": {"config, secrets or CI": ["foreman.toml", ".github/", "*secret*", "*.env"]},
         "medium": {"dependencies": ["requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "*.lock", "go.mod", "Cargo.toml"]},
     },
     "guard": {"ask": []},  # extra rules: [{"name": "deploy", "pattern": "regex on a Bash command"}]
@@ -50,7 +50,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 
 
 class ProjectError(Exception):
-    """An fm.toml that cannot be read as a project."""
+    """An foreman.toml that cannot be read as a project."""
 
 
 @dataclass
@@ -62,7 +62,7 @@ class Project:
     def load(cls, home: str | Path) -> Self:
         home = Path(home).resolve()
         raw: dict[str, Any] = {}
-        f = home / "fm.toml"
+        f = home / "foreman.toml"
         if f.exists():
             raw = tomllib.loads(f.read_text(encoding="utf-8"))
         cfg: dict[str, dict[str, Any]] = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
@@ -127,7 +127,7 @@ class Project:
 
     @property
     def config_file(self) -> Path:
-        return self.home / "fm.toml"
+        return self.home / "foreman.toml"
 
     @property
     def backlog_file(self) -> Path:
@@ -136,7 +136,7 @@ class Project:
 
 @dataclass
 class Unreadable:
-    """A registered home whose fm.toml cannot be loaded: it still claims its home and the folders it names
+    """A registered home whose foreman.toml cannot be loaded: it still claims its home and the folders it names
     ([project] repo and umbrella, [repos.<key>] path) when those can be read, so fm refuses there with its reason."""
 
     home: Path

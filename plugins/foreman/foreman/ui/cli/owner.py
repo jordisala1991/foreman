@@ -30,10 +30,10 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "triage" if a.triage or (a.parent and os.environ.get("FM_TASK")) else "backlog"  # a parent agent's waits for a Go
+    status = "triage" if a.triage or (a.parent and os.environ.get("FOREMAN_TASK")) else "backlog"  # a parent agent's waits for a Go
     tasks = backlog.tasks(backlog.load(p))
     ids = blockers.ids(a.blocked_by or [])
-    by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FM_TASK", ""), a.parent, "subtasks are filed")
+    by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FOREMAN_TASK", ""), a.parent, "subtasks are filed")
     if why := by_agent or (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids):
         sys.exit(f"foreman: {why}")
     tid = backlog.add(
@@ -60,7 +60,7 @@ def cmd_edit(a: argparse.Namespace) -> None:
         fields["blocked_by"] = blockers.ids(a.blocked_by)
     with backlog.edit(p) as d:
         i = backlog.get(d, a.id)
-        by_agent = subtasks.agent_refusal(backlog.tasks(d), os.environ.get("FM_TASK", ""), i.get("parent", ""), "tasks are edited")
+        by_agent = subtasks.agent_refusal(backlog.tasks(d), os.environ.get("FOREMAN_TASK", ""), i.get("parent", ""), "tasks are edited")
         if why := by_agent or editing.refusal(i, fields, backlog.tasks(d)):
             sys.exit(f"foreman: {why}")
         old = dict(i)

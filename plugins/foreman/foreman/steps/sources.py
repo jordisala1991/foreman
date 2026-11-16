@@ -1,5 +1,5 @@
 """Signals from tools (CI, an error log, a pull request's activity) become backlog or reach it through small plug-in
-sources: each executable in `<home>/sources/` is run every tick with FM_CURSOR (the last cursor it printed, or empty)
+sources: each executable in `<home>/sources/` is run every tick with FOREMAN_CURSOR (the last cursor it printed, or empty)
 and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has a "key" (deduplication):
   - without "task": `{"key", "title", "detail"}` files a `triage` task (the owner lets it in), deduplicated by
     source and key. For what has no task yet: CI failing on main, an error log.
@@ -51,7 +51,7 @@ def _poll(p: Project, exe: Path) -> list[str]:
     cursor_file = p.state / "cursors" / exe.name
     cursor = cursor_file.read_text().strip() if cursor_file.exists() else ""
     try:
-        r = proc.run([str(exe)], env={**os.environ, "FM_CURSOR": cursor})
+        r = proc.run([str(exe)], env={**os.environ, "FOREMAN_CURSOR": cursor})
     except proc.ProcError as e:
         util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": str(e)})
         return []

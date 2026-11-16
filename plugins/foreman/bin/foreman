@@ -46,7 +46,7 @@ def _ensure_python(minimum):
     need = "foreman: needs Python %d.%d or newer; " % minimum
     line = need + ("the python3 found is %s (%s)" % (first[1] or "?", first[0]) if first else "no python3 found on PATH")
     if hook:
-        note = Path(os.environ.get("FM_REGISTRY") or Path.home() / ".config/fm/projects.json")
+        note = Path(os.environ.get("FOREMAN_REGISTRY") or Path.home() / ".config/foreman/projects.json")
         try:
             note = note.with_name(note.name + ".python")
             note.parent.mkdir(parents=True, exist_ok=True)

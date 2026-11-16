@@ -32,7 +32,7 @@ class TestFiling:
         assert self.e.task(s)["status"] == "triage"
 
     def test_subtask_refused_from_an_agent_session(self):
-        with mock.patch.dict(os.environ, {"FM_TASK": "TY-9"}), pytest.raises(SystemExit):
+        with mock.patch.dict(os.environ, {"FOREMAN_TASK": "TY-9"}), pytest.raises(SystemExit):
             fm(self.e.home, "add", "s", "--parent", self.P, "--criteria", "c")
         assert count(self.e) == 1
 

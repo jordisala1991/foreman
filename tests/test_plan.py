@@ -18,7 +18,7 @@ class TestPlan:
         self.p = self.e.p
         self.tid = backlog.add(self.p, "vague idea")
         backlog.update(self.p, self.tid, status="refining")
-        self.env = mock.patch.dict(os.environ, {"FM_TASK": self.tid})
+        self.env = mock.patch.dict(os.environ, {"FOREMAN_TASK": self.tid})
         self.env.start()
         request.addfinalizer(self.env.stop)
         self.plan = self.p.home / "plans" / f"{self.tid}.md"

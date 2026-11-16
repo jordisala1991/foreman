@@ -16,19 +16,19 @@ from foreman.steps.health import checks
 
 class TestGuardFalsePositives:
     def check(self, cmd: str, cwd: str = "/h") -> str | None:
-        return guard.check_bash(cmd, guard.Scope(cwd, [Path("/w")], "fm/ty-1", Path("/h/fm.toml"), []))
+        return guard.check_bash(cmd, guard.Scope(cwd, [Path("/w")], "foreman/ty-1", Path("/h/foreman.toml"), []))
 
     def test_reading_the_config_with_redirects_is_not_a_write(self):
-        assert self.check("cat fm.toml 2>/dev/null") is None
-        assert self.check("grep -n slots fm.toml 2>&1 | head") is None
-        assert self.check("cp fm.toml /tmp/fm.toml.bak") is None
-        assert self.check("echo x > other/fm.toml") is None  # not the project's config
+        assert self.check("cat foreman.toml 2>/dev/null") is None
+        assert self.check("grep -n slots foreman.toml 2>&1 | head") is None
+        assert self.check("cp foreman.toml /tmp/foreman.toml.bak") is None
+        assert self.check("echo x > other/foreman.toml") is None  # not the project's config
 
     def test_writing_the_config_is_still_asked(self):
-        assert self.check("echo x >> fm.toml") == "config"
-        assert self.check("cp /tmp/new.toml /h/fm.toml") == "config"
-        assert self.check("sed -i '' s/a/b/ fm.toml") == "config"
-        assert self.check("echo x | tee fm.toml") == "config"
+        assert self.check("echo x >> foreman.toml") == "config"
+        assert self.check("cp /tmp/new.toml /h/foreman.toml") == "config"
+        assert self.check("sed -i '' s/a/b/ foreman.toml") == "config"
+        assert self.check("echo x | tee foreman.toml") == "config"
 
     def test_separators_inside_quotes_do_not_split(self):
         assert self.check('git commit -m "Docs: x; git push origin main is for the owner"') is None
@@ -79,9 +79,9 @@ class TestIsolation:
             e.hunter_done(tid)
         tick.tick(e.p)  # then both reviewers
         for tid in ids:
-            os.environ["FM_TASK"] = tid
+            os.environ["FOREMAN_TASK"] = tid
             fm(e.home, "verdict", "--open", "0", "--file", "r.md")
-        os.environ.pop("FM_TASK")
+        os.environ.pop("FOREMAN_TASK")
         backlog.update(e.p, ids[0], branch="no/such-branch")
         tick.tick(e.p)
         assert "could not check" in e.task(ids[0])["blocked"]
@@ -137,7 +137,7 @@ class TestLaunchRace:
         import sys
 
         e = Env()
-        os.environ["FM_REGISTRY"] = str(e.tmp / "projects.json")
+        os.environ["FOREMAN_REGISTRY"] = str(e.tmp / "projects.json")
         try:
             with open(str(e.tmp / "projects.json") + ".loop.lock", "a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -149,7 +149,7 @@ class TestLaunchRace:
                 )
             assert "another loop" in r.stderr
         finally:
-            os.environ.pop("FM_REGISTRY")
+            os.environ.pop("FOREMAN_REGISTRY")
 
 
 class TestReviewerSeesOwnerNotes:

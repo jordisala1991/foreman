@@ -16,7 +16,7 @@ def env() -> Env:
 
 @pytest.fixture
 def owner() -> Iterator[None]:
-    """The owner's shell: no agent session (FM_TASK) leaks in, whatever the caller's environment."""
+    """The owner's shell: no agent session (FOREMAN_TASK) leaks in, whatever the caller's environment."""
     with mock.patch.dict(os.environ):
-        os.environ.pop("FM_TASK", None)
+        os.environ.pop("FOREMAN_TASK", None)
         yield

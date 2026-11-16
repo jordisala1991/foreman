@@ -19,15 +19,15 @@ class TestLock:
     def set_up(self, request, env):
         self.request = request  # for the cleanups of helpers
         self.e = env
-        os.environ["FM_LOCKS"] = str(self.e.tmp / "locks")
-        with open(self.e.home / "fm.toml", "a") as f:
+        os.environ["FOREMAN_LOCKS"] = str(self.e.tmp / "locks")
+        with open(self.e.home / "foreman.toml", "a") as f:
             f.write('\n[resources.gpu]\nmax_minutes = 0.05\n[resources.sim]\nslots = ["A", "B"]\n')
         self.log = self.e.tmp / "order.txt"
         yield
-        os.environ.pop("FM_LOCKS")
+        os.environ.pop("FOREMAN_LOCKS")
 
     def fm_lock(self, name: str, who: str, *cmd: str) -> subprocess.Popen:
-        env = {**os.environ, "FM_AGENT": who, "FM_TASK": who.upper()}
+        env = {**os.environ, "FOREMAN_AGENT": who, "FOREMAN_TASK": who.upper()}
         proc = subprocess.Popen(
             [sys.executable, FM, "--home", str(self.e.home), "lock", name, "run", f"job {who}", *cmd], env=env, stderr=subprocess.PIPE, text=True
         )
@@ -35,10 +35,10 @@ class TestLock:
         return proc
 
     def test_one_at_a_time_in_arrival_order(self):
-        body = f"echo start $FM_AGENT >> {self.log}; sleep 0.4; echo end $FM_AGENT >> {self.log}"
+        body = f"echo start $FOREMAN_AGENT >> {self.log}; sleep 0.4; echo end $FOREMAN_AGENT >> {self.log}"
         procs = []
         for who in ("a", "b", "c"):
-            procs.append(self.fm_lock("gpu", who, "sh", "-c", body.replace("$FM_AGENT", who)))
+            procs.append(self.fm_lock("gpu", who, "sh", "-c", body.replace("$FOREMAN_AGENT", who)))
             time.sleep(0.15)
         for pr in procs:
             assert pr.wait(timeout=20) == 0
@@ -48,7 +48,7 @@ class TestLock:
         assert uses[2]["waited_s"] > 0.3
 
     def test_slots_run_side_by_side_with_their_own_slot(self):
-        body = f"echo start $FM_SLOT >> {self.log}; sleep 1.5; echo end $FM_SLOT >> {self.log}"
+        body = f"echo start $FOREMAN_SLOT >> {self.log}; sleep 1.5; echo end $FOREMAN_SLOT >> {self.log}"
         procs = [self.fm_lock("sim", w, "sh", "-c", body) for w in ("a", "b")]
         for pr in procs:
             pr.wait(timeout=20)

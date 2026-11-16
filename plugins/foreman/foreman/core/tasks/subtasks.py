@@ -37,7 +37,7 @@ def outcome(subs: list[backlog.Task]) -> str:
 
 
 def agent_refusal(tasks: list[backlog.Task], caller: str, parent: str, what: str) -> str:
-    """Why `caller` (FM_TASK; "" for the owner's shell) may not file or edit a subtask of `parent` ("" if it may): only
+    """Why `caller` (FOREMAN_TASK; "" for the owner's shell) may not file or edit a subtask of `parent` ("" if it may): only
     the owner, or the parent's own agent for its own subtasks."""
     if not caller or any(i["id"] == caller == parent and i.get("agent") and i["agent"].get("kind") == "parent" for i in tasks):
         return ""

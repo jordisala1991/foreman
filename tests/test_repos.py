@@ -1,4 +1,4 @@
-"""fm.toml with [repos.<key>] tables: strict keys, repo settings over the project's, post_create placeholders, layout."""
+"""foreman.toml with [repos.<key>] tables: strict keys, repo settings over the project's, post_create placeholders, layout."""
 
 import tempfile
 from pathlib import Path
@@ -20,7 +20,7 @@ class TestReposTest:
     def write(self, text: str, home: Path | None = None, project: str = "") -> Path:
         home = home or self.root / "home"
         home.mkdir(parents=True, exist_ok=True)
-        (home / "fm.toml").write_text(f'[project]\nname = "shop"\nprefix = "SH"\n{project}\n{text}', encoding="utf-8")
+        (home / "foreman.toml").write_text(f'[project]\nname = "shop"\nprefix = "SH"\n{project}\n{text}', encoding="utf-8")
         return home
 
     def load(self, text: str, home: Path | None = None, project: str = "") -> Project:

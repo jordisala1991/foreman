@@ -29,7 +29,7 @@ class TestHealth:
         return [i for i in backlog.tasks(backlog.load(self.p)) if i["status"] == "triage"]
 
     def test_the_python_note_is_shown_by_health(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"FM_REGISTRY": f"{d}/projects.json"}):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"FOREMAN_REGISTRY": f"{d}/projects.json"}):
             assert notes.python_note() == []
             line = "foreman: needs Python 3.12 or newer; the python3 found is 3.9.6 (/usr/bin/python3)"
             registry.python_note_file().write_text(line + "\n")
@@ -240,6 +240,6 @@ class TestVersions:
                 util.write_json(self.p.state / "loop.json", hb)
             lines = notes.versions(self.p)
             assert lines[0].endswith("installed none")
-            assert lines[1].startswith("! fm@fm cannot start the loop and the panel: fm@fm is not installed"), lines
+            assert lines[1].startswith("! foreman@foreman cannot start the loop and the panel: foreman@foreman is not installed"), lines
         install_fm(request, version_folder(self.e.tmp / "cache", "ccc"))
         assert len(notes.versions(self.p)) == 1

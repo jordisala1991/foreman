@@ -1,7 +1,7 @@
 {
-  "name": "fm",
+  "name": "foreman",
   "owner": {"name": "Jordi Sala Morales"},
   "plugins": [
-    {"name": "fm", "source": "./plugins/foreman", "description": "fm: backlog, loop and agents for a project's repos."}
+    {"name": "foreman", "source": "./plugins/foreman", "description": "foreman: backlog, loop and agents for a project's repos."}
   ]
 }

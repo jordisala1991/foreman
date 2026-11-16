@@ -1,4 +1,4 @@
-"""A temporary project: a git repo with one commit, a home with fm.toml and an empty backlog, and a fake `claude`
+"""A temporary project: a git repo with one commit, a home with foreman.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
 import atexit
@@ -26,17 +26,17 @@ sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugins/foreman"  # the folder the marketplace installs
 
-# A test run must not write the owner's real ~/.config/fm (registry, panel token, locks): HOME and FM_REGISTRY point
+# A test run must not write the owner's real ~/.config/foreman (registry, panel token, locks): HOME and FOREMAN_REGISTRY point
 # at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
-# And none of an agent's session variables (FM_TASK…) may change what a test does.
+# And none of an agent's session variables (FOREMAN_TASK…) may change what a test does.
 REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
-REAL_REGISTRY = REAL_HOME / ".config/fm/projects.json"
+REAL_REGISTRY = REAL_HOME / ".config/foreman/projects.json"
 SANDBOX = Path(tempfile.mkdtemp(prefix="fmhome-")).resolve()
 (SANDBOX / "tmp").mkdir()
 tempfile.tempdir = str(SANDBOX / "tmp")  # every temp dir of this run lives in the sandbox: a leak into the real registry is recognisable
 os.environ["HOME"] = str(SANDBOX)
-os.environ["FM_REGISTRY"] = str(SANDBOX / "projects.json")
-for _name in ("FM_TASK", "FM_AGENT", "FM_HOME", "FM_PROJECT", "FM_PINNED"):  # no agent session leaks in: a run is the owner's shell
+os.environ["FOREMAN_REGISTRY"] = str(SANDBOX / "projects.json")
+for _name in ("FOREMAN_TASK", "FOREMAN_AGENT", "FOREMAN_HOME", "FOREMAN_PROJECT", "FOREMAN_PINNED"):  # no agent session leaks in: a run is the owner's shell
     os.environ.pop(_name, None)
 atexit.register(shutil.rmtree, SANDBOX, ignore_errors=True)
 
@@ -92,7 +92,7 @@ FAKE = textwrap.dedent("""\
             print(f"backgrounded · {sid[:8]} · {row['name']}")
         sys.exit(0)
     title = a[a.index("-n") + 1]
-    name = json.loads(a[a.index("--settings") + 1])["env"]["FM_AGENT"]
+    name = json.loads(a[a.index("--settings") + 1])["env"]["FOREMAN_AGENT"]
     short = hashlib.sha1(name.encode()).hexdigest()[:8]
     rows = rows_of("agents.json")
     rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "title": title, "state": "working", "pid": 1})
@@ -145,7 +145,7 @@ class Env:
         (self.bin / "claude").chmod(0o755)
         self.home = self.tmp / "home"
         self.home.mkdir()
-        (self.home / "fm.toml").write_text(
+        (self.home / "foreman.toml").write_text(
             textwrap.dedent(f'''\
             [project]
             name = "toy"
@@ -163,7 +163,7 @@ class Env:
         )
         util.write_json(self.home / "backlog.json", backlog.empty())
         self.p = Project.load(self.home)
-        os.environ["FM_CLAUDE_PROJECTS"] = str(self.tmp / "transcripts")
+        os.environ["FOREMAN_CLAUDE_PROJECTS"] = str(self.tmp / "transcripts")
 
     def calls(self) -> list[dict]:
         return util.read_jsonl(self.bin / "calls.jsonl")
@@ -217,29 +217,29 @@ class Env:
 
     def verdict(self, tid: str, open_findings: int = 0) -> None:
         """The reviewer's verdict, as `fm verdict` gives it."""
-        os.environ["FM_TASK"] = tid
+        os.environ["FOREMAN_TASK"] = tid
         try:
             fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{tid}.md"))
         finally:
-            os.environ.pop("FM_TASK")
+            os.environ.pop("FOREMAN_TASK")
 
     def task(self, tid: str) -> dict:
         return backlog.get(backlog.load(self.p), tid)
 
 
 def install_fm(request: pytest.FixtureRequest, *entries: dict, version: int = 2) -> Path:
-    """Write Claude Code's record of installed plugins in the sandbox HOME with these fm@fm entries; removed after the test."""
+    """Write Claude Code's record of installed plugins in the sandbox HOME with these foreman@foreman entries; removed after the test."""
     from foreman import launcher
 
     f = launcher.record()
     f.parent.mkdir(parents=True, exist_ok=True)
-    util.write_json(f, {"version": version, "plugins": {"other@x": [{"scope": "user", "installPath": "/x", "version": "1"}], "fm@fm": list(entries)}})
+    util.write_json(f, {"version": version, "plugins": {"other@x": [{"scope": "user", "installPath": "/x", "version": "1"}], "foreman@foreman": list(entries)}})
     request.addfinalizer(functools.partial(f.unlink, missing_ok=True))
     return f
 
 
 def version_folder(parent: Path, name: str) -> dict:
-    """A version folder `parent/name` with a bin/foreman, and its fm@fm entry."""
+    """A version folder `parent/name` with a bin/foreman, and its foreman@foreman entry."""
     (parent / name / "bin").mkdir(parents=True)
     (parent / name / "bin/foreman").write_text("#!/usr/bin/env python3\n")
     return {"scope": "user", "installPath": str(parent / name), "version": name, "gitCommitSha": "stale"}

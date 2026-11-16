@@ -59,10 +59,10 @@ PY
 git add -A
 git commit -qm "textkit: word_count, shout and a tiny CLI"
 
-export FM_REGISTRY="$run/registry.json"
+export FOREMAN_REGISTRY="$run/registry.json"
 foreman="$root/plugins/foreman/bin/foreman"
 "$foreman" --home "$run/home" init --repo "$run/repo" --prefix TK >/dev/null
-cat > "$run/home/fm.toml" <<TOML
+cat > "$run/home/foreman.toml" <<TOML
 [project]
 name = "textkit"
 prefix = "TK"
@@ -74,8 +74,6 @@ branch_prefix = "next/demo-"
 slots = 2
 model = "sonnet"
 planning_model = "sonnet"
-# the demo agents run without today's foreman plugin: this prototype replaces it
-settings = { enabledPlugins = { "foreman@foreman" = false } }
 
 [merge]
 autonomy = "manual"

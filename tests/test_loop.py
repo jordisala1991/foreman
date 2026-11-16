@@ -36,10 +36,10 @@ class TestLaunch:
         assert "--bg" in argv
         assert argv[argv.index("-n") + 1] == "TY-2 responsible · clear one"
         assert self.e.task(b)["agent"]["name"] == b.lower()  # identity unchanged
-        assert json.loads(argv[argv.index("--settings") + 1])["env"]["FM_AGENT"] == b.lower()
+        assert json.loads(argv[argv.index("--settings") + 1])["env"]["FOREMAN_AGENT"] == b.lower()
         assert "[fm responsible TY-2]" in argv[-1]
         assert calls[0]["cwd"].endswith("worktrees/ty-2")
-        assert "fm/ty-2" in git(self.e.repo, "branch")
+        assert "foreman/ty-2" in git(self.e.repo, "branch")
         assert self.e.task(b)["agent"]["session"]
 
     def test_a_title_edited_before_launch_shows_in_the_new_agent(self):
@@ -183,7 +183,7 @@ class TestQueue:
         tick.tick(e.p)
         assert e.task(tid)["status"] == "done"
         assert "Merge TY-1" in git(e.repo, "log", "--oneline", "-1")
-        assert "fm/ty-1" not in git(e.repo, "branch")
+        assert "foreman/ty-1" not in git(e.repo, "branch")
 
     def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self, request):
         e = Env(test="true")
@@ -565,15 +565,15 @@ class TestQueue:
 
 
 class TestVersion:
-    """A loop started by the launcher (FM_PINNED) exits as soon as another fm@fm version is installed."""
+    """A loop started by the launcher (FOREMAN_PINNED) exits as soon as another foreman@foreman version is installed."""
 
     @pytest.fixture(autouse=True)
     def set_up(self, request, env):
         self.e = env
         self.p = self.e.p
-        cache = self.e.tmp / "cache/fm/fm"
+        cache = self.e.tmp / "cache/foreman/foreman"
         self.a, self.b = version_folder(cache, "aaa"), version_folder(cache, "bbb")
-        env = mock.patch.dict(os.environ, {"FM_PINNED": self.a["installPath"]})
+        env = mock.patch.dict(os.environ, {"FOREMAN_PINNED": self.a["installPath"]})
         env.start()
         request.addfinalizer(env.stop)
 
@@ -581,7 +581,7 @@ class TestVersion:
         install_fm(request, self.b)
         with pytest.raises(SystemExit) as e:
             tick.forever([str(self.p.home)], once=True)
-        assert str(e.value) == "foreman: fm@fm bbb is installed now; this runs aaa"
+        assert str(e.value) == "foreman: foreman@foreman bbb is installed now; this runs aaa"
         assert not (self.p.state / "loop.json").exists()
 
     def test_the_same_install_ticks_and_the_heartbeat_names_the_version(self, request):

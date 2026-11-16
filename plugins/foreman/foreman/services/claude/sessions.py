@@ -35,9 +35,9 @@ def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
     """The agent's `--settings`. The fm plugin is off: an agent gets nothing from it, its brief is its only instructions."""
     bin_ = launcher.ROOT / "bin"
     env = {
-        "FM_HOME": str(p.home),
-        "FM_TASK": tid,
-        "FM_AGENT": agent,
+        "FOREMAN_HOME": str(p.home),
+        "FOREMAN_TASK": tid,
+        "FOREMAN_AGENT": agent,
         "PATH": f"{bin_}{os.pathsep}{os.environ.get('PATH', '')}",
     }
     guard = f"{sys.executable} {bin_ / 'foreman'} guard"

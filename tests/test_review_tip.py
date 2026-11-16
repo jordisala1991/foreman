@@ -29,11 +29,11 @@ def start(e: Env) -> tuple[str, str]:
 
 
 def verdict(e: Env, tid: str, tip: str) -> None:
-    os.environ["FM_TASK"] = tid
+    os.environ["FOREMAN_TASK"] = tid
     try:
         fm(e.home, "verdict", "--tip", tip, "--open", "0", "--file", "r.md")
     finally:
-        os.environ.pop("FM_TASK")
+        os.environ.pop("FOREMAN_TASK")
 
 
 class TestTip:
