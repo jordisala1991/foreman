@@ -14,7 +14,7 @@ def run(p: Project) -> None:
                 continue
             if lost := blockers.dead(i, tasks):
                 n = i["id"]
-                i["blocked"] = f"{', '.join(lost)} closed without being done: fm edit {n} --blocked-by …, then fm unblock {n}, or fm cancel {n}"
+                i["blocked"] = f"{', '.join(lost)} closed without being done: foreman edit {n} --blocked-by …, then foreman unblock {n}, or foreman cancel {n}"
                 said.append((i["id"], f"blocked: {i['blocked']}"))
             elif not blockers.pending(i, tasks):
                 i["released"] = True

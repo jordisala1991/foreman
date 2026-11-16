@@ -3,7 +3,7 @@ panel/src) and a JSON API over every registered project (`p=NAME` picks one; the
 
 Adapted from foreman's lib/foreman/panel.py: the key (`?key=` or the `fm_key` cookie the page sets), the routing by path. What only served the
 old foreman is gone. The owner's actions call what the CLI calls (fm.ui.cli's functions, fm.services.delivery.merge.accept,
-fm.core.tasks.backlog.add), so the panel and `fm` cannot disagree.
+fm.core.tasks.backlog.add), so the panel and `foreman` cannot disagree.
 
 GET   /                index.html (sets the cookie)      /app.js, /app.css   the built files
 GET   /api/projects    each project: loop heartbeat, paused, what waits, what runs
@@ -132,7 +132,7 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if not self.ok(q):
-            return self.send(403, "wrong key: open the URL `fm panel` printed", "text/plain; charset=utf-8")
+            return self.send(403, "wrong key: open the URL `foreman panel` printed", "text/plain; charset=utf-8")
         if u.path == "/":
             return self.index()
         if u.path == "/evidence":
@@ -177,7 +177,7 @@ def watch_version(srv: ThreadingHTTPServer, every_s: float = 30, stale: Callable
     def watch() -> None:
         while not (why := stale()):
             time.sleep(every_s)
-        print(f"fm: {why}", file=sys.stderr, flush=True)
+        print(f"foreman: {why}", file=sys.stderr, flush=True)
         srv.shutdown()
 
     threading.Thread(target=watch, daemon=True).start()
@@ -186,13 +186,13 @@ def watch_version(srv: ThreadingHTTPServer, every_s: float = 30, stale: Callable
 def serve(port: int = 7788, host: str = "127.0.0.1") -> None:
     srv, tok = make_server(port, host=host)
     watch_version(srv)
-    names = ", ".join(p.name for p in projects()) or "none (fm init registers one)"
+    names = ", ".join(p.name for p in projects()) or "none (foreman init registers one)"
     shown = host
     if host in ("0.0.0.0", ""):
         import socket
 
         shown = socket.gethostname()
-    print(f"fm panel on http://{shown}:{srv.server_address[1]}/?key={quote(tok)}\nprojects: {names}", flush=True)
+    print(f"foreman panel on http://{shown}:{srv.server_address[1]}/?key={quote(tok)}\nprojects: {names}", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

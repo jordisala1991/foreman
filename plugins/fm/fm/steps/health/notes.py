@@ -6,7 +6,7 @@ from ...core.project.config import Project
 
 
 def python_note() -> list[str]:
-    """bin/fm's line when the hook found no Python new enough (see bin/fm)."""
+    """bin/foreman's line when the hook found no Python new enough (see bin/foreman)."""
     try:
         text = registry.python_note_file().read_text(encoding="utf-8").strip()
     except OSError:
@@ -15,12 +15,12 @@ def python_note() -> list[str]:
 
 
 def shared_folders(projects: list[Project]) -> list[str]:
-    """A folder two projects claim: `fm` refuses to pick one there."""
+    """A folder two projects claim: `foreman` refuses to pick one there."""
     return [f"! {f} is claimed by two projects: {' and '.join(names)}" for f, names in registry.shared(projects).items()]
 
 
 def old_links(p: Project) -> list[str]:
-    """The links `fm init` made before the plugin (FN-143), in the home or a repo: the plugin replaces them, so they
+    """The links `foreman init` made before the plugin (FN-143), in the home or a repo: the plugin replaces them, so they
     are to be deleted."""
     out: list[str] = []
     for folder in dict.fromkeys([p.home, *p.repos]):

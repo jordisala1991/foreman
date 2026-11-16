@@ -10,7 +10,7 @@
   "state_silent": "El bucle no corre",
   "state_running_tip": "El bucle pasa y lanza agentes cuando hay hueco.",
   "state_paused_tip": "El bucle no lanza agentes nuevos; los que trabajan siguen.",
-  "state_silent_tip": "El bucle no ha pasado hace rato: arráncalo con `fm loop` o su tarea de launchd.",
+  "state_silent_tip": "El bucle no ha pasado hace rato: arráncalo con `foreman loop` o su tarea de launchd.",
   "none_title": "Aún no hay ningún proyecto",
   "none_how": "Crea uno y regístralo:",
   "load_failed": "No se ha podido cargar.",

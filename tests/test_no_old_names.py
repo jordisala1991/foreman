@@ -2,6 +2,8 @@
 not read."""
 
 import os
+import re
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -55,3 +57,15 @@ class TestOldNames:
     def test_old_stored_key_is_not_read(self):
         util.write_json(self.e.p.backlog_file, {"schema_version": 5, OLD_KEY: [{"id": "TY-1", "title": "t", "status": "backlog"}]})
         assert backlog.tasks(backlog.load(self.e.p)) == []
+
+
+def test_the_command_is_called_foreman() -> None:
+    """The docs, briefs and instructions name the command `foreman`: macOS's /usr/bin/fm is not it."""
+    root = Path(__file__).resolve().parent.parent
+    texts = root / "plugins/fm/fm"
+    docs = [root / "README.md", root / "DESIGN.md", root / "GLOSSARY.md", *(texts / "briefs").glob("*.md"), *(texts / "shared").rglob("*.md")]
+    subcommands = "list|show|add|edit|go|ask|done|ready|block|reject|accept|cancel|health|launchd|loop|panel|init|lock"
+    subcommands += "|verdict|diagnose|allow|unblock|metrics|project|session-context|guard"
+    old = re.compile(rf"`fm ({subcommands})\b|(?<!usr/)bin/fm\b")
+    found = [f"{d.name}:{n}" for d in docs for n, line in enumerate(d.read_text().splitlines(), 1) if old.search(line)]
+    assert [f for f in found if not f.startswith("GLOSSARY.md")] == []

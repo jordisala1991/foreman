@@ -1,4 +1,4 @@
-"""Shared resources: `fm lock NAME run "what" command…` waits its turn, runs the command holding the resource, and
+"""Shared resources: `foreman lock NAME run "what" command…` waits its turn, runs the command holding the resource, and
 always releases it. The lean version of foreman's lock (lib/foreman/lock.py + sh/lock.sh), keeping what worked:
 
 - a fair queue: first come, first served (a ticket per waiter, by arrival time);
@@ -158,7 +158,7 @@ def describe(cfg: dict[str, Any]) -> str:
     names = ", ".join(f"`{n}`" + (f" ({len(r.slots)} slots)" if len(r.slots) > 1 else "") for n, r in res.items())
     return (
         f"Shared resources of this project: {names}. Anything that uses one runs inside "
-        '`fm lock NAME run "what" command…`: it waits its turn, runs, and always releases (the command gets '
+        '`foreman lock NAME run "what" command…`: it waits its turn, runs, and always releases (the command gets '
         "FM_SLOT). A run is stopped after its time limit: split long work into shorter runs. Never hold a "
         "resource while you wait for something else."
     )

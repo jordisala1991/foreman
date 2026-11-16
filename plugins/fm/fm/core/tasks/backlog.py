@@ -4,9 +4,9 @@ acceptance {goal, criteria, verdict}, result, priority; decisions), plus new key
 Statuses, and who moves a task between them (DESIGN.md has the picture):
   triage       filed by a health check or a source; waits for the owner's «go» (→ backlog or ready)
   backlog      to plan (it has acceptance criteria): the loop launches a planning agent
-  refining     a planning agent works on it; it ends with `fm ready` (the plan, or «trivial»)
+  refining     a planning agent works on it; it ends with `foreman ready` (the plan, or «trivial»)
   ready        the loop launches the task's responsible agent
-  in progress  the responsible agent works on it; it ends with `fm done`
+  in progress  the responsible agent works on it; it ends with `foreman done`
   in review    checked (tests, diff, risk) and reviewed; the owner accepts, or the autonomy does
   done | canceled | duplicate
 

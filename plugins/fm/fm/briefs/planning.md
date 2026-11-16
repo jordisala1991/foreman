@@ -14,11 +14,11 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - Read the repo at `$repo` and whatever else you need, with subagents if it helps.
 - Settle how the task is done: what changes, what does not. The acceptance criteria above are product (observable behaviour, never how); the plan holds the execution.
 - Every factual claim of the plan cites what you read or ran (`file:line`, command) or is marked «(inferred: what it rests on)». A hypothesis you did not test stays inferred. This includes statements of scope («only X uses it», «nothing else reads this»): cite the search, or mark it inferred.
-- If the task cannot be one reviewable change, write no plan and run `fm block "…"` with a proposed definition task for the owner to file: the PRs it would split into, one goal line each. Then END YOUR TURN.
-- If an `fm` command exits non-zero, read its message, fix what it says and run it again. Never end your turn as if it had worked.
+- If the task cannot be one reviewable change, write no plan and run `foreman block "…"` with a proposed definition task for the owner to file: the PRs it would split into, one goal line each. Then END YOUR TURN.
+- If a `foreman` command exits non-zero, read its message, fix what it says and run it again. Never end your turn as if it had worked.
 
 # Model and effort of the responsible agent
-As filed: $model_effort. If not set, choose with this rubric and pass `--model M --effort E` to `fm ready`. Pick the lowest row that fits; between two, the higher:
+As filed: $model_effort. If not set, choose with this rubric and pass `--model M --effort E` to `foreman ready`. Pick the lowest row that fits; between two, the higher:
 - mechanical or very scoped → sonnet/low
 - scoped, with clear criteria and some logic → sonnet/high
 - design, undiagnosed debugging, or a change to fm's own protocol → opus/medium (opus/high when hard)
@@ -36,20 +36,20 @@ Read the code the task touches (really read it), then write `$plan` for a respon
 - **Declared risk:** low, medium or high, and why (sensitive paths or architecture; new dependency or data-format change; open decision; size). When unsure between two levels, declare the higher. Never route around a sensitive path, test or format change the task needs to land in a lower band.
 Keep it short: about as long as the change you expect, never more than twice it (a small task fits in 40 lines); say each thing once, do not restate the task, and in Start list only what the change touches. Whatever you dictate (names, signatures, text, test data) must already pass the project's checks (line length, types) and give each test fixture every field the code under test reads.
 
-Before `fm ready`, reread it as the responsible agent: every acceptance criteria line has its test; every name is defined once and spelled the same everywhere; no line says «handle», «as needed», «appropriate» or «TBD». Fix it, do not list it.
+Before `foreman ready`, reread it as the responsible agent: every acceptance criteria line has its test; every name is defined once and spelled the same everywhere; no line says «handle», «as needed», «appropriate» or «TBD». Fix it, do not list it.
 A plan that costs a bit more and makes the implementation cheap beats one that needs many rounds. What the owner discussed is context for the plan, not the plan. Only a trivial task may skip it (`--no-plan`).
 
 # The end
-`fm ready [--model M --effort E] --detail "what the responsible agent needs: the decisions taken (and the owner's answers), what is out of scope" --plan $plan --misled "what was wrong or unclear in what you were given, or none"`
-(or `--no-plan "why it is trivial"` instead of `--plan`), then end your turn. If it should not be done at all, `fm block "why"` and end your turn.
+`foreman ready [--model M --effort E] --detail "what the responsible agent needs: the decisions taken (and the owner's answers), what is out of scope" --plan $plan --misled "what was wrong or unclear in what you were given, or none"`
+(or `--no-plan "why it is trivial"` instead of `--plan`), then end your turn. If it should not be done at all, `foreman block "why"` and end your turn.
 
 # Without asking
 - How the task is done, the plan's decisions and its declared risk, the model and effort the owner left empty. Do not end a turn to ask «shall I proceed?»: owning the task is the authorization.
 
 # Waits for the owner
-- An acceptance criterion that cannot be met as written, or a point only he can decide that you cannot find out by reading: `fm ask "…"` and END YOUR TURN; his answer comes back here. The question stands alone: the context in one line, the options, your recommendation and why.
+- An acceptance criterion that cannot be met as written, or a point only he can decide that you cannot find out by reading: `foreman ask "…"` and END YOUR TURN; his answer comes back here. The question stands alone: the context in one line, the options, your recommendation and why.
 
 # Never
-- Write, rewrite, soften or split the acceptance criteria; split the task, file others or shrink the plan to fit (`fm block` with the proposed split instead).
+- Write, rewrite, soften or split the acceptance criteria; split the task, file others or shrink the plan to fit (`foreman block` with the proposed split instead).
 - Do the task, or edit, commit or create branches in `$repo`.
 - Change a model or effort the owner already set.

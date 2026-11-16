@@ -1,4 +1,4 @@
-"""What every `fm` command needs: the project it works on and the task it speaks for."""
+"""What every `foreman` command needs: the project it works on and the task it speaks for."""
 
 import argparse
 import os
@@ -30,9 +30,9 @@ def named(name: str) -> Project:
     projects, broken = registry.load_all()
     found = [p for p in projects if p.name == name]
     if not found:
-        sys.exit(f"fm: no project named {name!r}; registered: {_names(projects, broken)}")
+        sys.exit(f"foreman: no project named {name!r}; registered: {_names(projects, broken)}")
     if len(found) > 1:
-        sys.exit(f"fm: {len(found)} projects are named {name!r}: {', '.join(str(p.home) for p in found)}")
+        sys.exit(f"foreman: {len(found)} projects are named {name!r}: {', '.join(str(p.home) for p in found)}")
     return found[0]
 
 
@@ -42,18 +42,20 @@ def here() -> Project:
     if len(found) == 1:
         p, folder = found[0]
         if isinstance(p, config.Unreadable):
-            sys.exit(f"fm: {folder} belongs to the project at {p.home}, whose fm.toml cannot be loaded: {p.reason}")
+            sys.exit(f"foreman: {folder} belongs to the project at {p.home}, whose fm.toml cannot be loaded: {p.reason}")
         return p
     if found:
-        sys.exit(f"fm: {found[0][1]} belongs to {' and '.join(p.name for p, _ in found)}; pass --project NAME")
+        sys.exit(f"foreman: {found[0][1]} belongs to {' and '.join(p.name for p, _ in found)}; pass --project NAME")
     h = next((d for d in (cwd, *cwd.parents) if (d / "fm.toml").exists()), None)
     if h is None:
-        sys.exit(f"fm: no project here: {cwd} is in none of the registered projects' folders (registered: {_names(projects, broken)}); pass --project NAME")
+        sys.exit(
+            f"foreman: no project here: {cwd} is in none of the registered projects' folders (registered: {_names(projects, broken)}); pass --project NAME"
+        )
     return Project.load(h)
 
 
 def mine(args: argparse.Namespace) -> str:
     tid = os.environ.get("FM_TASK")
     if not tid:
-        sys.exit("fm: which task? (FM_TASK, set in an agent's session)")
+        sys.exit("foreman: which task? (FM_TASK, set in an agent's session)")
     return tid

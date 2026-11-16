@@ -1,4 +1,4 @@
-"""`fm`, as bin/fm runs it: the CLI's commands, and `fm panel`, which starts what sits beside the CLI (the panel imports the
+"""`foreman`, as bin/foreman runs it: the CLI's commands, and `foreman panel`, which starts what sits beside the CLI (the panel imports the
 CLI's functions, so the CLI cannot import the panel)."""
 
 import argparse

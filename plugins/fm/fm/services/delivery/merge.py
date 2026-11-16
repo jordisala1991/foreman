@@ -122,7 +122,7 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
 
 def settle_parent(p: Project, tid: str) -> None:
     """A parent closes by itself once its subtasks have: done if any is done, else canceled. One with an agent closes
-    only by that agent's `fm done`."""
+    only by that agent's `foreman done`."""
     d = backlog.load(p)
     parent = backlog.get(d, tid).get("parent")
     if not parent or backlog.get(d, parent)["status"] in backlog.CLOSED or backlog.get(d, parent).get("agent"):
@@ -134,7 +134,7 @@ def settle_parent(p: Project, tid: str) -> None:
 def close(p: Project, tid: str, status: str, why: str, *, settle: bool = True) -> None:
     """Closes an open task as canceled or done (merged outside fm): stops its sessions, answers its open questions,
     removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
-    `fm cancel` and the sources' signals use it. Canceling a parent first cancels its open subtasks."""
+    `foreman cancel` and the sources' signals use it. Canceling a parent first cancels its open subtasks."""
     d = backlog.load(p)
     i = backlog.get(d, tid)
     if status == "canceled":

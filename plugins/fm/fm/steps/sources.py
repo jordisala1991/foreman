@@ -4,8 +4,8 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
   - without "task": `{"key", "title", "detail"}` files a `triage` task (the owner lets it in), deduplicated by
     source and key. For what has no task yet: CI failing on main, an error log.
   - with "task" (a task id): `{"key", "task", "action", "text"}` acts on that open task, with the owner's own
-    commands: note (text reaches its agent like an answer), reject (text; `fm reject`), accept (`fm accept`),
-    done (closed as done: merged outside fm), cancel (`fm cancel`; text is the reason). A review on a task's own
+    commands: note (text reaches its agent like an answer), reject (text; `foreman reject`), accept (`foreman accept`),
+    done (closed as done: merged outside fm), cancel (`foreman cancel`; text is the reason). A review on a task's own
     change targets that task; it is not a new task. Applied once per source and key (`state/applied/`); an unknown
     or closed task, an unknown action, a missing key or one not valid for the task's state changes nothing and is logged
     in `state/errors.jsonl` (and is not retried); a transient failure (accept before its check, a busy checkout, a

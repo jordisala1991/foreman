@@ -2,7 +2,7 @@
 
 The launchd jobs start through `main`: the plist carries this file's text (`python3 -c`), which reads Claude Code's record
 of the installed version (`~/.claude/plugins/installed_plugins.json`), sets `FM_PINNED` to its folder and runs that
-folder's `bin/fm`. Each version folder never changes, so a job runs one version from start to exit; a job started that
+folder's `bin/foreman`. Each version folder never changes, so a job runs one version from start to exit; a job started that
 way exits when the record names another folder (`stale`), and launchd starts it again on the new one.
 
 The record's format is Claude Code's, undocumented: fm reads format version 2, keys off `installPath` (its
@@ -56,7 +56,7 @@ def installed() -> Installed:
     path, version = users[0].get("installPath"), users[0].get("version")
     if not isinstance(path, str) or not isinstance(version, str):
         raise LauncherError(f"{f}: unexpected format for {PLUGIN} (no installPath or version)")
-    if not (Path(path) / "bin/fm").is_file():
+    if not (Path(path) / "bin/foreman").is_file():
         raise LauncherError(f"{PLUGIN} {version}: its folder {path} is missing")
     return Installed(Path(path).resolve(), version)
 
@@ -102,10 +102,10 @@ def main(argv: list[str]) -> None:
     try:
         now = installed()
     except LauncherError as e:
-        sys.exit(f"fm: {e}")
+        sys.exit(f"foreman: {e}")
     os.environ[PINNED] = str(now.path)
-    fm = str(now.path / "bin/fm")
-    os.execv(sys.executable, [sys.executable, fm, *argv])
+    foreman = str(now.path / "bin/foreman")
+    os.execv(sys.executable, [sys.executable, foreman, *argv])
 
 
 if __name__ == "__main__":

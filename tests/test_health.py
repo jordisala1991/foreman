@@ -31,7 +31,7 @@ class TestHealth:
     def test_the_python_note_is_shown_by_health(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"FM_REGISTRY": f"{d}/projects.json"}):
             assert notes.python_note() == []
-            line = "fm: needs Python 3.12 or newer; the python3 found is 3.9.6 (/usr/bin/python3)"
+            line = "foreman: needs Python 3.12 or newer; the python3 found is 3.9.6 (/usr/bin/python3)"
             registry.python_note_file().write_text(line + "\n")
             assert notes.python_note() == ["! " + line]
 

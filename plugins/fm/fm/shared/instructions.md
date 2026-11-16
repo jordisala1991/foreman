@@ -1,22 +1,22 @@
 # fm: the project {project}
 
-This session is in a folder of the project **{project}** (task prefix {prefix}), run with `fm`. Its home is `{home}`;
+This session is in a folder of the project **{project}** (task prefix {prefix}), run with `foreman`. Its home is `{home}`;
 its code lives in {repos}; work is integrated into the branch `{main}`. Here you talk with the owner, in the owner's
 language, in plain words.
 
 ## How fm is run
 
-`fm` is on your PATH in this session and finds the project from the folder you are in; `fm --help` lists every
+`foreman` is on your PATH in this session and finds the project from the folder you are in; `foreman --help` lists every
 command. A new repo needs `claude` opened in it once, so that it trusts the folder.
 
 ## The backlog
 
-The backlog is `backlog.json` in the home and **is changed only with `fm`**: never by hand, nor in another file or tool.
+The backlog is `backlog.json` in the home and **is changed only with `foreman`**: never by hand, nor in another file or tool.
 
-- `fm list` (and `--all`): the open tasks and the pending questions. `fm show {prefix}-3`: one task whole.
+- `foreman list` (and `--all`): the open tasks and the pending questions. `foreman show {prefix}-3`: one task whole.
 - A task with acceptance criteria goes through planning (an agent writes the plan, without touching the criteria) and
   then is ready (its responsible agent does it end to end). Without criteria it can only be in triage. Triage tasks
-  wait for the owner's Go (`fm go {prefix}-n`).
+  wait for the owner's Go (`foreman go {prefix}-n`).
 - What is not in triage, the loop launches as soon as there is a free slot ({slots} at once): say so before filing it.
 
 ## Defining tasks with the owner
@@ -27,13 +27,13 @@ per PR. Agents never split tasks.
 
 ## What the owner can ask here
 
-- **Answer an agent:** `fm answer "{prefix}-3 Q1" "text"`. Allow or deny an action the guard stopped:
-  `fm allow "{prefix}-3 Q2"` / `fm deny …`.
-- **The integration queue:** `fm accept {prefix}-3` (the loop merges its PR) or `fm reject {prefix}-3 "note"` (back to
+- **Answer an agent:** `foreman answer "{prefix}-3 Q1" "text"`. Allow or deny an action the guard stopped:
+  `foreman allow "{prefix}-3 Q2"` / `foreman deny …`.
+- **The integration queue:** `foreman accept {prefix}-3` (the loop merges its PR) or `foreman reject {prefix}-3 "note"` (back to
   its agent; the note counts as the owner's decision for the reviewer).
-- **Others:** `fm metrics`, `fm health`, `fm pause` / `fm pause --off`, `fm cancel {prefix}-n`,
-  `fm unblock {prefix}-n --relaunch`.
-- **Talk with a task's agent:** `claude attach <short id>` (in `fm show`, under `agent.short`), or in the panel.
+- **Others:** `foreman metrics`, `foreman health`, `foreman pause` / `foreman pause --off`, `foreman cancel {prefix}-n`,
+  `foreman unblock {prefix}-n --relaunch`.
+- **Talk with a task's agent:** `claude attach <short id>` (in `foreman show`, under `agent.short`), or in the panel.
 
 ## What is not done here
 

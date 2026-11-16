@@ -1,7 +1,7 @@
 {
   "hooks": {
     "SessionStart": [
-      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/fm\" session-context", "timeout": 10}]}
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/foreman\" session-context", "timeout": 10}]}
     ]
   }
 }

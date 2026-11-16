@@ -32,7 +32,7 @@ def project(q: dict[str, list[str]]) -> Project:
     name = q.get("p", [""])[0]
     p = next((x for x in ps if x.name == name), None) if name else (ps[0] if ps else None)
     if p is None:
-        raise KeyError(f"no project {name!r}" if name else "no project registered (fm init)")
+        raise KeyError(f"no project {name!r}" if name else "no project registered (foreman init)")
     return p
 
 

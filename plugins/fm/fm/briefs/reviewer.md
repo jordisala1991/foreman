@@ -39,7 +39,7 @@ N is the number of items under To fix. `Findings:` is the owner's view of the re
 - `## Noted (not sent to the responsible agent)` (optional): the rest, one line each, with why it is not to fix;
 - a line `Misled: …` (what in this brief or the task was wrong or unclear, or none).
 
-Then run `fm verdict --tip $tip --open N --file $review_file --misled "…or none"`. If it exits non-zero, read its message, fix the review file or the flags and run it again; end your turn only when it succeeded.
+Then run `foreman verdict --tip $tip --open N --file $review_file --misled "…or none"`. If it exits non-zero, read its message, fix the review file or the flags and run it again; end your turn only when it succeeded.
 
 # Without asking
 - What goes to To fix and what to Noted, and what to run (the tests, a command, a one-off call) to confirm a finding.

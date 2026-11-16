@@ -142,7 +142,7 @@ class TestLaunchRace:
             with open(str(e.tmp / "projects.json") + ".loop.lock", "a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 r = subprocess.run(
-                    [sys.executable, str(PLUGIN / "bin/fm"), "--home", str(e.home), "loop", "--once"],
+                    [sys.executable, str(PLUGIN / "bin/foreman"), "--home", str(e.home), "loop", "--once"],
                     capture_output=True,
                     text=True,
                     env=os.environ,

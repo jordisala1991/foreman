@@ -43,7 +43,7 @@ def cmd_verdict(a: argparse.Namespace) -> None:
         launched = [x.get("tip", "") for x in (*i.get("reviewers", []), latest)]
         tip = next((t for t in launched if t and t.startswith(a.tip)), "") if a.tip else newest
         if a.tip and not tip:
-            sys.exit(f"fm: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
+            sys.exit(f"foreman: no reviewer was launched for tip {a.tip}; use the Tip from your brief")
         v = {"round": reviews.review_round(i), "tip": tip, "open": a.open, "file": a.file, "at": util.now()}
         i["reviews"] = [*i.get("reviews", []), v]
         if tip == newest:  # a verdict for an older launch is history: it decides nothing
@@ -61,7 +61,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
     if a.plan:
         f = Path(a.plan)
         if not f.is_file() or not f.read_text(encoding="utf-8").strip():
-            sys.exit(f"fm: the plan file {a.plan} is missing or empty: write it, then run fm ready again")
+            sys.exit(f"foreman: the plan file {a.plan} is missing or empty: write it, then run foreman ready again")
     with backlog.edit(p) as d:
         i = backlog.get(d, tid)
         if a.plan:
@@ -92,9 +92,9 @@ def cmd_diagnose(a: argparse.Namespace) -> None:
     f = Path(a.file)
     text = f.read_text(encoding="utf-8") if f.is_file() else ""
     if not text.strip():
-        sys.exit(f"fm: the diagnosis file {a.file} is missing or empty")
+        sys.exit(f"foreman: the diagnosis file {a.file} is missing or empty")
     if missing := diagnosis.missing_sections(text):
-        sys.exit("fm: the diagnosis lacks: " + ", ".join(missing) + ". Add those sections and run fm diagnose again.")
+        sys.exit("foreman: the diagnosis lacks: " + ", ".join(missing) + ". Add those sections and run foreman diagnose again.")
     if not diagnosis.record(p, tid, "Diagnosis (mechanic)", text, file=str(f)):
-        sys.exit(f"fm: {tid} already has a diagnosis")
+        sys.exit(f"foreman: {tid} already has a diagnosis")
     print(f"Diagnosis recorded in {tid}. Remove your scratch folder and end your turn.")

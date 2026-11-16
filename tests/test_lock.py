@@ -11,7 +11,7 @@ from fm import util
 from fm.services import lock
 from fm.services.agents import brief
 
-FM = str(PLUGIN / "bin/fm")
+FM = str(PLUGIN / "bin/foreman")
 
 
 class TestLock:
@@ -91,4 +91,4 @@ class TestLock:
         tid = backlog.add(p, "x", status="ready", criteria="y")
         text = brief.brief(p, backlog.get(backlog.load(p), tid), "responsible")
         assert "`gpu`, `sim` (2 slots)" in text
-        assert "fm lock NAME run" in text
+        assert "foreman lock NAME run" in text

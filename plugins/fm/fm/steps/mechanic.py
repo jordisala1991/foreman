@@ -1,4 +1,4 @@
-"""The mechanic: a helper session that diagnoses each triage task health filed. Its only write is `fm diagnose`."""
+"""The mechanic: a helper session that diagnoses each triage task health filed. Its only write is `foreman diagnose`."""
 
 from typing import Any
 

@@ -25,7 +25,7 @@ def record_main_tests(p: Project, head: str) -> None:
 
 
 def main_tests(p: Project, run: bool = True) -> list[Finding]:
-    """With `run` False (the panel, `fm health`) it only reads the last result; the loop runs the tests."""
+    """With `run` False (the panel, `foreman health`) it only reads the last result; the loop runs the tests."""
     cmd = p.get("merge", "test")
     if not cmd:
         return []

@@ -43,7 +43,7 @@ export function None() {
     <main className="none card">
       <h1>{t("none_title")}</h1>
       <p>{t("none_how")}</p>
-      <pre>{"fm init --repo PATH --prefix AB"}</pre>
+      <pre>{"foreman init --repo PATH --prefix AB"}</pre>
     </main>
   );
 }

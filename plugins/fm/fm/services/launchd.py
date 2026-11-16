@@ -1,8 +1,8 @@
-"""`fm launchd`: the two launchd jobs (`loop`, `panel`) that start at login and are restarted if they exit.
+"""`foreman launchd`: the two launchd jobs (`loop`, `panel`) that start at login and are restarted if they exit.
 
 Run from a version folder of the installed plugin, a job's command names no version: it carries the launcher
 (`python3 -c`, fm/launcher.py), which runs the version of fm@fm installed at each start. Run from a plain checkout, it
-names that checkout's bin/fm."""
+names that checkout's bin/foreman."""
 
 import os
 from pathlib import Path
@@ -12,8 +12,8 @@ from .. import launcher, proc
 
 
 def program() -> tuple[str, ...]:
-    """What python3 runs: the launcher's text when this is the installed plugin, else this checkout's bin/fm."""
-    return ("-c", launcher.source()) if launcher.from_plugin() else (str(launcher.ROOT / "bin/fm"),)
+    """What python3 runs: the launcher's text when this is the installed plugin, else this checkout's bin/foreman."""
+    return ("-c", launcher.source()) if launcher.from_plugin() else (str(launcher.ROOT / "bin/foreman"),)
 
 
 def plist(job: str = "loop", args: tuple[str, ...] = ()) -> str:

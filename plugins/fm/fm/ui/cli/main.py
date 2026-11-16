@@ -1,5 +1,5 @@
-"""`fm`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their task comes from FM_TASK);
-the owner and the panel use the rest; launchd runs `fm loop`; Claude Code runs `fm guard` as the agents' hook."""
+"""`foreman`: the one command. Agents use `ask`, `done`, `ready`, `block`, `add` (their task comes from FM_TASK);
+the owner and the panel use the rest; launchd runs `foreman loop`; Claude Code runs `foreman guard` as the agents' hook."""
 
 import argparse
 import sys
@@ -68,4 +68,4 @@ def main(argv: list[str] | None = None, outside: dict[str, Handler] | None = Non
     try:
         ({**HANDLERS, **(outside or {})})[a.cmd](a)
     except (backlog.BacklogError, config.ProjectError) as e:
-        sys.exit(f"fm: {e}")
+        sys.exit(f"foreman: {e}")
