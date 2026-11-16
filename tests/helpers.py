@@ -28,6 +28,7 @@ PLUGIN = ROOT / "plugins/fm"  # the folder the marketplace installs
 
 # A test run must not write the owner's real ~/.config/fm (registry, panel token, locks): HOME and FM_REGISTRY point
 # at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
+# And none of an agent's session variables (FM_TASK…) may change what a test does.
 REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
 REAL_REGISTRY = REAL_HOME / ".config/fm/projects.json"
 SANDBOX = Path(tempfile.mkdtemp(prefix="fmhome-")).resolve()
@@ -35,6 +36,8 @@ SANDBOX = Path(tempfile.mkdtemp(prefix="fmhome-")).resolve()
 tempfile.tempdir = str(SANDBOX / "tmp")  # every temp dir of this run lives in the sandbox: a leak into the real registry is recognisable
 os.environ["HOME"] = str(SANDBOX)
 os.environ["FM_REGISTRY"] = str(SANDBOX / "projects.json")
+for _name in ("FM_TASK", "FM_AGENT", "FM_HOME", "FM_PROJECT", "FM_PINNED"):  # no agent session leaks in: a run is the owner's shell
+    os.environ.pop(_name, None)
 atexit.register(shutil.rmtree, SANDBOX, ignore_errors=True)
 
 FAKE = textwrap.dedent("""\

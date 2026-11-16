@@ -1,15 +1,18 @@
-"""A test run never writes the owner's real ~/.config/fm: HOME and FM_REGISTRY point at a temp dir (see helpers)."""
+"""A test run never writes the owner's real ~/.config/fm: HOME and FM_REGISTRY point at a temp dir (see helpers), and nothing of an
+agent's session (FM_TASK…) reaches a test."""
 
 import functools
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
-from helpers import REAL_REGISTRY, SANDBOX, fm
+from helpers import PLUGIN, REAL_REGISTRY, SANDBOX, fm
 
 from fm.core.project import registry
 from fm.services import lock
@@ -34,6 +37,14 @@ class TestSandbox:
         self.request.addfinalizer(patcher.stop)
         for name in names:
             os.environ.pop(name, None)
+
+    def test_an_agents_session_variables_do_not_reach_the_tests(self) -> None:
+        session = {"FM_TASK": "AL-1", "FM_AGENT": "al-1", "FM_HOME": "/x/home", "FM_PROJECT": "al", "FM_PINNED": "/x/v1"}
+        code = f"import os, helpers; print(sorted(k for k in {sorted(session)!r} if k in os.environ))"
+        path = os.pathsep.join([str(Path(__file__).parent), str(PLUGIN)])
+        env = {**os.environ, **session, "PYTHONPATH": path}
+        out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True).stdout
+        assert out.strip() == "[]"
 
     def test_home_files_live_in_the_sandbox(self) -> None:
         self.unset("FM_REGISTRY", "FM_LOCKS")
