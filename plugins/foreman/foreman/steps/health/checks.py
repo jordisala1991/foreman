@@ -32,8 +32,13 @@ def finding(key: str, title: str, meaning: str, evidence: str) -> Finding:
     return {"key": key, "title": title, "meaning": meaning, "evidence": evidence, "hypothesis": "pending", "detail": detail}
 
 
+def heartbeat(p: Project) -> dict[str, Any]:
+    """The loop's last beat; {} when loop.json is missing or not an object."""
+    return util.json_object(util.read_json(p.state / "loop.json", {})) or {}
+
+
 def loop_dead(p: Project) -> list[Finding]:
-    hb = util.read_json(p.state / "loop.json", {})
+    hb = heartbeat(p)
     limit = 3 * int(p.get("health", "loop_seconds"))
     late = time.time() - float(hb.get("epoch") or 0)
     if late > limit:

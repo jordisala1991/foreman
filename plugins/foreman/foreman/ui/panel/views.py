@@ -37,7 +37,7 @@ def project(q: dict[str, list[str]]) -> Project:
 
 
 def loop_beat(p: Project) -> Obj:
-    hb = util.read_json(p.state / "loop.json", {})
+    hb = checks.heartbeat(p)
     return {"time": hb.get("time"), "alive": not checks.loop_dead(p)}
 
 
@@ -125,4 +125,4 @@ def versions(p: Project) -> Obj:
         now: str | None = launcher.installed().version
     except launcher.LauncherError:
         now = None
-    return {"loop": util.read_json(p.state / "loop.json", {}).get("version"), "panel": launcher.ROOT.name, "installed": now}
+    return {"loop": checks.heartbeat(p).get("version"), "panel": launcher.ROOT.name, "installed": now}

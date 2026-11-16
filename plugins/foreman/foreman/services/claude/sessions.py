@@ -10,6 +10,7 @@ id instead, so a resume carries none."""
 import json
 import os
 import re
+import shlex
 import sys
 import time
 from dataclasses import dataclass
@@ -40,7 +41,7 @@ def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
         "FOREMAN_AGENT": agent,
         "PATH": f"{bin_}{os.pathsep}{os.environ.get('PATH', '')}",
     }
-    guard = f"{sys.executable} {bin_ / 'foreman'} guard"
+    guard = shlex.join([sys.executable, str(bin_ / "foreman"), "guard"])
     s: dict[str, Any] = {
         "worktree": {"bgIsolation": "none"},
         "env": env,

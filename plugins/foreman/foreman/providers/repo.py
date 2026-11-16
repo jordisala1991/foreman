@@ -64,7 +64,8 @@ class Repo(Protocol):
         ...
 
     def conflicts(self, base: str, branch: str) -> bool:
-        """Would merging `branch` into `base` conflict?"""
+        """Would merging `branch` into `base` conflict? Raises RepoError when git fails (an unknown ref, unrelated
+        histories), never reads that as a conflict."""
         ...
 
     def follows(self, tip: str, head: str, main: str) -> Follows:

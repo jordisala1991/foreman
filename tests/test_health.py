@@ -17,6 +17,7 @@ from foreman.loop import tick
 from foreman.services.claude import login
 from foreman.services.delivery import check
 from foreman.steps.health import checks, main_tests, notes
+from foreman.ui.panel import views
 
 
 class TestHealth:
@@ -231,6 +232,16 @@ class TestVersions:
         util.write_json(self.p.state / "loop.json", {"version": "aaa"})
         install_fm(request, version_folder(self.e.tmp / "cache", "ccc"))
         assert f"versions: this command {launcher.ROOT.name} · the loop aaa · installed ccc\n" in fm(self.p.home, "health")
+
+    def test_a_loop_json_that_is_not_an_object_gives_no_beat(self):
+        for hb in (None, [], 3):
+            (self.p.state / "loop.json").unlink(missing_ok=True)
+            if hb is not None:
+                util.write_json(self.p.state / "loop.json", hb)
+            assert views.loop_beat(self.p) == {"time": None, "alive": False}
+            assert views.versions(self.p)["loop"] is None
+            assert checks.loop_dead(self.p)[0]["key"] == "loop-dead"
+            assert "the loop unknown" in notes.versions(self.p)[0]
 
     def test_without_an_install_health_says_the_jobs_cannot_start(self, request):
         """Whether or not a loop ever ran from the plugin: a job that exits at once writes no heartbeat."""
