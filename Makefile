@@ -50,7 +50,7 @@ size:
 
 # -W error::ResourceWarning: a file or pipe left open is reported loudly (traceback of where it was opened), not swallowed.
 # -n auto: one worker per core (pytest-xdist); `test-serial` runs them in one process. pytest puts plugins/foreman (pythonpath in
-# pyproject.toml), so fm, on the path, and tests/, so `helpers`.
+# pyproject.toml), so foreman, on the path, and tests/, so `helpers`.
 test:
 	uv run python -m pytest -q -n auto -W error::ResourceWarning tests
 

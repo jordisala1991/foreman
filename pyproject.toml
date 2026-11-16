@@ -44,7 +44,7 @@ typeCheckingMode = "strict"
 enableTypeIgnoreComments = false  # a `type: ignore` comment does not silence anything
 pythonVersion = "3.12"
 
-# The tests import fm from the plugin folder.
+# The tests import foreman from the plugin folder.
 [tool.pytest.ini_options]
 pythonpath = ["plugins/foreman"]
 
