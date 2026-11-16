@@ -43,7 +43,7 @@ class TestLauncher:
     def test_what_does_not_fit_says_so_in_one_line(self, request) -> None:
         self.fails("is not installed in Claude Code")  # no record at all
         install_fm(request, self.a, version=3)
-        self.fails("has format version 3, fm reads 2")
+        self.fails("has format version 3, foreman reads 2")
         install_fm(request)
         self.fails("run claude plugin install foreman@foreman")
         install_fm(request, self.a, self.b)
