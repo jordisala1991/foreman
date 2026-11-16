@@ -10,7 +10,7 @@
   "state_silent": "Loop not running",
   "state_running_tip": "The loop ticks and launches agents when there is room.",
   "state_paused_tip": "The loop launches no new agent; the running ones go on.",
-  "state_silent_tip": "No recent tick of the loop: start it with `fm loop` or its launchd job.",
+  "state_silent_tip": "No recent tick of the loop: start it with `foreman loop` or its launchd job.",
   "none_title": "No project yet",
   "none_how": "Make one and register it:",
   "load_failed": "Could not load.",
