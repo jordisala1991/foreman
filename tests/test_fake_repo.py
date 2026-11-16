@@ -35,6 +35,12 @@ def test_what_a_branch_changes(repo: FakeRepo):
     assert repo.deleted_files("main", "b") == ["b.txt"]
 
 
+def test_diff_stat_adds_up_each_commit(repo: FakeRepo):
+    repo.commit("d", FileDiff("d.txt", 3, 0))
+    repo.commit("d", FileDiff("d.txt", 0, 3))
+    assert repo.diff_stat("main", "d") == [FileDiff("d.txt", 3, 3)]  # coarser than git, which gives nothing (docstring)
+
+
 def test_conflicts(repo: FakeRepo):
     assert repo.conflicts("main", "c") is True
     assert repo.conflicts("main", "b") is False
@@ -61,6 +67,12 @@ def test_merge_of_a_clean_branch(repo: FakeRepo, squash: bool):
     assert repo.is_ancestor(repo.head("b"), "main") is (not squash)
 
 
+def test_a_branch_merged_already_merges_as_up_to_date(repo: FakeRepo):
+    first = repo.merge("main", "b", "Merge FN-1: b", False)
+    assert repo.merge("main", "b", "Merge FN-1: b", False) == first
+    assert repo.head("main") == first.commit
+
+
 @pytest.mark.parametrize("squash", [False, True])
 def test_merge_of_a_conflicting_branch_leaves_main_as_it_was(repo: FakeRepo, squash: bool):
     before = repo.head("main")
@@ -83,9 +95,25 @@ def test_worktrees(repo: FakeRepo):
     b = repo.head("b")
     repo.add_worktree(wt, "b", "main")  # an existing branch is checked out as it is
     assert repo.head("b") == b
+    with pytest.raises(RepoError):
+        repo.add_worktree(wt, "b", "main")  # git refuses a path that is already a worktree
+    assert repo.worktrees() == [wt]  # only the worktrees added: not the main checkout (docstring)
+    other = wt.parent / "not-a-worktree"
+    other.mkdir()
+    repo.remove_worktree(other)
+    assert other.is_dir()  # git removes only a worktree it knows
+
+
+def test_detached_worktree_and_merge_in_it(repo: FakeRepo):
+    tmp = Path(tempfile.mkdtemp(prefix="fmfake-"))
     with pytest.raises(RepoError) as e:
-        repo.add_detached(wt.parent / "d0", "nope")
+        repo.add_detached(tmp / "d0", "nope")
     assert e.value.reason
+    wt = tmp / "d"
+    repo.add_detached(wt, repo.head("main"))
+    assert repo.trees[wt] == repo.head("main")
+    with pytest.raises(RepoError):
+        repo.merge_in_worktree(wt, repo.head("c"))
 
 
 def test_merges_of(repo: FakeRepo):
@@ -98,6 +126,30 @@ def test_merges_of(repo: FakeRepo):
 def test_the_main_checkout(repo: FakeRepo):
     assert repo.is_ancestor(repo.parents[repo.head("b")][0], "main") is True  # b~1
     assert repo.is_ancestor("b", "main") is False
+    assert repo.is_ancestor("main", "nope") is False  # git exits 128: not an ancestor, no error
     assert repo.current_branch() == "main"
     assert repo.dirty() is False
     assert repo.origin_url() == ""
+
+
+def test_commit_files(repo: FakeRepo, tmp_path: Path):
+    x, y = tmp_path / "x.png", tmp_path / "y.png"
+    x.write_bytes(b"x")
+    y.write_bytes(b"y")
+    first = repo.commit_files("", "FN-1", {"x.png": x}, "m")
+    assert sorted(repo.files[first]) == ["FN-1/x.png"]
+    assert repo.parents[first] == ()  # an orphan root
+    other = repo.commit_files(first, "FN-2", {"x.png": x}, "m")
+    second = repo.commit_files(other, "FN-1", {"y.png": y}, "m")
+    assert sorted(repo.files[second]) == ["FN-1/x.png", "FN-1/y.png", "FN-2/x.png"]
+    assert repo.commit_files(second, "FN-1", {"x.png": x, "y.png": y}, "m") == ""
+
+
+def test_fast_forward(repo: FakeRepo):
+    repo.commit("ahead", FileDiff("d.txt", 1, 0), message="more")
+    repo.fast_forward("ahead")
+    assert repo.head("main") == repo.head("ahead")
+    before = repo.head("main")
+    with pytest.raises(RepoError):
+        repo.fast_forward("c")
+    assert repo.head("main") == before

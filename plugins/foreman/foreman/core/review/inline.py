@@ -83,12 +83,12 @@ def line_comments(found: list[Finding], visible: dict[str, set[int]]) -> list[Li
     return list(out.values())
 
 
-LINK = re.compile(r"\[(`[^\n]*?`)\]\(fm-link:([^)\s]*)\)")  # the text is the place in backticks, whatever it holds
+LINK = re.compile(r"\[(`[^\n]*?`)\]\(foreman-link:([^)\s]*)\)")  # the text is the place in backticks, whatever it holds
 _AT = re.compile(r"^(.+?):(\d+)(?:[-:]\d+)?$")  # path:line, path:first-last, path:line:column
 
 
 def resolve_links(body: str, base: str, head: str, comments: dict[str, str]) -> str:
-    """Replaces each `[text](fm-link:PLACE)` of a review body: with the URL of its inline comment (`comments`: place ->
+    """Replaces each `[text](foreman-link:PLACE)` of a review body: with the URL of its inline comment (`comments`: place ->
     URL), else with the file at the reviewed commit on its first line (`base` is the repository's URL); a place that is
     not `path:line` (a range and a column are fine) is left as its text, without a link."""
 

@@ -83,13 +83,26 @@ class TestResume:
 
     def test_a_failed_stop_fails_the_send(self):
         def boom(p, short):
-            raise proc.ProcError("claude stop: timed out after 30s")
+            raise sessions.SessionError("claude stop: timed out after 30s")
 
         old, sessions.stop = sessions.stop, boom
         try:
             self.failed_send("stop_ok")
         finally:
             sessions.stop = old
+
+    def test_stop_raises_the_sessions_error(self):
+        e = Env(repo=self.fake)
+
+        def boom(*a, **k):
+            raise proc.ProcError("claude stop: timed out after 30s")
+
+        old, proc.run = proc.run, boom
+        try:
+            with pytest.raises(sessions.SessionError, match="timed out"):
+                sessions.stop(e.p, "abc")
+        finally:
+            proc.run = old
 
     def test_a_session_that_does_not_stop_is_not_resumed(self):
         self.failed_send("stop_noop", tries=1)

@@ -1,6 +1,8 @@
 """An in-memory Repo port (foreman/providers/repo.py) for tests that do not need git itself: a commit graph with refs,
 worktree folders made and removed on disk, and git's meaning of each operation (tests/test_fake_repo.py holds it to
-test_gitrepo.py's expected values), but for one: a conflict is a path both sides change (git looks at the hunks).
+test_gitrepo.py's expected values). Where it is coarser than git: a conflict is a path both sides change (git looks at
+the hunks); `diff_stat` adds up each commit's lines (git gives the net diff, so lines added then removed count on the
+fake); `worktrees()` lists only the worktrees added (git also lists the main checkout, which the fake has no path for).
 A test hands it to the code with the `fake_git` fixture (conftest.py)."""
 
 import hashlib
@@ -17,7 +19,8 @@ class FakeRepo:
         self.msgs: dict[str, str] = {}
         self.order: list[str] = []  # commits, oldest first
         self.heads: dict[str, str] = {}  # ref -> commit
-        self.trees: list[Path] = []
+        self.trees: dict[Path, str] = {}  # worktree -> the commit checked out there
+        self.files: dict[str, dict[str, bytes]] = {}  # commit made by commit_files -> its tree (path -> content)
         self.heads["main"] = self._new((), [], [], "init")
 
     def _new(self, parents: tuple[str, ...], files: list[FileDiff], deleted: list[str], message: str) -> str:
@@ -88,27 +91,31 @@ class FakeRepo:
         return Follows()
 
     def is_ancestor(self, ref: str, of: str) -> bool:
-        return bool(self.find(ref)) and self.find(ref) in self._history(self.head(of))
+        return bool(self.find(ref)) and bool(self.find(of)) and self.find(ref) in self._history(self.head(of))
 
     def worktrees(self) -> list[Path]:
         return list(self.trees)
 
-    def add_worktree(self, path: Path, branch: str, base: str) -> None:
-        self.heads.setdefault(branch, self.head(base))
+    def _checkout(self, path: Path, commit: str) -> None:
+        if path in self.trees or (path.exists() and any(path.iterdir())):
+            raise RepoError(f"git worktree add {path}: already exists", reason="already exists")
         path.mkdir(parents=True, exist_ok=True)
-        self.trees.append(path)
+        self.trees[path] = commit
+
+    def add_worktree(self, path: Path, branch: str, base: str) -> None:
+        self._checkout(path, self.heads.get(branch) or self.head(base))
+        self.heads.setdefault(branch, self.trees[path])
 
     def add_detached(self, path: Path, commit: str) -> None:
-        self.head(commit)
-        path.mkdir(parents=True, exist_ok=True)
-        self.trees.append(path)
+        self._checkout(path, self.head(commit))
 
     def merge_in_worktree(self, path: Path, commit: str) -> None:
-        pass
+        if self.conflicts(self.trees[path], commit):
+            raise RepoError(f"git merge {commit}: conflict", reason="conflict")
 
     def remove_worktree(self, path: Path | str) -> None:
-        shutil.rmtree(path, ignore_errors=True)
-        self.trees = [t for t in self.trees if t != Path(path)]
+        if self.trees.pop(Path(path), None) is not None:  # git removes only a worktree it knows
+            shutil.rmtree(path, ignore_errors=True)
 
     def delete_branch(self, branch: str) -> None:
         self.heads.pop(branch, None)
@@ -122,10 +129,26 @@ class FakeRepo:
     def dirty(self) -> bool:
         return False
 
+    def commit_files(self, parent: str, folder: str, files: dict[str, Path], message: str) -> str:
+        tree = self.files.get(self.head(parent), {}) if parent else {}
+        new = {**tree, **{f"{folder}/{n}": f.read_bytes() for n, f in files.items()}}
+        if new == tree:
+            return ""
+        c = self._new((parent,) if parent else (), [], [], message)
+        self.files[c] = new
+        return c
+
+    def fast_forward(self, ref: str) -> None:
+        if not self.is_ancestor("main", ref):
+            raise RepoError(f"git merge --ff-only {ref}: not possible to fast-forward", reason="not possible to fast-forward")
+        self.heads["main"] = self.head(ref)
+
     def merge(self, main: str, branch: str, message: str, squash: bool) -> MergeOutcome:
         if self.conflicts(main, branch):
             return MergeOutcome("", True, "conflict")
         ahead = self._ahead(main, branch)
+        if not ahead and not squash:  # already up to date: git makes no commit
+            return MergeOutcome(self.head(main))
         files = [f for c in ahead for f in self.diffs[c][0]] if squash else []  # a merge commit reaches them through its parent
         deleted = [d for c in ahead for d in self.diffs[c][1]] if squash else []
         parents = (self.head(main),) if squash else (self.head(main), self.head(branch))

@@ -8,7 +8,7 @@ import pytest
 from fakerepo import FakeRepo
 from helpers import Env, fm, git, install_fm, version_folder
 
-from foreman import launcher, proc, providers, util
+from foreman import launcher, providers, util
 from foreman.core.tasks import backlog, questions
 from foreman.loop import queue, tick
 from foreman.loop.launch import launch_free
@@ -426,7 +426,7 @@ class TestQueue:
         e = Env(test="true", repo=fake_git)
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         tick.tick(e.p)
-        with mock.patch("foreman.services.claude.sessions.stop", side_effect=proc.ProcError("timed out")):
+        with mock.patch("foreman.services.claude.sessions.stop", side_effect=sessions.SessionError("timed out")):
             merge.close(e.p, tid, "canceled", "no")
         assert e.task(tid)["status"] == "canceled"
 

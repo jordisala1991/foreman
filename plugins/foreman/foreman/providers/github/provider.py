@@ -1,8 +1,9 @@
 """The GitHub provider: every task is a pull request, driven with `gh`. Only the loop runs it (the guard stops `gh pr`
 for agents); the loop also pushes the task branches. Nothing here publishes: no tag, no release, no push to main. The other
-push fm makes is the `fm-evidence` branch (images of the reports, never forced, built with git plumbing so the checkout
+push fm makes is the `foreman-evidence` branch (images of the reports, never forced, built with git plumbing so the checkout
 and the task branch are untouched)."""
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from ... import proc, util
 from ...core.review import evidence
 from ...core.review.inline import Review
 from .. import Change, ChangeState, FailedCheck, Provider, ProviderError, Published
+from ..repo import RepoError
 from . import review as ghreview
 from .checks import down, open_prs, pull
 from .types import STATES, PermanentError, PullRequest, TransientError, failure
@@ -108,16 +110,8 @@ class GitHub(Provider):
     def describe(self, change: Change, body: str) -> None:
         self.run("gh", "pr", "edit", str(change.pr), "--title", self.title(change), "--body", body)
 
-    def entries(self, tree: str) -> dict[str, str]:
-        """`git ls-tree` lines of a tree, by entry name."""
-        lines = self.run("git", "ls-tree", tree).out.splitlines()
-        return {line.split("\t", 1)[1]: line for line in lines}
-
-    def mktree(self, rows: dict[str, str]) -> str:
-        return self.run("git", "mktree", input="".join(f"{r}\n" for r in rows.values())).out.strip()
-
     def evidence(self, change: Change, files: dict[str, Path]) -> dict[str, str]:
-        """Puts the images in `ID/` of the orphan branch `fm-evidence` (added to what is there, one commit, a plain push
+        """Puts the images in `ID/` of the orphan branch `foreman-evidence` (added to what is there, one commit, a plain push
         that origin refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
         files = {n: f for n, f in files.items() if evidence.bare(n) and f.stat().st_size <= evidence.MAX_BYTES}
         if not files:
@@ -125,21 +119,13 @@ class GitHub(Provider):
         tid = change.id
         ref = f"refs/heads/{evidence.BRANCH}"
         parent = (self.run("git", "ls-remote", "origin", ref).out.split() or [""])[0]
-        top: dict[str, str] = {}
-        mine: dict[str, str] = {}
         if parent:
             self.run("git", "fetch", "-q", "origin", ref)
-            top = self.entries(parent)
-            mine = self.entries(f"{parent}:{tid}") if tid in top else {}
-        before = dict(mine)
-        for name, f in files.items():
-            blob = self.run("git", "hash-object", "-w", "--no-filters", str(f)).out.strip()
-            mine[name] = f"100644 blob {blob}\t{name}"
-        if mine != before:
-            top[tid] = f"040000 tree {self.mktree(mine)}\t{tid}"
-            who = ["-c", "user.name=fm", "-c", "user.email=fm@localhost"]
-            parents = ["-p", parent] if parent else []
-            commit = self.run("git", *who, "commit-tree", self.mktree(top), *parents, "-m", f"evidence {tid}").out.strip()
+        try:
+            commit = self.repo.commit_files(parent, tid, files, f"evidence {tid}")
+        except RepoError as e:
+            raise TransientError(str(e)) from None
+        if commit:
             self.run("git", "push", "-q", "origin", f"{commit}:{ref}")
         slug = self.run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").out.strip()
         return {n: f"https://github.com/{slug}/blob/{evidence.BRANCH}/{tid}/{n}?raw=true" for n in files}
@@ -238,7 +224,6 @@ class GitHub(Provider):
         only; never a push)."""
         main = self.p.get("project", "main")
         self.run("git", "fetch", "-q", "origin", main, check=False)
-        on_main = self.run("git", "rev-parse", "--abbrev-ref", "HEAD", check=False).out.strip() == main
-        clean = not self.run("git", "status", "--porcelain", "--untracked-files=no", check=False).out.strip()
-        if on_main and clean:
-            self.run("git", "merge", "-q", "--ff-only", f"origin/{main}", check=False)
+        with contextlib.suppress(RepoError):
+            if self.repo.current_branch() == main and not self.repo.dirty():
+                self.repo.fast_forward(f"origin/{main}")

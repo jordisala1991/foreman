@@ -84,13 +84,13 @@ def headline(case: Case, found: list[Finding]) -> str:
 
 
 def link_target(place: str) -> str:
-    """What `fm-link:` carries for a place: percent-encoded, so any place fits in a Markdown link."""
+    """What `foreman-link:` carries for a place: percent-encoded, so any place fits in a Markdown link."""
     return quote(place, safe="")
 
 
 def _item(f: Finding) -> str:
-    """One line; its place links to the inline comment or the file (`fm-link:` is resolved by the provider)."""
-    place = "" if f.place == "-" else f"[`{f.place}`](fm-link:{link_target(f.place)}) "
+    """One line; its place links to the inline comment or the file (`foreman-link:` is resolved by the provider)."""
+    place = "" if f.place == "-" else f"[`{f.place}`](foreman-link:{link_target(f.place)}) "
     return f"- {place}{safe(f.what)}"
 
 

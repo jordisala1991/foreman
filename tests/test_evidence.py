@@ -1,4 +1,4 @@
-"""Images of a report: the pure rules, the `fm-evidence` branch on GitHub, the panel's /evidence and the guard."""
+"""Images of a report: the pure rules, the `foreman-evidence` branch on GitHub, the panel's /evidence and the guard."""
 
 import functools
 import json
@@ -33,7 +33,7 @@ class TestRules:
 
     def test_guard_push_evidence(self):
         sc = guard.Scope("/w", [Path("/w")], "foreman/ty-1", Path("/h/foreman.toml"), [])
-        for cmd in ("git push origin HEAD:fm-evidence", "git push origin abc123:refs/heads/fm-evidence"):
+        for cmd in ("git push origin HEAD:foreman-evidence", "git push origin abc123:refs/heads/foreman-evidence"):
             assert guard.check_bash(cmd, sc) == "push-evidence", cmd
         assert guard.check_bash("git push origin foreman/ty-1", sc) is None
 
@@ -70,8 +70,8 @@ class TestOnGitHub:
     def test_github_pushes_evidence_and_links(self):
         tid = self.deliver()
         self.ticks()
-        assert f"![the home](https://github.com/o/r/blob/fm-evidence/{tid}/x.png?raw=true)" in self.body()
-        assert self.remote("show", f"fm-evidence:{tid}/x.png") == PNG
+        assert f"![the home](https://github.com/o/r/blob/foreman-evidence/{tid}/x.png?raw=true)" in self.body()
+        assert self.remote("show", f"foreman-evidence:{tid}/x.png") == PNG
 
     def test_evidence_leaves_task_branch_and_checkout(self):
         g = self.g
@@ -79,7 +79,7 @@ class TestOnGitHub:
         repo = g.e.repo
         before = (git(repo, "rev-parse", g.e.task(tid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
         self.ticks()
-        assert "fm-evidence" in self.body()
+        assert "foreman-evidence" in self.body()
         after = (git(repo, "rev-parse", g.e.task(tid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
         assert before == after
         branch = g.e.task(tid)["branch"]
@@ -93,8 +93,8 @@ class TestOnGitHub:
         i = self.g.e.task(tid)
         backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
         self.ticks()
-        assert self.remote("rev-list", "--count", "fm-evidence").strip() == b"1"
-        assert "fm-evidence" in self.body()
+        assert self.remote("rev-list", "--count", "foreman-evidence").strip() == b"1"
+        assert "foreman-evidence" in self.body()
 
     def test_changed_image_is_pushed_again(self):
         tid = self.deliver()
@@ -103,8 +103,8 @@ class TestOnGitHub:
         i = self.g.e.task(tid)
         backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
         self.ticks()
-        assert self.remote("show", f"fm-evidence:{tid}/x.png") == PNG + b"2"
-        assert self.remote("rev-list", "--count", "fm-evidence").strip() == b"2"
+        assert self.remote("show", f"foreman-evidence:{tid}/x.png") == PNG + b"2"
+        assert self.remote("rev-list", "--count", "foreman-evidence").strip() == b"2"
 
     def test_symlinked_image_is_not_published(self):
         g = self.g
@@ -115,7 +115,7 @@ class TestOnGitHub:
         folder.mkdir(parents=True)
         (folder / "k.png").symlink_to(secret)
         assert pulls.evidence_files(g.e.p, tid, "![x](k.png)") == {}
-        assert self.remote("branch", "--list", "fm-evidence") == b""
+        assert self.remote("branch", "--list", "foreman-evidence") == b""
 
     def test_non_ascii_name_is_not_published_twice(self):
         for name in ("é.png", "a b.png", "$x.png"):
@@ -130,31 +130,31 @@ class TestOnGitHub:
         other = g.e.tmp / "y.png"
         other.write_bytes(b"other")
         reg.evidence(Change(id="TY-99"), {"y.png": other})
-        assert self.remote("show", f"fm-evidence:{first}/x.png") == PNG
-        assert self.remote("show", "fm-evidence:TY-99/y.png") == b"other"
+        assert self.remote("show", f"foreman-evidence:{first}/x.png") == PNG
+        assert self.remote("show", "foreman-evidence:TY-99/y.png") == b"other"
 
     def test_missing_image_is_left_alone(self):
         self.deliver(image=None)
         self.ticks()
         assert "![the home](x.png)" in self.body()
-        assert self.remote("branch", "--list", "fm-evidence") == b""
+        assert self.remote("branch", "--list", "foreman-evidence") == b""
 
     def test_no_images_no_push(self):
         self.deliver(text="Did X\n")
         self.ticks()
-        assert self.remote("branch", "--list", "fm-evidence") == b""
+        assert self.remote("branch", "--list", "foreman-evidence") == b""
         assert self.g.calls("repo", "view", "--json", "nameWithOwner") == []  # the review reads the repo url for its links
 
     def test_big_image_skipped(self):
         self.deliver(image=b"0" * (evidence.MAX_BYTES + 1))
         self.ticks()
         assert "![the home](x.png)" in self.body()
-        assert self.remote("branch", "--list", "fm-evidence") == b""
+        assert self.remote("branch", "--list", "foreman-evidence") == b""
 
     def test_evidence_push_failure_is_transient(self):
         g = self.g
         hook = g.bare / "hooks" / "pre-receive"
-        hook.write_text("#!/bin/sh\ngrep -q fm-evidence && exit 1\nexit 0\n")
+        hook.write_text("#!/bin/sh\ngrep -q foreman-evidence && exit 1\nexit 0\n")
         hook.chmod(0o755)
         tid = self.deliver()
         reg = registry.get(g.e.p)
@@ -258,7 +258,7 @@ class TestLocal:
         tick.tick(e.p)
         assert e.task(tid)["pr"].get("described")
         assert not e.task(tid).get("pr_error")
-        assert git(e.repo, "branch", "--list", "fm-evidence") == ""
+        assert git(e.repo, "branch", "--list", "foreman-evidence") == ""
         assert pulls.evidence_files(e.p, tid, BODY) == {"x.png": path.parent / tid / "x.png"}
         events = [json.loads(x) for x in (e.p.state / "events.jsonl").read_text().splitlines()]
         assert not [v for v in events if v.get("task") == tid and "error" in v["text"].lower()]

@@ -235,7 +235,7 @@ agent, once; `foreman metrics` shows it.
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
 (`<home>/reports/ID.md`: the task's description, each acceptance criterion with its evidence; fm sets it as the description
-inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
+inside `<!-- foreman:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
 section in `<details>`, and the panel shows it; the loop seeds the file from `foreman/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when it launches) and ends with
 `foreman done --summary --report --misled`. If the review returns it or the owner rejects it, the note arrives in the same
@@ -283,7 +283,7 @@ owner allows it once from the panel (`foreman allow QID`); the loop tells its ag
 |---|---|
 | `publish` | `npm/pnpm/yarn/cargo/uv/poetry publish`, `twine upload`, `docker push`, `gh release/pr/repo create|merge|edit|delete|upload` |
 | `push-main` | `git push` to the main branch (named, `HEAD` while on it, or bare while on it), or with `--force`/`--mirror`/`--all` or a ref written with a leading `+` |
-| `push-evidence` | `git push` to the `fm-evidence` branch (only the loop writes it) |
+| `push-evidence` | `git push` to the `foreman-evidence` branch (only the loop writes it) |
 | `delete` | `rm`/`rmdir`/`unlink`/`find -delete` of a path outside its worktree and temp dirs; `git branch -d/-D` of another branch; `git worktree remove`; `git push --delete` |
 | `config` | Edit/Write of the project's `foreman.toml`; a shell command that writes it (`>`, `tee`, `sed -i`, `mv`, `cp`, `rm`) |
 | owner's own | `[guard] ask = [{name, pattern}]` in foreman.toml: a regex on a shell segment |
@@ -338,7 +338,7 @@ with no `[merge] test` the PR's CI **replaces the local test**. Then the draft i
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
 origin when it is clean on main (fetch only, never a push). The images a report names (`![what](x.png)`, bare file
-names saved in `reports/ID/`) go, by git plumbing and never forced, to `ID/` on the orphan branch `fm-evidence`, the
+names saved in `reports/ID/`) go, by git plumbing and never forced, to `ID/` on the orphan branch `foreman-evidence`, the
 only push fm makes besides the task branch (agents may not: guard `push-evidence`); the PR body links them with
 `?raw=true` blob URLs and the panel serves them at `/evidence`. Conflicts with main go back to the responsible agent once accepted, also when the merge itself is refused for a conflict after acceptance: the acceptance is carried over as `resolving`, and the resolved tip merges without a new accept unless its review leaves findings open or its checks fail. Out of
 scope: reading approvals or comments from GitHub, merge queues, other platforms.
@@ -466,7 +466,7 @@ test = "make build"
 |---|---|
 | Worktrees | `<the repo's worktrees folder, else the project's>/<id>`, made from the repo's checkout; the planning agent runs in the task's repo checkout (read only); parent and mechanic agents keep the first repo as cwd |
 | Branch names | unchanged, `<branch_prefix><id>`: ids are unique in the project and a task has one repo, so a branch lives in one repo only |
-| PR | per repo: provider (`auto` looks at that repo's `remote`; `"none"` is `local`), `pr` mode, push to that `remote`; draft PR, description, review comments and `fm-evidence` go to the task's repo |
+| PR | per repo: provider (`auto` looks at that repo's `remote`; `"none"` is `local`), `pr` mode, push to that `remote`; draft PR, description, review comments and `foreman-evidence` go to the task's repo |
 | Merge | per repo `strategy`; the local provider merges into that repo's main checkout; the merged check runs on that repo's main. Merges stay one at a time for the whole project |
 | Tests and CI | per repo `test`, in a detached tree of that repo (`state/trees/<id>`); no `test`: the PR's CI stands in and the doubt is medium, as today. Main's tests (health) run per repo that has a test command: `state/ci-<key>.json`, tree `main-<key>`, finding key `ci:<key>:<since>` (one repo keeps `ci.json` and `ci:<since>`) |
 | Risk | the repo's tables and `large_lines`. `publish_on_merge` makes the impact high with the reason `merging publishes this repo (KEY)` (a fact of the score, `publishes`), so only the owner's accept merges it. fm still never tags or releases |
@@ -488,7 +488,7 @@ test = "make build"
   fine. A one-repo project (`[project] repo` or one `[repos.K]` table) is not checked (unchanged).
 - fm writes into a repo only what git keeps out of `git status`: the entries in `.git/worktrees/` of task worktrees
   and of the detached test trees (`state/trees/<name>`, in the home), the refs `<branch_prefix><id>` and
-  `fm-evidence` (written by git plumbing, without touching a checkout), the local provider's merges into main, and
+  `foreman-evidence` (written by git plumbing, without touching a checkout), the local provider's merges into main, and
   after a GitHub merge a `git fetch` and `merge --ff-only` of main when the checkout is clean on main. Everything
   else lives in the home: agent settings inline on the command line, plans, reports, reviews, the test trees.
 - Safety net, because fm cannot prove that a Claude session started in a repo (planning, parent, mechanic) writes
@@ -531,8 +531,8 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 |---|---|---|---|
 | ui | `foreman/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
-| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
-| services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
+| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
+| services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo (`registry.repo(p)`) (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo | one per platform, and `gitrepo` (the one module that runs git on a repo); they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome) |
@@ -565,6 +565,7 @@ modules = [
   { path = "foreman.services.delivery", layer = "services" },
   { path = "foreman.services.lock", layer = "services" },
   { path = "foreman.services.launchd", layer = "services" },
+  { path = "foreman.services.runsource", layer = "services" },
   { path = "foreman.services.scratch", layer = "services" },
   { path = "foreman.providers.registry", layer = "registry" },
   { path = "foreman.providers.github", layer = "adapters", depends_on = ["foreman.providers"] },

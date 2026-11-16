@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ... import providers, util
+from ... import providers
 from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
@@ -150,12 +150,7 @@ def cmd_unblock(a: argparse.Namespace) -> None:
 
 def cmd_pause(a: argparse.Namespace) -> None:
     p = home(a)
-    f = p.state / "paused"
-    if a.off:
-        f.unlink(missing_ok=True)
-    else:
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(util.now())
+    p.set_paused(not a.off)
     if a.off:
         print("launching resumed")
     else:

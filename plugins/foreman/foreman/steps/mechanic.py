@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from .. import proc, util
+from .. import util
 from ..core.oversight import diagnosis
 from ..core.project.config import Project
 from ..core.tasks import backlog
@@ -51,7 +51,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     if not still:
         try:
             sessions.stop(p, short)
-        except proc.ProcError as e:
+        except sessions.SessionError as e:
             backlog.event(p, tid, f"could not stop session {short}: {e}")
         return
     backlog.event(p, tid, f"launched {name} (mechanic, {model}, session {short})")
@@ -65,7 +65,7 @@ def run(p: Project, rows: dict[str, Any]) -> None:
     for i in backlog.tasks(d):
         if i.get("diagnosis") and i.get("mechanic") and sessions.state(rows, i["mechanic"].get("session")) not in ("stopped", "gone"):
             sessions.stop_live(p, i["id"], i["mechanic"], rows)
-    if (p.state / "paused").exists():
+    if p.paused:
         return
     free = int(p.get("agents", "slots")) - running(d)
     health = (i for i in backlog.tasks(d) if i["status"] == "triage" and str(i.get("source", "")).startswith("health:"))

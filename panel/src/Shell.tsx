@@ -48,7 +48,7 @@ export function None() {
   );
 }
 
-const KEPT = "fm-project";
+const KEPT = "foreman-project";
 const REFRESH_MS = 10_000;
 
 export function Shell({ all: initial }: { all: Project[] }) {
