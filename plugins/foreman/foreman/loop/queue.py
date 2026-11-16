@@ -141,6 +141,7 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
     if action == "conflict":
         return_to_agent(p, i["id"], "conflict", decide.conflict_note(p.get("project", "main")), by=by)
         return
+    guarded(p, i["id"], "set the PR description", lambda: pulls.describe_pr(p, i, c), "pr")
     pulls.deliver(p, i, c)
     if action == "merge":
         try:

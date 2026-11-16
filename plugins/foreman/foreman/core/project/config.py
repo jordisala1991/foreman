@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
+from ... import util
 from . import recurring_table, repos
 
 MODELS = ("haiku", "sonnet", "opus", "fable")
@@ -124,6 +125,20 @@ class Project:
     @property
     def state(self) -> Path:
         return self.home / "state"
+
+    @property
+    def paused(self) -> str:
+        """Why launching is paused: the flag file's text (`yes` when empty); empty when it is not."""
+        f = self.state / "paused"
+        return f.read_text().strip() or "yes" if f.exists() else ""
+
+    def set_paused(self, on: bool) -> None:
+        f = self.state / "paused"
+        if on:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(util.now())
+        else:
+            f.unlink(missing_ok=True)
 
     @property
     def config_file(self) -> Path:

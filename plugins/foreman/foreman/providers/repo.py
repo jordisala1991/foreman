@@ -112,6 +112,15 @@ class Repo(Protocol):
         """Has the main checkout uncommitted changes to tracked files?"""
         ...
 
+    def commit_files(self, parent: str, folder: str, files: dict[str, Path], message: str) -> str:
+        """Adds `files` to `folder/` of commit `parent`'s tree (`""`: an orphan root), as one new commit, no checkout
+        touched; returns it, `""` when the tree already holds them. RepoError on failure."""
+        ...
+
+    def fast_forward(self, ref: str) -> None:
+        """`merge --ff-only ref` in the main checkout; RepoError when it cannot."""
+        ...
+
     def merge(self, main: str, branch: str, message: str, squash: bool) -> MergeOutcome:
         """Merges `branch` into `main` in the main checkout (squashed or as a merge commit); on failure leaves the
         checkout as it was."""

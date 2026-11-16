@@ -114,7 +114,7 @@ def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
         raise SessionError(f"session {sid[:8]} is {state(listing(p), sid)}: not resuming it")
     try:
         stop(p, sid[:8])
-    except proc.ProcError as e:
+    except SessionError as e:
         raise SessionError(f"claude stop failed: {e}") from e
     for _ in range(STOP_WAIT_TRIES):
         rows = listing(p)
@@ -170,7 +170,10 @@ def busy(rows: dict[str, dict[str, Any]], sid: str | None) -> bool:
 
 
 def stop(p: Project, short: str) -> None:
-    proc.run([p.get("agents", "claude"), "stop", short], timeout=30, env=login.child_env())
+    try:
+        proc.run([p.get("agents", "claude"), "stop", short], timeout=30, env=login.child_env())
+    except proc.ProcError as e:
+        raise SessionError(str(e)) from e
 
 
 def stop_live(p: Project, tid: str, agent: dict[str, Any] | None, rows: dict[str, dict[str, Any]]) -> None:
@@ -180,5 +183,5 @@ def stop_live(p: Project, tid: str, agent: dict[str, Any] | None, rows: dict[str
     if a.get("short") and state(rows, a.get("session")) != "stopped":
         try:
             stop(p, a["short"])
-        except proc.ProcError as e:
+        except SessionError as e:
             backlog.event(p, tid, f"could not stop session {a['short']}: {e}")

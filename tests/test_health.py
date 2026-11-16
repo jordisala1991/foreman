@@ -16,7 +16,7 @@ from foreman.core.tasks import backlog, questions
 from foreman.loop import tick
 from foreman.services.claude import login
 from foreman.services.delivery import check
-from foreman.steps.health import checks, main_tests, notes
+from foreman.steps.health import checks, health, main_tests, notes
 from foreman.ui.panel import views
 
 
@@ -43,23 +43,23 @@ class TestHealth:
 
     def test_orphan_worktree_is_filed_once(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
-        main_tests.run(self.p, {})
-        main_tests.run(self.p, {})
+        health.run(self.p, {})
+        health.run(self.p, {})
         t = self.triage()
         assert len(t) == 1
         assert "ghost" in t[0]["title"]
 
     def test_a_finding_that_goes_away_and_returns_is_filed_again_only_once_its_task_closed(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
-        main_tests.run(self.p, {})
+        health.run(self.p, {})
         first = self.triage()[0]["id"]
         backlog.set_status(self.p, first, "done")
-        main_tests.run(self.p, {})  # still there, seen continuously: not again
+        health.run(self.p, {})  # still there, seen continuously: not again
         assert self.triage() == []
         git(self.e.repo, "worktree", "remove", str(self.e.home / "worktrees/ghost"))
-        main_tests.run(self.p, {})
+        health.run(self.p, {})
         git(self.e.repo, "worktree", "add", "-q", str(self.e.home / "worktrees/ghost"), "x")
-        main_tests.run(self.p, {})
+        health.run(self.p, {})
         assert len(self.triage()) == 1
 
     def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
@@ -149,22 +149,22 @@ class TestEvidence:
         stamps = (f"2026-01-01 00:00:{n:02d}" for n in itertools.count(1))
         with mock.patch.object(util, "now", lambda: next(stamps)):
             self.commit(e, "broken")
-            main_tests.run(e.p, {})
+            health.run(e.p, {})
             assert len(self.triage(e)) == 1
             self.commit(e, "other")
-            main_tests.run(e.p, {})
+            health.run(e.p, {})
             assert len(self.triage(e)) == 1
             git(e.repo, "rm", "-q", "broken")
             git(e.repo, "commit", "-qm", "fix")
-            main_tests.run(e.p, {})
+            health.run(e.p, {})
             assert len(self.triage(e)) == 1
             self.commit(e, "broken")
-            main_tests.run(e.p, {})
+            health.run(e.p, {})
         assert len(self.triage(e)) == 2
 
     def test_failing_tests_task_names_commit_step_and_tail(self):
         e = Env(test="echo lint ok; echo boom 1>&2; exit 1")
-        main_tests.run(e.p, {})
+        health.run(e.p, {})
         (i,) = self.triage(e)
         head = git(e.repo, "rev-parse", "main").strip()[:12]
         for text in (head, "echo lint ok", "boom"):
@@ -211,13 +211,13 @@ class TestEvidence:
         line = json.dumps({"step": "s", "error": "bad", "time": util.now()}) + "\n"
         git(e.repo, "worktree", "add", "-q", "-b", "x", str(wt), "main")
         errors.write_text(line)
-        main_tests.run(e.p, {})
+        health.run(e.p, {})
         git(e.repo, "worktree", "remove", str(wt))
         errors.write_text("")
-        main_tests.run(e.p, {})
+        health.run(e.p, {})
         git(e.repo, "worktree", "add", "-q", str(wt), "x")
         errors.write_text(line)
-        main_tests.run(e.p, {})
+        health.run(e.p, {})
         assert len(self.triage(e)) == 2  # one orphan, one error: each filed once
         assert sorted(i["source"] for i in self.triage(e)) == ["health:error:s:bad", "health:orphan:ghost"]
 

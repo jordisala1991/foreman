@@ -8,6 +8,7 @@ from helpers import git
 from foreman import util
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.services import runsource
 from foreman.services.delivery import check
 from foreman.steps import sources
 
@@ -157,3 +158,11 @@ class TestSignals:
         self.emit(rej)
         self.emit(rej)
         assert self.e.task(tid)["rework"] == 1
+
+
+def test_a_source_that_cannot_start_is_a_source_error(tmp_path: Path):
+    exe = tmp_path / "src"
+    exe.write_text("#!/nonexistent\n")
+    exe.chmod(0o755)
+    with pytest.raises(runsource.SourceError):
+        runsource.lines(exe, "")

@@ -65,7 +65,7 @@ def run(p: Project, rows: dict[str, Any]) -> None:
         if i["status"] in backlog.CLOSED and a.get("kind") == "parent" and sessions.state(rows, a.get("session")) not in ("stopped", "gone"):
             sessions.stop_live(p, i["id"], a, rows)
     notify(p)
-    if (p.state / "paused").exists():
+    if p.paused:
         return
     tasks = backlog.tasks(backlog.load(p))
     for i in tasks:

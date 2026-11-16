@@ -16,7 +16,7 @@ def sort_key(i: dict[str, Any]) -> tuple[int, int, int]:
 
 
 def launch_free(p: Project) -> None:
-    if (p.state / "paused").exists():
+    if p.paused:
         return
     d = backlog.load(p)
     free = int(p.get("agents", "slots")) - running(d)

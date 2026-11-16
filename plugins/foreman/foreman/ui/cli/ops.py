@@ -11,7 +11,7 @@ from ...loop import tick
 from ...services import lock
 from ...services.claude import sessions
 from ...steps import metrics, schedule
-from ...steps.health import main_tests, notes
+from ...steps.health import health, notes
 from .common import home
 
 
@@ -30,7 +30,7 @@ def cmd_health(a: argparse.Namespace) -> None:
     for line in [*notes.versions(p), *notes.old_links(p)]:
         print(line)
     rows = sessions.listing(p)
-    for f in main_tests.findings(p, rows, outside=True):
+    for f in health.findings(p, rows, outside=True):
         print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
 
 

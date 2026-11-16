@@ -190,3 +190,29 @@ class TestProvider:
         tick.tick(e.p)
         assert git(e.repo, "tag").strip() == ""
         assert git(e.repo, "remote").strip() == ""
+
+
+class TestRequestMerge:
+    def test_request_merge_sorts_platform_errors(self):
+        from foreman import providers
+        from foreman.services.delivery.git import DeliveryError
+
+        e = Env(test="true")
+        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+
+        class Refuses:
+            def __init__(self, error):
+                self.error = error
+
+            def merge(self, change, strategy):
+                raise self.error
+
+        def ask(error):
+            i = {"id": tid, "branch": "main"}  # main does not conflict with itself
+            merge.request_merge(e.p, i, Refuses(error), providers.Change(tid))
+
+        with pytest.raises(providers.Transient):
+            ask(providers.Transient("hiccup"))
+        for error in (providers.Permanent("no"), providers.ProviderError("odd"), providers.Conflict("claims a conflict")):
+            with pytest.raises(DeliveryError):
+                ask(error)

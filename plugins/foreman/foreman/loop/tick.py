@@ -1,33 +1,39 @@
 """The loop: a plain process, no model. Each tick, for each registered project:
 
 1. heartbeat (state/loop.json), read by the health check «loop dead» and by the panel
-2. sources: plug-in signals, and recurring entries that fell due, become tasks (sources.py, schedule.py)
-3. answers: the owner's answers go back to its agent (its own session, resumed)
-4. agents: one that ended its turn without finishing (no foreman done / ready / ask / block) is nudged once, then blocked
-5. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (pulls.py)
-6. queue: accepted tasks are merged first; then a branch whose head or main's moved is checked (tests, diff, risk) in
+Then the steps, in this order (a broken one is logged in state/errors.jsonl and does not stop the others):
+2. sessions: a session not listed at launch gets its full id (services/agents/launch.py)
+3. scratch: removes the scratch folder of every review round that is over (steps/reviewing.py)
+4. sources: plug-in signals, and recurring entries that fell due, become tasks (steps/sources.py, steps/schedule.py)
+5. answers: the owner's answers go back to its agent (its own session, resumed) (steps/talk.py)
+6. agents: one that ended its turn without finishing (no foreman done / ready / ask / block) is nudged once, then blocked (steps/talk.py)
+7. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (services/delivery/pulls.py)
+8. queue: accepted tasks are merged first; then a branch whose head or main's moved is checked (tests, diff, risk) in
    the background, one at a time, and the autonomy may merge it. A check slower than util.BACKGROUND_WAIT_S does not hold
-   the tick up: it finishes on its own and the next ticks go on.
-7. health: broken states become triage tasks, deduplicated (health.py)
-8. launch: while there are free slots (an agent waiting for the owner holds none), a planning agent for a `backlog` task,
-   the responsible agent for a `ready` one; a task whose blockers are not all done waits. The loop never plans, never reviews, never talks to the owner.
-   Before it, a let-in parent gets its parent agent outside the slots, told of each subtask merged or canceled (parents.py).
-9. mechanic: a diagnosing helper for each health finding in triage, in the slots launch left free (mechanic.py)
-10. scratch: right after sessions, removes the scratch folder of every review round that is over (reviewing.py)
+   the tick up: it finishes on its own and the next ticks go on (loop/queue.py)
+9. health: broken states become triage tasks, deduplicated (steps/health/health.py)
+10. blockers: a task whose blockers are all done is released (steps/release.py)
+11. parents: a closed parent's session is stopped; a let-in parent gets its parent agent outside the slots, told of each
+    subtask merged or canceled (steps/parents.py)
+12. launch: while there are free slots (an agent waiting for the owner holds none), a planning agent for a `backlog` task,
+    the responsible agent for a `ready` one; a task whose blockers are not all done waits. The loop never plans, never
+    reviews, never talks to the owner (loop/launch.py)
+13. mechanic: a diagnosing helper for each health finding in triage, in the slots launch left free (steps/mechanic.py)
 """
 
+import fcntl
 import os
 import time
 import traceback
 
 from .. import launcher, util
 from ..core.project.config import Project
-from ..core.project.registry import registered
+from ..core.project.registry import registered, registry_file
 from ..services.agents.launch import fill_sessions
 from ..services.claude import sessions
 from ..services.delivery import pulls
 from ..steps import mechanic, parents, release, sources
-from ..steps.health import main_tests
+from ..steps.health import health
 from ..steps.reviewing import sweep_scratch
 from ..steps.talk import deliver_answers, watch_agents
 from .guarded import guarded
@@ -53,7 +59,7 @@ def tick(p: Project) -> None:
         ("agents", lambda: watch_agents(p, rows)),
         ("pulls", lambda: run_pulls(p)),
         ("queue", lambda: run_queue(p, rows)),
-        ("health", lambda: main_tests.run(p, rows)),
+        ("health", lambda: health.run(p, rows)),
         ("blockers", lambda: release.run(p)),
         ("parents", lambda: parents.run(p, rows)),
         ("launch", lambda: launch_free(p)),
@@ -73,10 +79,6 @@ def run_pulls(p: Project) -> None:
 
 
 def forever(homes: list[str] | None = None, once: bool = False) -> None:
-    import fcntl
-
-    from ..core.project.registry import registry_file
-
     with open(str(registry_file()) + ".loop.lock", "a") as held:  # the lock lasts as long as the loop
         try:
             fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)

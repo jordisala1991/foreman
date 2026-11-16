@@ -41,11 +41,13 @@ def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, c
     backlog.update(p, i["id"], merging=registry.repo(p).head(p.get("project", "main")))
     try:
         return provider.merge(change, providers.merge_strategy(p))
-    except Exception as e:  # a platform's own errors are a delivery error
-        if isinstance(e, providers.ConfigError | providers.Transient):
-            raise
-        if isinstance(e, providers.Conflict) and git.conflicts(p, i["branch"]):
+    except (providers.ConfigError, providers.Transient):
+        raise
+    except providers.Conflict as e:
+        if git.conflicts(p, i["branch"]):
             raise git.MergeConflict(str(e)) from None
+        raise git.DeliveryError(str(e)) from None
+    except (providers.Permanent, providers.ProviderError) as e:
         raise git.DeliveryError(str(e)) from None
 
 

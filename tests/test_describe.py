@@ -132,11 +132,13 @@ class TestOnGitHub:
         tid = self.deliver()
         self.g.e.review(tid)
         self.g.set(fail_always=["pr", "edit"])
-        self.run_ticks(3)
+        self.run_ticks(2)
         assert len(self.pr()["reviews"]) == 1
         i = self.g.e.task(tid)
         assert "HTTP 502" in i["pr_error"]
         assert not i["pr"].get("described")
+        self.run_ticks(1)  # the 3rd failure in a row blocks the task
+        assert "HTTP 502" in self.g.e.task(tid)["blocked"]
 
 
 class TestTemplate:
