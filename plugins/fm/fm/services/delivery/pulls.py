@@ -9,7 +9,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
-from ... import proc, providers, util
+from ... import providers, util
 from ...core.project.config import Project
 from ...core.review import describe, evidence, inline, reviews, verdict
 from ...core.review.inline import Review
@@ -17,6 +17,7 @@ from ...core.review.verdict import Case, Finding
 from ...core.rules import decide
 from ...core.tasks import backlog
 from ...providers import Change, Permanent, Provider, ProviderError, Transient, registry
+from ...providers.repo import RepoError
 
 
 def change_of(i: dict[str, Any], head: str) -> Change:
@@ -26,12 +27,16 @@ def change_of(i: dict[str, Any], head: str) -> Change:
 
 
 def head_of(p: Project, branch: str) -> str:
-    return proc.run(["git", "-C", str(p.repo), "rev-parse", "--verify", branch]).out.strip()
+    return registry.repo(p).find(branch)  # "" when it names no commit
 
 
 def commits_of(p: Project, branch: str) -> int:
-    r = proc.run(["git", "-C", str(p.repo), "rev-list", "--count", f"{p.get('project', 'main')}..{branch}"])
-    return int(r.out.strip() or 0)
+    try:
+        return registry.repo(p).commits_ahead(p.get("project", "main"), branch)
+    except RepoError as e:  # git refused (no such branch): no commits; git that did not run raises, as before
+        if not e.reason:
+            raise
+        return 0
 
 
 def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: bool) -> None:

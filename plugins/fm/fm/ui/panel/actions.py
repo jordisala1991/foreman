@@ -12,6 +12,7 @@ from typing import Any
 from ... import providers
 from ...core.project.config import Project
 from ...core.tasks import backlog
+from ...providers.repo import RepoError
 from ...services.delivery import merge
 from ...services.delivery.git import DeliveryError
 from ..cli import owner
@@ -74,7 +75,7 @@ def permission(allowed: bool) -> Callable[[Project, str, str, Query], Obj]:
 def accept(p: Project, tid: str, text: str, q: Query) -> Obj:
     try:
         return {"accepted": merge.accept(p, tid, by="owner (panel)")}
-    except (DeliveryError, providers.ConfigError) as e:
+    except (DeliveryError, RepoError, providers.ConfigError) as e:
         raise Refused(str(e)) from None
 
 

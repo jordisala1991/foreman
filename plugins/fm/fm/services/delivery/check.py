@@ -9,6 +9,7 @@ from ...core.rules import decide
 from ...core.rules.risk import Facts, score
 from ...core.tasks import backlog
 from ...providers import registry
+from ...providers.repo import RepoError
 from . import git, pulls
 
 TAIL_LINES = 20
@@ -34,16 +35,23 @@ def tests_at(p: Project, commit: str, name: str, merge: str = "") -> tuple[str, 
     if not p.get("merge", "test"):
         return "none", ""
     tmp = p.state / "trees" / name
-    git.git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
-    added = git.git(p.repo, "worktree", "add", "--detach", str(tmp), commit, check=bool(merge))  # merged check: git's fault, it raises
-    if added.code != 0:
-        return "fail", added.err.strip()
+    r = registry.repo(p)
     try:
-        if merge:  # a failure here is git's, not the tests': it raises
-            git.git(tmp, "merge", "--no-commit", "--no-ff", merge)
-        return run_tests(p, tmp)
-    finally:
-        git.git(p.repo, "worktree", "remove", "--force", str(tmp), check=False)
+        r.remove_worktree(tmp)
+        try:
+            r.add_detached(tmp, commit)
+        except RepoError as e:
+            if merge or not e.reason:  # merged check, or git did not run: git's fault, it raises
+                raise
+            return "fail", e.reason
+        try:
+            if merge:  # a failure here is git's, not the tests': it raises
+                r.merge_in_worktree(tmp, merge)
+            return run_tests(p, tmp)
+        finally:
+            r.remove_worktree(tmp)
+    except RepoError as e:  # every git failure here is a DeliveryError, as documented
+        raise git.DeliveryError(str(e)) from e
 
 
 def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
@@ -78,7 +86,7 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
         "review": review,
         "reasons": reasons,
         "head": head,
-        "main": git.git(p.repo, "rev-parse", main).out.strip(),
+        "main": registry.repo(p).head(main),
         "conflict": conflict,
         "at": util.now(),
     }

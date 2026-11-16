@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ..core.project.config import Project
 from ..core.review.inline import Review
+from .repo import Repo
 
 MERGES = ("squash", "merge", "rebase")
 PRS = ("draft", "done")
@@ -93,8 +94,9 @@ class Provider:
     merges = MERGES
     has_ci = False  # True: there is CI whose result must be green before autonomy merges
 
-    def __init__(self, p: Project) -> None:
+    def __init__(self, p: Project, repo: Repo) -> None:
         self.p = p
+        self.repo = repo
 
     def pushed(self, change: Change) -> bool:
         """Is the branch on the platform at the tip of `change.head`? (nothing to push locally)"""

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core.project.config import Project
-from ..delivery import git
+from ...providers import registry
 
 
 def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
@@ -10,7 +10,5 @@ def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
     wt = p.path("worktrees") / i["id"].lower()
     if not wt.exists():
         wt.parent.mkdir(parents=True, exist_ok=True)
-        exists = git.git(p.repo, "rev-parse", "--verify", "--quiet", branch, check=False).code == 0
-        args = ["worktree", "add", str(wt), branch] if exists else ["worktree", "add", "-b", branch, str(wt), p.get("project", "main")]
-        git.git(p.repo, *args)
+        registry.repo(p).add_worktree(wt, branch, p.get("project", "main"))
     return wt, branch

@@ -19,9 +19,9 @@ from typing import Any
 from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog, questions
+from ...providers import registry
 from ...services.agents.running import idle_s
 from ...services.claude import login
-from ...services.delivery import git
 
 Finding = dict[str, str]
 
@@ -97,13 +97,11 @@ def orphan_worktrees(p: Project) -> list[Finding]:
     root = p.path("worktrees").resolve()
     live = {str(Path(i["worktree"]).resolve()) for i in backlog.tasks(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
     out: list[Finding] = []
-    listing = git.git(p.repo, "worktree", "list", "--porcelain", check=False).out
-    for ln in listing.splitlines():
-        if ln.startswith("worktree "):
-            wt = Path(ln.split(" ", 1)[1]).resolve()
-            if root in wt.parents and str(wt) not in live:
-                meaning = "A worktree under the worktrees folder belongs to no open task."
-                out.append(finding(f"orphan:{wt.name}", f"Orphan worktree {wt.name}", meaning, str(wt)))
+    for wt in registry.repo(p).worktrees():
+        wt = wt.resolve()
+        if root in wt.parents and str(wt) not in live:
+            meaning = "A worktree under the worktrees folder belongs to no open task."
+            out.append(finding(f"orphan:{wt.name}", f"Orphan worktree {wt.name}", meaning, str(wt)))
     return out
 
 

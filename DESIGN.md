@@ -532,10 +532,10 @@ its own layer and the ones below, never above. Three leaf files stay at `fm/`'s 
 | ui | `fm/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `fm/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
 | steps | `fm/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
-| services | `fm/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: git, claude, processes, the lock; called by steps |
-| registry | `fm/providers/registry.py` | | picks the adapter (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `fm/providers/` | local · `github/`: provider, types, checks, review | one per platform; they see the port, never the loop or each other |
-| ports | `fm/providers/__init__.py` | | the `Provider` interface |
+| services | `fm/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
+| registry | `fm/providers/registry.py` | | picks the adapter, and hands out the repo (`registry.repo(p)`) (by convention the only caller of the adapters; not enforced by tach) |
+| adapters | `fm/providers/` | local · `github/`: provider, types, checks, review · gitrepo | one per platform, and `gitrepo` (the one module that runs git on a repo); they see their port, never the loop or each other |
+| ports | `fm/providers/` | `__init__.py` · repo | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome) |
 | proc | `fm/proc.py` | | the one module that runs programs |
 | core | `fm/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
@@ -569,7 +569,9 @@ modules = [
   { path = "fm.providers.registry", layer = "registry" },
   { path = "fm.providers.github", layer = "adapters", depends_on = ["fm.providers"] },
   { path = "fm.providers.local", layer = "adapters", depends_on = ["fm.providers"] },
+  { path = "fm.providers.gitrepo", layer = "adapters", depends_on = ["fm.providers.repo"] },
   { path = "fm.providers", layer = "ports" },
+  { path = "fm.providers.repo", layer = "ports" },
   { path = "fm.proc", layer = "proc" },
   { path = "fm.util", layer = "core" },
   { path = "fm.launcher", layer = "core" },
@@ -585,7 +587,7 @@ modules = [
 ### Where new code goes
 
 Ask in this order; the first yes places it:
-1. Runs a program, or talks to claude, git or gh? → `services/` (through `proc`); a platform call → a `providers/` adapter.
+1. Talks to git on a repo? → the `Repo` port (`registry.repo(p)`); runs a program, or talks to claude or gh? → `services/` (through `proc`); a platform call → a `providers/` adapter.
 2. A decision from facts, reading no file and running no program? → `core/rules/`, or the core area it is about.
 3. The shape of a plain file (backlog, fm.toml, the registry)? → `core/<area>`.
 4. One step of the tick? → `steps/`. 5. A command or a panel route? → `ui/`.

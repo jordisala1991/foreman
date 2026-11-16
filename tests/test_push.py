@@ -71,18 +71,18 @@ class TestPushes:
         """Patches the push so its first `failures` calls fail with `error`; returns the list of push calls."""
         from unittest import mock
 
-        from fm.services.delivery import pulls
+        from fm import proc
 
-        real, calls = pulls.proc.run, []
+        real, calls = proc.run, []
 
         def run(args, **kw):
             if "push" in args:
                 calls.append(args)
                 if len(calls) <= failures:
-                    return pulls.proc.Result(128, "", error)
+                    return proc.Result(128, "", error)
             return real(args, **kw)
 
-        patcher = mock.patch.object(pulls.proc, "run", run)
+        patcher = mock.patch.object(proc, "run", run)
         patcher.start()
         self.request.addfinalizer(patcher.stop)
         return calls

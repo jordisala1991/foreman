@@ -16,7 +16,7 @@ def accept(p: Project, tid: str, by: str = "owner") -> str:
     i = backlog.get(d, tid)
     if i["status"] != "in review":
         raise git.DeliveryError(f"{tid} is {i['status']}, not in review")
-    head = git.git(p.repo, "rev-parse", i["branch"]).out.strip()
+    head = registry.repo(p).head(i["branch"])
     checked: backlog.Check = i.get("check") or {}
     if checked.get("head") != head:
         raise git.DeliveryError(f"{i['branch']} moved since it was checked: wait for the next check")
@@ -29,7 +29,7 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
     """After a crash between the merge and storing its ref: the merge commit already in main, or ''."""
     if not i.get("merging"):
         return ""
-    found = git.git(p.repo, "log", "--format=%H", f"--grep=^Merge {i['id']}: ", f"{i['merging']}..{p.get('project', 'main')}", check=False).out.split()
+    found = registry.repo(p).merges_of(i["id"], i["merging"], p.get("project", "main"))
     if found:
         backlog.update(p, i["id"], merge=found[0])
     return found[0] if found else ""
@@ -38,7 +38,7 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
 def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, change: Change) -> str:
     """Asks the provider to merge (marking `merging` first) and returns the merge ref. A refusal for a conflict that
     the local check confirms is a `MergeConflict`; any other platform error is a `DeliveryError`."""
-    backlog.update(p, i["id"], merging=git.git(p.repo, "rev-parse", p.get("project", "main")).out.strip())
+    backlog.update(p, i["id"], merging=registry.repo(p).head(p.get("project", "main")))
     try:
         return provider.merge(change, providers.merge_strategy(p))
     except Exception as e:  # a platform's own errors are a delivery error
@@ -57,7 +57,7 @@ def merge_accepted(p: Project, tid: str) -> str:
     acc = i.get("accepted")
     if i["status"] != "in review" or not acc:
         raise git.DeliveryError(f"{tid} is not accepted")
-    head = git.git(p.repo, "rev-parse", i["branch"]).out.strip()
+    head = registry.repo(p).head(i["branch"])
     if head != acc["head"]:
         backlog.update(p, tid, accepted=None)
         raise git.DeliveryError(f"{i['branch']} moved after it was accepted: accept again after the next check")
@@ -79,8 +79,8 @@ def merge_accepted(p: Project, tid: str) -> str:
         return "merging"
     stop_all(p, i)
     if i.get("worktree"):
-        git.git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
-    git.git(p.repo, "branch", "-D", i["branch"], check=False)
+        registry.repo(p).remove_worktree(i["worktree"])
+    registry.repo(p).delete_branch(i["branch"])
     by = acc["by"]
     report: backlog.Report = i.get("report") or {}
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
@@ -148,7 +148,7 @@ def close(p: Project, tid: str, status: str, why: str, *, settle: bool = True) -
         questions.answer(p, q["id"], f"(the task was {status})")
         questions.mark_delivered(p, q["id"])
     if i.get("worktree"):
-        git.git(p.repo, "worktree", "remove", "--force", i["worktree"], check=False)
+        registry.repo(p).remove_worktree(i["worktree"])
     backlog.set_status(p, tid, status, why)
     if settle:
         settle_parent(p, tid)
