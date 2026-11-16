@@ -20,7 +20,7 @@ Nothing needs keeping alive but the loop, which has no model.
       hunter, then reviewer (launched by the loop, read only) → hunter file, review file, foreman verdict
 ```
 
-Python stdlib only (3.11+, `tomllib`); the panel is React/Vite source in `panel/src`, built to `panel/dist`.
+Python stdlib only (3.11+, `tomllib`); the panel is React/Vite source in `panel/src`, built to `plugins/fm/panel/dist`.
 
 ## A project
 
@@ -516,6 +516,10 @@ Hexagonal-lite: a small core, ports only where something external varies, everyt
 nor full DDD; what is shared is a vocabulary: *task* (a unit of work in the backlog), *review round* (one review of a tip), *risk* (low,
 medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act). The whole vocabulary is in `GLOSSARY.md`; it changes only by the owner's decision.
 
+The plugin is `plugins/fm/` (`bin/`, `fm/`, `hooks/`, `panel/dist/`, `.claude-plugin/plugin.json`, `pyproject.toml`) and is all
+that is installed; the repo root keeps the development files. Every `fm/…`, `bin/` and `hooks/` path in this document, in
+`CLAUDE.md` and in the briefs is relative to `plugins/fm/`.
+
 ### Layers and packages
 
 Layer = folder: the package says the layer, its sub-packages (areas) say which part of fm. Outside in; a module imports
@@ -600,7 +604,7 @@ A module that grows past its size is split along its area's seams, inside its ar
   one paragraph, no other layer.
 - **Plugin entry points (FN-146, FN-159):** the SessionStart hook and `foreman project` → `ui/cli/plugin.py`; the session's
   context text → `core/project/plugin.py`; the installed version's start → `fm/launcher.py`; the launchd jobs' text →
-  `services/launchd.py`; `bin/foreman` and `hooks/hooks.json` stay at the repo root.
+  `services/launchd.py`; `bin/foreman` and `hooks/hooks.json` are in `plugins/fm/`.
 
 ### Ports
 

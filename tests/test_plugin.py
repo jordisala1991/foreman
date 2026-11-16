@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from helpers import ROOT, fm
+from helpers import PLUGIN, ROOT, fm
 
 from fm import launcher, util
 from fm.core.project import plugin, registry
@@ -126,8 +126,8 @@ class TestPluginTest:
 
     def test_the_plugin_ships_foreman_and_no_executable_fm(self) -> None:
         """macOS has its own /usr/bin/fm: the plugin's bin/ may hold no executable of that name."""
-        assert os.access(ROOT / "bin/foreman", os.X_OK)
-        assert not [f for f in (ROOT / "bin").iterdir() if f.name == "fm" and os.access(f, os.X_OK)]
+        assert os.access(PLUGIN / "bin/foreman", os.X_OK)
+        assert not [f for f in (PLUGIN / "bin").iterdir() if f.name == "fm" and os.access(f, os.X_OK)]
 
     def test_the_command_is_called_foreman(self) -> None:
         assert parser.parser(None).format_usage().startswith("usage: foreman")
@@ -165,14 +165,20 @@ class TestPluginTest:
 
     def test_the_manifests_name_fm_and_declare_no_version(self) -> None:
         market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
-        manifest = json.loads((ROOT / ".claude-plugin/plugin.json").read_text())
+        manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
         assert (market["name"], manifest["name"]) == ("fm", "fm")
-        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("fm", "./")]
+        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("fm", "./plugins/fm")]
+        assert (ROOT / market["plugins"][0]["source"] / ".claude-plugin/plugin.json").is_file()
         for data in (market, manifest):
             assert '"version"' not in json.dumps(data)
-        assert (ROOT / manifest["skills"] / "define-task/SKILL.md").is_file()
-        hook = json.loads((ROOT / "hooks/hooks.json").read_text())["hooks"]["SessionStart"][0]["hooks"][0]
+        assert (PLUGIN / manifest["skills"] / "define-task/SKILL.md").is_file()
+        hook = json.loads((PLUGIN / "hooks/hooks.json").read_text())["hooks"]["SessionStart"][0]["hooks"][0]
         assert hook["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/foreman" session-context'
+
+    def test_the_plugin_folder_holds_only_the_plugin(self) -> None:
+        """The marketplace installs plugins/fm, so the repo's development files stay out of it."""
+        for name in ("tests", "DESIGN.md", "GLOSSARY.md", "tach.toml", "uv.lock", "demo", "Makefile", "CLAUDE.md"):
+            assert (ROOT / name).exists() and not (PLUGIN / name).exists(), name
 
     def test_the_skill_reads_the_values_from_fm(self) -> None:
         text = (plugin.SHARED / "skills/define-task/SKILL.md").read_text()

@@ -3,11 +3,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 from unittest import mock
 
 import pytest
-from helpers import ROOT
+from helpers import PLUGIN, ROOT
 
 from fm.core.project import registry
 
@@ -26,7 +27,7 @@ class TestPythonVersion:
         request.addfinalizer(tmp.cleanup)
         self.t = Path(tmp.name).resolve()
         (self.t / "bin").mkdir()
-        shutil.copy(ROOT / "bin/foreman", self.t / "bin/foreman")
+        shutil.copy(PLUGIN / "bin/foreman", self.t / "bin/foreman")
         (self.t / "pyproject.toml").write_text('requires-python = ">=3.99"\n')
         fake(self.t / "old", "3.9.6", "echo old")
         fake(self.t / "new", "3.99.1", 'echo "new: $@"')
@@ -84,6 +85,14 @@ class TestPythonVersion:
         marker = self.t / "ran"
         (self.t / "spy").mkdir()
         (self.t / "spy/python3").write_text(f"#!/bin/sh\ntouch {marker}\n")
-        r = self.run_fm(f"{self.t}/spy", "--help", bin=ROOT / "bin/foreman")
+        r = self.run_fm(f"{self.t}/spy", "--help", bin=PLUGIN / "bin/foreman")
         assert r.returncode == 0, r.stderr
         assert not marker.exists()
+
+    def test_the_plugin_requires_the_python_the_repo_does(self):
+        """bin/foreman reads plugins/fm/pyproject.toml; the repo's dev project declares the same minimum."""
+
+        def minimum(path: Path) -> str:
+            return tomllib.loads(path.read_text())["project"]["requires-python"]
+
+        assert minimum(PLUGIN / "pyproject.toml") == minimum(ROOT / "pyproject.toml")

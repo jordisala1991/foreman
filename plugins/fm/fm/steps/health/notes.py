@@ -6,7 +6,7 @@ from ...core.project.config import Project
 
 
 def python_note() -> list[str]:
-    """bin/fm's line when the hook found no Python new enough (see bin/fm)."""
+    """bin/foreman's line when the hook found no Python new enough (see bin/foreman)."""
     try:
         text = registry.python_note_file().read_text(encoding="utf-8").strip()
     except OSError:

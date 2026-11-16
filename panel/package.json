@@ -2,7 +2,7 @@
   "name": "fm-panel",
   "private": true,
   "version": "0.0.0",
-  "description": "foreman-next's panel: built into dist/, which fm/panel.py serves. Adapted from foreman's panel/next-src.",
+  "description": "foreman-next's panel: built into ../plugins/fm/panel/dist/, which fm/panel.py serves. Adapted from foreman's panel/next-src.",
   "license": "MIT",
   "type": "module",
   "engines": {

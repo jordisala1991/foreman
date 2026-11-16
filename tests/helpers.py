@@ -24,6 +24,7 @@ from fm.services.claude import sessions
 
 sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent
+PLUGIN = ROOT / "plugins/fm"  # the folder the marketplace installs
 
 # A test run must not write the owner's real ~/.config/fm (registry, panel token, locks): HOME and FM_REGISTRY point
 # at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.

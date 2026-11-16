@@ -62,7 +62,8 @@ class TestOldNames:
 def test_the_command_is_called_foreman() -> None:
     """The docs, briefs and instructions name the command `foreman`: macOS's /usr/bin/fm is not it."""
     root = Path(__file__).resolve().parent.parent
-    docs = [root / "README.md", root / "DESIGN.md", root / "GLOSSARY.md", *(root / "fm/briefs").glob("*.md"), *(root / "fm/shared").rglob("*.md")]
+    texts = root / "plugins/fm/fm"
+    docs = [root / "README.md", root / "DESIGN.md", root / "GLOSSARY.md", *(texts / "briefs").glob("*.md"), *(texts / "shared").rglob("*.md")]
     subcommands = "list|show|add|edit|go|ask|done|ready|block|reject|accept|cancel|health|launchd|loop|panel|init|lock"
     subcommands += "|verdict|diagnose|allow|unblock|metrics|project|session-context|guard"
     old = re.compile(rf"`fm ({subcommands})\b|(?<!usr/)bin/fm\b")

@@ -15,14 +15,14 @@ One responsible agent per task, a loop without a model, a short guard, and a sys
 - **Shared resources**: `foreman lock NAME run "what" command…`.
 - **Health and metrics**: broken states become triage tasks; cost, time, rework and what misled agents per task.
 
-Python 3.12+ standard library only; the panel is React + Vite, built into `panel/dist`.
+Python 3.12+ standard library only; the panel is React + Vite, built into `plugins/fm/panel/dist`.
 
 ```sh
-bin/foreman --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
-bin/foreman loop            # or: bin/foreman launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die; from the installed plugin they follow `claude plugin update fm@fm`, from a checkout they run that checkout)
-bin/foreman panel --port 7788
+plugins/fm/bin/foreman --home ~/my-project-home init --repo ~/src/my-repo --prefix MY
+plugins/fm/bin/foreman loop            # or: plugins/fm/bin/foreman launchd --dir ~/Library/LaunchAgents  (two jobs, loop and panel: start at login, restart if they die; from the installed plugin they follow `claude plugin update fm@fm`, from a checkout they run that checkout)
+plugins/fm/bin/foreman panel --port 7788
 make check            # (needs uv) everything CI runs, in order: lint, format, types, arch (tach), suppressions, size, test (make fix: the mechanical fixes)
-python3 -m unittest discover -s tests   # just the tests
+make test             # just the tests
 ```
 
 Architecture: DESIGN.md "Architecture"; layers and adapters are enforced by `tach.toml` (`make arch`), and a suppression comment silences nothing (`--ignore-noqa`, pyright `enableTypeIgnoreComments = false`, `make suppressions` for the rest).
