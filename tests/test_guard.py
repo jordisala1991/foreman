@@ -90,7 +90,7 @@ class TestHook:
     def test_denies_with_a_reason_and_logs(self):
         out = json.loads(self.call("Bash", {"command": "git push origin main"}))
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert "fm ask --action push-main" in out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "foreman ask --action push-main" in out["hookSpecificOutput"]["permissionDecisionReason"]
         assert (self.e.home / "state/guard.jsonl").exists()
 
     def test_edit_of_the_config(self):

@@ -117,7 +117,7 @@ class TestLogin:
         panel = plistlib.loads((d / "dev.fm.panel.plist").read_bytes())
         assert panel["ProgramArguments"][-5:] == ["panel", "--host", "0.0.0.0", "--port", "7788"]
         assert (d / "dev.fm.loop.plist").exists()
-        assert panel["ProgramArguments"][1] == str(launcher.ROOT / "bin/fm")  # a checkout, no plugin: names it
+        assert panel["ProgramArguments"][1] == str(launcher.ROOT / "bin/foreman")  # a checkout, no plugin: names it
         with mock.patch.dict(os.environ, {"PATH": "/a&b:/c"}):
             assert plistlib.loads(launchd.plist().encode())["EnvironmentVariables"]["PATH"] == "/a&b:/c"
 

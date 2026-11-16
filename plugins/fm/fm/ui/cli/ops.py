@@ -49,7 +49,7 @@ def cmd_lock(a: argparse.Namespace) -> None:
     p = home(a)
     res = lock.declared(p.cfg)
     if a.name not in res:
-        sys.exit(f"fm: unknown resource {a.name!r} (declared: {', '.join(res) or 'none'}; [resources.NAME] in fm.toml)")
+        sys.exit(f"foreman: unknown resource {a.name!r} (declared: {', '.join(res) or 'none'}; [resources.NAME] in fm.toml)")
     r = res[a.name]
     if a.action == "status":
         s = r.status()
@@ -61,7 +61,7 @@ def cmd_lock(a: argparse.Namespace) -> None:
             print("free")
         return
     if not a.command:
-        sys.exit('fm: fm lock NAME run "what" command…')
+        sys.exit('foreman: foreman lock NAME run "what" command…')
     who = os.environ.get("FM_AGENT") or "owner"
     sys.exit(r.run(who, a.what, a.command, os.environ.get("FM_TASK", ""), say=lambda m: print(m, file=sys.stderr)))
 

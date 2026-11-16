@@ -88,7 +88,7 @@ def _owner_side(c: Command) -> None:
     s.add_argument("--title")
     s.add_argument("--goal")
     s.add_argument("--detail")
-    s.add_argument("--criteria", help="one criterion per line, as in fm add")
+    s.add_argument("--criteria", help="one criterion per line, as in foreman add")
     blocked_by(s)
     _model_effort(s)
     _type(s)
@@ -107,7 +107,7 @@ def _operations(c: Command) -> None:
     s.add_argument("--once", action="store_true")
     s = c("health", "the health checks, from outside the loop")
     s = c("metrics", "cost, time, rework, questions, what misled agents")
-    s = c("lock", 'use a shared resource: fm lock NAME run "what" command…, or fm lock NAME status')
+    s = c("lock", 'use a shared resource: foreman lock NAME run "what" command…, or foreman lock NAME status')
     s.add_argument("name")
     s.add_argument("action", choices=("run", "status"))
     s.add_argument("what", nargs="?", default="")
@@ -130,7 +130,7 @@ def blocked_by(s: argparse.ArgumentParser) -> None:
 
 
 def parser(description: str | None) -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="fm", description=description)
+    ap = argparse.ArgumentParser(prog="foreman", description=description)
     ap.add_argument("--project", metavar="NAME", help="the project's name (else FM_PROJECT, else the project that owns the current folder)")
     ap.add_argument("--home", help="the project's home (else FM_HOME)")
     sub = ap.add_subparsers(dest="cmd", required=True)

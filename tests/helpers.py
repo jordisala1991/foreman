@@ -236,7 +236,7 @@ def install_fm(request: pytest.FixtureRequest, *entries: dict, version: int = 2)
 
 
 def version_folder(parent: Path, name: str) -> dict:
-    """A version folder `parent/name` with a bin/fm, and its fm@fm entry."""
+    """A version folder `parent/name` with a bin/foreman, and its fm@fm entry."""
     (parent / name / "bin").mkdir(parents=True)
-    (parent / name / "bin/fm").write_text("#!/usr/bin/env python3\n")
+    (parent / name / "bin/foreman").write_text("#!/usr/bin/env python3\n")
     return {"scope": "user", "installPath": str(parent / name), "version": name, "gitCommitSha": "stale"}

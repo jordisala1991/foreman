@@ -66,6 +66,6 @@ def notice(sub: backlog.Task, subs: list[backlog.Task], parent: str) -> str:
     if outcome(subs):
         text += (
             f" Every subtask is closed: check the goal of {parent} against what landed, tell the owner what holds and "
-            "what is missing, and wait for his yes before `fm done`."
+            "what is missing, and wait for his yes before `foreman done`."
         )
     return text

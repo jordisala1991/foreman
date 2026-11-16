@@ -40,7 +40,7 @@ def plan_section(i: dict[str, Any]) -> str:
         return (
             f"# The plan\nThe task has a plan: `{i['plan_file']}`. Read it whole and follow it. If it does not hold "
             "on a detail (a name, a line, the order of steps), decide, and list it in your report under «Off the plan» with why; "
-            "if it would change the goal, the acceptance criteria, a decision or the out of scope, `fm ask` and end your turn."
+            "if it would change the goal, the acceptance criteria, a decision or the out of scope, `foreman ask` and end your turn."
         )
     return "# The plan\nNo plan exists for this task (it was judged trivial): work from the goal and acceptance criteria."
 

@@ -16,7 +16,7 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
     if q.get("kind") in ("conflict", "failing", "review", "subtask"):
         return q["answer"]
     elif q.get("kind") == "rejection":
-        return f"The owner rejected task {i['id']}: «{q['answer']}». Fix it, review again if you change much, and run `fm done` again."
+        return f"The owner rejected task {i['id']}: «{q['answer']}». Fix it, review again if you change much, and run `foreman done` again."
     elif q.get("kind") == "note":
         return f"A note from outside fm for task {i['id']} ({q.get('source')}): «{q['answer']}»."
     elif q.get("kind") == "permission":
@@ -64,12 +64,12 @@ def watch_agents(p: Project, rows: dict[str, Any]) -> None:
             continue  # it may be waiting for the owner, who is talking to it
 
         if not a.get("nudged"):
-            how = 'fm ready (--plan PATH, or --no-plan "why trivial")' if a.get("kind") == "planning" else "fm done"
+            how = 'foreman ready (--plan PATH, or --no-plan "why trivial")' if a.get("kind") == "planning" else "foreman done"
             if send(
                 p,
                 i,
                 f"Your turn ended but task {i['id']} is not finished: nothing says so. If it is, run "
-                f"`{how}`; if you need the owner, `fm ask`; if it cannot be done, `fm block`. "
+                f"`{how}`; if you need the owner, `foreman ask`; if it cannot be done, `foreman block`. "
                 "Otherwise carry on.",
             ):
                 update_agent(p, i["id"], nudged=util.now())

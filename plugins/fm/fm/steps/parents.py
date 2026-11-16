@@ -1,6 +1,6 @@
 """The parent agent: a session per let-in parent task, with no worktree, that follows its subtasks with the owner. The
 parent keeps status backlog while it lives; it is told when a subtask is merged or canceled (`notified` lists those
-already told), and closes only by its own `fm done` after the owner's yes."""
+already told), and closes only by its own `foreman done` after the owner's yes."""
 
 from typing import Any
 
@@ -74,7 +74,7 @@ def run(p: Project, rows: dict[str, Any]) -> None:
 
 
 def finish(p: Project, tid: str, summary: str) -> str:
-    """Closes a parent from its agent's `fm done`: done if any subtask is done, else canceled; refused while one is open."""
+    """Closes a parent from its agent's `foreman done`: done if any subtask is done, else canceled; refused while one is open."""
     subs = subtasks.of(backlog.tasks(backlog.load(p)), tid)
     status = subtasks.outcome(subs)
     if not status:

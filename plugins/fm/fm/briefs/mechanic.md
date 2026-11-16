@@ -6,12 +6,12 @@ $detail
 
 # Rules: you only read
 - Change no code, no repo, no other task and no fm state. The only files you write are `$diagnosis` and a scratch folder made with `mktemp -d`, which you `rm -rf` before ending.
-- Run no `fm` command except `fm show`, `fm list`, `fm metrics`, `fm health` and `fm diagnose`.
+- Run no `foreman` command except `foreman show`, `foreman list`, `foreman metrics`, `foreman health` and `foreman diagnose`.
 
 # Method, in order
 1. **Unblock** if something is stuck now: say what unblocks it, under `## Unblock (not the fix)`, separate from the fix. Skip it if nothing is stuck.
 2. **Gather evidence before reasoning:** the task above, `$state/events.jsonl`, `errors.jsonl`, `guard.jsonl`, `ci.json`, `git log` / `git blame` in `$repo`, the failing command run in a scratch copy. Keep what you saw (with its source) apart from what you infer.
-3. **Look for the pattern:** earlier tasks (`fm list --all`, `fm show`) and commits on the same area. Several fixes of one area point to a design problem.
+3. **Look for the pattern:** earlier tasks (`foreman list --all`, `foreman show`) and commits on the same area. Several fixes of one area point to a design problem.
 4. **Test the hypothesis** with the smallest experiment; if you cannot, mark it `untested` and say why.
 
 # Output
@@ -25,4 +25,4 @@ Write `$diagnosis` with these `##` headings:
 
 If the symptom is already gone when you look, write only `## Seen` (the evidence) and `## Symptom gone` (what shows it).
 
-Then run `fm diagnose --file $diagnosis`, remove your scratch folder, and end your turn.
+Then run `foreman diagnose --file $diagnosis`, remove your scratch folder, and end your turn.
