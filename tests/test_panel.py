@@ -14,11 +14,11 @@ from urllib.parse import quote
 import pytest
 from helpers import install_fm, version_folder
 
-from fm import launcher, util
-from fm.core.project.config import Project
-from fm.core.project.registry import register
-from fm.core.tasks import backlog, questions
-from fm.ui.panel import server
+from foreman import launcher, util
+from foreman.core.project.config import Project
+from foreman.core.project.registry import register
+from foreman.core.tasks import backlog, questions
+from foreman.ui.panel import server
 
 
 def start_panel(t) -> None:

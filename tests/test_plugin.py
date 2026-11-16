@@ -14,13 +14,13 @@ from unittest import mock
 import pytest
 from helpers import PLUGIN, ROOT, fm
 
-from fm import launcher, util
-from fm.core.project import plugin, registry
-from fm.core.project.config import Project
-from fm.core.tasks import backlog
-from fm.services.claude import sessions
-from fm.ui.cli import main, parser
-from fm.ui.cli import plugin as cli_plugin
+from foreman import launcher, util
+from foreman.core.project import plugin, registry
+from foreman.core.project.config import Project
+from foreman.core.tasks import backlog
+from foreman.services.claude import sessions
+from foreman.ui.cli import main, parser
+from foreman.ui.cli import plugin as cli_plugin
 
 
 class TestPluginTest:
@@ -167,7 +167,7 @@ class TestPluginTest:
         market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
         manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
         assert (market["name"], manifest["name"]) == ("fm", "fm")
-        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("fm", "./plugins/fm")]
+        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("fm", "./plugins/foreman")]
         assert (ROOT / market["plugins"][0]["source"] / ".claude-plugin/plugin.json").is_file()
         for data in (market, manifest):
             assert '"version"' not in json.dumps(data)
@@ -176,7 +176,7 @@ class TestPluginTest:
         assert hook["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/foreman" session-context'
 
     def test_the_plugin_folder_holds_only_the_plugin(self) -> None:
-        """The marketplace installs plugins/fm, so the repo's development files stay out of it."""
+        """The marketplace installs plugins/foreman, so the repo's development files stay out of it."""
         for name in ("tests", "DESIGN.md", "GLOSSARY.md", "tach.toml", "uv.lock", "demo", "Makefile", "CLAUDE.md"):
             assert (ROOT / name).exists() and not (PLUGIN / name).exists(), name
 

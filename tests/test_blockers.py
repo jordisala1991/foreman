@@ -5,10 +5,10 @@ import json
 import pytest
 from helpers import Env, fm
 
-from fm import util
-from fm.core.tasks import backlog, blockers
-from fm.loop import tick
-from fm.services.delivery import merge
+from foreman import util
+from foreman.core.tasks import backlog, blockers
+from foreman.loop import tick
+from foreman.services.delivery import merge
 
 
 def events(e: Env, tid: str) -> list[str]:

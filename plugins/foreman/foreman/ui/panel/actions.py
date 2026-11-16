@@ -1,4 +1,5 @@
-"""The panel's write side: the owner's actions. They call what the CLI calls (fm.ui.cli's functions, fm.services.delivery.merge.accept), so the panel and
+"""The panel's write side: the owner's actions. They call what the CLI calls (foreman.ui.cli's functions,
+foreman.services.delivery.merge.accept), so the panel and
 `foreman` cannot disagree. `act` routes a POST path to one small handler."""
 
 import argparse
@@ -30,7 +31,7 @@ _cli_lock = threading.Lock()  # one at a time: what a command prints for the ter
 
 
 def run_cli(fn: Callable[[argparse.Namespace], Any], p: Project, **kw: Any) -> None:
-    """A command of fm.ui.cli as `foreman --home HOME ...` would run it; its sys.exit(message) becomes a refusal."""
+    """A command of foreman.ui.cli as `foreman --home HOME ...` would run it; its sys.exit(message) becomes a refusal."""
     try:
         with _cli_lock, contextlib.redirect_stdout(io.StringIO()):
             fn(argparse.Namespace(project=None, home=str(p.home), **kw))

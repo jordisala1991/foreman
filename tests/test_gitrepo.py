@@ -1,4 +1,4 @@
-"""The repo adapter (fm/providers/gitrepo.py) on a real git repo: every expected value is what git means by it."""
+"""The repo adapter (foreman/providers/gitrepo.py) on a real git repo: every expected value is what git means by it."""
 
 import tempfile
 from pathlib import Path
@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from helpers import git
 
-from fm.providers.gitrepo import GitRepo
-from fm.providers.repo import FileDiff, MergeOutcome, RepoError
+from foreman.providers.gitrepo import GitRepo
+from foreman.providers.repo import FileDiff, MergeOutcome, RepoError
 
 
 def commit(repo: Path, msg: str, **files: str | None) -> str:

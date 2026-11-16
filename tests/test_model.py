@@ -7,12 +7,12 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm.core.oversight import costs
-from fm.core.project import config
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services.agents import brief
-from fm.steps import metrics
+from foreman.core.oversight import costs
+from foreman.core.project import config
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services.agents import brief
+from foreman.steps import metrics
 
 
 def flags(c: dict) -> tuple[str, str]:
@@ -132,7 +132,7 @@ class TestMeasured:
         backlog.update(self.e.p, a, agent={"kind": "responsible", "model": "opus", "effort": "high"})
         b = backlog.add(self.e.p, "b", criteria="c", model="haiku")
         c = backlog.add(self.e.p, "c", criteria="c")
-        with mock.patch("fm.core.oversight.costs.of_sessions", lambda s, seen=None: {"usd": 3.0, "minutes": 0}):
+        with mock.patch("foreman.core.oversight.costs.of_sessions", lambda s, seen=None: {"usd": 3.0, "minutes": 0}):
             rows = {r["id"]: r for r in metrics.per_task(self.e.p)}
         assert (rows[a]["model"], rows[a]["effort"]) == ("opus", "high")
         assert rows[b]["model"] == "haiku"

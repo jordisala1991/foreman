@@ -12,13 +12,13 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm.core.oversight import guard
-from fm.core.review import evidence
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.providers import Change, registry
-from fm.providers.github import types
-from fm.services.delivery import pulls
+from foreman.core.oversight import guard
+from foreman.core.review import evidence
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.providers import Change, registry
+from foreman.providers.github import types
+from foreman.services.delivery import pulls
 
 PNG = b"\x89PNG\r\n\x1a\n-evidence"
 BODY = "Did X\n\n![the home](x.png)\n"

@@ -9,9 +9,9 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm import util
-from fm.core.project.config import Project
-from fm.core.tasks import backlog
+from foreman import util
+from foreman.core.project.config import Project
+from foreman.core.tasks import backlog
 
 # The old names, written from parts so a scan for them finds nothing outside GLOSSARY.md.
 OLD_ENV = "FM_" + "IS" + "SUE"
@@ -62,7 +62,7 @@ class TestOldNames:
 def test_the_command_is_called_foreman() -> None:
     """The docs, briefs and instructions name the command `foreman`: macOS's /usr/bin/fm is not it."""
     root = Path(__file__).resolve().parent.parent
-    texts = root / "plugins/fm/fm"
+    texts = root / "plugins/foreman/foreman"
     docs = [root / "README.md", root / "DESIGN.md", root / "GLOSSARY.md", *(texts / "briefs").glob("*.md"), *(texts / "shared").rglob("*.md")]
     subcommands = "list|show|add|edit|go|ask|done|ready|block|reject|accept|cancel|health|launchd|loop|panel|init|lock"
     subcommands += "|verdict|diagnose|allow|unblock|metrics|project|session-context|guard"

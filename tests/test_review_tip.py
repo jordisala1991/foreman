@@ -3,8 +3,8 @@ import os
 import pytest
 from helpers import Env, fm, git
 
-from fm.core.tasks import backlog
-from fm.loop import tick
+from foreman.core.tasks import backlog
+from foreman.loop import tick
 
 
 def head(e: Env, tid: str) -> str:

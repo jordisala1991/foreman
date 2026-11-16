@@ -1,4 +1,4 @@
-"""Only the repo adapter runs git on a repo (fm/providers/gitrepo.py); the platform calls stay in providers/github and the
+"""Only the repo adapter runs git on a repo (foreman/providers/gitrepo.py); the platform calls stay in providers/github and the
 guard parses git commands without running them. A module that names the program "git" is one that runs it."""
 
 import ast
@@ -13,6 +13,6 @@ def names_git(source: str) -> bool:
 
 
 def test_only_the_adapter_names_git():
-    root = PLUGIN / "fm"
+    root = PLUGIN / "foreman"
     found = {f.relative_to(root).as_posix() for f in root.rglob("*.py") if names_git(f.read_text())}
     assert found == ALLOWED

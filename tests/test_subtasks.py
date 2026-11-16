@@ -8,9 +8,9 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm.core.tasks import backlog, subtasks
-from fm.loop import tick
-from fm.services.delivery import merge
+from foreman.core.tasks import backlog, subtasks
+from foreman.loop import tick
+from foreman.services.delivery import merge
 
 
 def count(e: Env) -> int:

@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from fm.core.tasks import backlog
+from foreman.core.tasks import backlog
 
 
 class TestEdit:

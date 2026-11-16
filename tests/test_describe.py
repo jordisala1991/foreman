@@ -4,11 +4,11 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm.core.review import describe
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services.agents import brief
-from fm.services.delivery import pulls
+from foreman.core.review import describe
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services.agents import brief
+from foreman.services.delivery import pulls
 
 
 class TestText:

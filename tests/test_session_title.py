@@ -1,4 +1,4 @@
-from fm import util
+from foreman import util
 
 
 class TestSessionTitle:

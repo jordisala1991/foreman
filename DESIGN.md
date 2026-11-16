@@ -20,7 +20,7 @@ Nothing needs keeping alive but the loop, which has no model.
       hunter, then reviewer (launched by the loop, read only) → hunter file, review file, foreman verdict
 ```
 
-Python stdlib only (3.11+, `tomllib`); the panel is React/Vite source in `panel/src`, built to `plugins/fm/panel/dist`.
+Python stdlib only (3.11+, `tomllib`); the panel is React/Vite source in `panel/src`, built to `plugins/foreman/panel/dist`.
 
 ## A project
 
@@ -86,7 +86,7 @@ A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and
 
 ## The loop
 
-A plain process, no model (`foreman loop`; `foreman launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Run from the installed plugin, a job's command names no version: at each start it runs the version of `fm@fm` Claude Code records as installed (`~/.claude/plugins/installed_plugins.json`, `fm/launcher.py`), and it exits when another version is installed so launchd starts the new one (the loop before its next tick, the panel within 30 s); each version folder never changes, so a job never mixes two versions. Run from a plain checkout, the jobs name that checkout. Agents use the normal claude.ai login, so they show in the Claude app; the loop removes `CLAUDE_CODE_OAUTH_TOKEN` from every agent it launches. `foreman health` warns 3 days before the login expires and files a finding when it does not work (`claude auth status`)); one per registry (a lock file).
+A plain process, no model (`foreman loop`; `foreman launchd` prints two jobs, loop and panel, with `RunAtLoad` and `KeepAlive`; `--dir` writes them as files. Run from the installed plugin, a job's command names no version: at each start it runs the version of `fm@fm` Claude Code records as installed (`~/.claude/plugins/installed_plugins.json`, `foreman/launcher.py`), and it exits when another version is installed so launchd starts the new one (the loop before its next tick, the panel within 30 s); each version folder never changes, so a job never mixes two versions. Run from a plain checkout, the jobs name that checkout. Agents use the normal claude.ai login, so they show in the Claude app; the loop removes `CLAUDE_CODE_OAUTH_TOKEN` from every agent it launches. `foreman health` warns 3 days before the login expires and files a finding when it does not work (`claude auth status`)); one per registry (a lock file).
 Each tick, per project, each step isolated (an exception goes to `state/errors.jsonl`, which a health check turns
 into a finding), and inside a step each task isolated (a failure blocks that task with the reason; the others go
 on). The heartbeat is written before every step, so a long test run does not look like a dead loop.
@@ -101,7 +101,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    `state/errors.jsonl`, not retried. A transient failure (accept before its check, busy checkout, hung stop) is
    logged and the same key is tried again next tick.
    Cursors in `state/cursors/`. None shipped (the owner's call for now). The same step first files the
-   recurring entries that fell due (`fm/steps/schedule.py`, see `## Recurring tasks`).
+   recurring entries that fell due (`foreman/steps/schedule.py`, see `## Recurring tasks`).
 3. **answers**: each answered question, permission or rejection not yet delivered is sent to its agent's session
    (`claude --bg --resume SID MESSAGE`, no other flag: a flag or a live process makes claude start a copy), when that
    session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
@@ -125,11 +125,11 @@ on). The heartbeat is written before every step, so a long test run does not loo
 6. **health**: the checks below; the tests of main run in the background the same way (the tick waits for them
    only `BACKGROUND_WAIT_S`; the result lands in `ci.json`).
 7. **blockers**: a task whose blockers are all `done` is marked unblocked once; one whose blocker closed undone is blocked
-   with a reason (`fm/steps/release.py`).
+   with a reason (`foreman/steps/release.py`).
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
-   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`fm/steps/parents.py`).
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py`).
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
@@ -142,7 +142,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 ### What the loop does with a task in review
 
 Each tick, for a task in review (not accepted, not blocked), in this order. The decisions are pure functions in
-`fm/core/rules/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
+`foreman/core/rules/decide.py`; the loop (`queue_one`) gathers the facts (sessions, files, git, CI, the check) and acts on the answer.
 
 A review runs only when its result goes somewhere: to the agent (rounds 1-2, an owner reject, a conflict resolution,
 the fix of failing tests or CI)
@@ -176,7 +176,7 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 
 A branch's own check runs its tests on the branch alone. Just before an accepted branch merges (the owner's accept or
 the autonomy's, `loop.gate_merge` on both paths), the test command runs again on the branch merged with main as main
-is at that moment (`fm/services/delivery/mergecheck.py`, in the background like the check). The result goes in the task's `check`
+is at that moment (`foreman/services/delivery/mergecheck.py`, in the background like the check). The result goes in the task's `check`
 (`merged_with` = that main commit); `foreman show` (`checked_on`) and the panel say what the last check ran on. A task not
 about to merge (in review, waiting for the owner) never runs it. Accepted tasks merge one at a time, so of two waiting,
 the second is checked with the first already in main.
@@ -221,7 +221,7 @@ Each is a Claude Code session of its own, named after its task (`tk-1`, `tk-3-pl
 - The owner opens any of them: `claude attach SHORT`, `claude agents`, or the Claude app; what he says there goes to
   that agent.
 
-**Planning agent** (`fm/briefs/planning.md`): the acceptance criteria are product (observable behaviour, never how) and
+**Planning agent** (`foreman/briefs/planning.md`): the acceptance criteria are product (observable behaviour, never how) and
 are settled with the owner when the task is filed; the planning agent never writes, rewrites or splits them, and `foreman ask`s
 the owner if one cannot be met as written. It reads the repo (read only), asks the owner only what only he can decide
 (`foreman ask`, then ends its turn), and ends with `foreman ready --detail --plan PATH` (or `--no-plan "why trivial"`). It writes a
@@ -231,17 +231,17 @@ risk); the task gets `plan_file`, and the responsible agent follows it and `fore
 `foreman done`, `foreman ready` and `foreman verdict` take `--misled`; the text (not «none») is kept on the task under `misled`, per
 agent, once; `foreman metrics` shows it.
 
-**Responsible agent** (`fm/briefs/responsible.md`): owns the whole task in its
+**Responsible agent** (`foreman/briefs/responsible.md`): owns the whole task in its
 worktree: splits it, uses subagents, writes the failing test first for bugs and behaviour, keeps tests green, merges
 main before delivering if it moved, asks the owner only what only he can answer, writes a report
 (`<home>/reports/ID.md`: the task's description, each acceptance criterion with its evidence; fm sets it as the description
 inside `<!-- fm:description -->` markers, adds a footer with the commit and review state, folds its `## Review rounds`
-section in `<details>`, and the panel shows it; the loop seeds the file from `fm/briefs/report.md`, or from the repo's
+section in `<details>`, and the panel shows it; the loop seeds the file from `foreman/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when it launches) and ends with
 `foreman done --summary --report --misled`. If the review returns it or the owner rejects it, the note arrives in the same
 conversation: each finding gets the smallest change that settles it, or a one-line answer if it thinks the finding is wrong; add a `### Round N` to the report's «Review rounds» section, `foreman done` again.
 
-**Review: hunter, then reviewer** (`fm/briefs/hunter.md`, `fm/briefs/reviewer.md`): launched by the loop, not by the responsible agent, each as
+**Review: hunter, then reviewer** (`foreman/briefs/hunter.md`, `foreman/briefs/reviewer.md`): launched by the loop, not by the responsible agent, each as
 its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail
 and the owner's notes. The **hunter** lists everything it suspects (with a confidence each, plus the acceptance criteria table and an
 inventory of what the diff adds) in `<home>/reviews/ID-rN-<tip>-hunter.md`. When that file exists and the hunter has ended,
@@ -256,12 +256,12 @@ round 2 goes to the owner as high risk. A hunter that ends without its file, or 
 Each review session gets its own `<home>/scratch/ID-rN-<tip>-ROLE/`, told in its brief as `$scratch`; the loop removes it on the first tick where no live session owns it.
 
 The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health finding and changes nothing else: read-only by its
-brief (as the hunter's), its only write is `foreman diagnose --file`, which checks the required `##` headings (`fm/core/oversight/diagnosis.py`)
+brief (as the hunter's), its only write is `foreman diagnose --file`, which checks the required `##` headings (`foreman/core/oversight/diagnosis.py`)
 and appends the diagnosis to the task's `detail`, so `foreman show` has it. The task stays in triage; the owner decides next.
 
 ## Shared resources
 
-`fm/services/lock.py`. A resource is declared in fm.toml (`[resources.NAME]`, optional
+`foreman/services/lock.py`. A resource is declared in fm.toml (`[resources.NAME]`, optional
 `slots = [...]` and `max_minutes`, default 20). `foreman lock NAME run "what" command…` waits its turn, runs the command
 holding the resource (with `FM_SLOT`), stops it at the time limit and always releases it; `foreman lock NAME status`.
 
@@ -274,7 +274,7 @@ holding the resource (with `FM_SLOT`), stops it at the time limit and always rel
 
 ## The guard
 
-A reminder, not a cage (`fm/core/oversight/guard.py`). It runs only in agent sessions (the hook comes in `--settings`), looks at
+A reminder, not a cage (`foreman/core/oversight/guard.py`). It runs only in agent sessions (the hook comes in `--settings`), looks at
 the program each shell segment runs (never at words inside strings or messages), and denies a handful of actions
 with a reason that says: do not look for another way; `foreman ask --action NAME "what and why"`, end your turn. The
 owner allows it once from the panel (`foreman allow QID`); the loop tells its agent; it passes once.
@@ -311,7 +311,7 @@ The project's `[merge] autonomy` decides what merges without the owner: `manual`
 
 ### Provider, accepted → merged
 
-The merge goes through a *provider* module (`fm/providers/`), one per platform; the rest of fm does not know which.
+The merge goes through a *provider* module (`foreman/providers/`), one per platform; the rest of fm does not know which.
 Interface: `pushed` (is the branch on the platform at its tip?) and `push` (put it there: never forced, never main, 20 s; any failure is `Transient` with the platform's error; a no-op locally), `publish` (open the change), `ready`, `diff` (its unified diff; empty locally), `review` (post the verdict as one PR review with its inline comments; no-op locally), `body` / `describe` (read and set the description and title; no-ops locally), `merge(change, strategy)` (the only merge
 in fm: a future queue is just another strategy) and `state` (merged? closed?). Operations take a `Change` and return `Published` / `ChangeState`: no dict crosses the port. Steps:
 
@@ -345,9 +345,9 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 
 ## Recurring tasks
 
-`[[recurring]]` tables in `fm.toml` (strict: `fm/core/project/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `foreman add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
+`[[recurring]]` tables in `fm.toml` (strict: `foreman/core/project/recurring_table.py`; any other key, both triggers, neither or a bad interval is refused at load, naming the table and the key). Each has `name`, `title`, one trigger, and the fields `foreman add` takes (`goal`, `criteria`, `detail`, `model`, `effort`, `type`), plus `triage` (true by default).
 - Trigger: `every_merges = N` (N merged tasks) or `every = "12h" | "7d" | "2w"` (plain durations: h, d, w, at most 100 years; no cron).
-- Each tick (the `sources` step, which calls `fm/steps/schedule.py` over the pure rules of `fm/core/tasks/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
+- Each tick (the `sources` step, which calls `foreman/steps/schedule.py` over the pure rules of `foreman/core/tasks/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
 - Anchor: the count or period starts when the entry's last task closed (done, canceled or duplicate), else when fm first saw the entry (`state/recurring.json`, the one store). A time trigger that fell due while fm was off files once. Merges are `done` tasks not filed by an entry and not parents; their closing time is that of the `→ done` event.
 - `foreman list`, `foreman show` and the panel's data mark an entry's task (`recurring`: the name); `foreman health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it.
 
@@ -434,7 +434,7 @@ test = "make build"
   replaced by shell-quoted paths (another placeholder is a config error at load), 300 s each, once per worktree (a
   reused one does not run it again). A failing or timed-out step removes the worktree (and the branch, if this
   launch made it) and blocks the task: `post_create step failed (CMD): LAST 300 CHARS`.
-- When built: `fm/core/project/repos.py` in the core, pure (parse, validate, the view below, the layout check); the commands run in
+- When built: `foreman/core/project/repos.py` in the core, pure (parse, validate, the view below, the layout check); the commands run in
   `agents.worktree` (a service). No port: nothing varies that `providers/` does not already cover.
 
 ### One task, one PR, one repo
@@ -496,7 +496,7 @@ test = "make build"
   --porcelain --ignored=matching --untracked-files=all`, so a file a global ignore hides is seen) with a component named
   `.claude`, `CLAUDE.md`, `CLAUDE.local.md` or `fm.toml`, and files one finding. It looks only inside the repos, never
   at the umbrella. Tracked files are the repo's own and are not reported; a folder ignored whole (dependencies) is not
-  looked into. The matching is a pure function over paths, in `fm/core/project/repos.py`.
+  looked into. The matching is a pure function over paths, in `foreman/core/project/repos.py`.
 - The owner's own chat in the umbrella is the plugin's (FN-144 subtask 2), not this.
 
 ### Left out on purpose
@@ -516,28 +516,28 @@ Hexagonal-lite: a small core, ports only where something external varies, everyt
 nor full DDD; what is shared is a vocabulary: *task* (a unit of work in the backlog), *review round* (one review of a tip), *risk* (low,
 medium, high), and *accept* (a record of the owner's decision) is **not** *merge* (the provider's act). The whole vocabulary is in `GLOSSARY.md`; it changes only by the owner's decision.
 
-The plugin is `plugins/fm/` (`bin/`, `fm/`, `hooks/`, `panel/dist/`, `.claude-plugin/plugin.json`, `pyproject.toml`) and is all
-that is installed; the repo root keeps the development files. Every `fm/…`, `bin/` and `hooks/` path in this document, in
-`CLAUDE.md` and in the briefs is relative to `plugins/fm/`.
+The plugin is `plugins/foreman/` (`bin/`, `foreman/`, `hooks/`, `panel/dist/`, `.claude-plugin/plugin.json`, `pyproject.toml`) and is all
+that is installed; the repo root keeps the development files. Every `foreman/…`, `bin/` and `hooks/` path in this document, in
+`CLAUDE.md` and in the briefs is relative to `plugins/foreman/`.
 
 ### Layers and packages
 
 Layer = folder: the package says the layer, its sub-packages (areas) say which part of fm. Outside in; a module imports
-its own layer and the ones below, never above. Three leaf files stay at `fm/`'s root, for everyone to import: `proc.py`
+its own layer and the ones below, never above. Three leaf files stay at `foreman/`'s root, for everyone to import: `proc.py`
 (layer proc), `util.py` and `launcher.py` (layer core; `launcher` imports nothing of fm, as it runs alone under
 `python3 -c`).
 
 | Layer | Package | Areas → modules | Responsibility |
 |---|---|---|---|
-| ui | `fm/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
-| loop | `fm/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
-| steps | `fm/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
-| services | `fm/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
-| registry | `fm/providers/registry.py` | | picks the adapter, and hands out the repo (`registry.repo(p)`) (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `fm/providers/` | local · `github/`: provider, types, checks, review · gitrepo | one per platform, and `gitrepo` (the one module that runs git on a repo); they see their port, never the loop or each other |
-| ports | `fm/providers/` | `__init__.py` · repo | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome) |
-| proc | `fm/proc.py` | | the one module that runs programs |
-| core | `fm/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+| ui | `foreman/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
+| loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
+| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
+| services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
+| registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo (`registry.repo(p)`) (by convention the only caller of the adapters; not enforced by tach) |
+| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo | one per platform, and `gitrepo` (the one module that runs git on a repo); they see their port, never the loop or each other |
+| ports | `foreman/providers/` | `__init__.py` · repo | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome) |
+| proc | `foreman/proc.py` | | the one module that runs programs |
+| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
 Core areas, in their `depends_on` order: `project` (fm.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
 `tasks` (the backlog file, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
@@ -550,37 +550,37 @@ inline comments, the description, evidence) → `rules` (`risk` on `project`; `d
 its layer. A module with `depends_on` may import, in its own layer, only what it lists (lower layers stay open): that
 fixes the order of the core areas, so no cycle can form among them, as tach does not see a cycle inside one layer
 otherwise. `cli` and `panel` are two modules: the panel imports the CLI's functions (its actions run the
-owner's commands), the CLI never imports the panel; `fm/ui/main.py` starts `foreman panel`. Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
+owner's commands), the CLI never imports the panel; `foreman/ui/main.py` starts `foreman panel`. Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
 `agents` is the reviewer's.
 
 ```toml
 layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
 modules = [
-  { path = "fm.ui.cli", layer = "ui" },
-  { path = "fm.ui.panel", layer = "ui" },
-  { path = "fm.loop", layer = "loop" },
-  { path = "fm.steps", layer = "steps" },
-  { path = "fm.services.agents", layer = "services" },
-  { path = "fm.services.claude", layer = "services" },
-  { path = "fm.services.delivery", layer = "services" },
-  { path = "fm.services.lock", layer = "services" },
-  { path = "fm.services.launchd", layer = "services" },
-  { path = "fm.services.scratch", layer = "services" },
-  { path = "fm.providers.registry", layer = "registry" },
-  { path = "fm.providers.github", layer = "adapters", depends_on = ["fm.providers"] },
-  { path = "fm.providers.local", layer = "adapters", depends_on = ["fm.providers"] },
-  { path = "fm.providers.gitrepo", layer = "adapters", depends_on = ["fm.providers.repo"] },
-  { path = "fm.providers", layer = "ports" },
-  { path = "fm.providers.repo", layer = "ports" },
-  { path = "fm.proc", layer = "proc" },
-  { path = "fm.util", layer = "core" },
-  { path = "fm.launcher", layer = "core" },
-  { path = "fm.core.project", layer = "core", depends_on = ["fm.util"] },
-  { path = "fm.core.tasks", layer = "core", depends_on = ["fm.core.project", "fm.util"] },
-  { path = "fm.core.review", layer = "core", depends_on = ["fm.util"] },
-  { path = "fm.core.rules.risk", layer = "core", depends_on = ["fm.core.project"] },
-  { path = "fm.core.rules.decide", layer = "core", depends_on = ["fm.core.rules.risk"] },
-  { path = "fm.core.oversight", layer = "core", depends_on = ["fm.core.project", "fm.core.tasks", "fm.core.review", "fm.util"] },
+  { path = "foreman.ui.cli", layer = "ui" },
+  { path = "foreman.ui.panel", layer = "ui" },
+  { path = "foreman.loop", layer = "loop" },
+  { path = "foreman.steps", layer = "steps" },
+  { path = "foreman.services.agents", layer = "services" },
+  { path = "foreman.services.claude", layer = "services" },
+  { path = "foreman.services.delivery", layer = "services" },
+  { path = "foreman.services.lock", layer = "services" },
+  { path = "foreman.services.launchd", layer = "services" },
+  { path = "foreman.services.scratch", layer = "services" },
+  { path = "foreman.providers.registry", layer = "registry" },
+  { path = "foreman.providers.github", layer = "adapters", depends_on = ["foreman.providers"] },
+  { path = "foreman.providers.local", layer = "adapters", depends_on = ["foreman.providers"] },
+  { path = "foreman.providers.gitrepo", layer = "adapters", depends_on = ["foreman.providers.repo"] },
+  { path = "foreman.providers", layer = "ports" },
+  { path = "foreman.providers.repo", layer = "ports" },
+  { path = "foreman.proc", layer = "proc" },
+  { path = "foreman.util", layer = "core" },
+  { path = "foreman.launcher", layer = "core" },
+  { path = "foreman.core.project", layer = "core", depends_on = ["foreman.util"] },
+  { path = "foreman.core.tasks", layer = "core", depends_on = ["foreman.core.project", "foreman.util"] },
+  { path = "foreman.core.review", layer = "core", depends_on = ["foreman.util"] },
+  { path = "foreman.core.rules.risk", layer = "core", depends_on = ["foreman.core.project"] },
+  { path = "foreman.core.rules.decide", layer = "core", depends_on = ["foreman.core.rules.risk"] },
+  { path = "foreman.core.oversight", layer = "core", depends_on = ["foreman.core.project", "foreman.core.tasks", "foreman.core.review", "foreman.util"] },
 ]
 ```
 
@@ -602,11 +602,11 @@ A module that grows past its size is split along its area's seams, inside its ar
   (a new `repos.py`), the path matching pure in `core/project/repos.py`; the loop calls `for_task` once per task step,
   in `loop/queue.py`.
 - **Task types (FN-157, built):** the type names and rules → `core/tasks/tasktypes.py`; each type's paragraph stays data
-  in `fm/briefs/*.md`, read by `services/agents/brief.py`; `--type` → `ui/cli/parser.py`. A new type is one entry and
+  in `foreman/briefs/*.md`, read by `services/agents/brief.py`; `--type` → `ui/cli/parser.py`. A new type is one entry and
   one paragraph, no other layer.
 - **Plugin entry points (FN-146, FN-159):** the SessionStart hook and `foreman project` → `ui/cli/plugin.py`; the session's
-  context text → `core/project/plugin.py`; the installed version's start → `fm/launcher.py`; the launchd jobs' text →
-  `services/launchd.py`; `bin/foreman` and `hooks/hooks.json` are in `plugins/fm/`.
+  context text → `core/project/plugin.py`; the installed version's start → `foreman/launcher.py`; the launchd jobs' text →
+  `services/launchd.py`; `bin/foreman` and `hooks/hooks.json` are in `plugins/foreman/`.
 
 ### Ports
 
@@ -619,7 +619,7 @@ task.
 
 The rules, one line each, are in `CLAUDE.md`, each marked as checked by `make check` or by the reviewer. What they need
 said once:
-- **One module runs programs**: `fm/proc.py` (`run`, `run_json`; it knows nothing of git, gh or claude; a missing
+- **One module runs programs**: `foreman/proc.py` (`run`, `run_json`; it knows nothing of git, gh or claude; a missing
   program or a timeout is a `ProcError`). ruff bans `import subprocess` elsewhere (TID251; not `os.system`/`os.popen`).
   The only other exceptions in `per-file-ignores` (`pyproject.toml`) are the tests and `lock.py`, which needs a process
   group and signals to stop a whole job at its time limit (`start_new_session`, `killpg`).
@@ -646,7 +646,7 @@ Metrics per task (`foreman metrics`, the panel): the model and effort its respon
 done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (stopped without finishing),
 questions to the owner, guard stops, risk, and what misled its agents (their `--misled` words, per agent).
 
-Health checks (`fm/steps/health/`), each finding a triage task, deduplicated by key while open or while it persists:
+Health checks (`foreman/steps/health/`), each finding a triage task, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `foreman health`, the panel), agent stuck (working, its
 transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
 tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing

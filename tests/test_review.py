@@ -4,11 +4,11 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
-from fm.core.review.inline import Review
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.providers import Change, registry
-from fm.services.delivery import pulls
+from foreman.core.review.inline import Review
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.providers import Change, registry
+from foreman.services.delivery import pulls
 
 DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @@\n a\n+b\n+c\n d\n"
 

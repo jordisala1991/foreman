@@ -4,11 +4,11 @@ import pytest
 import test_loop
 from helpers import Env, git
 
-from fm.core.tasks import backlog
-from fm.loop import queue, tick
-from fm.providers import ChangeState, registry
-from fm.services.delivery import merge
-from fm.steps import talk
+from foreman.core.tasks import backlog
+from foreman.loop import queue, tick
+from foreman.providers import ChangeState, registry
+from foreman.services.delivery import merge
+from foreman.steps import talk
 
 
 class TestProvider:
@@ -16,7 +16,7 @@ class TestProvider:
         return test_loop.TestQueue().deliver(e)  # via the module: an imported Queue would be collected and run twice
 
     def test_accept_only_marks_and_the_task_closes_when_the_merge_is_seen_in_main(self):
-        from fm.providers import local
+        from foreman.providers import local
 
         e = Env(test="true")
         tid = self.delivered(e)
@@ -56,7 +56,7 @@ class TestProvider:
             assert len(git(e.repo, "log", "-1", "--format=%P", "main").split()) == parents
 
     def test_unknown_merge_or_provider_is_a_clear_config_error(self):
-        from fm import providers
+        from foreman import providers
 
         e = Env(test="true")
         tid = self.delivered(e)
@@ -180,7 +180,7 @@ class TestProvider:
         assert registry.get(e.p).name == "local"  # no GitHub remote: local
         import inspect
 
-        from fm.providers import local
+        from foreman.providers import local
 
         src = inspect.getsource(local)
         for word in ('"push"', '"tag"', "release"):

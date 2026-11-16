@@ -7,9 +7,9 @@ import time
 import pytest
 from helpers import PLUGIN
 
-from fm import util
-from fm.services import lock
-from fm.services.agents import brief
+from foreman import util
+from foreman.services import lock
+from foreman.services.agents import brief
 
 FM = str(PLUGIN / "bin/foreman")
 
@@ -58,7 +58,7 @@ class TestLock:
 
     def test_the_command_fails_and_the_resource_is_released_with_its_code(self):
         assert self.fm_lock("gpu", "a", "sh", "-c", "exit 3").wait(timeout=20) == 3
-        from fm.core.project.config import Project
+        from foreman.core.project.config import Project
 
         assert lock.declared(Project.load(self.e.home).cfg)["gpu"].status()["held"] == {}
 
@@ -69,7 +69,7 @@ class TestLock:
         assert lock.uses(["gpu"])[-1]["event"] == "timeout"
 
     def test_a_holder_that_died_is_cleaned_up(self):
-        from fm.core.project.config import Project
+        from foreman.core.project.config import Project
 
         dead = subprocess.Popen(["true"])
         dead.wait()
@@ -84,8 +84,8 @@ class TestLock:
         assert r.stdout.strip() == "free"
 
     def test_the_brief_names_the_resources(self):
-        from fm.core.project.config import Project
-        from fm.core.tasks import backlog
+        from foreman.core.project.config import Project
+        from foreman.core.tasks import backlog
 
         p = Project.load(self.e.home)
         tid = backlog.add(p, "x", status="ready", criteria="y")

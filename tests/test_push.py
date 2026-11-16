@@ -7,10 +7,10 @@ import pytest
 from helpers import Env, git
 from test_github import GH
 
-from fm import providers
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.loop.guarded import guarded
+from foreman import providers
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.loop.guarded import guarded
 
 
 def transient() -> None:
@@ -71,7 +71,7 @@ class TestPushes:
         """Patches the push so its first `failures` calls fail with `error`; returns the list of push calls."""
         from unittest import mock
 
-        from fm import proc
+        from foreman import proc
 
         real, calls = proc.run, []
 

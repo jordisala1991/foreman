@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from fm.core.tasks import backlog
-from fm.services.agents import brief, launch
-from fm.ui.panel import actions
+from foreman.core.tasks import backlog
+from foreman.services.agents import brief, launch
+from foreman.ui.panel import actions
 
 READY = ("ready",)
 

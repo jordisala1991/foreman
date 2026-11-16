@@ -7,8 +7,8 @@ from unittest import mock
 
 import pytest
 
-from fm.core.oversight import guard
-from fm.core.tasks import backlog
+from foreman.core.oversight import guard
+from foreman.core.tasks import backlog
 
 
 class TestBash:

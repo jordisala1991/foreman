@@ -1,8 +1,8 @@
 import re
 
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services.agents import launch
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services.agents import launch
 from tests.helpers import Env, fm
 
 

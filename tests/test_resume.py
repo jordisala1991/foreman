@@ -5,12 +5,12 @@ import json
 import pytest
 from helpers import Env
 
-from fm import proc, util
-from fm.core.tasks import backlog, questions
-from fm.loop import tick
-from fm.services.claude import sessions
-from fm.steps import talk
-from fm.steps.health import checks
+from foreman import proc, util
+from foreman.core.tasks import backlog, questions
+from foreman.loop import tick
+from foreman.services.claude import sessions
+from foreman.steps import talk
+from foreman.steps.health import checks
 
 
 def launched(e: Env) -> str:

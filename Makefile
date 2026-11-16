@@ -29,7 +29,7 @@ lint:
 format:
 	uv run ruff format --check .
 
-# Strict on plugins/fm/fm/ (see [tool.pyright] in pyproject.toml).
+# Strict on plugins/foreman/foreman/ (see [tool.pyright] in pyproject.toml).
 types:
 	uv run pyright
 
@@ -41,15 +41,15 @@ arch:
 # Suppression comments. noqa is ignored by `make lint` (--ignore-noqa) and type: ignore by pyright (enableTypeIgnoreComments = false);
 # these are the ones no tool covers: none allowed. A suppression is not a fix.
 suppressions:
-	@! git grep -nE '#[[:space:]]*(pyright:[[:space:]]*(ignore|basic|off)|pylint:[[:space:]]*disable)' -- plugins/fm/fm tests || { echo "suppressions: fix the cause, do not silence it"; exit 1; }
+	@! git grep -nE '#[[:space:]]*(pyright:[[:space:]]*(ignore|basic|off)|pylint:[[:space:]]*disable)' -- plugins/foreman/foreman tests || { echo "suppressions: fix the cause, do not silence it"; exit 1; }
 
-# File length: ruff has no rule for it. plugins/fm/fm/ 300 lines (limit in pyproject.toml), tests 600.
+# File length: ruff has no rule for it. plugins/foreman/foreman/ 300 lines (limit in pyproject.toml), tests 600.
 size:
-	uv run pylint plugins/fm/fm
+	uv run pylint plugins/foreman/foreman
 	uv run pylint --max-module-lines=600 tests
 
 # -W error::ResourceWarning: a file or pipe left open is reported loudly (traceback of where it was opened), not swallowed.
-# -n auto: one worker per core (pytest-xdist); `test-serial` runs them in one process. pytest puts plugins/fm (pythonpath in
+# -n auto: one worker per core (pytest-xdist); `test-serial` runs them in one process. pytest puts plugins/foreman (pythonpath in
 # pyproject.toml), so fm, on the path, and tests/, so `helpers`.
 test:
 	uv run python -m pytest -q -n auto -W error::ResourceWarning tests

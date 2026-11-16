@@ -14,9 +14,9 @@ from unittest import mock
 import pytest
 from helpers import PLUGIN, REAL_REGISTRY, SANDBOX, fm
 
-from fm.core.project import registry
-from fm.services import lock
-from fm.ui.panel import server
+from foreman.core.project import registry
+from foreman.services import lock
+from foreman.ui.panel import server
 
 
 def leaked(registry: Path) -> list[str]:

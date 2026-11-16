@@ -4,115 +4,115 @@
 # Loosening a rule here is the owner's call.
 exact = false  # layers carry most rules; an unused depends_on is not an error
 forbid_circular_dependencies = true
-source_roots = ["plugins/fm"]
+source_roots = ["plugins/foreman"]
 root_module = "ignore"
 exclude = ["tests", "panel/**", "demo", ".venv", "**/__pycache__"]
 layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]
 
 # ui: the owner's and the agents' entry points; they call the loop and everything below. cli and panel are two modules: the
-# panel imports the CLI's functions, the CLI never imports the panel (`fm/ui/main.py`, above both, starts `fm panel`).
+# panel imports the CLI's functions, the CLI never imports the panel (`foreman/ui/main.py`, above both, starts `fm panel`).
 [[modules]]
-path = "fm.ui.cli"
+path = "foreman.ui.cli"
 layer = "ui"
 
 [[modules]]
-path = "fm.ui.panel"
+path = "foreman.ui.panel"
 layer = "ui"
 
 # loop: the process that ticks; does the I/O and calls the core.
 [[modules]]
-path = "fm.loop"
+path = "foreman.loop"
 layer = "loop"
 
 # steps: one step of a tick, or a view over several pieces.
 [[modules]]
-path = "fm.steps"
+path = "foreman.steps"
 layer = "steps"
 
 # services: git, claude and the lock: the outside world, called by the steps.
 [[modules]]
-path = "fm.services.agents"
+path = "foreman.services.agents"
 layer = "services"
 [[modules]]
-path = "fm.services.claude"
+path = "foreman.services.claude"
 layer = "services"
 [[modules]]
-path = "fm.services.delivery"
+path = "foreman.services.delivery"
 layer = "services"
 [[modules]]
-path = "fm.services.lock"
+path = "foreman.services.lock"
 layer = "services"
 [[modules]]
-path = "fm.services.launchd"
+path = "foreman.services.launchd"
 layer = "services"
 [[modules]]
-path = "fm.services.scratch"
+path = "foreman.services.scratch"
 layer = "services"
 
 # registry: the one place that knows the provider adapters.
 [[modules]]
-path = "fm.providers.registry"
+path = "foreman.providers.registry"
 layer = "registry"
 
 # ports: the provider interface, and the repo interface (every git operation on a repo).
 [[modules]]
-path = "fm.providers"
+path = "foreman.providers"
 layer = "ports"
 [[modules]]
-path = "fm.providers.repo"
+path = "foreman.providers.repo"
 layer = "ports"
 
 # adapters: one per platform. Layer "adapters" keeps the core from importing them; a layer rule keeps them from the loop, and their `depends_on` from each other.
 [[modules]]
-path = "fm.providers.github"
+path = "foreman.providers.github"
 layer = "adapters"
-depends_on = ["fm.providers"]
+depends_on = ["foreman.providers"]
 [[modules]]
-path = "fm.providers.local"
+path = "foreman.providers.local"
 layer = "adapters"
-depends_on = ["fm.providers"]
-# gitrepo: the one module that runs git on a repo, behind fm.providers.repo.
+depends_on = ["foreman.providers"]
+# gitrepo: the one module that runs git on a repo, behind foreman.providers.repo.
 [[modules]]
-path = "fm.providers.gitrepo"
+path = "foreman.providers.gitrepo"
 layer = "adapters"
-depends_on = ["fm.providers.repo"]
+depends_on = ["foreman.providers.repo"]
 
 # proc: the one module that runs programs; used by the loop, the services and the adapters, never by the core.
 [[modules]]
-path = "fm.proc"
+path = "foreman.proc"
 layer = "proc"
 
 # core: vocabulary and pure rules (risk, autonomy, guard), plus the plain files that do not vary (backlog.json, config).
-# Packages under fm/core/ (a package path gives all its files); no subprocess here (ruff, TID251 in pyproject.toml).
+# Packages under foreman/core/ (a package path gives all its files); no subprocess here (ruff, TID251 in pyproject.toml).
 [[modules]]
-path = "fm.core.project"
+path = "foreman.core.project"
 layer = "core"
-depends_on = ["fm.util"]
+depends_on = ["foreman.util"]
 [[modules]]
-path = "fm.core.tasks"
+path = "foreman.core.tasks"
 layer = "core"
-depends_on = ["fm.core.project", "fm.util"]
+depends_on = ["foreman.core.project", "foreman.util"]
 [[modules]]
-path = "fm.core.review"
+path = "foreman.core.review"
 layer = "core"
-depends_on = ["fm.util"]
+depends_on = ["foreman.util"]
 [[modules]]
-path = "fm.core.rules.risk"
+path = "foreman.core.rules.risk"
 layer = "core"
-depends_on = ["fm.core.project"]
+depends_on = ["foreman.core.project"]
 # decide: the loop's review and merge decisions; runs no program and touches no file, so it may import only risk.
 [[modules]]
-path = "fm.core.rules.decide"
+path = "foreman.core.rules.decide"
 layer = "core"
-depends_on = ["fm.core.rules.risk"]
+depends_on = ["foreman.core.rules.risk"]
 [[modules]]
-path = "fm.core.oversight"
+path = "foreman.core.oversight"
 layer = "core"
-depends_on = ["fm.core.project", "fm.core.tasks", "fm.core.review", "fm.util"]
+depends_on = ["foreman.core.project", "foreman.core.tasks", "foreman.core.review", "foreman.util"]
 [[modules]]
-path = "fm.util"
+path = "foreman.util"
 layer = "core"
 # launcher: which fm version runs; stdlib only, as the launchd jobs run it alone (python3 -c).
 [[modules]]
-path = "fm.launcher"
+path = "foreman.launcher"
 layer = "core"

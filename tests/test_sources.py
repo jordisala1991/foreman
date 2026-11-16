@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 from helpers import git
 
-from fm import util
-from fm.core.tasks import backlog
-from fm.loop import tick
-from fm.services.delivery import check
-from fm.steps import sources
+from foreman import util
+from foreman.core.tasks import backlog
+from foreman.loop import tick
+from foreman.services.delivery import check
+from foreman.steps import sources
 
 
 class TestSignals:
@@ -139,7 +139,7 @@ class TestSignals:
 
         a, b = self.running(), backlog.add(self.p, "second", status="triage")
         backlog.set_status(self.p, b, "in progress")
-        with mock.patch("fm.services.claude.sessions.stop", side_effect=OSError("hung")):
+        with mock.patch("foreman.services.claude.sessions.stop", side_effect=OSError("hung")):
             self.emit({"key": "x1", "task": a, "action": "cancel"}, {"key": "x2", "task": b, "action": "done"})
         assert self.e.task(b)["status"] == "done"
         assert self.e.task(a)["status"] == "in progress"

@@ -1,6 +1,6 @@
 """Risk and autonomy: pure functions, no I/O. Given the facts the checks found about a branch (`Facts`), `score` says how risky
 the merge is (low, medium, high, with the reasons) and `allows` says whether the project's autonomy lets that risk
-merge without the owner. High never merges alone. The checks that find the facts, and the merge itself, are in fm/services/delivery/."""
+merge without the owner. High never merges alone. The checks that find the facts, and the merge itself, are in foreman/services/delivery/."""
 
 import fnmatch
 from collections.abc import Mapping

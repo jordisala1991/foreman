@@ -1,7 +1,7 @@
 """The verdict as a review body: pure."""
 
-from fm.core.review import verdict
-from fm.core.review.verdict import FIX, LOOK, READY, Case, Finding, findings, key, render
+from foreman.core.review import verdict
+from foreman.core.review.verdict import FIX, LOOK, READY, Case, Finding, findings, key, render
 
 
 def case(risk="low", tests="pass", ci="pass", open=0, reasons=None) -> Case:

@@ -1,5 +1,5 @@
 """The loop's review step of a branch in review: what it sees (`seen_of`, the facts decide.review_step needs) and doing
-what that step said (`apply_review`). The decisions themselves are in fm/core/rules/decide.py."""
+what that step said (`apply_review`). The decisions themselves are in foreman/core/rules/decide.py."""
 
 from pathlib import Path
 from typing import Any

@@ -3,8 +3,8 @@
 from helpers import Env, fm
 from test_review_rules import commit, deliver
 
-from fm.core.tasks import backlog
-from fm.loop import tick
+from foreman.core.tasks import backlog
+from foreman.loop import tick
 
 
 def pause(e: Env) -> None:

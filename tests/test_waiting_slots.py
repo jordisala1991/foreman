@@ -3,8 +3,8 @@
 import pytest
 from helpers import Env
 
-from fm.core.tasks import backlog, questions
-from fm.loop import tick
+from foreman.core.tasks import backlog, questions
+from foreman.loop import tick
 
 
 def three_ready(e: Env) -> tuple[str, str, str]:

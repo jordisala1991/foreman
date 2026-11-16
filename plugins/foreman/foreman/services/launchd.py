@@ -1,7 +1,7 @@
 """`foreman launchd`: the two launchd jobs (`loop`, `panel`) that start at login and are restarted if they exit.
 
 Run from a version folder of the installed plugin, a job's command names no version: it carries the launcher
-(`python3 -c`, fm/launcher.py), which runs the version of fm@fm installed at each start. Run from a plain checkout, it
+(`python3 -c`, foreman/launcher.py), which runs the version of fm@fm installed at each start. Run from a plain checkout, it
 names that checkout's bin/foreman."""
 
 import os

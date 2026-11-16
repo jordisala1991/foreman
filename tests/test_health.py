@@ -10,13 +10,13 @@ from unittest import mock
 import pytest
 from helpers import Env, fm, git, install_fm, version_folder
 
-from fm import launcher, util
-from fm.core.project import registry
-from fm.core.tasks import backlog, questions
-from fm.loop import tick
-from fm.services.claude import login
-from fm.services.delivery import check
-from fm.steps.health import checks, main_tests, notes
+from foreman import launcher, util
+from foreman.core.project import registry
+from foreman.core.tasks import backlog, questions
+from foreman.loop import tick
+from foreman.services.claude import login
+from foreman.services.delivery import check
+from foreman.steps.health import checks, main_tests, notes
 
 
 class TestHealth:
@@ -107,8 +107,8 @@ class TestHealth:
 
 class TestMetrics:
     def test_cost_from_transcripts_counts_each_response_once(self):
-        from fm.core.oversight import costs
-        from fm.steps import metrics
+        from foreman.core.oversight import costs
+        from foreman.steps import metrics
 
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
@@ -125,7 +125,7 @@ class TestMetrics:
         assert metrics.per_task(e.p)[0]["usd"] == 2.0
 
     def test_usage_skips_lines_that_are_not_objects(self):
-        from fm.core.oversight import costs
+        from foreman.core.oversight import costs
 
         good = {"type": "assistant", "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 1000, "output_tokens": 0}}}
         f = Path(tempfile.mkdtemp()) / "s.jsonl"
