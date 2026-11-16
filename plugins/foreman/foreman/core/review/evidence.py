@@ -1,10 +1,10 @@
 """Images of a task's report (screenshots as proof). The report names them as bare file names, `![what](x.png)`, saved
-in `reports/ID/`; GitHub gets them on the `fm-evidence` branch (the loop pushes it, never an agent), the panel serves them
+in `reports/ID/`; GitHub gets them on the `foreman-evidence` branch (the loop pushes it, never an agent), the panel serves them
 itself. Pure text rules: no I/O here."""
 
 import re
 
-BRANCH = "fm-evidence"
+BRANCH = "foreman-evidence"
 KINDS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 MAX_BYTES = 2_000_000
 

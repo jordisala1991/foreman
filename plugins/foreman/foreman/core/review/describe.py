@@ -3,8 +3,8 @@ Pure text: no I/O here. fm owns only the block between the markers; text someone
 
 from typing import Any
 
-OPEN = "<!-- fm:description -->"
-CLOSE = "<!-- /fm:description -->"
+OPEN = "<!-- foreman:description -->"
+CLOSE = "<!-- /foreman:description -->"
 ROUNDS = "## Review rounds"
 
 

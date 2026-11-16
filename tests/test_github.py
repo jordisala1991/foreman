@@ -70,7 +70,7 @@ FAKE_GH = textwrap.dedent("""\
         if parts[4].isdigit() and tail[:1] == ["reviews"] and len(tail) == 3:
             bodies = s["prs"][parts[4]].get("review_comments", [])
             for n, b in enumerate(bodies, 1):
-                print(n, *re.findall(r"<!-- fm:[a-z0-9-]+ -->", b))
+                print(n, *re.findall(r"<!-- foreman:[a-z0-9-]+ -->", b))
             sys.exit(0)
         if parts[4].isdigit() and tail[:1] == ["reviews"] and len(tail) == 2:
             if s.get("fail_put"):
@@ -96,7 +96,7 @@ FAKE_GH = textwrap.dedent("""\
             else:
                 bodies = [r["body"] or "" for r in pr.get("reviews", [])] if tail == ["reviews"] else pr.get("review_comments", [])
                 for b in bodies:
-                    for m in re.findall(r"<!-- fm:[a-z0-9-]+ -->", b):
+                    for m in re.findall(r"<!-- foreman:[a-z0-9-]+ -->", b):
                         print(m)
             sys.exit(0)
         print(s.get("api_sha") or "null")

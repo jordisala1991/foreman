@@ -140,7 +140,7 @@ class TestReview_:
         (r,) = self.pr(g)["reviews"]
         assert f"https://github.com/o/r/blob/{head}/app.py#L99" in r["body"]
         assert "https://github.com/o/r/pull/1#discussion_r1" in r["body"]
-        assert "fm-link" not in r["body"]
+        assert "foreman-link" not in r["body"]
         assert "why: because" not in r["comments"][0]["body"]
         assert "because" in r["comments"][0]["body"]
 
