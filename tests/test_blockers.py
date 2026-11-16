@@ -7,8 +7,9 @@ from helpers import Env, fm
 
 from foreman import util
 from foreman.core.tasks import backlog, blockers
-from foreman.loop import tick
+from foreman.loop.launch import launch_free
 from foreman.services.delivery import merge
+from foreman.steps import release
 
 
 def events(e: Env, tid: str) -> list[str]:
@@ -17,17 +18,23 @@ def events(e: Env, tid: str) -> list[str]:
 
 class TestBlockers:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner):
+    def set_up(self, owner, fake_git):
+        self.fake = fake_git
         self.fresh()
 
     def fresh(self) -> None:
         """A new project with two triage tasks (a test that needs several calls it again)."""
-        self.e = Env()
+        self.e = Env(repo=self.fake)
         self.X1 = backlog.add(self.e.p, "x1", status="triage")
         self.X2 = backlog.add(self.e.p, "x2", status="triage")
 
     def y(self, *extra: str) -> str:
         return fm(self.e.home, "add", "y", "--criteria", "c", *extra).strip()
+
+    def step(self) -> None:
+        """The tick's steps a blocker is about, in its order: release, then launch."""
+        release.run(self.e.p)
+        launch_free(self.e.p)
 
     def ids(self, tid: str) -> list[str]:
         return self.e.task(tid).get("blocked_by", [])
@@ -56,22 +63,22 @@ class TestBlockers:
     def test_not_launched_until_the_last_blocker_is_done(self, status, started):
         y = self.y("--blocked-by", self.X1, self.X2)
         backlog.set_status(self.e.p, y, status)
-        tick.tick(self.e.p)
+        self.step()
         assert (self.e.calls(), self.e.task(y)["status"]) == ([], status)
         merge.close(self.e.p, self.X1, "done", "x")
-        tick.tick(self.e.p)
+        self.step()
         assert self.e.calls() == []
         merge.close(self.e.p, self.X2, "done", "x")
-        tick.tick(self.e.p)
+        self.step()
         assert (len(self.e.calls()), self.e.task(y)["status"]) == (1, started)
         assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
-        tick.tick(self.e.p)
+        self.step()
         assert len([t for t in events(self.e, y) if "unblocked" in t]) == 1
 
     def test_a_task_filed_with_a_done_blocker_launches_at_once(self):
         merge.close(self.e.p, self.X1, "done", "x")
         y = self.y("--blocked-by", self.X1)
-        tick.tick(self.e.p)
+        self.step()
         assert len(self.e.calls()) == 1
         assert self.e.task(y)["status"] == "refining"
 
@@ -80,20 +87,20 @@ class TestBlockers:
             self.fresh()
             y = self.y("--blocked-by", self.X1)
             backlog.set_status(self.e.p, self.X1, status)
-            tick.tick(self.e.p)
+            self.step()
             assert self.e.calls() == []
             assert self.X1 in self.e.task(y)["blocked"]
             n = len(events(self.e, y))
-            tick.tick(self.e.p)
+            self.step()
             assert len(events(self.e, y)) == n
             fm(self.e.home, "edit", y, "--blocked-by", "none")
             fm(self.e.home, "unblock", y)
-            tick.tick(self.e.p)
+            self.step()
             assert len(self.e.calls()) == 1
         self.fresh()
         y = self.y("--blocked-by", self.X1)
         backlog.set_status(self.e.p, self.X1, "canceled")
-        tick.tick(self.e.p)
+        self.step()
         fm(self.e.home, "cancel", y)
         assert self.e.task(y)["status"] == "canceled"
 
