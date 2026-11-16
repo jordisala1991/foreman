@@ -36,21 +36,22 @@ def tests_at(p: Project, commit: str, name: str, merge: str = "") -> tuple[str, 
         return "none", ""
     tmp = p.state / "trees" / name
     r = registry.repo(p)
-    r.remove_worktree(tmp)
     try:
-        r.add_detached(tmp, commit)
-    except RepoError as e:
-        if merge or not e.reason:  # merged check, or git did not run: git's fault, it raises
-            raise git.DeliveryError(str(e)) from e
-        return "fail", e.reason
-    try:
-        if merge:  # a failure here is git's, not the tests': it raises
-            r.merge_in_worktree(tmp, merge)
-        return run_tests(p, tmp)
-    except RepoError as e:
-        raise git.DeliveryError(str(e)) from e
-    finally:
         r.remove_worktree(tmp)
+        try:
+            r.add_detached(tmp, commit)
+        except RepoError as e:
+            if merge or not e.reason:  # merged check, or git did not run: git's fault, it raises
+                raise
+            return "fail", e.reason
+        try:
+            if merge:  # a failure here is git's, not the tests': it raises
+                r.merge_in_worktree(tmp, merge)
+            return run_tests(p, tmp)
+        finally:
+            r.remove_worktree(tmp)
+    except RepoError as e:  # every git failure here is a DeliveryError, as documented
+        raise git.DeliveryError(str(e)) from e
 
 
 def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
