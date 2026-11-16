@@ -65,6 +65,19 @@ def test_conflicts(repo: Path):
     assert r.conflicts("main", "b") is False
 
 
+def test_a_git_failure_is_an_error_not_a_conflict(repo: Path):
+    r = GitRepo(repo)
+    for base, branch in (("main", "nope"), ("nope", "c")):
+        with pytest.raises(RepoError) as e:
+            r.conflicts(base, branch)
+        assert e.value.reason
+
+
+def test_merge_of_an_unknown_branch_is_an_error(repo: Path):
+    with pytest.raises(RepoError):
+        GitRepo(repo).merge("main", "nope", "m", False)
+
+
 @pytest.mark.parametrize("squash", [False, True])
 def test_merge_of_a_clean_branch(repo: Path, squash: bool):
     r = GitRepo(repo)

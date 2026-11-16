@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from ... import launcher, util
+from ... import launcher
 from ...core.project import registry
 from ...core.project.config import Project
+from . import checks
 
 
 def python_note() -> list[str]:
@@ -48,7 +49,7 @@ def repos_note(p: Project) -> str:
 
 def versions(p: Project) -> list[str]:
     """Which fm this command, the loop and Claude Code's install are; and that foreman@foreman cannot start the launchd jobs."""
-    hb = util.json_object(util.read_json(p.state / "loop.json", {})) or {}
+    hb = checks.heartbeat(p)
     try:
         now, why = launcher.installed().version, ""
     except launcher.LauncherError as e:

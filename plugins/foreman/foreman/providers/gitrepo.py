@@ -41,7 +41,11 @@ class GitRepo:
         return self._run("diff", "--name-only", "--diff-filter=D", f"{base}...{branch}").out.split()
 
     def conflicts(self, base: str, branch: str) -> bool:
-        return self._run("merge-tree", "--write-tree", base, branch, check=False).code != 0
+        r = self._run("merge-tree", "--write-tree", self.head(base), self.head(branch), check=False)
+        if r.code not in (0, 1):
+            reason = (r.err or r.out).strip()
+            raise RepoError(f"git merge-tree: {reason[:300]}", reason=reason)
+        return r.code == 1
 
     def follows(self, tip: str, head: str, main: str) -> Follows:
         parents = self._run("rev-list", "--parents", "-n", "1", head).out.split()[1:]
@@ -98,8 +102,7 @@ class GitRepo:
         if r.code != 0:
             self._run("merge", "--abort", check=False)
             self._run("reset", "--hard", "-q", "HEAD", check=False)  # a failed squash leaves no merge to abort
-            conflict = self._run("merge-tree", "--write-tree", main, branch, check=False).code == 1  # 1 = conflicts
-            return MergeOutcome(conflict=conflict, why=(r.err or r.out).strip()[:300])
+            return MergeOutcome(conflict=self.conflicts(main, branch), why=(r.err or r.out).strip()[:300])
         return MergeOutcome(commit=self.head("HEAD"))
 
     def origin_url(self) -> str:
