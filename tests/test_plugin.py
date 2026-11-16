@@ -7,6 +7,8 @@ import io
 import json
 import os
 import re
+import shlex
+import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -166,6 +168,12 @@ class TestPluginTest:
             s = sessions.settings(p, "AL-1", "al-1")
         assert s["env"]["PATH"].startswith(f"{self.root / 'v1/bin'}{os.pathsep}")
         assert f"{self.root / 'v1/bin/foreman'} guard" in s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+    def test_the_guard_command_is_one_shell_safe_string(self) -> None:
+        p = self.alpha(f'repo = "{self.repo}"')
+        with mock.patch.object(launcher, "ROOT", self.root / "with space/v1"):
+            cmd = sessions.settings(p, "AL-1", "al-1")["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        assert shlex.split(cmd) == [sys.executable, str(self.root / "with space/v1/bin/foreman"), "guard"]
 
     def test_the_manifests_name_foreman_and_declare_no_version(self) -> None:
         market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
