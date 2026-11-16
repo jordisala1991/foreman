@@ -89,6 +89,6 @@ class TestEdit:
         assert backlog.load(self.e.p) == before
 
     def test_refused_from_an_agent_session(self):
-        with mock.patch.dict(os.environ, {"FM_TASK": "TY-9"}), pytest.raises(SystemExit):
+        with mock.patch.dict(os.environ, {"FOREMAN_TASK": "TY-9"}), pytest.raises(SystemExit):
             fm(self.e.home, "edit", self.tid, "--title", "x")
         assert self.e.task(self.tid)["title"] == "t"

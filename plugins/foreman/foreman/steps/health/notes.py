@@ -47,11 +47,11 @@ def repos_note(p: Project) -> str:
 
 
 def versions(p: Project) -> list[str]:
-    """Which fm this command, the loop and Claude Code's install are; and that fm@fm cannot start the launchd jobs."""
+    """Which fm this command, the loop and Claude Code's install are; and that foreman@foreman cannot start the launchd jobs."""
     hb = util.json_object(util.read_json(p.state / "loop.json", {})) or {}
     try:
         now, why = launcher.installed().version, ""
     except launcher.LauncherError as e:
         now, why = "none", str(e)
     out = [f"versions: this command {launcher.ROOT.name} · the loop {hb.get('version') or 'unknown'} · installed {now}"]
-    return out + [f"! fm@fm cannot start the loop and the panel: {why}"] if why else out
+    return out + [f"! foreman@foreman cannot start the loop and the panel: {why}"] if why else out

@@ -16,7 +16,7 @@ from .common import home, mine
 def cmd_ask(a: argparse.Namespace) -> None:
     p = home(a)
     kind = "permission" if a.action else "question"
-    qid = questions.ask(p, mine(a), os.environ.get("FM_AGENT", "?"), a.text, kind=kind, action=a.action or "")
+    qid = questions.ask(p, mine(a), os.environ.get("FOREMAN_AGENT", "?"), a.text, kind=kind, action=a.action or "")
     print(f"{qid} is with the owner. End your turn now: his answer will come back to this conversation.")
 
 
@@ -50,7 +50,7 @@ def cmd_verdict(a: argparse.Namespace) -> None:
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
             i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
-    backlog.record_misled(p, tid, "hunter" if os.environ.get("FM_AGENT", "").endswith("-hunt") else "reviewer", a.misled)
+    backlog.record_misled(p, tid, "hunter" if os.environ.get("FOREMAN_AGENT", "").endswith("-hunt") else "reviewer", a.misled)
     backlog.event(p, tid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
     print("Verdict recorded. End your turn.")
 

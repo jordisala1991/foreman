@@ -40,7 +40,7 @@ If the task cannot be done, or turns out not to be one change, run `foreman bloc
 
 # Waits for the owner
 - What only he can answer (a preference, a choice of scope): `foreman ask "…"` and END YOUR TURN; his answer comes back here. Do not guess on that point meanwhile. A good question stands alone: the context in one line, the options, your recommendation and why.
-- Publishing, pushing to `$main`, deleting what is not yours, changing fm.toml, silencing a lint or type error (noqa, ignore, cast, exception lists, helpers whose only purpose is to please the checker): `foreman ask --action publish|push-main|delete|config "what and why"` (to silence a check, a plain `foreman ask "…"`). If the guard stops one, ask the same way; if he allows it you are told here, and it passes once.
+- Publishing, pushing to `$main`, deleting what is not yours, changing foreman.toml, silencing a lint or type error (noqa, ignore, cast, exception lists, helpers whose only purpose is to please the checker): `foreman ask --action publish|push-main|delete|config "what and why"` (to silence a check, a plain `foreman ask "…"`). If the guard stops one, ask the same way; if he allows it you are told here, and it passes once.
 
 # Never
 - Touch the main checkout (`$repo`), merge into `$main` (the merge is not yours), or look for another way past the guard.

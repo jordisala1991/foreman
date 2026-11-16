@@ -32,10 +32,10 @@ class TestRules:
         assert out == "![a](U) ![b](http://h/y.png) ![c](d/z.png) ![d](U) ![e](n.txt)"
 
     def test_guard_push_evidence(self):
-        sc = guard.Scope("/w", [Path("/w")], "fm/ty-1", Path("/h/fm.toml"), [])
+        sc = guard.Scope("/w", [Path("/w")], "foreman/ty-1", Path("/h/foreman.toml"), [])
         for cmd in ("git push origin HEAD:fm-evidence", "git push origin abc123:refs/heads/fm-evidence"):
             assert guard.check_bash(cmd, sc) == "push-evidence", cmd
-        assert guard.check_bash("git push origin fm/ty-1", sc) is None
+        assert guard.check_bash("git push origin foreman/ty-1", sc) is None
 
 
 class TestOnGitHub:
@@ -211,7 +211,7 @@ class TestPanel:
         assert self.get(self.q("x.png"), key=False)[0] == 403
 
     def test_panel_evidence_refuses_paths(self):
-        for name in ("../../fm.toml", "a/b.png", "../secret.png", "..", "x.txt", "nope.png", "/etc/passwd"):
+        for name in ("../../foreman.toml", "a/b.png", "../secret.png", "..", "x.txt", "nope.png", "/etc/passwd"):
             assert self.get(self.q(name))[0] == 404, name
         assert self.get("/evidence?p=demo&id=..&name=x.png")[0] == 404
         (self.folder / "k.png").symlink_to(self.t.p.home / "reports" / "secret.png")

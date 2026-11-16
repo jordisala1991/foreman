@@ -1,4 +1,4 @@
-"""The `[repos.<key>]` tables of fm.toml (DESIGN.md `## Several repos`): read strictly, each repo's settings merged over
+"""The `[repos.<key>]` tables of foreman.toml (DESIGN.md `## Several repos`): read strictly, each repo's settings merged over
 the project's key by key, and the layout check. Pure: raises ValueError, `config` turns it into a ProjectError."""
 
 import string
@@ -16,7 +16,7 @@ def parse(raw: dict[str, Any], cfg: dict[str, dict[str, Any]]) -> dict[str, dict
         raise ValueError("[repos] holds [repos.<key>] tables (path, main)")
     tables: dict[str, Any] = raw.get("repos", {})
     if tables and "repo" in raw.get("project", {}):
-        raise ValueError("fm.toml has both [project] repo and [repos.<key>] tables: use one of the two forms")
+        raise ValueError("foreman.toml has both [project] repo and [repos.<key>] tables: use one of the two forms")
     if tables and not isinstance(cfg["project"]["worktrees"], str):
         raise ValueError("[project] worktrees is a folder path")
     out: dict[str, dict[str, Any]] = {}

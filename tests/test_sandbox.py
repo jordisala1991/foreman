@@ -1,5 +1,5 @@
-"""A test run never writes the owner's real ~/.config/fm: HOME and FM_REGISTRY point at a temp dir (see helpers), and nothing of an
-agent's session (FM_TASK…) reaches a test."""
+"""A test run never writes the owner's real ~/.config/foreman: HOME and FOREMAN_REGISTRY point at a temp dir (see helpers), and nothing of an
+agent's session (FOREMAN_TASK…) reaches a test."""
 
 import functools
 import json
@@ -39,7 +39,7 @@ class TestSandbox:
             os.environ.pop(name, None)
 
     def test_an_agents_session_variables_do_not_reach_the_tests(self) -> None:
-        session = {"FM_TASK": "AL-1", "FM_AGENT": "al-1", "FM_HOME": "/x/home", "FM_PROJECT": "al", "FM_PINNED": "/x/v1"}
+        session = {"FOREMAN_TASK": "AL-1", "FOREMAN_AGENT": "al-1", "FOREMAN_HOME": "/x/home", "FOREMAN_PROJECT": "al", "FOREMAN_PINNED": "/x/v1"}
         code = f"import os, helpers; print(sorted(k for k in {sorted(session)!r} if k in os.environ))"
         path = os.pathsep.join([str(Path(__file__).parent), str(PLUGIN)])
         env = {**os.environ, **session, "PYTHONPATH": path}
@@ -47,12 +47,15 @@ class TestSandbox:
         assert out.strip() == "[]"
 
     def test_home_files_live_in_the_sandbox(self) -> None:
-        self.unset("FM_REGISTRY", "FM_LOCKS")
+        self.unset("FOREMAN_REGISTRY", "FOREMAN_LOCKS")
         for path in (Path.home(), registry.registry_file(), server.token_file(), lock.root()):
             assert path.is_relative_to(SANDBOX), path
+        assert registry.registry_file() == Path.home() / ".config/foreman/projects.json"
+        assert server.token_file() == Path.home() / ".config/foreman/panel.token"
+        assert lock.root() == Path.home() / ".local/state/foreman/locks"
 
     def test_init_registers_in_the_sandbox(self, request) -> None:
-        self.unset("FM_REGISTRY")
+        self.unset("FOREMAN_REGISTRY")
         d = Path(tempfile.mkdtemp(prefix="fmtest-")).resolve()
         request.addfinalizer(functools.partial(shutil.rmtree, d, ignore_errors=True))
         fm(d, "init", "--prefix", "ZZ", "--repo", "r")

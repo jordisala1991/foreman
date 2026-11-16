@@ -20,7 +20,7 @@ PRICES = {
 
 
 def projects_dir() -> Path:
-    return Path(os.environ.get("FM_CLAUDE_PROJECTS") or Path.home() / ".claude/projects")
+    return Path(os.environ.get("FOREMAN_CLAUDE_PROJECTS") or Path.home() / ".claude/projects")
 
 
 def files_of(sid: str) -> list[Path]:

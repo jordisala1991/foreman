@@ -64,14 +64,14 @@ class TestChoice:
     def test_ready_sets_model_and_effort(self):
         tid = backlog.add(self.e.p, "t", criteria="c")
         backlog.update(self.e.p, tid, status="refining")
-        with mock.patch.dict(os.environ, {"FM_TASK": tid}):
+        with mock.patch.dict(os.environ, {"FOREMAN_TASK": tid}):
             fm(self.e.home, "ready", "--no-plan", "x", "--model", "opus", "--effort", "high")
         i = self.e.task(tid)
         assert (i["status"], i["model"], i["effort"]) == ("ready", "opus", "high")
 
     def plan_ready(self, tid: str, *flags: str) -> None:
         backlog.update(self.e.p, tid, status="refining")
-        with mock.patch.dict(os.environ, {"FM_TASK": tid}):
+        with mock.patch.dict(os.environ, {"FOREMAN_TASK": tid}):
             fm(self.e.home, "ready", "--no-plan", "x", *flags)
 
     def launched_with(self, tid: str) -> tuple:

@@ -1,4 +1,4 @@
-"""Which fm runs: Claude Code's record of the installed fm@fm, the launcher the launchd plists carry, and a job started
+"""Which fm runs: Claude Code's record of the installed foreman@foreman, the launcher the launchd plists carry, and a job started
 by it exiting when another version is installed."""
 
 import os
@@ -21,7 +21,7 @@ class TestLauncher:
     def set_up(self, request) -> None:
         tmp = tempfile.TemporaryDirectory()
         request.addfinalizer(tmp.cleanup)
-        self.cache = Path(tmp.name).resolve() / "cache/fm/fm"
+        self.cache = Path(tmp.name).resolve() / "cache/foreman/foreman"
         self.a = version_folder(self.cache, "aaa")
         self.b = version_folder(self.cache, "bbb")
         env = mock.patch.dict(os.environ)
@@ -33,7 +33,7 @@ class TestLauncher:
         with pytest.raises(launcher.LauncherError) as e:
             launcher.installed()
         assert needle in str(e.value)
-        assert ("fm@fm" if "format version" not in needle else "installed_plugins.json") in str(e.value)
+        assert ("foreman@foreman" if "format version" not in needle else "installed_plugins.json") in str(e.value)
         assert "\n" not in str(e.value)
 
     def test_the_user_install_is_read_by_its_folder(self, request) -> None:
@@ -43,9 +43,9 @@ class TestLauncher:
     def test_what_does_not_fit_says_so_in_one_line(self, request) -> None:
         self.fails("is not installed in Claude Code")  # no record at all
         install_fm(request, self.a, version=3)
-        self.fails("has format version 3, fm reads 2")
+        self.fails("has format version 3, foreman reads 2")
         install_fm(request)
-        self.fails("run claude plugin install fm@fm")
+        self.fails("run claude plugin install foreman@foreman")
         install_fm(request, self.a, self.b)
         self.fails("2 user installs")
         install_fm(request, {"scope": "user", "version": "aaa"})
@@ -53,8 +53,8 @@ class TestLauncher:
         install_fm(request, {**self.a, "installPath": str(self.cache / "gone")})
         self.fails(f"its folder {self.cache / 'gone'} is missing")
         for odd in (5, self.a, ["aaa"], [{"version": "aaa"}]):  # not a list of installs, each with its scope
-            util.write_json(launcher.record(), {"version": 2, "plugins": {"fm@fm": odd}})
-            self.fails("unexpected format for fm@fm")
+            util.write_json(launcher.record(), {"version": 2, "plugins": {"foreman@foreman": odd}})
+            self.fails("unexpected format for foreman@foreman")
 
     def test_only_a_pinned_job_goes_stale(self, request) -> None:
         install_fm(request, self.b)
@@ -62,9 +62,9 @@ class TestLauncher:
         os.environ[launcher.PINNED] = self.b["installPath"]
         assert launcher.stale() == ""
         install_fm(request, self.a)
-        assert launcher.stale() == "fm@fm aaa is installed now; this runs bbb"
+        assert launcher.stale() == "foreman@foreman aaa is installed now; this runs bbb"
         launcher.record().unlink()
-        assert "fm@fm is not installed" in launcher.stale()
+        assert "foreman@foreman is not installed" in launcher.stale()
 
     def test_from_plugin_when_this_is_a_sibling_of_the_installed_folder(self, request) -> None:
         with mock.patch.object(launcher, "ROOT", self.cache / "bbb"):
@@ -88,7 +88,7 @@ class TestLauncher:
 
     def run_plist(self, *args: str) -> subprocess.CompletedProcess[str]:
         """What launchd runs for the plugin plist: python3 -c <launcher> JOB ARGS."""
-        (self.cache / "aaa/bin/foreman").write_text("import os, sys\nprint(os.path.realpath(__file__), sys.argv[1:], os.environ['FM_PINNED'])\n")
+        (self.cache / "aaa/bin/foreman").write_text("import os, sys\nprint(os.path.realpath(__file__), sys.argv[1:], os.environ['FOREMAN_PINNED'])\n")
         return subprocess.run([sys.executable, "-c", launcher.source(), *args], capture_output=True, text=True, timeout=30, check=False)
 
     def test_the_launcher_runs_the_installed_folder_pinned(self, request) -> None:
@@ -104,5 +104,5 @@ class TestLauncher:
             r = self.run_plist("loop")
             assert r.returncode != 0
             assert len(r.stderr.strip().splitlines()) == 1, r.stderr
-            assert "fm@fm" in r.stderr
+            assert "foreman@foreman" in r.stderr
             assert r.stdout == ""

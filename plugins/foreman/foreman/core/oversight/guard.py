@@ -3,7 +3,7 @@ recognised by the name of the program run (never by a word inside a string or a 
 the owner with `foreman ask`. The owner allows it once from the panel (`foreman allow QID`).
 
 The list (DESIGN.md): publish · push to main · delete what is not yours · change the project's config · the owner's
-own rules (`[guard] ask` in fm.toml). Agents work for the owner: a way around this list is not a hole to close, the
+own rules (`[guard] ask` in foreman.toml). Agents work for the owner: a way around this list is not a hole to close, the
 review before the merge is the safety net. Do not grow this file for a new trick.
 """
 
@@ -43,7 +43,7 @@ WHY = {
     "push-main": "pushing to the main branch (or forcing a push) skips the owner's review and accept",
     "delete": "it deletes something that is not this task's (outside its worktree, or another branch)",
     "push-evidence": "the evidence branch is written by the loop, not by agents",
-    "config": "it changes the project's config (fm.toml)",
+    "config": "it changes the project's config (foreman.toml)",
 }
 
 
@@ -99,7 +99,7 @@ def _mine(path: str, cwd: str, own: list[Path]) -> bool:
 
 @dataclass
 class Scope:
-    """Where a command runs and what it may touch: its folder, its agent's own folders and branch, fm.toml, the owner's rules."""
+    """Where a command runs and what it may touch: its folder, its agent's own folders and branch, foreman.toml, the owner's rules."""
 
     cwd: str
     own: list[Path]
@@ -212,7 +212,7 @@ def grant(p: Project, tid: str, action: str) -> None:
 def hook(stdin: str) -> str:
     """The PreToolUse hook: the JSON to print (empty: let it run). Never raises: a guard error lets the call run."""
     try:
-        home, tid = os.environ.get("FM_HOME"), os.environ.get("FM_TASK", "")
+        home, tid = os.environ.get("FOREMAN_HOME"), os.environ.get("FOREMAN_TASK", "")
         if not home:
             return ""
         d = json.loads(stdin or "{}")

@@ -12,8 +12,8 @@ from foreman.core.tasks import backlog
 
 
 class TestBash:
-    def check(self, cmd: str, branch: str = "fm/ty-1", own: str = "/w/ty-1") -> str | None:
-        return guard.check_bash(cmd, guard.Scope(own, [Path(own)], branch, Path("/h/fm.toml"), []))
+    def check(self, cmd: str, branch: str = "foreman/ty-1", own: str = "/w/ty-1") -> str | None:
+        return guard.check_bash(cmd, guard.Scope(own, [Path(own)], branch, Path("/h/foreman.toml"), []))
 
     def test_publish_by_program_name(self):
         assert self.check("npm publish") == "publish"
@@ -30,9 +30,9 @@ class TestBash:
     def test_push(self):
         assert self.check("git push origin main") == "push-main"
         assert self.check("git push origin HEAD:refs/heads/master") == "push-main"
-        assert self.check("git push --force origin fm/ty-1") == "push-main"
+        assert self.check("git push --force origin foreman/ty-1") == "push-main"
         assert self.check("git -C /w/ty-1 push origin main") == "push-main"
-        assert self.check("git push origin fm/ty-1") is None
+        assert self.check("git push origin foreman/ty-1") is None
         assert self.check("git push origin HEAD:fm-evidence") == "push-evidence"
         assert self.check("git push") is None  # the current branch is the task's
         assert self.check("git push", branch="main") == "push-main"
@@ -43,13 +43,13 @@ class TestBash:
             "git push origin +main",
             "git push origin +HEAD:main",
             "git push origin +refs/heads/main",
-            "git push origin +fm/ty-1",
+            "git push origin +foreman/ty-1",
             "git push origin +HEAD:fm-evidence",
-            "git push origin fm/ty-1 +main",
+            "git push origin foreman/ty-1 +main",
             "git push -o -o origin +main",
         ):
             assert self.check(cmd) == "push-main", cmd
-        for cmd in ("git push origin fm/ty-1", "git push origin HEAD:fm/ty-1", "git push -u origin fm/ty-1", "git push"):
+        for cmd in ("git push origin foreman/ty-1", "git push origin HEAD:foreman/ty-1", "git push -u origin foreman/ty-1", "git push"):
             assert self.check(cmd) is None, cmd
 
     def test_delete_what_is_not_yours(self):
@@ -59,18 +59,18 @@ class TestBash:
         assert self.check("rm -rf ../other") == "delete"
         with mock.patch.dict(os.environ, HOME="/Users/owner"):  # the suite's HOME is a temp dir, which counts as yours
             assert self.check("rm -rf ~/Projects") == "delete"
-        assert self.check("git branch -D fm/ty-2") == "delete"
-        assert self.check("git branch -D fm/ty-1") is None
+        assert self.check("git branch -D foreman/ty-2") == "delete"
+        assert self.check("git branch -D foreman/ty-1") is None
         assert self.check("git worktree remove /w/ty-2") == "delete"
 
     def test_config(self):
-        assert self.check("sed -i '' s/manual/low/ /h/fm.toml") == "config"
-        assert self.check("echo x >> /h/fm.toml") == "config"
-        assert self.check("cat /h/fm.toml") is None
+        assert self.check("sed -i '' s/manual/low/ /h/foreman.toml") == "config"
+        assert self.check("echo x >> /h/foreman.toml") == "config"
+        assert self.check("cat /h/foreman.toml") is None
 
     def test_owner_rules(self):
         extra = [{"name": "deploy", "pattern": r"^\s*make deploy"}]
-        assert guard.check_bash("make deploy", guard.Scope("/w", [], "", Path("/h/fm.toml"), extra)) == "deploy"
+        assert guard.check_bash("make deploy", guard.Scope("/w", [], "", Path("/h/foreman.toml"), extra)) == "deploy"
 
 
 class TestHook:
@@ -78,11 +78,11 @@ class TestHook:
     def set_up(self, env):
         self.e = env
         self.tid = backlog.add(self.e.p, "t", status="ready", criteria="c")
-        backlog.update(self.e.p, self.tid, worktree=str(self.e.tmp / "wt"), branch="fm/ty-1")
-        os.environ.update(FM_HOME=str(self.e.home), FM_TASK=self.tid)
+        backlog.update(self.e.p, self.tid, worktree=str(self.e.tmp / "wt"), branch="foreman/ty-1")
+        os.environ.update(FOREMAN_HOME=str(self.e.home), FOREMAN_TASK=self.tid)
         yield
-        os.environ.pop("FM_HOME")
-        os.environ.pop("FM_TASK")
+        os.environ.pop("FOREMAN_HOME")
+        os.environ.pop("FOREMAN_TASK")
 
     def call(self, tool: str, inp: dict) -> str:
         return guard.hook(json.dumps({"tool_name": tool, "tool_input": inp, "cwd": str(self.e.tmp / "wt")}))
@@ -94,7 +94,7 @@ class TestHook:
         assert (self.e.home / "state/guard.jsonl").exists()
 
     def test_edit_of_the_config(self):
-        assert self.call("Edit", {"file_path": str(self.e.home / "fm.toml")})
+        assert self.call("Edit", {"file_path": str(self.e.home / "foreman.toml")})
         assert self.call("Edit", {"file_path": str(self.e.tmp / "wt/app.py")}) == ""
 
     def test_a_grant_lets_it_pass_once(self):
@@ -103,9 +103,9 @@ class TestHook:
         assert self.call("Bash", {"command": "git push origin main"})
 
     def test_outside_an_agent_it_lets_everything_run(self):
-        os.environ.pop("FM_HOME")
+        os.environ.pop("FOREMAN_HOME")
         assert self.call("Bash", {"command": "npm publish"}) == ""
-        os.environ["FM_HOME"] = str(self.e.home)
+        os.environ["FOREMAN_HOME"] = str(self.e.home)
 
     def test_a_broken_input_lets_it_run(self):
         with contextlib.redirect_stderr(io.StringIO()):  # the hook reports the broken input on stderr

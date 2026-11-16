@@ -10,14 +10,14 @@ from ...core.project.config import Project
 
 
 def home(args: argparse.Namespace) -> Project:
-    """--project NAME, --home, FM_HOME, FM_PROJECT, the project owning the current folder, the nearest fm.toml."""
+    """--project NAME, --home, FOREMAN_HOME, FOREMAN_PROJECT, the project owning the current folder, the nearest foreman.toml."""
     if args.project:
         return named(args.project)
-    h = args.home or os.environ.get("FM_HOME")
+    h = args.home or os.environ.get("FOREMAN_HOME")
     if h:
         return Project.load(h)
-    if os.environ.get("FM_PROJECT"):
-        return named(os.environ["FM_PROJECT"])
+    if os.environ.get("FOREMAN_PROJECT"):
+        return named(os.environ["FOREMAN_PROJECT"])
     return here()
 
 
@@ -42,11 +42,11 @@ def here() -> Project:
     if len(found) == 1:
         p, folder = found[0]
         if isinstance(p, config.Unreadable):
-            sys.exit(f"foreman: {folder} belongs to the project at {p.home}, whose fm.toml cannot be loaded: {p.reason}")
+            sys.exit(f"foreman: {folder} belongs to the project at {p.home}, whose foreman.toml cannot be loaded: {p.reason}")
         return p
     if found:
         sys.exit(f"foreman: {found[0][1]} belongs to {' and '.join(p.name for p, _ in found)}; pass --project NAME")
-    h = next((d for d in (cwd, *cwd.parents) if (d / "fm.toml").exists()), None)
+    h = next((d for d in (cwd, *cwd.parents) if (d / "foreman.toml").exists()), None)
     if h is None:
         sys.exit(
             f"foreman: no project here: {cwd} is in none of the registered projects' folders (registered: {_names(projects, broken)}); pass --project NAME"
@@ -55,7 +55,7 @@ def here() -> Project:
 
 
 def mine(args: argparse.Namespace) -> str:
-    tid = os.environ.get("FM_TASK")
+    tid = os.environ.get("FOREMAN_TASK")
     if not tid:
-        sys.exit("foreman: which task? (FM_TASK, set in an agent's session)")
+        sys.exit("foreman: which task? (FOREMAN_TASK, set in an agent's session)")
     return tid

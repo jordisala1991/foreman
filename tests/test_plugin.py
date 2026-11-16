@@ -29,10 +29,10 @@ class TestPluginTest:
         tmp = tempfile.TemporaryDirectory()
         request.addfinalizer(tmp.cleanup)
         self.root = Path(tmp.name).resolve()
-        env = mock.patch.dict(os.environ, {"FM_REGISTRY": str(self.root / "projects.json")})
+        env = mock.patch.dict(os.environ, {"FOREMAN_REGISTRY": str(self.root / "projects.json")})
         env.start()
         request.addfinalizer(env.stop)
-        for k in ("FM_HOME", "FM_PROJECT", "FM_TASK"):
+        for k in ("FOREMAN_HOME", "FOREMAN_PROJECT", "FOREMAN_TASK"):
             os.environ.pop(k, None)
         request.addfinalizer(functools.partial(os.chdir, Path.cwd()))
         self.home = self.root / "umbrella/alpha"
@@ -41,7 +41,7 @@ class TestPluginTest:
     def alpha(self, project_lines: str = "", tail: str = "") -> Project:
         self.home.mkdir(parents=True, exist_ok=True)
         (self.repo / "src").mkdir(parents=True, exist_ok=True)
-        (self.home / "fm.toml").write_text(
+        (self.home / "foreman.toml").write_text(
             f'[project]\nname = "alpha"\nprefix = "AL"\nmain = "trunk"\numbrella = "{self.root / "umbrella"}"\n{project_lines}\n[agents]\nslots = 3\n{tail}',
             encoding="utf-8",
         )
@@ -77,18 +77,18 @@ class TestPluginTest:
         other = self.root / "other"
         other.mkdir()
         assert self.context(other) == ""
-        (other / "fm.toml").write_text('[project]\nname = "beta"\n', encoding="utf-8")  # not registered
+        (other / "foreman.toml").write_text('[project]\nname = "beta"\n', encoding="utf-8")  # not registered
         assert self.context(other) == ""
 
     def test_an_agent_session_gets_nothing(self) -> None:
         self.alpha(f'repo = "{self.repo}"')
-        assert self.context(self.home, {"FM_TASK": "AL-1"}) == ""
+        assert self.context(self.home, {"FOREMAN_TASK": "AL-1"}) == ""
 
     def test_a_folder_two_projects_claim_gets_nothing(self) -> None:
         self.alpha(f'repo = "{self.repo}"')
         beta = self.root / "beta"
         beta.mkdir()
-        (beta / "fm.toml").write_text(f'[project]\nname = "beta"\nrepo = "{self.repo}"\n', encoding="utf-8")
+        (beta / "foreman.toml").write_text(f'[project]\nname = "beta"\nrepo = "{self.repo}"\n', encoding="utf-8")
         registry.register(beta)
         assert self.context(self.repo) == ""
 
@@ -151,9 +151,13 @@ class TestPluginTest:
 
     def test_agents_launch_with_the_plugin_disabled(self) -> None:
         p = self.alpha(f'repo = "{self.repo}"')
-        assert sessions.settings(p, "AL-1", "al-1")["enabledPlugins"]["fm@fm"] is False
-        p = self.alpha(f'repo = "{self.repo}"', '[agents.settings]\nenabledPlugins = {"foreman@foreman" = false}\n')
-        assert sessions.settings(p, "AL-1", "al-1")["enabledPlugins"] == {"fm@fm": False, "foreman@foreman": False}
+        assert sessions.settings(p, "AL-1", "al-1")["enabledPlugins"]["foreman@foreman"] is False
+        p = self.alpha(f'repo = "{self.repo}"', '[agents.settings]\nenabledPlugins = {"other@x" = false}\n')
+        assert sessions.settings(p, "AL-1", "al-1")["enabledPlugins"] == {"foreman@foreman": False, "other@x": False}
+
+    def test_the_agents_session_env_holds_only_foreman_variables(self) -> None:
+        p = self.alpha(f'repo = "{self.repo}"')
+        assert set(sessions.settings(p, "AL-1", "al-1")["env"]) == {"FOREMAN_HOME", "FOREMAN_TASK", "FOREMAN_AGENT", "PATH"}
 
     def test_agents_run_the_loops_foreman(self) -> None:
         """Their PATH and their guard hook name the folder the loop runs from."""
@@ -163,11 +167,11 @@ class TestPluginTest:
         assert s["env"]["PATH"].startswith(f"{self.root / 'v1/bin'}{os.pathsep}")
         assert f"{self.root / 'v1/bin/foreman'} guard" in s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
 
-    def test_the_manifests_name_fm_and_declare_no_version(self) -> None:
+    def test_the_manifests_name_foreman_and_declare_no_version(self) -> None:
         market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
         manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
-        assert (market["name"], manifest["name"]) == ("fm", "fm")
-        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("fm", "./plugins/foreman")]
+        assert (market["name"], manifest["name"]) == ("foreman", "foreman")
+        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("foreman", "./plugins/foreman")]
         assert (ROOT / market["plugins"][0]["source"] / ".claude-plugin/plugin.json").is_file()
         for data in (market, manifest):
             assert '"version"' not in json.dumps(data)
@@ -183,4 +187,4 @@ class TestPluginTest:
     def test_the_skill_reads_the_values_from_fm(self) -> None:
         text = (plugin.SHARED / "skills/define-task/SKILL.md").read_text()
         assert '!`"${CLAUDE_PLUGIN_ROOT}/bin/foreman" project`' in text
-        assert "fm.toml" not in text
+        assert "foreman.toml" not in text

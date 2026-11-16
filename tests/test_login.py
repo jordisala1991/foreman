@@ -2,6 +2,7 @@ import json
 import os
 import plistlib
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -44,9 +45,9 @@ class TestLogin:
 
     def test_child_env_drops_only_the_token(self):
         os.environ[login.ENV] = "x"
-        os.environ["FM_PROBE"] = "1"
+        os.environ["FOREMAN_PROBE"] = "1"
         env = login.child_env()
-        assert env["FM_PROBE"] == "1"
+        assert env["FOREMAN_PROBE"] == "1"
         assert login.ENV not in env
 
     def test_fm_never_reads_the_keychain(self):
@@ -105,29 +106,31 @@ class TestLogin:
         assert "sk-ant-oat01-SECRET" not in out
         for job in ("loop", "panel"):
             plist = plistlib.loads(launchd.plist(job).encode())
-            assert plist["Label"] == f"dev.fm.{job}"
+            assert plist["Label"] == f"dev.foreman.{job}"
             assert plist["RunAtLoad"] and plist["KeepAlive"]
             assert list(plist["EnvironmentVariables"]) == ["PATH"]
             assert job in plist["ProgramArguments"]
-            assert f"dev.fm.{job}.plist" in out
+            assert f"dev.foreman.{job}.plist" in out
+            log = f"{Path.home()}/Library/Logs/foreman-{job}.log"
+            assert plist["StandardOutPath"] == plist["StandardErrorPath"] == log
 
     def test_launchd_dir_writes_both_jobs_with_the_panel_args_and_escapes(self):
         d = self.e.tmp
         fm(self.p.home, "launchd", "--dir", str(d), "--panel-host", "0.0.0.0")
-        panel = plistlib.loads((d / "dev.fm.panel.plist").read_bytes())
+        panel = plistlib.loads((d / "dev.foreman.panel.plist").read_bytes())
         assert panel["ProgramArguments"][-5:] == ["panel", "--host", "0.0.0.0", "--port", "7788"]
-        assert (d / "dev.fm.loop.plist").exists()
+        assert (d / "dev.foreman.loop.plist").exists()
         assert panel["ProgramArguments"][1] == str(launcher.ROOT / "bin/foreman")  # a checkout, no plugin: names it
         with mock.patch.dict(os.environ, {"PATH": "/a&b:/c"}):
             assert plistlib.loads(launchd.plist().encode())["EnvironmentVariables"]["PATH"] == "/a&b:/c"
 
     def test_launchd_dir_from_the_plugin_writes_jobs_that_name_no_version(self, request):
-        cache = self.e.tmp / "cache/fm/fm"
+        cache = self.e.tmp / "cache/foreman/foreman"
         install_fm(request, version_folder(cache, "aaa"))
         version_folder(cache, "bbb")
         with mock.patch.object(launcher, "ROOT", cache / "bbb"):
             fm(self.p.home, "launchd", "--dir", str(self.e.tmp))
         for job in ("loop", "panel"):
-            argv = plistlib.loads((self.e.tmp / f"dev.fm.{job}.plist").read_bytes())["ProgramArguments"]
+            argv = plistlib.loads((self.e.tmp / f"dev.foreman.{job}.plist").read_bytes())["ProgramArguments"]
             assert argv[1:3] == ["-c", launcher.source()]
             assert not [a for a in argv if "aaa" in a or "bbb" in a]

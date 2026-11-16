@@ -1,6 +1,6 @@
-"""`foreman init`: a home with fm.toml, backlog.json and an empty instructions.md (the owner's own rules for the project,
+"""`foreman init`: a home with foreman.toml, backlog.json and an empty instructions.md (the owner's own rules for the project,
 given to every session in it). What already exists is never changed. The define-task skill, fm's instructions and the
-foreman command reach Claude Code through the plugin `fm@fm`: init prints the two lines that install it."""
+foreman command reach Claude Code through the plugin `foreman@foreman`: init prints the two lines that install it."""
 
 from pathlib import Path
 
@@ -8,12 +8,12 @@ from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog
 
-INSTALL = ("claude plugin marketplace add jordisala1991/foreman#foreman-next", "claude plugin install fm@fm")
+INSTALL = ("claude plugin marketplace add jordisala1991/foreman#foreman-next", "claude plugin install foreman@foreman")
 
 
 def init(home: Path, prefix: str, repo: str) -> list[str]:
     home.mkdir(parents=True, exist_ok=True)
-    _fm_toml(home, prefix, repo)
+    _foreman_toml(home, prefix, repo)
     p = Project.load(home)
     if not p.backlog_file.exists():
         util.write_json(p.backlog_file, backlog.empty())
@@ -22,8 +22,8 @@ def init(home: Path, prefix: str, repo: str) -> list[str]:
     return ["To get the define-task skill, fm's instructions and the foreman command in your Claude Code sessions, run:", *INSTALL]
 
 
-def _fm_toml(home: Path, prefix: str, repo: str) -> None:
-    f = home / "fm.toml"
+def _foreman_toml(home: Path, prefix: str, repo: str) -> None:
+    f = home / "foreman.toml"
     if f.exists():
         return
     f.write_text(

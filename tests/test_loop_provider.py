@@ -36,11 +36,11 @@ class TestProvider:
             local.Local.state = orig
         assert e.task(tid)["status"] == "in review"
         assert e.task(tid)["merge"]
-        assert "fm/ty-1" in git(e.repo, "branch")
+        assert "foreman/ty-1" in git(e.repo, "branch")
         assert os.path.isdir(e.repo.parent / wt)
         tick.tick(e.p)  # seen done in main: closes and cleans, without merging twice
         assert e.task(tid)["status"] == "done"
-        assert "fm/ty-1" not in git(e.repo, "branch")
+        assert "foreman/ty-1" not in git(e.repo, "branch")
         assert not os.path.isdir(e.repo.parent / wt)
         assert git(e.repo, "rev-list", "--count", f"{before}..main").strip() == "1"
 
@@ -48,7 +48,7 @@ class TestProvider:
         for strategy, parents in (("", 1), ("merge", 2)):
             e = Env(test="true", autonomy="low")
             if strategy:
-                e.home.joinpath("fm.toml").write_text(e.home.joinpath("fm.toml").read_text().replace("[merge]", f'[merge]\nstrategy = "{strategy}"'))
+                e.home.joinpath("foreman.toml").write_text(e.home.joinpath("foreman.toml").read_text().replace("[merge]", f'[merge]\nstrategy = "{strategy}"'))
                 e.p = type(e.p).load(e.home)
             tid = self.delivered(e)
             tick.tick(e.p)
@@ -85,7 +85,7 @@ class TestProvider:
         tick.tick(e.p)
         merge.accept(e.p, tid)
         base = git(e.repo, "rev-parse", "main").strip()
-        git(e.repo, "merge", "--squash", "fm/ty-1")
+        git(e.repo, "merge", "--squash", "foreman/ty-1")
         git(e.repo, "commit", "-qm", f"Merge {tid}: x")  # the merge happened; its ref was never stored
         backlog.update(e.p, tid, merging=base)
         merged = git(e.repo, "rev-parse", "main").strip()

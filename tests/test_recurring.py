@@ -1,4 +1,4 @@
-"""Recurring entries: `[[recurring]]` in fm.toml, due every N merges or every interval, filed once, marked, listed."""
+"""Recurring entries: `[[recurring]]` in foreman.toml, due every N merges or every interval, filed once, marked, listed."""
 
 import json
 from datetime import datetime
@@ -26,8 +26,8 @@ class TestRecurring:
         self.p = self.e.p
 
     def entries(self, text: str) -> Project:
-        """fm.toml gets these tables; the project reloads."""
-        f = self.e.home / "fm.toml"
+        """foreman.toml gets these tables; the project reloads."""
+        f = self.e.home / "foreman.toml"
         base = f.read_text().split("[[recurring]]")[0]
         f.write_text(base + text)
         self.p = Project.load(self.e.home)

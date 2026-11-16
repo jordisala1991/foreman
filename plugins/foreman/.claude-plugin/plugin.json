@@ -1,5 +1,5 @@
 {
-  "name": "fm",
-  "description": "fm: backlog, loop and agents for a project's repos. In a folder of a registered project: the define-task skill, fm's instructions with the project's values and the owner's rules, and the foreman command.",
+  "name": "foreman",
+  "description": "foreman: backlog, loop and agents for a project's repos. In a folder of a registered project: the define-task skill, fm's instructions with the project's values and the owner's rules, and the foreman command.",
   "skills": "./foreman/shared/skills"
 }

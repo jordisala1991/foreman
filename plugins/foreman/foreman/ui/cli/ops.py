@@ -49,7 +49,7 @@ def cmd_lock(a: argparse.Namespace) -> None:
     p = home(a)
     res = lock.declared(p.cfg)
     if a.name not in res:
-        sys.exit(f"foreman: unknown resource {a.name!r} (declared: {', '.join(res) or 'none'}; [resources.NAME] in fm.toml)")
+        sys.exit(f"foreman: unknown resource {a.name!r} (declared: {', '.join(res) or 'none'}; [resources.NAME] in foreman.toml)")
     r = res[a.name]
     if a.action == "status":
         s = r.status()
@@ -62,8 +62,8 @@ def cmd_lock(a: argparse.Namespace) -> None:
         return
     if not a.command:
         sys.exit('foreman: foreman lock NAME run "what" command…')
-    who = os.environ.get("FM_AGENT") or "owner"
-    sys.exit(r.run(who, a.what, a.command, os.environ.get("FM_TASK", ""), say=lambda m: print(m, file=sys.stderr)))
+    who = os.environ.get("FOREMAN_AGENT") or "owner"
+    sys.exit(r.run(who, a.what, a.command, os.environ.get("FOREMAN_TASK", ""), say=lambda m: print(m, file=sys.stderr)))
 
 
 def cmd_launchd(a: argparse.Namespace) -> None:
@@ -73,8 +73,8 @@ def cmd_launchd(a: argparse.Namespace) -> None:
     for job, args in jobs.items():
         text = launchd.plist(job, args)
         if a.dir:
-            out = Path(a.dir).expanduser() / f"dev.fm.{job}.plist"
+            out = Path(a.dir).expanduser() / f"dev.foreman.{job}.plist"
             out.write_text(text, encoding="utf-8")
             print(f"wrote {out}: launchctl bootstrap gui/$(id -u) {out}")
         else:
-            print(f"<!-- dev.fm.{job}.plist -->\n{text}")
+            print(f"<!-- dev.foreman.{job}.plist -->\n{text}")

@@ -11,12 +11,12 @@ BRIEFS = PLUGIN / "foreman" / "briefs"
 
 
 def run_as(e, tid, agent, *args):
-    os.environ.update(FM_TASK=tid, FM_AGENT=agent)
+    os.environ.update(FOREMAN_TASK=tid, FOREMAN_AGENT=agent)
     try:
         fm(e.home, *args)
     finally:
-        os.environ.pop("FM_TASK")
-        os.environ.pop("FM_AGENT")
+        os.environ.pop("FOREMAN_TASK")
+        os.environ.pop("FOREMAN_AGENT")
 
 
 class TestMisled:

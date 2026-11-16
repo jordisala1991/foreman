@@ -184,7 +184,7 @@ _Chat_: foreman
 _Avoid_: fm (as the command)
 
 **Home**
-The project's folder: `fm.toml`, `backlog.json`, `state/`, `plans/`, `worktrees/`.
+The project's folder: `foreman.toml`, `backlog.json`, `state/`, `plans/`, `worktrees/`.
 _Chat_: casa
 _Avoid_: project folder, workspace
 
@@ -212,3 +212,16 @@ _Avoid_: monitor
 A broken state a health check found; fm files it as a task in triage.
 _Chat_: problema de salud
 _Avoid_: health task, health issue, triage issue
+
+## Old names
+
+Not read by any code; `tests/test_no_old_names.py` proves it.
+
+- Variables `FM_TASK`, `FM_HOME`, `FM_SLOT`, `FM_PROJECT`, `FM_AGENT`, `FM_REGISTRY`, `FM_PINNED`, `FM_LOCKS`, `FM_CURSOR`, `FM_RESOURCE`, `FM_CLAUDE_PROJECTS`: now `FOREMAN_*`.
+- Project file `fm.toml`: now `foreman.toml`.
+- `~/.config/fm/` (`projects.json`, `panel.token`): now `~/.config/foreman/`.
+- `~/.local/state/fm/locks`: now `~/.local/state/foreman/locks`.
+- launchd jobs `dev.fm.loop`, `dev.fm.panel` and logs `fm-loop.log`, `fm-panel.log`: now `dev.foreman.*` and `foreman-*.log`.
+- Plugin `fm@fm`, marketplace `fm`: now `foreman@foreman`, marketplace `foreman`.
+- Panel cookie `fm_key`: now `foreman_key`.
+- Default branch prefix `fm/`: now `foreman/`.

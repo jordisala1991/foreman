@@ -119,7 +119,7 @@ def _operations(c: Command) -> None:
     s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from other devices (the key is required)")
     s.add_argument("--port", type=int, default=7788)
     s = c("launchd", "print the two launchd jobs (loop and panel) that start at login and restart if they die")
-    s.add_argument("--dir", help="write dev.fm.loop.plist and dev.fm.panel.plist here (e.g. ~/Library/LaunchAgents) instead of printing")
+    s.add_argument("--dir", help="write dev.foreman.loop.plist and dev.foreman.panel.plist here (e.g. ~/Library/LaunchAgents) instead of printing")
     s.add_argument("--panel-host", default="127.0.0.1")
 
 
@@ -131,8 +131,8 @@ def blocked_by(s: argparse.ArgumentParser) -> None:
 
 def parser(description: str | None) -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="foreman", description=description)
-    ap.add_argument("--project", metavar="NAME", help="the project's name (else FM_PROJECT, else the project that owns the current folder)")
-    ap.add_argument("--home", help="the project's home (else FM_HOME)")
+    ap.add_argument("--project", metavar="NAME", help="the project's name (else FOREMAN_PROJECT, else the project that owns the current folder)")
+    ap.add_argument("--home", help="the project's home (else FOREMAN_HOME)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def c(name: str, help_: str) -> argparse.ArgumentParser:

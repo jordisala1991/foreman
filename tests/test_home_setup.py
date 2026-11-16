@@ -1,4 +1,4 @@
-"""fm init sets up a home (fm.toml, backlog.json, instructions.md) and prints the two lines that install the plugin;
+"""fm init sets up a home (foreman.toml, backlog.json, instructions.md) and prints the two lines that install the plugin;
 it makes no links. fm health warns about the links an older init made (FN-143)."""
 
 import functools
@@ -33,17 +33,18 @@ class TestHomeSetup:
     def test_init_prints_the_two_install_lines_and_makes_no_links(self) -> None:
         h = self.home()
         out = self.init(h)
-        for f in ("fm.toml", "backlog.json", "instructions.md"):
+        for f in ("foreman.toml", "backlog.json", "instructions.md"):
             assert (h / f).is_file(), f
         assert not (h / ".claude").exists()
         assert not (h / "CLAUDE.md").exists()
-        assert "claude plugin marketplace add jordisala1991/foreman#foreman-next\nclaude plugin install fm@fm\n" in out
-        assert "fm =" not in (h / "fm.toml").read_text()
+        assert not (h / ("fm" + ".toml")).exists()  # the old name, from parts for the scan
+        assert "claude plugin marketplace add jordisala1991/foreman#foreman-next\nclaude plugin install foreman@foreman\n" in out
+        assert "fm =" not in (h / "foreman.toml").read_text()
 
         (h / "instructions.md").write_text("Habla en español.\n")
         (h / "CLAUDE.md").write_text("owner\n")
-        before = {f: (h / f).read_bytes() for f in ("fm.toml", "backlog.json", "instructions.md", "CLAUDE.md")}
-        assert "claude plugin install fm@fm" in self.init(h)
+        before = {f: (h / f).read_bytes() for f in ("foreman.toml", "backlog.json", "instructions.md", "CLAUDE.md")}
+        assert "claude plugin install foreman@foreman" in self.init(h)
         assert {f: (h / f).read_bytes() for f in before} == before
         assert not (h / ".claude").exists()
 
@@ -71,7 +72,7 @@ class TestHomeSetup:
     def test_health_names_old_links_in_a_repo(self) -> None:
         h = self.home()
         code = h / "code"
-        (h / "fm.toml").write_text(f'[project]\nrepo = "{code}"\n')
+        (h / "foreman.toml").write_text(f'[project]\nrepo = "{code}"\n')
         p = Project.load(h)
         code.mkdir()
         assert notes.old_links(p) == []

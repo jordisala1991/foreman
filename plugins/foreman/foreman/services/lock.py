@@ -2,7 +2,7 @@
 always releases it. The lean version of foreman's lock (lib/foreman/lock.py + sh/lock.sh), keeping what worked:
 
 - a fair queue: first come, first served (a ticket per waiter, by arrival time);
-- slots: a resource may have several (`slots = ["A", "B"]`, e.g. two simulators); the command gets FM_SLOT;
+- slots: a resource may have several (`slots = ["A", "B"]`, e.g. two simulators); the command gets FOREMAN_SLOT;
 - a holder or waiter whose process died is cleaned up when anyone looks, so a crash never leaves it stuck;
 - a time limit: the command is stopped after `max_minutes` (default 20), so short jobs pass between long takes;
 - a log of every use (who, task, what, waited, held), read by the metrics and the panel.
@@ -10,8 +10,8 @@ always releases it. The lean version of foreman's lock (lib/foreman/lock.py + sh
 Dropped from today's: the «busy» detector, short jobs jumping the queue, the turn file, the 5-step «who am I» chain
 and the hook that forces its use. Like the guard, it is a convention agents follow because their brief says so.
 
-A resource is declared in fm.toml, `[resources.NAME]` with optional `slots` and `max_minutes`. Its state is common to
-the machine (`~/.local/state/fm/locks/NAME/`, or $FM_LOCKS), so two projects declaring the same name share its queue.
+A resource is declared in foreman.toml, `[resources.NAME]` with optional `slots` and `max_minutes`. Its state is common to
+the machine (`~/.local/state/foreman/locks/NAME/`, or $FOREMAN_LOCKS), so two projects declaring the same name share its queue.
 """
 
 import contextlib
@@ -30,7 +30,7 @@ POLL_S = 1.0
 
 
 def root() -> Path:
-    return Path(os.environ.get("FM_LOCKS") or Path.home() / ".local/state/fm/locks")
+    return Path(os.environ.get("FOREMAN_LOCKS") or Path.home() / ".local/state/foreman/locks")
 
 
 def alive(pid: int) -> bool:
@@ -98,11 +98,11 @@ class Resource:
                 del d["held"][slot]
 
     def run(self, who: str, what: str, cmd: list[str], task: str = "", say: Callable[[str], object] | None = None) -> int:
-        """Holds the resource while `cmd` runs (FM_SLOT set), stops it at the time limit, always releases."""
+        """Holds the resource while `cmd` runs (FOREMAN_SLOT set), stops it at the time limit, always releases."""
         slot, waited = self.acquire(who, what, task, say)
         t0, rc, event = time.time(), 1, "use"
         try:
-            p = subprocess.Popen(cmd, env={**os.environ, "FM_SLOT": slot, "FM_RESOURCE": self.name}, start_new_session=True)
+            p = subprocess.Popen(cmd, env={**os.environ, "FOREMAN_SLOT": slot, "FOREMAN_RESOURCE": self.name}, start_new_session=True)
             try:
                 rc = p.wait(timeout=self.max_s)
             except subprocess.TimeoutExpired:
@@ -138,7 +138,7 @@ class Resource:
 
 
 def declared(cfg: dict[str, Any]) -> dict[str, Resource]:
-    """The project's resources, from `[resources.NAME]` in fm.toml."""
+    """The project's resources, from `[resources.NAME]` in foreman.toml."""
     out: dict[str, Resource] = {}
     for name, item in (util.json_object(cfg.get("resources")) or {}).items():
         r = util.json_object(item) or {}
@@ -159,6 +159,6 @@ def describe(cfg: dict[str, Any]) -> str:
     return (
         f"Shared resources of this project: {names}. Anything that uses one runs inside "
         '`foreman lock NAME run "what" command…`: it waits its turn, runs, and always releases (the command gets '
-        "FM_SLOT). A run is stopped after its time limit: split long work into shorter runs. Never hold a "
+        "FOREMAN_SLOT). A run is stopped after its time limit: split long work into shorter runs. Never hold a "
         "resource while you wait for something else."
     )

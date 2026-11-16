@@ -1,4 +1,4 @@
-"""The `[[recurring]]` tables of fm.toml (DESIGN.md `## Recurring tasks`), read strictly. Pure: raises ValueError,
+"""The `[[recurring]]` tables of foreman.toml (DESIGN.md `## Recurring tasks`), read strictly. Pure: raises ValueError,
 `config` turns it into a ProjectError. Apart from `recurring` because `config` imports this and `recurring` imports
 the backlog, which imports `config`."""
 

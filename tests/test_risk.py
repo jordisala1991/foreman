@@ -8,7 +8,7 @@ from foreman.core.rules import risk
 def project(toml: str = "") -> Project:
     d = Path(tempfile.mkdtemp())
     if toml:
-        (d / "fm.toml").write_text(toml)
+        (d / "foreman.toml").write_text(toml)
     return Project.load(d)
 
 
@@ -19,10 +19,10 @@ def facts(*paths: str, **kw) -> risk.Facts:
 
 class TestScore:
     def test_custom_high_path_names_label_and_path(self):
-        p = project('[risk.high]\n"the merge path" = ["fm/delivery.py"]\n')
-        r, why = risk.score(p, facts("fm/delivery.py"))
+        p = project('[risk.high]\n"the merge path" = ["foreman/delivery.py"]\n')
+        r, why = risk.score(p, facts("foreman/delivery.py"))
         assert r == "high"
-        assert any("the merge path" in x and "fm/delivery.py" in x and x.endswith("[diff]") for x in why)
+        assert any("the merge path" in x and "foreman/delivery.py" in x and x.endswith("[diff]") for x in why)
 
     def test_default_ci_file_is_high(self):
         assert risk.score(project(), facts(".github/workflows/ci.yml"))[0] == "high"
@@ -85,7 +85,7 @@ class TestScore:
     def test_path_matches(self):
         pats = project().get("risk", "high")["config, secrets or CI"]
         assert risk.path_matches(".github/workflows/ci.yml", pats)
-        assert risk.path_matches("conf/fm.toml", pats)
+        assert risk.path_matches("conf/foreman.toml", pats)
         assert not risk.path_matches("src/app.py", pats)
 
 

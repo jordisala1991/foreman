@@ -1,7 +1,7 @@
 """The panel: a stdlib HTTP server for the owner (127.0.0.1, or the network with `--host 0.0.0.0`). It serves the page built in panel/dist (React, from
 panel/src) and a JSON API over every registered project (`p=NAME` picks one; the first by default).
 
-Adapted from foreman's lib/foreman/panel.py: the key (`?key=` or the `fm_key` cookie the page sets), the routing by path. What only served the
+Adapted from foreman's lib/foreman/panel.py: the key (`?key=` or the `foreman_key` cookie the page sets), the routing by path. What only served the
 old foreman is gone. The owner's actions call what the CLI calls (foreman.ui.cli's functions, foreman.services.delivery.merge.accept,
 foreman.core.tasks.backlog.add), so the panel and `foreman` cannot disagree.
 
@@ -37,7 +37,7 @@ from .views import Obj, project, projects, state, summary, system, task
 
 DIST = Path(__file__).resolve().parents[3] / "panel" / "dist"
 STATIC = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8")}
-COOKIE = "fm_key"
+COOKIE = "foreman_key"
 
 # the read-only JSON views, by path: each takes the query
 VIEWS: dict[str, Callable[[dict[str, list[str]]], Obj]] = {
@@ -51,7 +51,7 @@ VIEWS: dict[str, Callable[[dict[str, list[str]]], Obj]] = {
 
 
 def token_file() -> Path:
-    return Path.home() / ".config/fm/panel.token"
+    return Path.home() / ".config/foreman/panel.token"
 
 
 def load_token() -> str:
@@ -172,7 +172,7 @@ def make_server(port: int = 7788, token: str | None = None, host: str = "127.0.0
 
 
 def watch_version(srv: ThreadingHTTPServer, every_s: float = 30, stale: Callable[[], str] = launcher.stale) -> None:
-    """A panel started by the launcher stops when another fm@fm version is installed (launchd starts the new one)."""
+    """A panel started by the launcher stops when another foreman@foreman version is installed (launchd starts the new one)."""
 
     def watch() -> None:
         while not (why := stale()):

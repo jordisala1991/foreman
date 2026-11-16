@@ -1,11 +1,11 @@
-"""Which fm runs: the folder this code runs from (`ROOT`), and the version of the plugin `fm@fm` Claude Code has installed.
+"""Which fm runs: the folder this code runs from (`ROOT`), and the version of the plugin `foreman@foreman` Claude Code has installed.
 
 The launchd jobs start through `main`: the plist carries this file's text (`python3 -c`), which reads Claude Code's record
-of the installed version (`~/.claude/plugins/installed_plugins.json`), sets `FM_PINNED` to its folder and runs that
+of the installed version (`~/.claude/plugins/installed_plugins.json`), sets `FOREMAN_PINNED` to its folder and runs that
 folder's `bin/foreman`. Each version folder never changes, so a job runs one version from start to exit; a job started that
 way exits when the record names another folder (`stale`), and launchd starts it again on the new one.
 
-The record's format is Claude Code's, undocumented: fm reads format version 2, keys off `installPath` (its
+The record's format is Claude Code's, undocumented: foreman reads format version 2, keys off `installPath` (its
 `gitCommitSha` is known to lag behind updates) and says in one line what does not fit. Standard library only: under
 `python3 -c` it runs alone."""
 
@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(globals().get("__file__", ".")).resolve().parent.parent  # under `python3 -c` (the plist) there is no __file__
-PINNED = "FM_PINNED"
-PLUGIN = "fm@fm"
+PINNED = "FOREMAN_PINNED"
+PLUGIN = "foreman@foreman"
 
 
 @dataclass(frozen=True)
@@ -36,14 +36,14 @@ def record() -> Path:
 
 
 def installed() -> Installed:
-    """The version of fm@fm installed for the user, or LauncherError with one line saying why there is none."""
+    """The version of foreman@foreman installed for the user, or LauncherError with one line saying why there is none."""
     f = record()
     try:
         data: Any = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise LauncherError(f"{PLUGIN} is not installed in Claude Code ({f}: {e})") from None
     if _get(data, "version") != 2:
-        raise LauncherError(f"{f} has format version {_get(data, 'version')}, fm reads 2: update fm")
+        raise LauncherError(f"{f} has format version {_get(data, 'version')}, foreman reads 2: update foreman")
     entries: Any = _get(_get(data, "plugins"), PLUGIN) or []
     try:
         users = [u for u in entries if u["scope"] == "user"]
