@@ -9,8 +9,8 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
     change targets that task; it is not a new task. Applied once per source and key (`state/applied/`); an unknown
     or closed task, an unknown action, a missing key or one not valid for the task's state changes nothing and is logged
     in `state/errors.jsonl` (and is not retried); a transient failure (accept before its check, a busy checkout, a
-    hung stop) is logged and the same key is tried again next tick. None is shipped yet: the contract is the point; the health checks (health.py) are the
-    first producer of findings."""
+    hung stop) is logged and the same key is tried again next tick. None is shipped yet: the contract is the point; the
+    health checks (steps/health/health.py) are the first producer of findings."""
 
 import json
 import os
@@ -18,9 +18,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from .. import proc, util
+from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, questions
+from ..services import runsource
 from ..services.delivery import merge
 from . import schedule
 from .talk import return_to_agent
@@ -51,11 +52,11 @@ def _poll(p: Project, exe: Path) -> list[str]:
     cursor_file = p.state / "cursors" / exe.name
     cursor = cursor_file.read_text().strip() if cursor_file.exists() else ""
     try:
-        r = proc.run([str(exe)], env={**os.environ, "FOREMAN_CURSOR": cursor})
-    except proc.ProcError as e:
+        out = runsource.lines(exe, cursor)
+    except runsource.SourceError as e:
         util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": str(e)})
         return []
-    ids = (_signal(p, exe.name, ln, cursor_file) for ln in r.out.splitlines())
+    ids = (_signal(p, exe.name, ln, cursor_file) for ln in out)
     return [tid for tid in ids if tid]
 
 

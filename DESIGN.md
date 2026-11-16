@@ -531,8 +531,8 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 |---|---|---|---|
 | ui | `foreman/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
-| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: checks, main_tests, notes | one step of a tick, or a view over several pieces |
-| services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
+| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
+| services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo (`registry.repo(p)`) (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo | one per platform, and `gitrepo` (the one module that runs git on a repo); they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome) |
@@ -565,6 +565,7 @@ modules = [
   { path = "foreman.services.delivery", layer = "services" },
   { path = "foreman.services.lock", layer = "services" },
   { path = "foreman.services.launchd", layer = "services" },
+  { path = "foreman.services.runsource", layer = "services" },
   { path = "foreman.services.scratch", layer = "services" },
   { path = "foreman.providers.registry", layer = "registry" },
   { path = "foreman.providers.github", layer = "adapters", depends_on = ["foreman.providers"] },

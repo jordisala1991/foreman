@@ -46,6 +46,9 @@ layer = "services"
 path = "foreman.services.launchd"
 layer = "services"
 [[modules]]
+path = "foreman.services.runsource"
+layer = "services"
+[[modules]]
 path = "foreman.services.scratch"
 layer = "services"
 

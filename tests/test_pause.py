@@ -69,3 +69,19 @@ class TestPause:
         assert backlog.in_flight(backlog.load(e.p)) == 2
         assert "2" in fm(e.home, "pause")
         assert "2" not in fm(e.home, "pause", "--off")
+
+
+def test_project_paused(env: Env):
+    p = env.p
+    assert p.paused == ""
+    (p.state).mkdir(parents=True, exist_ok=True)
+    (p.state / "paused").write_text("")
+    assert p.paused == "yes"
+    (p.state / "paused").write_text("now")
+    assert p.paused == "now"
+    p.set_paused(False)
+    assert p.paused == ""
+    p.set_paused(True)
+    assert p.paused
+    p.set_paused(False)
+    assert p.paused == ""

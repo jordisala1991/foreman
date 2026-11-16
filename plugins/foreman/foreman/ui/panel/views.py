@@ -14,7 +14,7 @@ from ...services import lock
 from ...services.claude import sessions
 from ...services.delivery import pulls
 from ...steps import metrics, schedule
-from ...steps.health import checks, main_tests
+from ...steps.health import checks, health
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
 Obj = dict[str, Any]
@@ -41,11 +41,6 @@ def loop_beat(p: Project) -> Obj:
     return {"time": hb.get("time"), "alive": not checks.loop_dead(p)}
 
 
-def paused(p: Project) -> str | None:
-    f = p.state / "paused"
-    return f.read_text().strip() or "yes" if f.exists() else None
-
-
 def needs(d: Obj) -> int:
     """What waits for the owner: open questions, the queue, triage, blocked tasks."""
     waiting = [i for i in backlog.tasks(d) if i["status"] in ("in review", "triage") or (i.get("blocked") and i["status"] not in backlog.CLOSED)]
@@ -57,7 +52,7 @@ def summary(p: Project) -> Obj:
         d = backlog.load(p)
         return {
             "name": p.name,
-            "paused": paused(p),
+            "paused": p.paused or None,
             "loop": loop_beat(p),
             "needs": needs(d),
             "running": sum(1 for i in backlog.tasks(d) if i["status"] in backlog.RUNNING),
@@ -79,7 +74,7 @@ def state(p: Project) -> Obj:
     recent = [i for i in all_tasks if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
     shown = [recurring.shown(tasktypes.shown(with_session(p, i, rows), all_tasks)) for i in recent]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
-    return {"name": p.name, "paused": paused(p), "loop": loop_beat(p), "tasks": shown, "questions": d["decisions"], "events": events}
+    return {"name": p.name, "paused": p.paused or None, "loop": loop_beat(p), "tasks": shown, "questions": d["decisions"], "events": events}
 
 
 def task(p: Project, tid: str) -> Obj:
@@ -102,13 +97,13 @@ def task(p: Project, tid: str) -> Obj:
 
 
 def system(p: Project) -> Obj:
-    found = main_tests.findings(p, sessions.listing(p), outside=True)
+    found = health.findings(p, sessions.listing(p), outside=True)
     rows = metrics.per_task(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     entries = schedule.rows(p)
     return {
         "name": p.name,
-        "paused": paused(p),
+        "paused": p.paused or None,
         "in_flight": backlog.in_flight(backlog.load(p)),
         "loop": loop_beat(p),
         "findings": found,

@@ -10,9 +10,9 @@ class GitRepo:
     def __init__(self, path: Path) -> None:
         self.path = path
 
-    def _run(self, *args: str, cwd: Path | None = None, check: bool = True) -> proc.Result:
+    def _run(self, *args: str, cwd: Path | None = None, check: bool = True, input: str | None = None) -> proc.Result:
         try:
-            r = proc.run(["git", "-C", str(cwd or self.path), *args])
+            r = proc.run(["git", "-C", str(cwd or self.path), *args], input=input)
         except proc.ProcError as e:
             raise RepoError(str(e)) from e
         if check and r.code != 0:
@@ -91,6 +91,30 @@ class GitRepo:
 
     def dirty(self) -> bool:
         return bool(self._run("status", "--porcelain", "--untracked-files=no").out.strip())
+
+    def _entries(self, tree: str) -> dict[str, str]:
+        """`git ls-tree` lines of a tree, by entry name."""
+        return {line.split("\t", 1)[1]: line for line in self._run("ls-tree", tree).out.splitlines()}
+
+    def _mktree(self, rows: dict[str, str]) -> str:
+        return self._run("mktree", input="".join(f"{r}\n" for r in rows.values())).out.strip()
+
+    def commit_files(self, parent: str, folder: str, files: dict[str, Path], message: str) -> str:
+        top = self._entries(parent) if parent else {}
+        mine = self._entries(f"{parent}:{folder}") if folder in top else {}
+        before = dict(mine)
+        for name, f in files.items():
+            blob = self._run("hash-object", "-w", "--no-filters", str(f)).out.strip()
+            mine[name] = f"100644 blob {blob}\t{name}"
+        if mine == before:
+            return ""
+        top[folder] = f"040000 tree {self._mktree(mine)}\t{folder}"
+        who = ["-c", "user.name=fm", "-c", "user.email=fm@localhost"]
+        parents = ["-p", parent] if parent else []
+        return self._run(*who, "commit-tree", self._mktree(top), *parents, "-m", message).out.strip()
+
+    def fast_forward(self, ref: str) -> None:
+        self._run("merge", "-q", "--ff-only", ref)
 
     def merge(self, main: str, branch: str, message: str, squash: bool) -> MergeOutcome:
         if squash:

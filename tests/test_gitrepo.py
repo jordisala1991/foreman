@@ -143,3 +143,35 @@ def test_the_main_checkout(repo: Path):
     assert r.origin_url() == ""
     git(repo, "remote", "add", "origin", "https://github.com/o/r")
     assert r.origin_url() == "https://github.com/o/r"
+
+
+def test_commit_files(repo: Path, tmp_path: Path):
+    r = GitRepo(repo)
+    x, y = tmp_path / "x.png", tmp_path / "y.png"
+    x.write_bytes(b"x")
+    y.write_bytes(b"y")
+
+    def names(commit: str) -> list[str]:
+        return git(repo, "ls-tree", "-r", "--name-only", commit).split()
+
+    first = r.commit_files("", "FN-1", {"x.png": x}, "m")
+    assert names(first) == ["FN-1/x.png"]
+    assert git(repo, "rev-list", "--parents", "-n1", first).split() == [first]  # an orphan root
+    other = r.commit_files(first, "FN-2", {"x.png": x}, "m")
+    second = r.commit_files(other, "FN-1", {"y.png": y}, "m")
+    assert names(second) == ["FN-1/x.png", "FN-1/y.png", "FN-2/x.png"]
+    assert r.commit_files(second, "FN-1", {"x.png": x, "y.png": y}, "m") == ""
+
+
+def test_fast_forward(repo: Path):
+    r = GitRepo(repo)
+    git(repo, "checkout", "-q", "b")
+    git(repo, "checkout", "-q", "-b", "ahead", "main")
+    commit(repo, "more", d_txt="d\n")
+    git(repo, "checkout", "-q", "main")
+    r.fast_forward("ahead")
+    assert r.head("main") == r.head("ahead")
+    before = r.head("main")
+    with pytest.raises(RepoError):
+        r.fast_forward("c")
+    assert r.head("main") == before
