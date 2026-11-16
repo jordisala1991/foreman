@@ -41,6 +41,18 @@ def test_conflicts(repo: FakeRepo):
     assert repo.conflicts(repo.head("main"), repo.head("c")) is True  # commit ids too, as mergecheck.py passes them
 
 
+def test_a_git_failure_is_an_error_not_a_conflict(repo: FakeRepo):
+    for base, branch in (("main", "nope"), ("nope", "c")):
+        with pytest.raises(RepoError) as e:
+            repo.conflicts(base, branch)
+        assert e.value.reason
+
+
+def test_merge_of_an_unknown_branch_is_an_error(repo: FakeRepo):
+    with pytest.raises(RepoError):
+        repo.merge("main", "nope", "m", False)
+
+
 @pytest.mark.parametrize("squash", [False, True])
 def test_merge_of_a_clean_branch(repo: FakeRepo, squash: bool):
     out = repo.merge("main", "b", "Merge FN-1: b", squash)
