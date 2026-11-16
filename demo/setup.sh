@@ -60,7 +60,7 @@ git add -A
 git commit -qm "textkit: word_count, shout and a tiny CLI"
 
 export FM_REGISTRY="$run/registry.json"
-fm="$root/bin/fm"
+fm="$root/plugins/fm/bin/fm"
 "$fm" --home "$run/home" init --repo "$run/repo" --prefix TK >/dev/null
 cat > "$run/home/fm.toml" <<TOML
 [project]

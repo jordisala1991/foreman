@@ -1,14 +1,13 @@
 import os
-from pathlib import Path
 
 import pytest
-from helpers import fm
+from helpers import PLUGIN, fm
 
 from fm.core.tasks import backlog
 from fm.loop import tick
 from fm.services.agents import brief
 
-BRIEFS = Path(__file__).resolve().parent.parent / "fm" / "briefs"
+BRIEFS = PLUGIN / "fm" / "briefs"
 
 
 def run_as(e, tid, agent, *args):

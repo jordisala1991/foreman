@@ -4,7 +4,7 @@
 # Loosening a rule here is the owner's call.
 exact = false  # layers carry most rules; an unused depends_on is not an error
 forbid_circular_dependencies = true
-source_roots = ["."]
+source_roots = ["plugins/fm"]
 root_module = "ignore"
 exclude = ["tests", "panel/**", "demo", ".venv", "**/__pycache__"]
 layers = ["ui", "loop", "steps", "services", "registry", "adapters", "ports", "proc", "core"]

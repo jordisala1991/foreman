@@ -2,6 +2,6 @@
   "name": "fm",
   "owner": {"name": "Jordi Sala Morales"},
   "plugins": [
-    {"name": "fm", "source": "./", "description": "fm: backlog, loop and agents for a project's repos."}
+    {"name": "fm", "source": "./plugins/fm", "description": "fm: backlog, loop and agents for a project's repos."}
   ]
 }

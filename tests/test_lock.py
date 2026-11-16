@@ -3,15 +3,15 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
+from helpers import PLUGIN
 
 from fm import util
 from fm.services import lock
 from fm.services.agents import brief
 
-FM = str(Path(__file__).resolve().parent.parent / "bin/fm")
+FM = str(PLUGIN / "bin/fm")
 
 
 class TestLock:

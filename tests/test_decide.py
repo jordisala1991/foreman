@@ -4,7 +4,7 @@ review", then the queue, the retry, the provider's config and main's tests; none
 import ast
 from typing import Any
 
-from helpers import ROOT
+from helpers import PLUGIN
 
 from fm.core.rules import decide
 from fm.core.rules.decide import (
@@ -303,4 +303,4 @@ class TestPure:
         assert impurities(source) == []
 
     def test_decide_is_pure(self):
-        assert impurities((ROOT / "fm" / "core" / "rules" / "decide.py").read_text()) == []
+        assert impurities((PLUGIN / "fm" / "core" / "rules" / "decide.py").read_text()) == []

@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from helpers import ROOT, fm
+from helpers import PLUGIN, ROOT, fm
 
 from fm import launcher, util
 from fm.core.project import plugin, registry
@@ -121,7 +121,7 @@ class TestPluginTest:
         self.alpha(f'repo = "{self.repo}"')
         env_file = self.root / "env.sh"
         assert json.loads(self.hook(self.repo, env_file))["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-        assert env_file.read_text() == f'export PATH="{ROOT / "bin"}:$PATH"\n'
+        assert env_file.read_text() == f'export PATH="{PLUGIN / "bin"}:$PATH"\n'
         env_file.unlink()
         assert self.hook(self.root, env_file) == ""
         assert not env_file.exists()
@@ -164,14 +164,20 @@ class TestPluginTest:
 
     def test_the_manifests_name_fm_and_declare_no_version(self) -> None:
         market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
-        manifest = json.loads((ROOT / ".claude-plugin/plugin.json").read_text())
+        manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
         assert (market["name"], manifest["name"]) == ("fm", "fm")
-        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("fm", "./")]
+        assert [(x["name"], x["source"]) for x in market["plugins"]] == [("fm", "./plugins/fm")]
+        assert (ROOT / market["plugins"][0]["source"] / ".claude-plugin/plugin.json").is_file()
         for data in (market, manifest):
             assert '"version"' not in json.dumps(data)
-        assert (ROOT / manifest["skills"] / "define-task/SKILL.md").is_file()
-        hook = json.loads((ROOT / "hooks/hooks.json").read_text())["hooks"]["SessionStart"][0]["hooks"][0]
+        assert (PLUGIN / manifest["skills"] / "define-task/SKILL.md").is_file()
+        hook = json.loads((PLUGIN / "hooks/hooks.json").read_text())["hooks"]["SessionStart"][0]["hooks"][0]
         assert hook["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/fm" session-context'
+
+    def test_the_plugin_folder_holds_only_the_plugin(self) -> None:
+        """The marketplace installs plugins/fm, so the repo's development files stay out of it."""
+        for name in ("tests", "DESIGN.md", "GLOSSARY.md", "tach.toml", "uv.lock", "demo", "Makefile", "CLAUDE.md"):
+            assert (ROOT / name).exists() and not (PLUGIN / name).exists(), name
 
     def test_the_skill_reads_the_values_from_fm(self) -> None:
         text = (plugin.SHARED / "skills/define-task/SKILL.md").read_text()
