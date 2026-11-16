@@ -89,6 +89,10 @@ class TestFindProjectTest:
         for word in ("no project here", "alpha", "beta", "--project"):
             assert word in msg
 
+    def test_the_default_branch_prefix_is_foreman(self) -> None:
+        h = self.project("alpha")
+        assert Project.load(h).get("project", "branch_prefix") == "foreman/"
+
     def test_one_repo_as_today(self) -> None:
         self.project("alpha")
         assert "Alpha work" in self.run_fm(self.root / "alpha-repo", "list")
