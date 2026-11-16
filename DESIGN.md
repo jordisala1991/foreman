@@ -39,7 +39,7 @@ Several repos).
 `foreman init` makes `foreman.toml`, `backlog.json` and `instructions.md` (the owner's own rules), never overwrites a file of the
 home, and prints the two lines that install the plugin. The plugin (`foreman@foreman`, marketplace `foreman`, from this repo's branch
 `foreman-next`; no `version` anywhere, so Claude Code's version is the commit and every merge reaches it) gives a
-session in any folder of a registered project the skill `fm:define-task` (its values from `foreman project`), the shared
+session in any folder of a registered project the skill `foreman:define-task` (its values from `foreman project`), the shared
 instructions with the project's values plus `<home>/instructions.md` (the SessionStart hook `foreman session-context`; `bin/foreman` re-executes under a newer `python3` from PATH or names the minimum, and the hook leaves that line for `foreman health`), and
 `foreman` on the Bash tool's PATH (Claude Code adds the plugin's `bin/`, which ships `foreman` and no executable `fm`: macOS's `/usr/bin/fm` stays macOS's; no hook writes PATH); a session elsewhere gets no context. Agents run with it disabled (`enabledPlugins` in their settings).
 

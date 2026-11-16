@@ -50,7 +50,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 
 
 class ProjectError(Exception):
-    """An foreman.toml that cannot be read as a project."""
+    """A foreman.toml that cannot be read as a project."""
 
 
 @dataclass

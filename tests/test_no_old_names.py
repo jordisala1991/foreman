@@ -155,7 +155,7 @@ class TestOldInstallNames:
         root = Path(__file__).resolve().parent.parent
         skip = ("GLOSSARY.md", "tests/test_no_old_names.py", "uv.lock", "panel/package-lock.json", "plugins/foreman/panel/dist/")  # prefixes
         files = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True).stdout.split("\n")
-        old = re.compile(r"\bFM_|fm\.toml|\.config/fm\b|\.local/state/fm\b|dev\.fm\.|\bfm@fm|fm_key|fm-(loop|panel)\.log")
+        old = re.compile(r"\bFM_|fm\.toml|\.config/fm\b|\.local/state/fm\b|dev\.fm\.|\bfm@fm|fm_key|fm-(loop|panel|\{job\})\.log")
         found = []
         for name in files:
             if name and not name.startswith(skip) and (root / name).is_file():

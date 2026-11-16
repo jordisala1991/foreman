@@ -37,7 +37,7 @@ def loaded() -> list[Project]:
 def _named_folders(home: Path) -> list[Path]:
     try:
         raw: dict[str, Any] = tomllib.loads((home / "foreman.toml").read_text(encoding="utf-8"))
-    except Exception:  # an foreman.toml that cannot be read names no folder
+    except Exception:  # a foreman.toml that cannot be read names no folder
         return [home]
     try:
         keys: list[Any] = list(raw["repos"])
