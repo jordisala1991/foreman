@@ -33,7 +33,9 @@ def head_of(p: Project, branch: str) -> str:
 def commits_of(p: Project, branch: str) -> int:
     try:
         return registry.repo(p).commits_ahead(p.get("project", "main"), branch)
-    except RepoError:  # no such branch: no commits
+    except RepoError as e:  # git refused (no such branch): no commits; git that did not run raises, as before
+        if not e.reason:
+            raise
         return 0
 
 
