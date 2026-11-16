@@ -3,7 +3,6 @@ by it exiting when another version is installed."""
 
 import os
 import plistlib
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -107,13 +106,3 @@ class TestLauncher:
             assert len(r.stderr.strip().splitlines()) == 1, r.stderr
             assert "fm@fm" in r.stderr
             assert r.stdout == ""
-
-    def test_a_plist_written_before_the_rename_still_starts_the_installed_version(self) -> None:
-        """The old launcher text runs `<installPath>/bin/fm` with python and FM_PINNED set: the bridge hands it to foreman."""
-        folder = self.cache / "old"
-        (folder / "bin").mkdir(parents=True)
-        shutil.copy(launcher.ROOT / "bin/fm", folder / "bin/fm")
-        (folder / "bin/foreman").write_text("import os, sys\nprint(sys.argv[1:], os.environ['FM_PINNED'])\n")
-        env = {**os.environ, "FM_PINNED": str(folder)}
-        r = subprocess.run([sys.executable, str(folder / "bin/fm"), "loop"], env=env, capture_output=True, text=True, timeout=30, check=False)
-        assert r.stdout.strip() == f"['loop'] {folder}"

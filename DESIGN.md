@@ -41,7 +41,7 @@ home, and prints the two lines that install the plugin. The plugin (`fm@fm`, mar
 `foreman-next`; no `version` anywhere, so Claude Code's version is the commit and every merge reaches it) gives a
 session in any folder of a registered project the skill `fm:define-task` (its values from `foreman project`), the shared
 instructions with the project's values plus `<home>/instructions.md` (the SessionStart hook `foreman session-context`; `bin/foreman` re-executes under a newer `python3` from PATH or names the minimum, and the hook leaves that line for `foreman health`), and
-`foreman` on the Bash tool's PATH (Claude Code adds the plugin's `bin/`, which ships `foreman` and no executable `fm`: macOS's `/usr/bin/fm` stays macOS's; no hook writes PATH; a non-executable bridge file of the old command's name in `bin/` serves launchd plists written before the rename, to delete once `foreman launchd` was re-run); a session elsewhere gets no context. Agents run with it disabled (`enabledPlugins` in their settings).
+`foreman` on the Bash tool's PATH (Claude Code adds the plugin's `bin/`, which ships `foreman` and no executable `fm`: macOS's `/usr/bin/fm` stays macOS's; no hook writes PATH); a session elsewhere gets no context. Agents run with it disabled (`enabledPlugins` in their settings).
 
 A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and `~/Projects/<name>/home`.
 
