@@ -259,6 +259,155 @@ The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health fin
 brief (as the hunter's), its only write is `foreman diagnose --file`, which checks the required `##` headings (`foreman/core/oversight/diagnosis.py`)
 and appends the diagnosis to the task's `detail`, so `foreman show` has it. The task stays in triage; the owner decides next.
 
+## Agents through Orca (FN-204)
+
+Defined, not built. FN-203 wants every agent of a project set to `runner = "orca"` to be an Orca tab the owner can open
+and write to (also from Orca on the phone), while foreman keeps launching, messaging, watching and stopping it. This
+section answers how, from commands run on this Mac; the evidence log is `<home>/plans/FN-204-evidence.md` («E1»-«E7» below
+are its sections). The owner's questions Q1-Q5 at the end gate the Orca adapter (subtasks 2-3), not this definition.
+
+### How it was tried
+
+Orca 1.4.261 and Claude Code 2.1.325 on this Mac. A scratch git repo with worktrees made by git (as foreman makes them),
+registered in the owner's Orca; restarts on a second, headless Orca (`ORCA_USER_DATA_PATH=… orca serve --port 6790`) so
+the owner's tabs were never touched; the owner's `~/.claude/settings.json` holds Orca's hooks for every event and
+`permissions.defaultMode: "auto"`. Terminals and worktrees made were closed and removed and the second runtime killed;
+Orca has no verb to delete a repo or a Run, so the scratch repo (hidden with `orca repo hide`) and one Run named
+«fn-204 scratch (remove)» stay in the owner's Orca (E, last section).
+
+### Answers
+
+`T` is a terminal handle (`term_…`), `WT` a worktree path, `REPO` the repo's main checkout.
+
+| Question | Answer (the design) | Command → decisive output |
+|---|---|---|
+| Launch with model, effort, permission mode, settings (the guard hook) and the brief | A tab made by `orca terminal create` running `exec claude …` with every flag foreman passes today (D1). Orca's own verbs cannot: `agent launch` and `orchestration worker-start` take only model and effort | `orca terminal create --worktree path:WT --title "FN-77 responsible · test" --command "$LINE" --json`, `LINE` = `claude --model sonnet --effort low --permission-mode bypassPermissions --settings JSON PROMPT` → claude's footer `⏵⏵ bypass permissions on`; the agent's `echo task=$FOREMAN_TASK` → `task=FN-77`; the stand-in guard hook received the PreToolUse JSON (`session_id`, `cwd`); a 24,700-byte brief passed as `"$(cat brief.md)"` → the agent answered `4242`, its last line. `agent launch --help`, `worker-start --help`: no flag for settings or permission mode (E2) |
+| Send a message as foreman does today | `orca terminal send` to a live idle tab; an ended session gets a new tab with `--resume SID` and the same flags (D4) | `orca terminal send --terminal T --text MSG --enter --wait-submit 10 --json` → `accepted: true`, `prompt.stages: ["input_accepted","turn_started"]` (E3); `exec claude --resume 11111111-… --model sonnet --effort low --permission-mode bypassPermissions --settings JSON "msg"` → the same transcript grew 46 → 79 lines, no new file, the hook's `session_id` the same (E2) |
+| Tell idle, busy, waiting for input and ended apart | `orca worktree ps --json`, `agents[].state`, matched by `paneKey`; ended = the terminal gone from `terminal list` (D3) | busy: `state: "working"`, `toolName: "Bash"`; idle: `state: "done"`; waiting: `state: "waiting"` (`toolName: "ExitPlanMode"`, and the trust dialog with no tool), worktree `sidebarStatus: "permission"`; ended: `/exit` in an `exec claude` tab → `terminal wait --for exit` → `status: "exited"`, `exitCode: 0`, `terminal list` → `totalCount: 0`. `terminal wait --for tui-idle` → `satisfied: true` while the row said `working`: not a guide (E4) |
+| Stop it and close its tab | `orca terminal close --terminal T --tab` (D5) | → `closeMode: tab`; then `terminal list` → `totalCount: 0`, `ps` shows no claude of it. An orphaned tab: `close --tab` → `terminal_handle_stale`, `close` → `tab_not_found`, and it was gone from `terminal list` (E5) |
+| Must Orca know the repo; how a foreman worktree becomes an Orca worktree without Orca making one | Yes: `repo add` once, then `path:<worktree>` addresses foreman's own worktree; Orca creates none (D2) | unregistered: `terminal create --worktree path:WT2 …` → `"code": "selector_not_found"`; after `orca repo add --path REPO --json` → `orca worktree show --worktree path:WT --json` → the existing worktree, `isMainWorktree: false`; `worktree list` shows it only after `orca repo set --repo path:REPO --external-worktree-visibility show` (E1) |
+| Titles | `--title` at launch, `orca terminal rename` once after, the worktree's display name (D9) | `--title` names the tab and becomes the agent's `conversationName`; `terminal list` later shows claude's own title (`FOREMAN_TASK echo test`); `orca terminal rename --terminal T --title "…"` sets the tab's custom title (E6) |
+| Orca not running | Every call but `status` fails with `runtime_unavailable`: launches wait, nothing is blocked (D7) | `orca status --json` → exit 0, `app.running: false`; any other → exit 1, `error.code: "runtime_unavailable"` («Start the Orca app first»); `terminal send` → «no input was sent» (E7) |
+| Orca restarts | The agent keeps running and its handle stays valid | second runtime: `kill -TERM` of `orca serve` → the claude process kept its pid (parent: Orca's terminal daemon); after `serve` again: same handle, `connected: true`, `writable: true`, `state: done`, a message sent after it → `turn_started` and answered. The owner's desktop Orca was not restarted (inferred: the same terminal daemon design) (E7) |
+
+**The design** (each line answers a row above or a gap below):
+- **D1 Launch.** `orca terminal create --worktree path:<cwd> --title "<title>" --command '<line>' --json`, `<line>` =
+  `env -u CLAUDE_CODE_OAUTH_TOKEN exec <claude> --session-id <uuid4> --model M --effort E --permission-mode bypassPermissions --settings '<json>' "$(cat <brief file>)"`
+  (`shlex.join` for all but the brief; the brief in `<home>/state/briefs/<task>-<role>-<uuid>.md`; the JSON the same dict `sessions.settings` builds).
+  `exec` makes the tab end with claude (E4, ended (b): without it the shell stays and no agent row is left). Not `agent launch`
+  (no settings nor permission mode; Orca refuses `haiku` + `low`, which claude takes, E2) nor `worker-start` (the same, plus a
+  structured chat worker with Orca's own flags that needs a calling Orca terminal, `--from`, which the launchd loop is not).
+- **D2 Repo.** The adapter's `ensure_repo(path)`: `orca repo list --json`, else `orca repo add --path P --json`; then
+  `orca repo set --repo path:P --external-worktree-visibility show` (foreman's worktrees show in the sidebar). Planning, mechanic
+  and parent agents run in the repo's main checkout, the worktree Orca lists as `main`.
+- **D3 State.** One `orca worktree ps --json` per tick; a row is matched to its terminal by `paneKey` (what `terminal create`
+  returned). `working` → WORKING, `waiting` → WAITING, `done` → IDLE; a terminal listed with no row yet → WORKING (starting);
+  a terminal absent from `orca terminal list` → ENDED; a session foreman does not know → GONE. WORKING and WAITING are busy:
+  nothing is sent to them. Any field but `state` and `paneKey` may be missing (`hasLivePty` was).
+- **D4 Send.** Only to IDLE: `orca terminal send --terminal T --text MSG --enter --wait-submit 10 --json`; `turn_started` missing
+  from `prompt.stages` → `RunnerError`, retried next tick as `running.send` is today. Ended: a new tab with D1's line, `--resume SID`
+  instead of `--session-id`.
+- **D5 Stop.** `orca terminal close --terminal T --tab`; `terminal_handle_stale` or `tab_not_found` count as closed when
+  `terminal list` no longer has the handle. `stop_live` stays best-effort and never raises.
+- **D6 Trust dialog.** Right after start, while the row is WAITING with no tool, the adapter reads
+  `orca terminal read --terminal T --screen --json`; when the screen holds `Yes, I trust this folder` it sends `$'\x1b[B'` then `$'\r'`
+  (E2: the agent went on and answered its brief). Only for a folder inside the project's repos or worktrees folder. Pending Q2.
+- **D7 Orca down.** `orca status --json` says it (`app.running: false`); any other call's `runtime_unavailable` → `RunnerUnavailable(RunnerError)`.
+  A launch that gets it leaves the task as it is (no block), writes one event and is retried next tick; a send is retried as any
+  failure. Foreman never runs `orca open` (Q3). The binary is `$ORCA_BIN`, else `orca` on PATH, else
+  `/Applications/Orca.app/Contents/Resources/bin/orca`, because launchd's PATH is short.
+- **D8 Health**, `runner = "orca"` only: the binary is found; `orca status` answers (a warning, not a finding, when Orca is merely
+  closed); Orca's hooks are in `~/.claude/settings.json`: without them no state ever appears and every agent would read WORKING
+  (inferred: the owner's file holds them for every event and `ps` showed no other source).
+- **D9 Titles.** `--title` at launch, then `orca terminal rename --terminal T --title "<title>"` once (claude overwrites the shown pty
+  title, E6); a responsible agent's worktree gets `orca worktree set --worktree path:W --display-name "<id> <task title>"` (E1).
+- **D10 Config.** `[agents] runner = "claude" | "orca"` per project, default `claude`; an unknown value is a config error naming it
+  (as `provider_error` does). No fallback from one runner to the other.
+
+### What the claude runner does that Orca cannot
+
+| Claude runner (today) | Orca | What foreman does |
+|---|---|---|
+| `claude agents --json --all` keeps ended sessions | lists live terminals only | ended = the terminal absent after `terminal wait --for exit` or from `terminal list`; foreman keeps `agent.terminal`, `agent.pane` and `agent.session` in the backlog and never asks Orca about a session it forgot |
+| resume under the same id needs stop, wait, then a flagless `claude --bg --resume` | a live idle tab takes `terminal send` | an ended one gets a new tab `exec claude --resume SID …flags… "message"`, which kept the id and took the flags (E2) |
+| `--bg` skips the trust dialog | a tab shows it for every folder claude never saw (E2) | D6 |
+| sessions run with Orca closed | tabs need Orca's runtime to be read or written, though a restarted server left the process running (E7) | D7 |
+| the state comes from claude itself | the state comes only from Orca's hooks in `~/.claude/settings.json` (inferred: the owner's file holds them for every event and `ps` showed no other source) | D8 |
+| `busy` = `status idle` of a `working` row | Orca keeps `working` ~30 s while a background task runs, and `tui-idle` is no guide (E4) | the adapter trusts `agents[].state` only |
+| the short id for `claude attach SHORT` | no short id | `agent.short` = the first 8 characters of the session id foreman chose (`--session-id`), so `fill_sessions` has nothing to fill |
+| `login.child_env()` strips `CLAUDE_CODE_OAUTH_TOKEN` | the tab inherits Orca's environment | `env -u CLAUDE_CODE_OAUTH_TOKEN` in the tab's command (D1) |
+
+### The port
+
+From what foreman uses today in `services/claude/sessions.py` (`command` :68, `start` :102, `resume` :108, `listing` :134, `state` :148,
+`alive` :154, `busy` :160, `stop` :172, `find` :97, `SessionError` :31) and its callers (`services/agents/launch.py`, `running.py`,
+`steps/mechanic.py`, `parents.py`, `reviewing.py`, `talk.py`, `services/delivery/merge.py`, `loop/queue.py`, `tick.py`,
+`ui/panel/views.py`, `ui/cli/ops.py`). Two real implementations, so a port is allowed. Package `foreman/providers/`, module
+`runner.py` (layer ports); adapters `providers/claude/` (today's `services/claude/sessions.py` and `login.py`, moved) and
+`providers/orca/`; the registry hands it out (`registry.runner(p)`), as it does `registry.repo(p)`.
+
+```
+class State(Enum): WORKING, WAITING, IDLE, ENDED, GONE            # today: working|blocked, —, done, stopped, gone
+@dataclass(frozen=True) class Agent: tid, name, model, effort, title                      # unchanged
+@dataclass(frozen=True) class Started: short: str; session: str | None                    # orca: session known at once; claude: from the listing, maybe None
+class Rows(Protocol):                                                                     # one snapshot per tick; replaces dict rows
+    def state(self, session: str | None) -> State
+    def busy(self, session: str | None) -> bool                                           # WORKING or WAITING
+    def alive(self, session: str | None) -> bool
+    def find(self, short: str) -> str | None
+class Runner(Protocol):
+    def start(self, agent: Agent, brief: str, cwd: Path) -> Started
+    def send(self, session: str, message: str, cwd: Path) -> None                         # today's resume
+    def rows(self) -> Rows | None                                                         # None: unreadable (today {}); callers do nothing, as today
+    def stop(self, short: str) -> None
+class RunnerError(Exception); class RunnerUnavailable(RunnerError)                        # SessionError becomes RunnerError
+```
+
+`stop_live` and `settings` stay shared (they use only the above). No dict crosses the port: where a caller reads
+`rows.get(sid).get("id")` (`merge.py:117`) or `row.get("status")`, it gets `Rows`.
+
+### Questions for the owner
+
+- **Q1** The agent's tab is Claude Code's terminal screen, not Orca's chat view: the chat (structured) worker cannot carry the guard
+  hook, foreman's environment or a session id (E2). Is a terminal tab acceptable, also from Orca on the phone? Recommend yes: without
+  it the guard hook is lost; «seen acting» (subtask 3) checks the phone.
+- **Q2** May foreman press «Yes, I trust this folder» for its own worktrees (the click the owner would make; claude records the folder
+  in `~/.claude.json`)? Recommend yes, only inside the project's repos and worktrees folder; otherwise every new agent waits until
+  the owner clicks.
+- **Q3** When Orca is not running, may foreman start it (`orca open` opens a window on the owner's screen)? Recommend no: launches wait
+  with one event and a health warning; agents already running keep running (E7).
+- **Q4** May foreman add the project's repos to Orca and show their external worktrees (the sidebar gains each project)? Recommend
+  yes, automatic, only the repos in `foreman.toml`; it is what makes the tabs visible.
+- **Q5** Add «Runner» to `GLOSSARY.md`: «The way a project's agents run, chosen by `[agents] runner` (`claude` or `orca`); the port
+  `Runner` has one adapter for each.» Avoid: engine, backend. Recommend yes (the owner's call).
+
+### The reference workspace
+
+An Orca-driven setup on this Mac, read at a fixed commit; `ref:` paths are relative to its package.
+
+| Question | What it does | Foreman |
+|---|---|---|
+| launch | `orchestration worker-start --keep-open --worktree path: --agent claude` with only `--model/--effort` (`ref:services/orca/workers.py:141-145`, `ref:steps/run/start.py:40-45`); permission mode and settings are Orca's own | differs: guard hook, env, session id (D1) |
+| its own run | an Orca terminal tab made by `terminal_create` (`ref:entry/trigger.py:76-86`; `ref:services/orca/client.py:41-44`) | differs: the loop is launchd, no terminal |
+| the binary, Orca reachable | `find_binary` (`ref:services/orca/call.py:15-21`), `reachable()` (`ref:services/orca/client.py:24-27`), gate before a run (`ref:entry/trigger.py:78`) | as is (D7) |
+| a failed call | a `Failure` value with Orca's reason trimmed to 300 characters (`ref:services/orca/call.py:24-49`) | adapts: `RunnerError(reason)` |
+| send | `orchestration send --to dispatch:` (`ref:services/orca/workers.py:125-135`); a not-ready agent is retried quietly, a stuck one flagged (`ref:services/orca/workers.py:13-33`, commit ed5a762); a follow-up gets a new dispatch id, so the newest row per worktree is read (`ref:steps/run/closing/topic.py:30-39`) | adapts: retry next tick (D4); terminals have stable handles |
+| states | `worker-show --full`: `stage.activity` `done` → idle, `liveness.verdict` (`ref:services/orca/workers.py:161-179`); Orca keeps `working` with background work | adapts: `worktree ps` `state` (D3) |
+| closing | an idle agent released, an open task stopped, a fenced one's tabs closed, an agent silent 15 min is quiet (`ref:steps/run/closing/topic.py:50-117`, `ref:core/router_run.py:129-136`; commits 905f1b9, 686b2bf, 1f62905) | adapts: every tab is foreman's, so `terminal close --tab` always (D5); no fence, no quiet rule (`stop_live` is unconditional) |
+| repo, worktree and titles | repo by origin key (`ref:services/orca/worktrees.py:66-83`); Orca creates the worktree in `worker-start new-top-level` (`ref:services/orca/workers.py:147-159`); display name (`ref:services/orca/worktrees.py:103-105`); nesting (`ref:services/orca/worktrees.py:123-125`) | differs: foreman creates worktrees with git and Orca adopts `path:` (D2); display name as is (D9); nesting left out |
+| one agent per task | a launch never starts a second agent where one ever started (`ref:steps/run/start.py:16-25`) | adapts: before `start`, `terminal list` in the cwd; a live tab titled for the task is adopted, never duplicated |
+| Orca closed or restarted | a run does nothing when Orca is not reachable (`ref:entry/trigger.py:76-80`); nothing about a restart | as is for closed (D7); restart answered by E7 |
+
+Left out: other agents than Claude; nesting sub-agent tabs under a parent agent's worktree; Orca's chat view; a quiet rule for
+agents Orca keeps `working`.
+
+### Next subtasks
+
+Drafted in `<home>/reports/FN-204.md`, to be filed under FN-203 in triage:
+1. The runner port, with today's claude adapter behind it (after FN-153 and FN-154).
+2. The Orca adapter (after 1; gated by Q1-Q5).
+3. Seen acting in a real project (after 2).
+
 ## Shared resources
 
 `foreman/services/lock.py`. A resource is declared in foreman.toml (`[resources.NAME]`, optional
@@ -615,6 +764,7 @@ Only where there is an external system or two real implementations: `providers/`
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
 the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
 task.
+`Runner` (FN-203, planned): the agents' sessions; adapters `claude` and `orca`; two real implementations.
 
 ### Rules
 
