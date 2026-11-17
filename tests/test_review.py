@@ -60,6 +60,10 @@ class TestReview_:
         assert "the why" in c["body"]
         assert "the why" not in r["body"]
         assert r["body"].index("<details") < r["body"].index("the what")
+        backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})  # a lost record does not post the review twice
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
+        assert len(self.pr(g)["reviews"]) == 1
 
     def test_findings_outside_the_diff_are_listed_in_the_body(self):
         g, iid = self.make()
@@ -81,14 +85,6 @@ class TestReview_:
         commit(g, iid)
         tip(g, iid, "Findings:\nF2 | M | app.py:4 | another what\n", 1)
         assert len(self.pr(g)["review_comments"]) == 2
-
-    def test_a_lost_record_does_not_post_the_review_twice(self):
-        g, iid = self.make()
-        tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
-        backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})
-        tick.tick(g.e.p)
-        tick.tick(g.e.p)
-        assert len(self.pr(g)["reviews"]) == 1
 
     def test_a_failed_diff_read_posts_the_review_without_inline_comments(self):
         g, iid = self.make()
@@ -113,11 +109,10 @@ class TestReview_:
         assert "Ready" not in r["body"]
         assert g.calls("pr", "diff") == []
 
-    def test_a_verdict_of_another_tip_adds_no_findings(self):
-        g, iid = self.make()
-        f = g.e.home / "x.md"
+    def test_a_verdict_of_another_tip_adds_no_findings(self, tmp_path):
+        f = tmp_path / "x.md"
         f.write_text("Findings:\nF1 | M | app.py:3 | w\n")
-        i = {"id": iid, "title": "t", "review": {"tip": "aaa", "file": str(f), "open": 1}}
+        i = {"id": "TY-1", "title": "t", "review": {"tip": "aaa", "file": str(f), "open": 1}}
         c = {"head": "bbb", "risk": "low", "tests": "pass", "files": 1, "lines": 1}
         assert pulls.findings_of(i, "bbb") == []
         assert len(pulls.findings_of(i, "aaa")) == 1
