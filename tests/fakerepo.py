@@ -127,7 +127,8 @@ class FakeRepo:
             shutil.rmtree(path, ignore_errors=True)
 
     def delete_branch(self, branch: str) -> None:
-        self.heads.pop(branch, None)
+        if branch not in (self.current_branch(), *self.branch_at.values()):  # git refuses a checked-out branch
+            self.heads.pop(branch, None)
 
     def merges_of(self, task_id: str, since: str, until: str) -> list[str]:
         return [c for c in reversed(self._ahead(since, until)) if self.msgs[c].startswith(f"Merge {task_id}: ")]
@@ -139,16 +140,16 @@ class FakeRepo:
         return False
 
     def _tree(self, commit: str) -> dict[str, bytes]:
-        """The files of `commit`: its history replayed, a commit_files commit giving its whole tree, any other the paths
-        it changed and kept (content b"")."""
-        h, tree = self._history(commit), dict[str, bytes]()
+        """The files of `commit`: a commit_files commit's own tree; any other, its parents' files (a merge: all of
+        them) with the paths it changed and kept (content b""). Creation order puts every parent before its child."""
+        h, trees = self._history(commit), dict[str, dict[str, bytes]]()
         for c in (c for c in self.order if c in h):
-            if c in self.files:
-                tree = dict(self.files[c])
+            tree = dict(self.files.get(c) or {k: v for p in self.parents[c] for k, v in trees[p].items()})
             tree.update({f.path: b"" for f in self.diffs[c][0] if f.path not in self.diffs[c][1]})
             for d in self.diffs[c][1]:
                 tree.pop(d, None)
-        return tree
+            trees[c] = tree
+        return trees[commit]
 
     def commit_files(self, parent: str, folder: str, files: dict[str, Path], message: str) -> str:
         tree = self._tree(self.head(parent)) if parent else {}

@@ -94,6 +94,8 @@ def test_worktrees(repo: FakeRepo):
     assert repo.find("t") == ""
     b = repo.head("b")
     repo.add_worktree(wt, "b", "main")  # an existing branch is checked out as it is
+    repo.delete_branch("b")
+    assert repo.find("b")  # git refuses to delete a checked-out branch
     assert repo.head("b") == b
     with pytest.raises(RepoError):
         repo.add_worktree(wt, "b", "main")  # git refuses a path that is already a worktree
@@ -164,6 +166,10 @@ def test_commit_files(repo: FakeRepo, tmp_path: Path):
     repo.commit("e", FileDiff("a.txt", 1, 0))
     above = repo.commit_files("e", "FN-2", {"y.png": y}, "m")
     assert sorted(repo.files[above]) == ["FN-1/x.png", "FN-2/y.png", "a.txt"]  # files of a commit_files commit below, kept
+    repo.commit("f", FileDiff("f.txt", 1, 0))  # made before the commit_files commit it is merged onto
+    repo.heads["main"] = repo.commit_files("main", "FN-4", {"x.png": x}, "m")
+    repo.merge("main", "f", "m", False)
+    assert "f.txt" in repo.files[repo.commit_files("main", "FN-5", {"y.png": y}, "m")]  # the merged-in files are kept
 
 
 def test_fast_forward(repo: FakeRepo):
