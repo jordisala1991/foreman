@@ -125,6 +125,7 @@ def test_detached_worktree_and_merge_in_it(repo: FakeRepo):
         repo.merge_in_worktree(tmp / "none", repo.head("b"))  # not a worktree: git cannot run there
     e2 = repo.commit("e", FileDiff("a.txt", 1, 1))
     repo.merge_in_worktree(wt, repo.head("b"))  # clean: the worktree now holds b's change to a.txt
+    assert repo.trees[wt] == repo.head("main")  # staged, not committed: HEAD stays
     with pytest.raises(RepoError):
         repo.merge_in_worktree(wt, e2)
 
@@ -158,6 +159,11 @@ def test_commit_files(repo: FakeRepo, tmp_path: Path):
     assert repo.commit_files(second, "FN-1", {"x.png": x, "y.png": y}, "m") == ""
     on_main = repo.commit_files("main", "FN-3", {"x.png": x}, "m")
     assert sorted(repo.files[on_main]) == ["FN-3/x.png", "a.txt", "b.txt", "c.txt"]  # the parent's files are kept
+    assert repo.is_ancestor("main", on_main)  # a ref given as parent is its commit
+    repo.heads["e"] = first
+    repo.commit("e", FileDiff("a.txt", 1, 0))
+    above = repo.commit_files("e", "FN-2", {"y.png": y}, "m")
+    assert sorted(repo.files[above]) == ["FN-1/x.png", "FN-2/y.png", "a.txt"]  # files of a commit_files commit below, kept
 
 
 def test_fast_forward(repo: FakeRepo):

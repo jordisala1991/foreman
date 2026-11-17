@@ -19,7 +19,8 @@ class FakeRepo:
         self.msgs: dict[str, str] = {}
         self.order: list[str] = []  # commits, oldest first
         self.heads: dict[str, str] = {}  # ref -> commit
-        self.trees: dict[Path, str] = {}  # worktree -> the commit checked out there (with what was merged in it)
+        self.trees: dict[Path, str] = {}  # worktree -> the commit checked out there
+        self.staged: dict[Path, list[str]] = {}  # worktree -> the commits merged in it, not committed (git's --no-commit)
         self.branch_at: dict[Path, str] = {}  # worktree -> the branch checked out there ("" when detached)
         self.files: dict[str, dict[str, bytes]] = {}  # commit made by commit_files -> its tree (path -> content)
         self.heads["main"] = self._new((), [], [], "init")
@@ -115,13 +116,14 @@ class FakeRepo:
     def merge_in_worktree(self, path: Path, commit: str) -> None:
         if path not in self.trees:
             raise RepoError(f"git -C {path} merge {commit}: not a git repository", reason="not a git repository")
-        if self.conflicts(self.trees[path], commit):
+        if any(self.conflicts(side, commit) for side in (self.trees[path], *self.staged.get(path, []))):
             raise RepoError(f"git merge {commit}: conflict", reason="conflict")
-        self.trees[path] = self._new((self.trees[path], self.head(commit)), [], [], "merged, not committed")
+        self.staged.setdefault(path, []).append(self.head(commit))  # HEAD stays: the merge is only staged
 
     def remove_worktree(self, path: Path | str) -> None:
         if self.trees.pop(Path(path), None) is not None:  # git removes only a worktree it knows
             del self.branch_at[Path(path)]
+            self.staged.pop(Path(path), None)
             shutil.rmtree(path, ignore_errors=True)
 
     def delete_branch(self, branch: str) -> None:
@@ -137,11 +139,12 @@ class FakeRepo:
         return False
 
     def _tree(self, commit: str) -> dict[str, bytes]:
-        """The files of `commit`: its commit_files tree, else the paths its history changed and kept (content b"")."""
-        if commit in self.files:
-            return self.files[commit]
+        """The files of `commit`: its history replayed, a commit_files commit giving its whole tree, any other the paths
+        it changed and kept (content b"")."""
         h, tree = self._history(commit), dict[str, bytes]()
         for c in (c for c in self.order if c in h):
+            if c in self.files:
+                tree = dict(self.files[c])
             tree.update({f.path: b"" for f in self.diffs[c][0] if f.path not in self.diffs[c][1]})
             for d in self.diffs[c][1]:
                 tree.pop(d, None)
@@ -152,7 +155,7 @@ class FakeRepo:
         new = {**tree, **{f"{folder}/{n}": f.read_bytes() for n, f in files.items()}}
         if new == tree:
             return ""
-        c = self._new((parent,) if parent else (), [], [], message)
+        c = self._new((self.head(parent),) if parent else (), [], [], message)
         self.files[c] = new
         return c
 
