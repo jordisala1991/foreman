@@ -170,6 +170,11 @@ def test_commit_files(repo: FakeRepo, tmp_path: Path):
     repo.heads["main"] = repo.commit_files("main", "FN-4", {"x.png": x}, "m")
     repo.merge("main", "f", "m", False)
     assert "f.txt" in repo.files[repo.commit_files("main", "FN-5", {"y.png": y}, "m")]  # the merged-in files are kept
+    repo.commit("g", FileDiff("g.txt", 1, 0))
+    repo.commit("main", deleted=("a.txt",))  # main deletes a.txt after g branched
+    repo.merge("main", "g", "m", False)
+    after = repo.files[repo.commit_files("main", "FN-6", {"y.png": y}, "m")]
+    assert "g.txt" in after and "a.txt" not in after  # a file deleted on one side stays deleted
 
 
 def test_fast_forward(repo: FakeRepo):

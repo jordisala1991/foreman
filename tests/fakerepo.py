@@ -140,16 +140,33 @@ class FakeRepo:
         return False
 
     def _tree(self, commit: str) -> dict[str, bytes]:
-        """The files of `commit`: a commit_files commit's own tree; any other, its parents' files (a merge: all of
-        them) with the paths it changed and kept (content b""). Creation order puts every parent before its child."""
+        """The files of `commit`: a commit_files commit's own tree; any other, its first parent's files, with what each
+        merged-in parent's side changed (added, changed or deleted) and the paths it changed itself (content b"").
+        Creation order puts every parent before its child."""
         h, trees = self._history(commit), dict[str, dict[str, bytes]]()
         for c in (c for c in self.order if c in h):
-            tree = dict(self.files.get(c) or {k: v for p in self.parents[c] for k, v in trees[p].items()})
+            first, *merged = self.parents[c] or ("",)
+            tree = dict(self.files.get(c) or trees.get(first, {}))
+            for p in merged if c not in self.files else []:
+                for path in self._side_paths(first, p, trees):
+                    if path in trees[p]:
+                        tree[path] = trees[p][path]
+                    else:
+                        tree.pop(path, None)
             tree.update({f.path: b"" for f in self.diffs[c][0] if f.path not in self.diffs[c][1]})
             for d in self.diffs[c][1]:
                 tree.pop(d, None)
             trees[c] = tree
         return trees[commit]
+
+    def _side_paths(self, base: str, branch: str, trees: dict[str, dict[str, bytes]]) -> set[str]:
+        """The paths the commits of `branch` not in `base` changed, commit_files commits included."""
+        side = self._ahead(base, branch)
+        out = {f.path for c in side for f in self.diffs[c][0]} | {d for c in side for d in self.diffs[c][1]}
+        for c in (c for c in side if c in self.files):
+            before = trees[self.parents[c][0]] if self.parents[c] else {}
+            out |= {k for k in self.files[c].keys() | before.keys() if self.files[c].get(k) != before.get(k)}
+        return out
 
     def commit_files(self, parent: str, folder: str, files: dict[str, Path], message: str) -> str:
         tree = self._tree(self.head(parent)) if parent else {}
