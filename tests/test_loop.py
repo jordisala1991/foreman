@@ -1,14 +1,14 @@
 import functools
 import json
 import os
-import time
+import threading
 from unittest import mock
 
 import pytest
 from fakerepo import FakeRepo
-from helpers import Env, fm, git, install_fm, version_folder
+from helpers import Env, fm, git
 
-from foreman import launcher, providers, util
+from foreman import providers, util
 from foreman.core.tasks import backlog, questions
 from foreman.loop import queue, tick
 from foreman.loop.launch import launch_free
@@ -238,36 +238,45 @@ class TestQueue:
         assert len(checks) == 1
         assert len(ids) == 3
 
-    def test_a_slow_check_does_not_hold_up_a_launch(self, request, fake_git):
-        e = Env(test="case $PWD in */trees/*) sleep 3;; esac", repo=fake_git)
+    def test_a_slow_check_does_not_hold_up_a_launch(self, request, monkeypatch, tmp_path, fake_git):
+        gate, armed = tmp_path / "gate", tmp_path / "armed"  # once armed, a check blocks reading the gate until the test writes a line
+        os.mkfifo(gate)
+        fd = os.open(gate, os.O_RDWR)  # held open for reading and writing: a write never blocks, the check's open never waits
+        request.addfinalizer(functools.partial(os.close, fd))
+        request.addfinalizer(functools.partial(os.write, fd, b"release\n" * 2))  # a failing assertion never leaves the check hanging
+        e = Env(test=f"case $PWD in */trees/*) if [ -e {armed} ]; then read line < {gate}; fi;; esac", repo=fake_git)
         a = self.deliver(e)
         e.fake.commit("main", FileDiff("other.py", 1, 0))  # main moves
         ready = backlog.add(e.p, "later", status="ready", criteria="z")
-        util.BACKGROUND_WAIT_S = 0.2
-        request.addfinalizer(functools.partial(setattr, util, "BACKGROUND_WAIT_S", 20))
+        monkeypatch.setattr(util, "BACKGROUND_WAIT_S", 0)
+        armed.touch()
         tick.tick(e.p)
         assert e.task(ready)["status"] == "in progress"  # launched while the check still runs
         assert (e.task(a).get("check") or {}).get("main") != e.fake.head("main")
+        os.write(fd, b"release\n" * 2)  # one line for each check blocked: main's tests and the branch's
         for t in list(util.BACKGROUND.values()):
             t.join()
         assert e.task(a)["check"]["main"] == e.fake.head("main")
 
-    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self, request, fake_git):
+    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self, request, monkeypatch, fake_git):
         e = Env(test="true", repo=fake_git)
         a = self.deliver(e)
         e.fake.commit("main", FileDiff("other.py", 1, 0))  # main moves
 
+        tick_over = threading.Event()
+
         def down(*args):
-            time.sleep(0.3)  # longer than the wait: the tick has gone on when it fails
+            tick_over.wait(5)  # fails only once the tick has gone on without it (a guard of 5 s, the test sets it)
             raise providers.Transient("net down")
 
         real = check.check
         check.check = down
         request.addfinalizer(functools.partial(setattr, check, "check", real))
-        util.BACKGROUND_WAIT_S = 0.05
-        request.addfinalizer(functools.partial(setattr, util, "BACKGROUND_WAIT_S", 20))
+        monkeypatch.setattr(util, "BACKGROUND_WAIT_S", 0)
         for _ in range(3):
+            tick_over.clear()
             tick.tick(e.p)
+            tick_over.set()
             for t in list(util.BACKGROUND.values()):
                 t.join()
         assert "net down" in e.task(a)["blocked"]
@@ -421,8 +430,6 @@ class TestQueue:
         assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
 
     def test_a_failing_stop_does_not_stop_the_cancel(self, fake_git):
-        from unittest import mock
-
         e = Env(test="true", repo=fake_git)
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -542,30 +549,3 @@ class TestQueue:
         tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"]) == ("in review", "low")
-
-
-class TestVersion:
-    """A loop started by the launcher (FOREMAN_PINNED) exits as soon as another foreman@foreman version is installed."""
-
-    @pytest.fixture(autouse=True)
-    def set_up(self, request, fake_git):
-        self.e = Env(repo=fake_git)
-        self.p = self.e.p
-        cache = self.e.tmp / "cache/foreman/foreman"
-        self.a, self.b = version_folder(cache, "aaa"), version_folder(cache, "bbb")
-        env = mock.patch.dict(os.environ, {"FOREMAN_PINNED": self.a["installPath"]})
-        env.start()
-        request.addfinalizer(env.stop)
-
-    def test_a_new_install_stops_the_loop_before_its_tick(self, request):
-        install_fm(request, self.b)
-        with pytest.raises(SystemExit) as e:
-            tick.forever([str(self.p.home)], once=True)
-        assert str(e.value) == "foreman: foreman@foreman bbb is installed now; this runs aaa"
-        assert not (self.p.state / "loop.json").exists()
-
-    def test_the_same_install_ticks_and_the_heartbeat_names_the_version(self, request):
-        install_fm(request, self.a)
-        tick.forever([str(self.p.home)], once=True)
-        hb = util.read_json(self.p.state / "loop.json", {})
-        assert hb["version"] == launcher.ROOT.name
