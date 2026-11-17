@@ -98,6 +98,13 @@ def test_worktrees(repo: FakeRepo):
     with pytest.raises(RepoError):
         repo.add_worktree(wt, "b", "main")  # git refuses a path that is already a worktree
     assert repo.worktrees() == [wt]  # only the worktrees added: not the main checkout (docstring)
+    with pytest.raises(RepoError):
+        repo.add_worktree(wt.parent / "u", "b", "main")  # nor a branch checked out in another worktree
+    with pytest.raises(RepoError):
+        repo.add_worktree(wt.parent / "v", "main", "main")  # nor the main checkout's branch
+    (wt.parent / "f").write_text("x")
+    with pytest.raises(RepoError):
+        repo.add_detached(wt.parent / "f", repo.head("main"))  # nor a path that is a file
     other = wt.parent / "not-a-worktree"
     other.mkdir()
     repo.remove_worktree(other)
@@ -114,6 +121,12 @@ def test_detached_worktree_and_merge_in_it(repo: FakeRepo):
     assert repo.trees[wt] == repo.head("main")
     with pytest.raises(RepoError):
         repo.merge_in_worktree(wt, repo.head("c"))
+    with pytest.raises(RepoError):
+        repo.merge_in_worktree(tmp / "none", repo.head("b"))  # not a worktree: git cannot run there
+    e2 = repo.commit("e", FileDiff("a.txt", 1, 1))
+    repo.merge_in_worktree(wt, repo.head("b"))  # clean: the worktree now holds b's change to a.txt
+    with pytest.raises(RepoError):
+        repo.merge_in_worktree(wt, e2)
 
 
 def test_merges_of(repo: FakeRepo):
@@ -143,6 +156,8 @@ def test_commit_files(repo: FakeRepo, tmp_path: Path):
     second = repo.commit_files(other, "FN-1", {"y.png": y}, "m")
     assert sorted(repo.files[second]) == ["FN-1/x.png", "FN-1/y.png", "FN-2/x.png"]
     assert repo.commit_files(second, "FN-1", {"x.png": x, "y.png": y}, "m") == ""
+    on_main = repo.commit_files("main", "FN-3", {"x.png": x}, "m")
+    assert sorted(repo.files[on_main]) == ["FN-3/x.png", "a.txt", "b.txt", "c.txt"]  # the parent's files are kept
 
 
 def test_fast_forward(repo: FakeRepo):

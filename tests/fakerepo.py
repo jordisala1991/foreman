@@ -19,7 +19,8 @@ class FakeRepo:
         self.msgs: dict[str, str] = {}
         self.order: list[str] = []  # commits, oldest first
         self.heads: dict[str, str] = {}  # ref -> commit
-        self.trees: dict[Path, str] = {}  # worktree -> the commit checked out there
+        self.trees: dict[Path, str] = {}  # worktree -> the commit checked out there (with what was merged in it)
+        self.branch_at: dict[Path, str] = {}  # worktree -> the branch checked out there ("" when detached)
         self.files: dict[str, dict[str, bytes]] = {}  # commit made by commit_files -> its tree (path -> content)
         self.heads["main"] = self._new((), [], [], "init")
 
@@ -96,25 +97,31 @@ class FakeRepo:
     def worktrees(self) -> list[Path]:
         return list(self.trees)
 
-    def _checkout(self, path: Path, commit: str) -> None:
-        if path in self.trees or (path.exists() and any(path.iterdir())):
+    def _checkout(self, path: Path, commit: str, branch: str = "") -> None:
+        if path in self.trees or path.is_file() or (path.is_dir() and any(path.iterdir())):
             raise RepoError(f"git worktree add {path}: already exists", reason="already exists")
+        if branch and branch in (self.current_branch(), *self.branch_at.values()):
+            raise RepoError(f"git worktree add {path} {branch}: {branch} is already checked out", reason="already checked out")
         path.mkdir(parents=True, exist_ok=True)
-        self.trees[path] = commit
+        self.trees[path], self.branch_at[path] = commit, branch
 
     def add_worktree(self, path: Path, branch: str, base: str) -> None:
-        self._checkout(path, self.heads.get(branch) or self.head(base))
+        self._checkout(path, self.heads.get(branch) or self.head(base), branch)
         self.heads.setdefault(branch, self.trees[path])
 
     def add_detached(self, path: Path, commit: str) -> None:
         self._checkout(path, self.head(commit))
 
     def merge_in_worktree(self, path: Path, commit: str) -> None:
+        if path not in self.trees:
+            raise RepoError(f"git -C {path} merge {commit}: not a git repository", reason="not a git repository")
         if self.conflicts(self.trees[path], commit):
             raise RepoError(f"git merge {commit}: conflict", reason="conflict")
+        self.trees[path] = self._new((self.trees[path], self.head(commit)), [], [], "merged, not committed")
 
     def remove_worktree(self, path: Path | str) -> None:
         if self.trees.pop(Path(path), None) is not None:  # git removes only a worktree it knows
+            del self.branch_at[Path(path)]
             shutil.rmtree(path, ignore_errors=True)
 
     def delete_branch(self, branch: str) -> None:
@@ -129,8 +136,19 @@ class FakeRepo:
     def dirty(self) -> bool:
         return False
 
+    def _tree(self, commit: str) -> dict[str, bytes]:
+        """The files of `commit`: its commit_files tree, else the paths its history changed and kept (content b"")."""
+        if commit in self.files:
+            return self.files[commit]
+        h, tree = self._history(commit), dict[str, bytes]()
+        for c in (c for c in self.order if c in h):
+            tree.update({f.path: b"" for f in self.diffs[c][0] if f.path not in self.diffs[c][1]})
+            for d in self.diffs[c][1]:
+                tree.pop(d, None)
+        return tree
+
     def commit_files(self, parent: str, folder: str, files: dict[str, Path], message: str) -> str:
-        tree = self.files.get(self.head(parent), {}) if parent else {}
+        tree = self._tree(self.head(parent)) if parent else {}
         new = {**tree, **{f"{folder}/{n}": f.read_bytes() for n, f in files.items()}}
         if new == tree:
             return ""
