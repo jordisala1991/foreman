@@ -20,8 +20,8 @@ class TestRun:
         assert not c.value.timed_out
 
     def test_a_timeout_is_a_proc_error_that_says_so(self):
-        with pytest.raises(proc.ProcError, match="timed out after 0.2s") as c:
-            proc.run([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.2)
+        with pytest.raises(proc.ProcError, match="timed out after 0s") as c:  # a limit of 0 is over at once: no real wait, the program is killed
+            proc.run([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0)
         assert c.value.timed_out
 
 

@@ -346,14 +346,14 @@ class TestPulls:
         merge.accept(g.e.p, tid)
         return g, tid
 
-    def test_the_configured_merge_type_is_used(self):
-        for strategy, used in ((None, "squash"), ("merge", "merge"), ("rebase", "rebase")):
-            g, tid = self.merged(strategy)
-            tick.tick(g.e.p)
-            assert g.state["prs"]["1"]["strategy"] == used
-            assert g.e.task(tid)["status"] == "done"
-            assert g.e.task(tid)["commit"] == "c0ffee"
-            assert g.calls("pr", "merge")[0][:3] == ["pr", "merge", "1"]
+    @pytest.mark.parametrize(("strategy", "used"), [(None, "squash"), ("merge", "merge"), ("rebase", "rebase")])
+    def test_the_configured_merge_type_is_used(self, strategy, used):
+        g, tid = self.merged(strategy)
+        tick.tick(g.e.p)
+        assert g.state["prs"]["1"]["strategy"] == used
+        assert g.e.task(tid)["status"] == "done"
+        assert g.e.task(tid)["commit"] == "c0ffee"
+        assert g.calls("pr", "merge")[0][:3] == ["pr", "merge", "1"]
 
     def main_changes_app(self, g: GH) -> None:
         (g.e.repo / "app.py").write_text("changed on main\n")
@@ -460,15 +460,15 @@ class TestPulls:
         tick.tick(g.e.p)
         assert g.e.task(tid)["check"]["ci"] == "pass"
 
-    def test_autonomy_merges_only_with_green_ci(self):
-        for ci, status in (("none", "in review"), ("pending", "in review"), ("fail", "in progress"), ("pass", "done")):
-            g = self.make(test="true", autonomy="medium")
-            g.set(ci=ci)
-            tid = g.work()
-            g.deliver(tid)
-            tick.tick(g.e.p)
-            tick.tick(g.e.p)
-            assert g.e.task(tid)["status"] == status, ci
+    @pytest.mark.parametrize(("ci", "status"), [("none", "in review"), ("pending", "in review"), ("fail", "in progress"), ("pass", "done")])
+    def test_autonomy_merges_only_with_green_ci(self, ci, status):
+        g = self.make(test="true", autonomy="medium")
+        g.set(ci=ci)
+        tid = g.work()
+        g.deliver(tid)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
+        assert g.e.task(tid)["status"] == status
 
     def test_ci_is_read_again_at_every_decision_not_cached_with_the_check(self):
         g = self.make(test="true", autonomy="medium")
@@ -525,35 +525,35 @@ class TestPulls:
         assert self.graphql(g) == 1
         assert all("check" not in g.e.task(tid) for tid in ids)
 
-    def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self):
-        for failing in (["api", "graphql"], ["pr", "merge"], ["pr", "view"]):
-            g = self.make(test="true", autonomy="medium")
-            g.set(ci="pending")
-            tid = g.work()
-            g.deliver(tid)
-            g.set(ci="pass", fail_once=failing)
-            tick.tick(g.e.p)
-            tick.tick(g.e.p)
-            tick.tick(g.e.p)
-            i = g.e.task(tid)
-            assert not i.get("blocked"), failing
-            assert i["status"] == "done", failing
+    @pytest.mark.parametrize("failing", [["api", "graphql"], ["pr", "merge"], ["pr", "view"]], ids=lambda f: " ".join(f))
+    def test_a_transient_gh_failure_in_the_queue_retries_instead_of_blocking(self, failing):
+        g = self.make(test="true", autonomy="medium")
+        g.set(ci="pending")
+        tid = g.work()
+        g.deliver(tid)
+        g.set(ci="pass", fail_once=failing)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
+        tick.tick(g.e.p)
+        i = g.e.task(tid)
+        assert not i.get("blocked")
+        assert i["status"] == "done"
 
-    def test_one_tasks_failure_never_blocks_it_nor_stops_the_next_task_getting_its_pr(self):
-        # "Head sha can't be blank" (once, then fine) and a 502 are both retried; neither blocks the task
-        for flag, text in (({"reject": "foreman/ty-1"}, "Head sha"), ({"flaky": "foreman/ty-1"}, "HTTP 502")):
-            g = self.make(test="true")
-            g.set(**flag)
-            first, second = g.work(), g.work()  # each work() ticks: the first one fails there, once
-            events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
-            assert len(events) == 1
-            assert text in events[0]
-            assert not g.e.task(first).get("blocked")
-            g.set(flaky="")
-            tick.tick(g.e.p)
-            assert "pr" in g.e.task(second)  # the failure did not stop the next task
-            assert "pr" in g.e.task(first)
-            assert g.e.task(first)["retry_error"] == ""
+    # "Head sha can't be blank" (once, then fine) and a 502 are both retried; neither blocks the task
+    @pytest.mark.parametrize(("flag", "text"), [({"reject": "foreman/ty-1"}, "Head sha"), ({"flaky": "foreman/ty-1"}, "HTTP 502")], ids=["reject", "flaky"])
+    def test_one_tasks_failure_never_blocks_it_nor_stops_the_next_task_getting_its_pr(self, flag, text):
+        g = self.make(test="true")
+        g.set(**flag)
+        first, second = g.work(), g.work()  # each work() ticks: the first one fails there, once
+        events = [e["text"] for e in util.read_jsonl(g.e.p.state / "events.jsonl") if "could not push it or open its PR" in e["text"]]
+        assert len(events) == 1
+        assert text in events[0]
+        assert not g.e.task(first).get("blocked")
+        g.set(flaky="")
+        tick.tick(g.e.p)
+        assert "pr" in g.e.task(second)  # the failure did not stop the next task
+        assert "pr" in g.e.task(first)
+        assert g.e.task(first)["retry_error"] == ""
 
     def test_only_known_permanent_errors_are_permanent_and_unblock_clears_the_errors(self):
         cases = (

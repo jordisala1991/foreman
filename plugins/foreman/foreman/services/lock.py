@@ -21,6 +21,7 @@ import signal
 import subprocess
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -43,9 +44,20 @@ def alive(pid: int) -> bool:
     return True
 
 
+@dataclass(frozen=True)
+class Hands:
+    """What a Resource tells the time, waits and starts its command with; tests hand in their own."""
+
+    clock: Callable[[], float] = time.time
+    pause: Callable[[float], None] = time.sleep
+    spawn: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen
+
+
 class Resource:
-    def __init__(self, name: str, slots: list[str] | None = None, max_minutes: float = 20) -> None:
+    def __init__(self, name: str, slots: list[str] | None = None, max_minutes: float = 20, hands: Hands | None = None) -> None:
         self.name, self.slots, self.max_s = name, slots or ["1"], float(max_minutes) * 60
+        hands = hands or Hands()
+        self.clock, self.pause, self.spawn = hands.clock, hands.pause, hands.spawn
         self.dir = root() / name
         self.dir.mkdir(parents=True, exist_ok=True)
 
@@ -67,30 +79,45 @@ class Resource:
         with self._state() as d:
             return {"name": self.name, "slots": self.slots, "held": dict(d["held"]), "queue": list(d["queue"])}
 
-    def acquire(self, who: str, what: str, task: str = "", say: Callable[[str], object] | None = None) -> tuple[str, float]:
-        """Waits for a free slot in arrival order; (slot, seconds waited)."""
-        me = {"who": who, "what": what, "task": task, "pid": os.getpid(), "since": util.now(), "t": time.time()}
+    def enqueue(self, who: str, what: str, task: str = "") -> dict[str, Any]:
+        """Takes a place at the end of the queue; the ticket to hand to `take`."""
+        me = {"who": who, "what": what, "task": task, "pid": os.getpid(), "since": util.now(), "t": self.clock()}
         with self._state() as d:
             d["queue"].append(me)
-        t0, said = time.time(), 0.0
-        while True:
-            with self._state() as d:
-                first = min(d["queue"], key=lambda t: t["t"], default=None)
-                free = [s for s in self.slots if s not in d["held"]]
-                if first and first["pid"] == me["pid"] and first["t"] == me["t"] and free:
-                    d["queue"].remove(first)
-                    d["held"][free[0]] = {**me, "since": util.now(), "t": time.time()}
-                    return free[0], time.time() - t0
-                ahead = [t for t in d["queue"] if t["t"] < me["t"]]
-                holders = list(d["held"].values())
-            if say and time.time() - said >= 60:
-                said = time.time()
-                say(
-                    f"waiting for {self.name}: held by "
-                    + ", ".join(f"{h['who']} ({h['what']})" for h in holders)
-                    + (f"; {len(ahead)} ahead in the queue" if ahead else "")
-                )
-            time.sleep(POLL_S)
+        return me
+
+    def take(self, me: dict[str, Any]) -> str | None:
+        """One attempt for the ticket: its slot (moved from the queue to held) if it is first and one is free, else None."""
+        with self._state() as d:
+            first = min(d["queue"], key=lambda t: t["t"], default=None)
+            free = [s for s in self.slots if s not in d["held"]]
+            if first and first["pid"] == me["pid"] and first["t"] == me["t"] and free:
+                d["queue"].remove(first)
+                d["held"][free[0]] = {**me, "since": util.now(), "t": self.clock()}
+                return free[0]
+        return None
+
+    def acquire(self, who: str, what: str, task: str = "", say: Callable[[str], object] | None = None) -> tuple[str, float]:
+        """Waits for a free slot in arrival order; (slot, seconds waited)."""
+        me = self.enqueue(who, what, task)
+        t0, said = self.clock(), 0.0
+        while (slot := self.take(me)) is None:
+            if say and self.clock() - said >= 60:
+                said = self.clock()
+                say(self.waiting(me))
+            self.pause(POLL_S)
+        return slot, self.clock() - t0
+
+    def waiting(self, me: dict[str, Any]) -> str:
+        """The line for who waits: who holds the resource and how many are ahead."""
+        with self._state() as d:
+            ahead = [t for t in d["queue"] if t["t"] < me["t"]]
+            holders = list(d["held"].values())
+        return (
+            f"waiting for {self.name}: held by "
+            + ", ".join(f"{h['who']} ({h['what']})" for h in holders)
+            + (f"; {len(ahead)} ahead in the queue" if ahead else "")
+        )
 
     def release(self, slot: str) -> None:
         with self._state() as d:
@@ -100,9 +127,9 @@ class Resource:
     def run(self, who: str, what: str, cmd: list[str], task: str = "", say: Callable[[str], object] | None = None) -> int:
         """Holds the resource while `cmd` runs (FOREMAN_SLOT set), stops it at the time limit, always releases."""
         slot, waited = self.acquire(who, what, task, say)
-        t0, rc, event = time.time(), 1, "use"
+        t0, rc, event = self.clock(), 1, "use"
         try:
-            p = subprocess.Popen(cmd, env={**os.environ, "FOREMAN_SLOT": slot, "FOREMAN_RESOURCE": self.name}, start_new_session=True)
+            p = self.spawn(cmd, env={**os.environ, "FOREMAN_SLOT": slot, "FOREMAN_RESOURCE": self.name}, start_new_session=True)
             try:
                 rc = p.wait(timeout=self.max_s)
             except subprocess.TimeoutExpired:
@@ -130,7 +157,7 @@ class Resource:
                     "what": what,
                     "slot": slot,
                     "waited_s": round(waited, 1),
-                    "held_s": round(time.time() - t0, 1),
+                    "held_s": round(self.clock() - t0, 1),
                     "rc": rc,
                 },
             )

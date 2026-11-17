@@ -171,12 +171,17 @@ def make_server(port: int = 7788, token: str | None = None, host: str = "127.0.0
     return ThreadingHTTPServer((host, port), Handler), Handler.token
 
 
-def watch_version(srv: ThreadingHTTPServer, every_s: float = 30, stale: Callable[[], str] = launcher.stale) -> None:
+def watch_version(
+    srv: ThreadingHTTPServer,
+    every_s: float = 30,
+    stale: Callable[[], str] = launcher.stale,
+    pause: Callable[[float], None] = time.sleep,
+) -> None:
     """A panel started by the launcher stops when another foreman@foreman version is installed (launchd starts the new one)."""
 
     def watch() -> None:
         while not (why := stale()):
-            time.sleep(every_s)
+            pause(every_s)
         print(f"foreman: {why}", file=sys.stderr, flush=True)
         srv.shutdown()
 
