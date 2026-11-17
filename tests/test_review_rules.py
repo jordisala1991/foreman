@@ -97,24 +97,17 @@ class TestMergeOf:
 
 
 class TestRules:
-    def test_a_waiting_task_that_conflicts_stays_and_says_so(self):
-        e = Env(test="true")
-        tid = deliver(e)
-        tick.tick(e.p)
-        main_conflicts(e)
-        tick.tick(e.p)
-        i = e.task(tid)
-        assert i["status"] == "in review"
-        assert "conflicts" not in i
-        assert i["check"]["conflict"]
-        assert i["check"]["reasons"][0].startswith("conflicts with main"), i["check"]["reasons"]
-
     def accept_into_conflict(self, e: Env) -> tuple[str, str]:
         """Delivered and checked; main conflicts; the owner accepts; the merge sends it back. Returns (task, old tip)."""
         tid = deliver(e)
         tick.tick(e.p)
         main_conflicts(e)
         tick.tick(e.p)
+        i = e.task(tid)  # a waiting task that conflicts stays and says so
+        assert i["status"] == "in review"
+        assert "conflicts" not in i
+        assert i["check"]["conflict"]
+        assert i["check"]["reasons"][0].startswith("conflicts with main"), i["check"]["reasons"]
         fm(e.home, "accept", tid)
         old = head(e, tid)
         tick.tick(e.p)
@@ -177,6 +170,11 @@ class TestRules:
         assert len(e.calls()) == before
         assert (i["review"]["holds"], i["check"]["head"]) == (head(e, tid), head(e, tid))
         assert "no review runs, its verdict holds" in " ".join(events(e, tid))
+        assert e.task(tid).get("review_for", "") == ""
+        commit(e.task(tid)["worktree"], "app.py", "# more\n")  # a new tip after a clean verdict gets a review
+        tick.tick(e.p)
+        assert e.task(tid)["hunter"]["tip"] == head(e, tid)
+        assert launched(e, tid)[-1].endswith("rule: rounds 1-2"), launched(e, tid)
 
     def test_after_round_two_later_tips_launch_no_review(self):
         e = Env(test="true")
@@ -196,16 +194,6 @@ class TestRules:
         assert len(e.calls()) == before
         assert i["review"]["holds"] == head(e, tid)
         assert i["check"]["review"].startswith("open after round 2"), i["check"]
-
-    def test_a_new_tip_after_a_clean_verdict_gets_a_review(self):
-        e = Env(test="true")
-        tid = deliver(e)
-        tick.tick(e.p)
-        assert e.task(tid).get("review_for", "") == ""
-        commit(e.task(tid)["worktree"], "app.py", "# more\n")
-        tick.tick(e.p)
-        assert e.task(tid)["hunter"]["tip"] == head(e, tid)
-        assert launched(e, tid)[-1].endswith("rule: rounds 1-2"), launched(e, tid)
 
     def test_after_two_clean_rounds_a_new_tip_launches_nothing(self):
         e = Env(test="true")

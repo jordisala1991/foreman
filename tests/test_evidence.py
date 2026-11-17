@@ -68,40 +68,28 @@ class TestOnGitHub:
         return subprocess.run(["git", "-C", str(self.g.bare), *args], capture_output=True, check=False).stdout
 
     def test_github_pushes_evidence_and_links(self):
-        tid = self.deliver()
-        self.ticks()
-        assert f"![the home](https://github.com/o/r/blob/foreman-evidence/{tid}/x.png?raw=true)" in self.body()
-        assert self.remote("show", f"foreman-evidence:{tid}/x.png") == PNG
-
-    def test_evidence_leaves_task_branch_and_checkout(self):
         g = self.g
         tid = self.deliver()
         repo = g.e.repo
         before = (git(repo, "rev-parse", g.e.task(tid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
         self.ticks()
-        assert "foreman-evidence" in self.body()
+        assert f"![the home](https://github.com/o/r/blob/foreman-evidence/{tid}/x.png?raw=true)" in self.body()
+        assert self.remote("show", f"foreman-evidence:{tid}/x.png") == PNG
+        # the task branch and the checkout are left as they were, with no image in the branch
         after = (git(repo, "rev-parse", g.e.task(tid)["branch"]), git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD"), git(repo, "branch"))
         assert before == after
         branch = g.e.task(tid)["branch"]
         files = self.remote("ls-tree", "-r", "--name-only", branch) + self.remote("diff", "--name-only", f"main...{branch}")
         assert b"app.py" in files
         assert b".png" not in files
-
-    def test_evidence_twice_pushes_once(self):
-        tid = self.deliver()
-        self.ticks()
-        i = self.g.e.task(tid)
-        backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
+        # the same evidence twice pushes once
+        backlog.update(g.e.p, tid, pr={**g.e.task(tid)["pr"], "described": ""})
         self.ticks()
         assert self.remote("rev-list", "--count", "foreman-evidence").strip() == b"1"
         assert "foreman-evidence" in self.body()
-
-    def test_changed_image_is_pushed_again(self):
-        tid = self.deliver()
-        self.ticks()
-        (self.g.e.home / "reports" / tid / "x.png").write_bytes(PNG + b"2")
-        i = self.g.e.task(tid)
-        backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
+        # a changed image is pushed again
+        (g.e.home / "reports" / tid / "x.png").write_bytes(PNG + b"2")
+        backlog.update(g.e.p, tid, pr={**g.e.task(tid)["pr"], "described": ""})
         self.ticks()
         assert self.remote("show", f"foreman-evidence:{tid}/x.png") == PNG + b"2"
         assert self.remote("rev-list", "--count", "foreman-evidence").strip() == b"2"
@@ -110,7 +98,7 @@ class TestOnGitHub:
         g = self.g
         secret = g.e.tmp / "secret.png"
         secret.write_bytes(b"secret")
-        tid = g.work()
+        tid = "TY-1"
         folder = g.e.home / "reports" / tid
         folder.mkdir(parents=True)
         (folder / "k.png").symlink_to(secret)
@@ -133,10 +121,13 @@ class TestOnGitHub:
         assert self.remote("show", f"foreman-evidence:{first}/x.png") == PNG
         assert self.remote("show", "foreman-evidence:TY-99/y.png") == b"other"
 
-    def test_missing_image_is_left_alone(self):
-        self.deliver(image=None)
+    def test_missing_image_and_big_image_are_left_alone(self):
+        tid = self.deliver(text="Did X\n\n![the home](x.png)\n![big](y.png)\n", image=None)  # no x.png
+        (self.g.e.home / "reports" / tid).mkdir(exist_ok=True)
+        (self.g.e.home / "reports" / tid / "y.png").write_bytes(b"0" * (evidence.MAX_BYTES + 1))
         self.ticks()
         assert "![the home](x.png)" in self.body()
+        assert "![big](y.png)" in self.body()
         assert self.remote("branch", "--list", "foreman-evidence") == b""
 
     def test_no_images_no_push(self):
@@ -144,12 +135,6 @@ class TestOnGitHub:
         self.ticks()
         assert self.remote("branch", "--list", "foreman-evidence") == b""
         assert self.g.calls("repo", "view", "--json", "nameWithOwner") == []  # the review reads the repo url for its links
-
-    def test_big_image_skipped(self):
-        self.deliver(image=b"0" * (evidence.MAX_BYTES + 1))
-        self.ticks()
-        assert "![the home](x.png)" in self.body()
-        assert self.remote("branch", "--list", "foreman-evidence") == b""
 
     def test_evidence_push_failure_is_transient(self):
         g = self.g
