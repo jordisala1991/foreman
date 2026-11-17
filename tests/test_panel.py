@@ -7,7 +7,7 @@ import tempfile
 import threading
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from urllib.parse import quote
 
@@ -153,19 +153,31 @@ class TestWatchVersion:
     def keep_request(self, request):
         self.request = request  # for the cleanups of helpers
 
-    def serving(self, stale) -> threading.Thread:
+    def serving(self, stale: Callable[[], str], pause: Callable[[float], None] = lambda _s: None) -> threading.Thread:
         srv, _ = server.make_server(0, token="k")
         self.request.addfinalizer(srv.server_close)
         th = threading.Thread(target=srv.serve_forever, daemon=True)
         th.start()
-        server.watch_version(srv, 0.05, stale=stale)
-        th.join(2)
-        if th.is_alive():
-            self.request.addfinalizer(srv.shutdown)
+        self.request.addfinalizer(srv.shutdown)
+        server.watch_version(srv, 0.05, stale=stale, pause=pause)
         return th
 
     def test_a_new_version_stops_the_panel(self) -> None:
-        assert not self.serving(lambda: "foreman@foreman bbb is installed now; this runs aaa").is_alive()
+        th = self.serving(lambda: "foreman@foreman bbb is installed now; this runs aaa")
+        th.join(5)  # a guard: it stops at once
+        assert not th.is_alive()
 
     def test_the_same_version_keeps_it_serving(self) -> None:
-        assert self.serving(lambda: "").is_alive()
+        """The watcher has looked three times and is held in its pause: the panel still serves. The finalizer lets it go."""
+        reached, release, pauses = threading.Event(), threading.Event(), []
+
+        def pause(every_s: float) -> None:
+            pauses.append(every_s)
+            if len(pauses) >= 3:
+                reached.set()
+                release.wait(5)  # a guard only: the finalizer sets it
+
+        th = self.serving(lambda: "stopped" if release.is_set() else "", pause)
+        self.request.addfinalizer(release.set)
+        assert reached.wait(5)
+        assert th.is_alive()

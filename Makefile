@@ -52,7 +52,7 @@ size:
 # -n auto: one worker per core (pytest-xdist); `test-serial` runs them in one process. pytest puts plugins/foreman (pythonpath in
 # pyproject.toml), so foreman, on the path, and tests/, so `helpers`.
 test:
-	uv run python -m pytest -q -n auto -W error::ResourceWarning tests
+	uv run python -m pytest -q -n auto --durations=10 -W error::ResourceWarning tests
 
 test-serial:
-	uv run python -m pytest -q -W error::ResourceWarning tests
+	uv run python -m pytest -q --durations=10 -W error::ResourceWarning tests

@@ -1,9 +1,11 @@
+import importlib.machinery
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import tomllib
+import types
 from pathlib import Path
 from unittest import mock
 
@@ -50,21 +52,52 @@ class TestPythonVersion:
         for s in ("3.99", "3.9.6", f"{self.t}/old"):
             assert s in r.stderr
 
-    def test_a_python3_that_times_out_is_named_in_the_line(self):
-        fake(self.t / "hang", "3.99.1", "echo hang")
-        (self.t / "hang/python3").write_text("#!/bin/sh\nexec /bin/sleep 30\n")
-        r = self.run_fm(f"{self.t}/hang", "list")
-        assert r.returncode != 0
-        assert len(r.stderr.splitlines()) == 1
-        assert "timed out" in r.stderr
+    def load_bin(self):
+        """bin/foreman as a module (not __main__: nothing runs)."""
+        loader = importlib.machinery.SourceFileLoader("foreman_bin", str(self.t / "bin/foreman"))
+        mod = types.ModuleType(loader.name)
+        mod.__file__ = str(self.t / "bin/foreman")
+        loader.exec_module(mod)
+        return mod
 
-    def test_the_hook_writes_its_note_before_its_own_timeout_when_pythons_hang(self):
-        for n in ("a", "b"):
+    def ensure_with_hanging_pythons(self, monkeypatch, names: list[str], *argv: str) -> tuple[list[float], object]:
+        """_ensure_python with a probe that always times out, taking the whole timeout it is given on a fake clock:
+        the timeouts it was handed, and what it exits with."""
+        for n in names:
             fake(self.t / n, "3.99.1", "echo hang")
-            (self.t / n / "python3").write_text("#!/bin/sh\nexec /bin/sleep 30\n")
-        r = self.run_fm(f"{self.t}/a:{self.t}/b", "session-context", stdin='{"cwd": "/"}')
-        assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
+        monkeypatch.setattr(sys, "argv", ["foreman", *argv])
+        monkeypatch.setenv("PATH", os.pathsep.join(str(self.t / n) for n in names))
+        monkeypatch.setenv("FOREMAN_REGISTRY", str(self.reg))
+        now, given = [0.0], []
+
+        def probe(cand: str, timeout: float) -> str:
+            given.append(timeout)
+            now[0] += timeout
+            return "timed out"
+
+        with pytest.raises(SystemExit) as e:
+            self.load_bin()._ensure_python((3, 99), probe=probe, clock=lambda: now[0])
+        return given, e.value.code
+
+    def test_a_python3_that_times_out_is_named_in_the_line(self, monkeypatch):
+        given, line = self.ensure_with_hanging_pythons(monkeypatch, ["hang"], "list")
+        assert given == [10]
+        assert isinstance(line, str)
+        assert len(line.splitlines()) == 1
+        assert "timed out" in line
+        assert f"{self.t}/hang" in line
+
+    def test_the_hook_writes_its_note_before_its_own_timeout_when_pythons_hang(self, monkeypatch):
+        given, code = self.ensure_with_hanging_pythons(monkeypatch, ["a", "b"], "session-context")
+        assert code == 0  # the hook exits 0
+        assert given == [6]  # the first probe takes the 6 s budget: the second python is not tried, it is «timed out» already
         assert "timed out" in Path(f"{self.reg}.python").read_text()
+
+    def test_a_probe_that_times_out_says_so(self):
+        def hang(*_a, **_k):
+            raise subprocess.TimeoutExpired("python3", 10)
+
+        assert self.load_bin()._probe("python3", 10, run=hang) == "timed out"
 
     def test_no_python3_at_all_is_said(self):
         r = self.run_fm(f"{self.t}/empty", "list")
