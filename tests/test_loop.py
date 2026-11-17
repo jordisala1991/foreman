@@ -9,6 +9,7 @@ from fakerepo import FakeRepo
 from helpers import Env, fm, git
 
 from foreman import providers, util
+from foreman.core.rules import decide, risk
 from foreman.core.tasks import backlog, questions
 from foreman.loop import queue, tick
 from foreman.loop.launch import launch_free
@@ -180,6 +181,7 @@ class TestQueue:
         tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"], i["check"]["tests"]) == ("in review", "low", "pass")
+        assert not [x for x in backlog.load(e.p)["decisions_resolved"] if x.get("kind") == "review"]  # a clean review sends nothing
         merge.accept(e.p, tid)
         assert e.task(tid)["status"] == "in review"  # accepting merges nothing
         tick.tick(e.p)
@@ -331,25 +333,18 @@ class TestQueue:
             queue.queue_one = real
         assert not e.task(b).get("check")
 
-    def test_autonomy_low_merges_low_risk_alone(self, fake_git):
-        e = Env(test="true", autonomy="low", repo=fake_git)
-        tid = self.deliver(e)
-        tick.tick(e.p)
-        assert e.task(tid)["status"] == "done"
-
     def test_a_big_diff_alone_does_not_raise_risk(self, fake_git):
         e = Env(test="true", autonomy="low", repo=fake_git)
         big = self.deliver(e, lines=400)
         tick.tick(e.p)
         assert (e.task(big)["status"], e.task(big)["check"]["risk"]) == ("done", "low")
 
-    def test_failing_tests_are_high(self, fake_git):
-        e = Env(test="false", autonomy="medium", repo=fake_git)
-        tid = self.deliver(e)
-        tick.tick(e.p)
-        c = e.task(tid)["check"]
-        assert (e.task(tid)["status"], c["risk"]) == ("in progress", "high")  # returned to its agent (FN-67)
-        assert any("tests fail" in r for r in c["reasons"])
+    def test_failing_tests_are_high(self):
+        level, reasons = risk.score(Env().p, risk.Facts("fail", "clean", [{"path": "app.py", "added": 1, "deleted": 0}], [], False, 1, ""))
+        assert level == "high"
+        assert any("tests fail" in r for r in reasons)
+        c = {"risk": "high", "review": "clean", "tests": "fail", "ci": "", "conflict": False}
+        assert decide.after_check(c, "medium", False) == "failing"  # returned to its agent (FN-67)
 
     def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self, fake_git):
         e = Env(test="true", repo=fake_git)
@@ -381,14 +376,6 @@ class TestQueue:
         assert "check" not in e.task(tid)  # no check before the verdict
         tick.tick(e.p)
         assert len(e.calls()) == 3  # not launched twice
-
-    def test_a_finished_hunter_and_a_reviewer_with_a_verdict_are_stopped(self, fake_git):
-        e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        tick.tick(e.p)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
-        e.hunt_then_review(tid)
-        tick.tick(e.p)
         assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
         assert e.state_of(e.task(tid)["reviewer"]["name"]) == "working"
         e.verdict(tid)
@@ -486,6 +473,7 @@ class TestQueue:
         e.set_state(tid.lower(), "done")
         tick.tick(e.p)
         assert "leaves 1 open" in e.calls()[-1]["argv"][-1]
+        assert f"reviews/{tid}.md" in e.calls()[-1]["argv"][-1]
         e.change(tid)  # the fix
         backlog.set_status(e.p, tid, "in review")
         e.review(tid, 1)  # round 2 still open: to the owner, whatever the autonomy
@@ -495,22 +483,6 @@ class TestQueue:
         assert (i["status"], i["check"]["risk"]) == ("in review", "low")
         assert any("open after round 2" in r for r in i["check"]["reasons"])
 
-    def test_a_branch_that_conflicts_after_main_moved_goes_back_to_its_agent_once_accepted(self):
-        e = Env(test="true")
-        tid = self.deliver(e)
-        tick.tick(e.p)
-        (e.repo / "app.py").write_text("changed on main\n")
-        git(e.repo, "commit", "-qam", "main moves")
-        tick.tick(e.p)
-        assert e.task(tid)["status"] == "in review"  # nobody wants it merged yet: it waits
-        merge.accept(e.p, tid)
-        tick.tick(e.p)
-        i = e.task(tid)
-        assert (i["status"], i["conflicts"]) == ("in progress", 1)
-        e.set_state(tid.lower(), "done")
-        tick.tick(e.p)
-        assert "conflicts" in e.calls()[-1]["argv"][-1]
-
     def test_reject_sends_the_note_back_to_the_agent(self, fake_git):
         e = Env(test="true", repo=fake_git)
         tid = self.deliver(e)
@@ -519,25 +491,6 @@ class TestQueue:
         e.set_state(tid.lower(), "done")
         tick.tick(e.p)
         assert "name it better" in e.calls()[-1]["argv"][-1]
-
-    def test_open_findings_send_the_review_back(self, fake_git):
-        e = Env(test="true", repo=fake_git)
-        tid = self.deliver(e, open_findings=1)
-        tick.tick(e.p)
-        assert e.task(tid)["status"] == "in progress"
-        e.set_state(tid.lower(), "done")
-        tick.tick(e.p)
-        assert f"reviews/{tid}.md" in e.calls()[-1]["argv"][-1]
-
-    def test_clean_review_sends_nothing(self, fake_git):
-        e = Env(test="true", repo=fake_git)
-        tid = self.deliver(e)
-        tick.tick(e.p)
-        i = e.task(tid)
-        assert i["status"] == "in review"
-        assert "check" in i
-        d = backlog.load(e.p)
-        assert not [x for x in d["decisions_resolved"] if x.get("kind") == "review"]
 
     def test_refuted_without_commit_is_not_returned_twice(self, fake_git):
         e = Env(test="true", repo=fake_git)

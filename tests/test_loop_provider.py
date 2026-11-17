@@ -2,11 +2,12 @@ import os
 
 import pytest
 import test_loop
-from helpers import Env, git
+from helpers import Env, fm, git
 
+from foreman import providers
 from foreman.core.tasks import backlog
 from foreman.loop import queue, tick
-from foreman.providers import ChangeState, registry
+from foreman.providers import Change, ChangeState, registry
 from foreman.services.delivery import merge
 from foreman.steps import talk
 
@@ -46,18 +47,28 @@ class TestProvider:
 
     def test_squash_by_default_merge_is_no_ff(self):
         for strategy, parents in (("", 1), ("merge", 2)):
-            e = Env(test="true", autonomy="low")
+            e = Env(test="true")
             if strategy:
                 e.home.joinpath("foreman.toml").write_text(e.home.joinpath("foreman.toml").read_text().replace("[merge]", f'[merge]\nstrategy = "{strategy}"'))
                 e.p = type(e.p).load(e.home)
-            tid = self.delivered(e)
-            tick.tick(e.p)
-            assert e.task(tid)["status"] == "done"
+            git(e.repo, "checkout", "-qb", "b")
+            (e.repo / "app.py").write_text("# on b\n")
+            git(e.repo, "commit", "-qam", "on b")
+            git(e.repo, "checkout", "-q", "main")
+            registry.get(e.p).merge(Change(id="TY-1", title="x", branch="b"), providers.merge_strategy(e.p))
             assert len(git(e.repo, "log", "-1", "--format=%P", "main").split()) == parents
+        assert providers.merge_strategy(Env().p) == "squash"  # the default
 
-    def test_unknown_merge_or_provider_is_a_clear_config_error(self):
-        from foreman import providers
+    def test_rejection_forgets_the_merge_of_the_old_tip(self):
+        e = Env(test="true")
+        tid = self.delivered(e)
+        tick.tick(e.p)
+        backlog.update(e.p, tid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
+        talk.return_to_agent(e.p, tid, "rejection", "again")
+        i = e.task(tid)
+        assert not {"accepted", "merge", "merging"} & set(i)
 
+    def test_an_accepted_task_that_cannot_merge_blocks_with_its_reason_then_merges(self):
         e = Env(test="true")
         tid = self.delivered(e)
         tick.tick(e.p)
@@ -69,34 +80,6 @@ class TestProvider:
             with pytest.raises(providers.ConfigError):
                 merge.accept(e.p, tid)
             e.p.cfg["merge"][key] = before
-
-    def test_rejection_forgets_the_merge_of_the_old_tip(self):
-        e = Env(test="true")
-        tid = self.delivered(e)
-        tick.tick(e.p)
-        backlog.update(e.p, tid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
-        talk.return_to_agent(e.p, tid, "rejection", "again")
-        i = e.task(tid)
-        assert not {"accepted", "merge", "merging"} & set(i)
-
-    def test_a_crash_after_the_merge_adopts_it_instead_of_merging_twice(self):
-        e = Env(test="true")
-        tid = self.delivered(e)
-        tick.tick(e.p)
-        merge.accept(e.p, tid)
-        base = git(e.repo, "rev-parse", "main").strip()
-        git(e.repo, "merge", "--squash", "foreman/ty-1")
-        git(e.repo, "commit", "-qm", f"Merge {tid}: x")  # the merge happened; its ref was never stored
-        backlog.update(e.p, tid, merging=base)
-        merged = git(e.repo, "rev-parse", "main").strip()
-        tick.tick(e.p)
-        assert e.task(tid)["status"] == "done"
-        assert git(e.repo, "rev-parse", "main").strip() == merged
-
-    def test_a_failing_merge_blocks_the_task_with_the_reason(self):
-        e = Env(test="true")
-        tid = self.delivered(e)
-        tick.tick(e.p)
         merge.accept(e.p, tid)
         (e.repo / "app.py").write_text("dirty\n")  # the main checkout has uncommitted changes
         tick.tick(e.p)
@@ -104,16 +87,29 @@ class TestProvider:
         assert i["status"] == "in review"
         assert "uncommitted changes" in i["blocked"]
         assert "merge" not in i
-
-    def test_a_main_checkout_on_another_branch_blocks_the_merge(self):
-        e = Env(test="true")
-        tid = self.delivered(e)
-        tick.tick(e.p)
-        merge.accept(e.p, tid)
-        git(e.repo, "checkout", "-q", "-b", "elsewhere")
+        assert "accepted" in i
+        assert "conflicts" not in i
+        git(e.repo, "checkout", "--", "app.py")
+        fm(e.home, "unblock", tid)
+        git(e.repo, "checkout", "-q", "-b", "elsewhere")  # the main checkout is on another branch
         tick.tick(e.p)
         assert "is not on main" in e.task(tid)["blocked"]
         assert "merge" not in e.task(tid)
+        git(e.repo, "checkout", "-q", "main")
+        fm(e.home, "unblock", tid)
+        e.p.cfg["merge"]["strategy"] = "rebase"  # a bad provider blocks at the merge step
+        queue.run_queue(e.p, {})
+        assert "strategy = 'rebase'" in e.task(tid)["blocked"]
+        e.p.cfg["merge"]["strategy"] = "squash"
+        fm(e.home, "unblock", tid)
+        base = git(e.repo, "rev-parse", "main").strip()  # a crash after the merge adopts it instead of merging twice
+        git(e.repo, "merge", "--squash", "foreman/ty-1")
+        git(e.repo, "commit", "-qm", f"Merge {tid}: x")  # the merge happened; its ref was never stored
+        backlog.update(e.p, tid, merging=base)
+        merged = git(e.repo, "rev-parse", "main").strip()
+        tick.tick(e.p)
+        assert e.task(tid)["status"] == "done"
+        assert git(e.repo, "rev-parse", "main").strip() == merged
 
     def accepted_then_main_moves(self, e):
         tid = self.delivered(e)
@@ -139,39 +135,13 @@ class TestProvider:
             assert "accepted" not in i
             assert git(e.repo, "rev-parse", "main").strip() == main
             assert git(e.repo, "status", "--porcelain").strip() == ""
-
-    def test_an_accepted_branch_whose_merge_fails_otherwise_is_still_blocked(self):
-        e = Env(test="true")
-        tid = self.delivered(e)
-        tick.tick(e.p)
-        merge.accept(e.p, tid)
-        (e.repo / "app.py").write_text("dirty\n")
-        tick.tick(e.p)
-        i = e.task(tid)
-        assert i["blocked"]
-        assert i["status"] == "in review"
-        assert "accepted" in i
-        assert "conflicts" not in i
-
-    def test_after_the_fix_the_task_merges_without_a_new_accept(self):
-        e = Env(test="true")
-        tid = self.accepted_then_main_moves(e)
-        tick.tick(e.p)
-        wt = e.repo.parent / e.task(tid)["worktree"]
-        git(wt, "merge", "-X", "ours", "main", "-m", "fix")
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
-        e.review(tid)
-        tick.tick(e.p)
-        assert e.task(tid)["status"] == "done"
-
-    def test_a_bad_provider_blocks_at_the_merge_step(self):
-        e = Env(test="true")
-        tid = self.delivered(e)
-        tick.tick(e.p)
-        merge.accept(e.p, tid)
-        e.p.cfg["merge"]["strategy"] = "rebase"
-        queue.run_queue(e.p, {})
-        assert "strategy = 'rebase'" in e.task(tid)["blocked"]
+            if strategy == "squash":  # after the fix the task merges without a new accept
+                wt = e.repo.parent / i["worktree"]
+                git(wt, "merge", "-X", "ours", "main", "-m", "fix")
+                backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+                e.review(tid)
+                tick.tick(e.p)
+                assert e.task(tid)["status"] == "done"
 
     def test_defaults_and_nothing_is_published(self):
 
@@ -194,7 +164,6 @@ class TestProvider:
 
 class TestRequestMerge:
     def test_request_merge_sorts_platform_errors(self):
-        from foreman import providers
         from foreman.services.delivery.git import DeliveryError
 
         e = Env(test="true")

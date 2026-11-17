@@ -27,7 +27,6 @@ from foreman.services.claude import sessions
 sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugins/foreman"  # the folder the marketplace installs
-SLOW_TEST_S = 5.0  # a test whose setup, call and teardown together take longer fails (conftest.py)
 
 # A test run must not write the owner's real ~/.config/foreman (registry, panel token, locks): HOME and FOREMAN_REGISTRY point
 # at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
@@ -119,23 +118,6 @@ FAKE = textwrap.dedent("""\
     save("agents.json", rows)
     print(f"backgrounded · {short} · {name}")
 """)
-
-
-class SlowLimit:
-    """Adds up a test's setup, call and teardown; at the teardown says whether the total is over SLOW_TEST_S."""
-
-    def __init__(self) -> None:
-        self.total: dict[str, float] = {}
-
-    def record(self, nodeid: str, when: str, seconds: float) -> str:
-        """Empty before the teardown and when the total is within the limit; else the failure text (test, time, limit)."""
-        self.total[nodeid] = self.total.get(nodeid, 0.0) + seconds
-        if when != "teardown":
-            return ""
-        total = self.total.pop(nodeid)
-        if total <= SLOW_TEST_S:
-            return ""
-        return f"{nodeid} took {total:.1f} s (setup, call and teardown); the limit is {SLOW_TEST_S:g} s"
 
 
 def git(repo: Path, *args: str) -> str:

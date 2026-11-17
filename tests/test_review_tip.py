@@ -55,20 +55,17 @@ class TestTip:
         verdict(e, tid, a)
         assert e.task(tid)["review"]["tip"] == a
         b = commit(e, tid)
-        e.hunt_then_review(tid)
+        tick.tick(e.p)
+        text = e.calls()[-1]["argv"][-1]  # the round two hunter checks the fixes only
+        assert "[fm hunter" in text
+        assert "Round 2 looks at the fixes" in text
+        assert e.task(tid)["reviews"][-1]["file"] in text
+        e.hunter_done(tid)
+        tick.tick(e.p)
         assert "check" not in e.task(tid)
         last = e.calls()[-1]["argv"][-1]
         assert "Round: 2" in last
         assert f"Tip: {b}" in last
-
-    def test_a_verdict_for_the_current_tip_decides(self):
-        e = Env(test="true")
-        tid, a = start(e)
-        verdict(e, tid, a)
-        r = e.task(tid)["review"]
-        assert (r["tip"], r["round"]) == (a, 1)
-        tick.tick(e.p)
-        assert e.task(tid)["check"]["head"] == a
 
     def test_two_reviewers_each_verdict_lands_on_its_own_tip(self):
         for order in ("ba", "ab"):
@@ -100,20 +97,20 @@ class TestTip:
         tick.tick(e.p)
         assert e.task(tid)["check"]["head"] == b
 
-    def test_an_unknown_tip_is_refused(self):
+    def test_an_unknown_tip_is_refused_an_abbreviated_one_is_stored_in_full_and_the_current_tip_decides(self):
         e = Env(test="true")
-        tid, _ = start(e)
+        tid, a = start(e)
         with pytest.raises(SystemExit):
             verdict(e, tid, "deadbeef")
         i = e.task(tid)
         assert "reviews" not in i
         assert i.get("review") is None
-
-    def test_an_abbreviated_tip_is_stored_in_full(self):
-        e = Env(test="true")
-        tid, a = start(e)
         verdict(e, tid, a[:9])
-        assert e.task(tid)["review"]["tip"] == a
+        r = e.task(tid)["review"]
+        assert r["tip"] == a
+        assert r["round"] == 1
+        tick.tick(e.p)
+        assert e.task(tid)["check"]["head"] == a
 
     def test_with_one_slot_the_new_tip_is_reviewed_once_the_old_verdict_lands(self):
         e = Env(test="true", slots=1)
@@ -145,23 +142,13 @@ class TestPasses:
         assert hunter_file in e.calls()[-1]["argv"][-1]
         assert os.path.exists(hunter_file)
 
-    def test_the_round_two_hunter_checks_the_fixes_only(self):
-        e = Env(test="true")
-        tid, a = start(e)
-        verdict(e, tid, a)
-        commit(e, tid)
-        tick.tick(e.p)
-        text = e.calls()[-1]["argv"][-1]
-        assert "[fm hunter" in text
-        assert "Round 2 looks at the fixes" in text
-        assert e.task(tid)["reviews"][-1]["file"] in text
-
 
 class TestFreshReview:
     def test_fm_review_starts_both_passes_again_on_the_same_tip_as_round_one(self):
         e = Env(test="true")
         tid, a = start(e)
         verdict(e, tid, a)
+        backlog.update(e.p, tid, blocked="its hunter ended without its findings file")  # fm review clears a block so the review starts
         fm(e.home, "review", tid)
         i = e.task(tid)
         assert len(i["reviews"]) == 1  # history stays
@@ -181,29 +168,17 @@ class TestFreshReview:
         with pytest.raises(SystemExit):
             fm(e.home, "review", tid)
 
-    def test_fm_review_clears_a_block_so_the_review_starts(self):
-        e = Env(test="true")
-        tid, a = start(e)
-        verdict(e, tid, a)
-        backlog.update(e.p, tid, blocked="its hunter ended without its findings file")
-        fm(e.home, "review", tid)
-        tick.tick(e.p)
-        assert "[fm hunter" in e.calls()[-1]["argv"][-1]
-
     def test_fm_review_refuses_an_accepted_task_and_one_with_a_review_running(self):
         e = Env(test="true")
         tid, a = start(e)  # its reviewer has launched, no verdict yet
         with pytest.raises(SystemExit):
             fm(e.home, "review", tid)
+        backlog.update(e.p, tid, blocked="something")  # a running review is refused even when the task is blocked
+        with pytest.raises(SystemExit):
+            fm(e.home, "review", tid)
+        backlog.update(e.p, tid, blocked="")
         verdict(e, tid, a)
         backlog.update(e.p, tid, accepted={"by": "owner", "head": a, "at": ""})
         with pytest.raises(SystemExit):
             fm(e.home, "review", tid)
         assert "accepted" in e.task(tid)
-
-    def test_fm_review_refuses_a_running_review_even_when_the_task_is_blocked(self):
-        e = Env(test="true")
-        tid, _ = start(e)  # its reviewer has launched, no verdict yet
-        backlog.update(e.p, tid, blocked="something")
-        with pytest.raises(SystemExit):
-            fm(e.home, "review", tid)

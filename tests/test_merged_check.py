@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from helpers import Env, fm, git
 from test_failing import fix
-from test_review_rules import commit, events, take_note
+from test_review_rules import commit, events
 
 from foreman.core.tasks import backlog
 from foreman.loop import tick
@@ -50,32 +50,17 @@ class TestMerged:
     def test_passes_alone_and_merged_merges(self):
         e = self.env("true")
         (tid,) = self.deliver(e, {"a.py": "a\n"})
+        assert json.loads(fm(e.home, "show", tid))["checked_on"] == "branch alone"
+        mergecheck.merged_check(e.p, tid)
+        assert self.runs() == 2
+        assert json.loads(fm(e.home, "show", tid))["checked_on"] == "merged with main " + self.main(e)[:9]
+        commit(str(e.repo), "other.py", "o\n")  # main moved after a pass: checked again
         merge.accept(e.p, tid)
-        before = self.main(e)
+        moved = self.main(e)
         tick.tick(e.p)
+        assert self.runs() == 3
         i = e.task(tid)
-        assert i["status"] == "done"
-        assert i["check"]["merged_with"] == before
-
-    def test_fails_merged_goes_back_saying_so(self):
-        e = self.env()
-        a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
-        assert self.runs() == 2  # one per branch, alone: nothing is about to merge yet
-        assert "merged_with" not in e.task(a)["check"]
-        assert "merged_with" not in e.task(b)["check"]
-        merge.accept(e.p, a)
-        merge.accept(e.p, b)
-        tick.tick(e.p)
-        assert e.task(a)["status"] == "done"
-        i = e.task(b)
-        assert (i["status"], i["failures"], i["failure_streak"]) == ("in progress", 1, 1)
-        main = self.main(e)
-        assert i["check"]["merged_with"] == main  # checked with A already in main
-        take_note(e, b)
-        note = e.calls()[-1]["argv"][-1]
-        assert main[:9] in note
-        assert "not on its branch alone" in note
-        assert not (e.repo / "b.py").exists()
+        assert (i["status"], i["check"]["merged_with"]) == ("done", moved)
 
     def test_autonomy_path_checks_merged_too(self):
         e = self.env(autonomy="low")
@@ -86,19 +71,6 @@ class TestMerged:
         assert (i["status"], i["failures"]) == ("in progress", 1)
         assert i["check"]["merged_with"] == self.main(e)
         assert not (e.repo / "b.py").exists()
-
-    def test_main_moved_after_a_pass_checks_again(self):
-        e = self.env("true")
-        (tid,) = self.deliver(e, {"a.py": "a\n"})
-        mergecheck.merged_check(e.p, tid)
-        assert self.runs() == 2
-        commit(str(e.repo), "other.py", "o\n")
-        merge.accept(e.p, tid)
-        moved = self.main(e)
-        tick.tick(e.p)
-        assert self.runs() == 3
-        i = e.task(tid)
-        assert (i["status"], i["check"]["merged_with"]) == ("done", moved)
 
     def test_nothing_moved_merges_without_a_run(self):
         e = self.env("true")
@@ -138,6 +110,9 @@ class TestMerged:
     def test_third_merged_failure_waits_for_the_owner(self):
         e = self.env()
         a, b = self.deliver(e, {"a.py": "a\n", "b.py": "b\n"})
+        assert self.runs() == 2  # one per branch, alone: nothing is about to merge yet
+        assert "merged_with" not in e.task(a)["check"]
+        assert "merged_with" not in e.task(b)["check"]
         merge.accept(e.p, a)
         tick.tick(e.p)
         assert e.task(a)["status"] == "done"
@@ -146,7 +121,13 @@ class TestMerged:
             tick.tick(e.p)
             i = e.task(b)
             assert (i["status"], i["failures"], i["failure_streak"]) == ("in progress", n, n)
+            main = self.main(e)
+            if n == 1:
+                assert i["check"]["merged_with"] == main  # checked with A already in main
             fix(e, b)
+            if n == 1:  # its fix delivers the note, which says what failed
+                assert any(main[:9] in c["argv"][-1] and "not on its branch alone" in c["argv"][-1] for c in e.calls())
+                assert not (e.repo / "b.py").exists()
             tick.tick(e.p)  # its branch alone passes: the row goes on
             assert e.task(b)["failure_streak"] == n
         merge.accept(e.p, b)
@@ -168,10 +149,3 @@ class TestMerged:
         with pytest.raises(DeliveryError):
             check.tests_at(e.p, "no-such-commit", "x", merge=self.main(e))
         assert check.tests_at(e.p, "no-such-commit", "x")[0] == "fail"  # without merge: as before
-
-    def test_show_says_what_the_check_ran_on(self):
-        e = self.env("true")
-        (tid,) = self.deliver(e, {"a.py": "a\n"})
-        assert json.loads(fm(e.home, "show", tid))["checked_on"] == "branch alone"
-        mergecheck.merged_check(e.p, tid)
-        assert json.loads(fm(e.home, "show", tid))["checked_on"] == "merged with main " + self.main(e)[:9]

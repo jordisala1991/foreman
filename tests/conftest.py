@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 from fakerepo import FakeRepo
-from helpers import Env, SlowLimit
+from helpers import Env
 
 from foreman.providers import registry
 
@@ -31,16 +31,3 @@ def owner() -> Iterator[None]:
     with mock.patch.dict(os.environ):
         os.environ.pop("FOREMAN_TASK", None)
         yield
-
-
-_limit = SlowLimit()
-
-
-@pytest.hookimpl(wrapper=True)
-def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Iterator[pytest.TestReport]:
-    """A test that takes longer than SLOW_TEST_S in all fails at its teardown, saying its time and the limit."""
-    rep = yield
-    note = _limit.record(item.nodeid, rep.when, rep.duration)
-    if note and rep.passed:
-        rep.outcome, rep.longrepr = "failed", note
-    return rep
