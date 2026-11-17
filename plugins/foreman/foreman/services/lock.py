@@ -104,20 +104,16 @@ class Resource:
         while (slot := self.take(me)) is None:
             if say and self.clock() - said >= 60:
                 said = self.clock()
-                say(self.waiting(me))
+                with self._state() as d:
+                    ahead = [t for t in d["queue"] if t["t"] < me["t"]]
+                    holders = list(d["held"].values())
+                say(
+                    f"waiting for {self.name}: held by "
+                    + ", ".join(f"{h['who']} ({h['what']})" for h in holders)
+                    + (f"; {len(ahead)} ahead in the queue" if ahead else "")
+                )
             self.pause(POLL_S)
         return slot, self.clock() - t0
-
-    def waiting(self, me: dict[str, Any]) -> str:
-        """The line for who waits: who holds the resource and how many are ahead."""
-        with self._state() as d:
-            ahead = [t for t in d["queue"] if t["t"] < me["t"]]
-            holders = list(d["held"].values())
-        return (
-            f"waiting for {self.name}: held by "
-            + ", ".join(f"{h['who']} ({h['what']})" for h in holders)
-            + (f"; {len(ahead)} ahead in the queue" if ahead else "")
-        )
 
     def release(self, slot: str) -> None:
         with self._state() as d:

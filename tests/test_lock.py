@@ -1,7 +1,6 @@
 import functools
 import itertools
 import os
-import signal
 import subprocess
 import sys
 from collections.abc import Callable
@@ -25,7 +24,6 @@ class TestLock:
         os.environ["FOREMAN_LOCKS"] = str(self.e.tmp / "locks")
         with open(self.e.home / "foreman.toml", "a") as f:
             f.write('\n[resources.gpu]\nmax_minutes = 0.05\n[resources.sim]\nslots = ["A", "B"]\n')
-        self.log = self.e.tmp / "order.txt"
         yield
         os.environ.pop("FOREMAN_LOCKS")
 
@@ -43,8 +41,11 @@ class TestLock:
         ticks = itertools.count(1)
         turns: list[Callable[[], None]] = []
 
+        env_of_c: dict[str, str] = {}
+
         def spawn(cmd, env, start_new_session):
             events.append("c runs")
+            env_of_c.update(env)
             return mock.Mock(wait=lambda timeout: 0)
 
         def pause(_s):
@@ -72,6 +73,7 @@ class TestLock:
         turns += [take("b", b), take("a", a), take("b", b), release("a"), take("b", b), release("b")]
         assert r.run("c", "job c", ["true"]) == 0
         assert events == ["b waits", "a takes", "b waits", "a releases", "b takes", "b releases", "c runs"]
+        assert (env_of_c["FOREMAN_SLOT"], env_of_c["FOREMAN_RESOURCE"]) == ("1", "gpu")  # what the command is told
         use = lock.uses(["gpu"])[0]
         assert use["who"] == "c"
         assert use["waited_s"] > 0
@@ -93,28 +95,13 @@ class TestLock:
         assert lock.declared(Project.load(self.e.home).cfg)["gpu"].status()["held"] == {}
 
     def test_the_time_limit_stops_the_command(self):
-        """The first wait for the command raises TimeoutExpired at once (no real time passes); the real process then gets the real SIGTERM."""
-        real: list[subprocess.Popen[bytes]] = []
-
-        class Waiter:
-            def __init__(self, p: subprocess.Popen[bytes]) -> None:
-                self.p, self.pid, self.timed_out = p, p.pid, False
-
-            def wait(self, timeout: float | None = None) -> int:
-                if not self.timed_out:
-                    self.timed_out = True
-                    raise subprocess.TimeoutExpired("sleep", timeout or 0)
-                return self.p.wait(timeout)
-
-        def spawn(cmd, env, start_new_session):
-            real.append(subprocess.Popen(cmd, env=env, start_new_session=start_new_session))
-            return Waiter(real[0])
-
-        said: list[str] = []
-        assert lock.Resource("gpu", max_minutes=0.05, hands=lock.Hands(spawn=spawn)).run("a", "job a", ["sleep", "30"], say=said.append) == 124
-        assert any("split long work" in line for line in said)
-        assert real[0].returncode == -signal.SIGTERM
-        assert lock.uses(["gpu"])[-1]["event"] == "timeout"
+        """A limit of 0 minutes (max_minutes of foreman.toml) is over at once: no real wait, the real sleep gets the real SIGTERM."""
+        with open(self.e.home / "foreman.toml", "a") as f:
+            f.write("\n[resources.stop]\nmax_minutes = 0\n")
+        pr = self.fm_lock("stop", "a", "sleep", "30")
+        assert pr.wait(timeout=20) == 124
+        assert "split long work" in pr.stderr.read()
+        assert lock.uses(["stop"])[-1]["event"] == "timeout"
 
     def test_a_holder_that_died_is_cleaned_up(self):
         from foreman.core.project.config import Project
