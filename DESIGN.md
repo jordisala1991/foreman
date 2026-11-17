@@ -292,10 +292,10 @@ Orca has no verb to delete a repo or a Run, so the scratch repo (hidden with `or
 
 **The design** (each line answers a row above or a gap below):
 - **D1 Launch.** `orca terminal create --worktree path:<cwd> --title "<title>" --command '<line>' --json`, `<line>` =
-  `env -u CLAUDE_CODE_OAUTH_TOKEN exec <claude> --session-id <uuid4> --model M --effort E --permission-mode bypassPermissions --settings '<json>' "$(cat <brief file>)"`
+  `exec env -u CLAUDE_CODE_OAUTH_TOKEN <claude> --session-id <uuid4> --model M --effort E --permission-mode bypassPermissions --settings '<json>' "$(cat <brief file>)"`
   (`shlex.join` for all but the brief; the brief in `<home>/state/briefs/<task>-<role>-<uuid>.md`; the JSON the same dict `sessions.settings` builds).
-  `exec` makes the tab end with claude (E4, ended (b): without it the shell stays and no agent row is left). Not `agent launch`
-  (no settings nor permission mode; Orca refuses `haiku` + `low`, which claude takes, E2) nor `worker-start` (the same, plus a
+  `exec` makes the tab end with claude (`env` execs it in the same process) (E4, ended (b): without it the shell stays and no agent row is left). Not `agent launch`
+  (no settings nor permission mode; Orca refused `haiku` + `low`, E2) nor `worker-start` (the same, plus a
   structured chat worker with Orca's own flags that needs a calling Orca terminal, `--from`, which the launchd loop is not).
 - **D2 Repo.** The adapter's `ensure_repo(path)`: `orca repo list --json`, else `orca repo add --path P --json`; then
   `orca repo set --repo path:P --external-worktree-visibility show` (foreman's worktrees show in the sidebar). Planning, mechanic
@@ -335,7 +335,7 @@ Orca has no verb to delete a repo or a Run, so the scratch repo (hidden with `or
 | the state comes from claude itself | the state comes only from Orca's hooks in `~/.claude/settings.json` (inferred: the owner's file holds them for every event and `ps` showed no other source) | D8 |
 | `busy` = `status idle` of a `working` row | Orca keeps `working` ~30 s while a background task runs, and `tui-idle` is no guide (E4) | the adapter trusts `agents[].state` only |
 | the short id for `claude attach SHORT` | no short id | `agent.short` = the first 8 characters of the session id foreman chose (`--session-id`), so `fill_sessions` has nothing to fill |
-| `login.child_env()` strips `CLAUDE_CODE_OAUTH_TOKEN` | the tab inherits Orca's environment | `env -u CLAUDE_CODE_OAUTH_TOKEN` in the tab's command (D1) |
+| `login.child_env()` strips `CLAUDE_CODE_OAUTH_TOKEN` | the tab's shell inherits Orca's environment (inferred: a pty child's) | `exec env -u CLAUDE_CODE_OAUTH_TOKEN` in the tab's command (D1; `env -u … exec claude` fails: `env: exec: No such file or directory`) |
 
 ### The port
 
