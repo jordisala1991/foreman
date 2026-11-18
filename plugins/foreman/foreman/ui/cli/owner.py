@@ -10,7 +10,7 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
-from ...core.tasks import backlog, blockers, editing, questions, subtasks, taskrepo
+from ...core.tasks import backlog, blockers, chains, editing, questions, subtasks, taskrepo
 from ...providers.repo import RepoError
 from ...services.agents.running import review_running
 from ...services.delivery import merge
@@ -30,28 +30,29 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "triage" if a.triage or (a.parent and os.environ.get("FOREMAN_TASK")) else "backlog"  # a parent agent's waits for a Go
     repo = repo_key(p, a.repo)
     tasks = backlog.tasks(backlog.load(p))
+    step = chains.step_fields(tasks, a.parent) if a.parent else None  # a chain's step: the parent's fields, its flags ignored
+    triage = not step and (a.triage or (a.parent and os.environ.get("FOREMAN_TASK")))  # a parent agent's waits for a Go
+    status = "triage" if triage else "backlog"
     ids = blockers.ids(a.blocked_by or [])
     by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FOREMAN_TASK", ""), a.parent, "subtasks are filed")
-    by_repo = taskrepo.add_refusal(p.repo_keys, repo, status, a.criteria or "")
-    if why := by_agent or (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids) or by_repo:
+    flags = chains.StepFields(goal=a.goal or "", criteria=a.criteria or "", model=a.model or "", effort=a.effort or "", type=a.type or "")
+    fields = step or flags
+    by_repo = taskrepo.add_refusal(p.repo_keys, repo, status, fields["criteria"], step is not None)
+    by_parent = a.parent and (subtasks.refusal(tasks, a.parent) or chains.refusal(tasks, a.parent))
+    if why := by_agent or by_parent or blockers.refusal(tasks, "", ids) or by_repo:
         sys.exit(f"foreman: {why}")
     tid = backlog.add(
         p,
         a.title,
         detail=a.detail or "",
         status=status,
-        criteria=a.criteria or "",
-        goal=a.goal or "",
         priority=a.priority,
         parent=a.parent or "",
         blocked_by=ids,
-        model=a.model or "",
-        effort=a.effort or "",
-        type=a.type or "",
         repo=repo,
+        **fields,
     )
     print(tid)
 

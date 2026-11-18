@@ -61,7 +61,8 @@ def notify(p: Project) -> None:
             subs = subtasks.of(tasks, i["id"])
             for s in subs:
                 if s["status"] in backlog.CLOSED and s["id"] not in i.get("notified", []):
-                    questions.message(d, i, "S", ("subtask",), kind="subtask", text="subtask", answer=subtasks.notice(s, subs, i["id"]))
+                    text = chains.notice(s, subs, i) if i.get("chain") else subtasks.notice(s, subs, i["id"])
+                    questions.message(d, i, "S", ("subtask",), kind="subtask", text="subtask", answer=text)
                     i["notified"] = [*i.get("notified", []), s["id"]]
                     told.append((i["id"], s["id"]))
     for tid, sid in told:
