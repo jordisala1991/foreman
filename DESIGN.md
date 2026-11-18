@@ -354,7 +354,7 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 ## Improvement chains (defined in FN-207; not built yet)
 
 This section defines how fm improves itself one finding at a time; the subtasks listed in FN-207's report build it. Until
-then the `design-audit` entry files one task every 10 merges. Paths are under `plugins/foreman/`; a `file:line` names
+then the `design-audit` entry files one task every 10 merges (`<home>/foreman.toml:40-42`). Paths are under `plugins/foreman/`; a `file:line` names
 today's code.
 
 A **lens** is a question asked of fm, with the evidence that proves a finding. A **chain** is a run of one lens: the
@@ -378,10 +378,11 @@ criteria = "…"
 detail = "…"         # the lens's question and the evidence of a finding
 ```
 
-`lens`, `max_steps` and `max_lines` come together, else the entry is refused at load naming the key (as the other keys
+`lens`, `max_steps`, `max_lines` and `criteria` come together, else the entry is refused at load naming the key (as the other keys
 today, `foreman/core/project/recurring_table.py:11-12,57-66`). A chain starts on its own: a lens entry files in backlog,
-`triage` defaults to false for it and `triage = true` is refused. The count starts when the previous chain closed
-(`foreman/core/tasks/recurring.py:48`) and no chain is filed while one is open (`:47,55`, `foreman/core/tasks/backlog.py:152`).
+`triage` defaults to false for it and `triage = true` is refused; `criteria` is required because a task without it is
+filed in triage (`foreman/core/tasks/backlog.py:149-150`). The count starts when the previous chain closed
+(`foreman/core/tasks/recurring.py:48`) and no chain is filed while one is open (`:47,55`, `backlog.py:152`).
 **Steps never count as merges for any entry**: today a merge is a done task not filed by an entry and not a parent
 (`recurring.py:52`), so a step would count; the rule becomes «and not the subtask of a task an entry filed».
 
@@ -441,10 +442,10 @@ redundant tests, brittle tests.
 | Brake | Number | Enforced by |
 |---|---|---|
 | one open step per chain; the next only after the previous merged | 1 | code: `chains.refusal` refuses `--parent` filing while a step is open |
-| cap of steps per chain | 5 | code: the sixth is refused with «ask the owner to renew»; renewal is the owner's `foreman edit PARENT --max-steps N`, only on a chain parent and only from his shell (an agent may not edit a parent, `owner.py:63`) |
+| cap of steps per chain | 5 | code: the sixth is refused with «ask the owner to renew»; renewal is the owner's `foreman edit PARENT --max-steps N`, only on a chain parent and only from his shell (an agent may not edit a parent, `owner.py:63`); a chain parent is the one task with an agent that `foreman edit` accepts (an exception to «never one with an agent» in The states of a task), and `--max-steps` joins the edit fields (`foreman/core/tasks/editing.py:8`) |
 | no evidence, no next step | | brief and review: a Frontier item has its evidence or is dropped; a step whose after-evidence does not show the fix is rejected |
 | a canceled step ends the chain | | code: no further step; the agent writes the owner's reason in History and closes |
-| size budget per step | 150 changed lines | criteria and review; `large_lines` (400) stays the risk mark |
+| size budget per step | 150 changed lines | criteria and review; `large_lines` (400, `foreman/core/project/config.py:44`) stays the risk mark |
 | one chain per entry at a time | 1 | code: `backlog.add` files none while the entry's task is open (`backlog.py:152`) |
 | steps never count as merges | | code: the merges rule above |
 | how often a chain starts | every 10 merges | the entry's `every_merges`, as design-audit (owner, 2026-11-15) |
