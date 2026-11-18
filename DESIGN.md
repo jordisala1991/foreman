@@ -324,7 +324,7 @@ second headless Orca only.
   (E2, E8: the agent went on and answered its brief). Only for a folder inside the project's repos or worktrees folder. Pending Q2.
   A dialog D6 may not answer stays WAITING (D3), so nothing is sent to the agent. For any WAITING agent the loop writes one event on its
   task, «NAME waits in its Orca tab» (the tab shows why); the owner sees it in the panel, with the agent's state WAITING (`agent_state`,
-  `ui/panel/views.py:66`); `foreman list` and `foreman show` print neither. Written once, marked as a nudge is (`agent.waiting_seen`, as
+  `ui/panel/views.py:66`; the panel's agent line gains a «waiting» label: `panel/src/cards.tsx`, `panel/src/strings/*.json`, `lib.ts`); `foreman list` and `foreman show` print neither. Written once, marked as a nudge is (`agent.waiting_seen`, as
   `agent.nudged` in `steps/talk.py`), cleared when the agent leaves WAITING.
 - **D7 Orca down.** `orca status --json` says it (`app.running: false`); any other call's `runtime_unavailable` → `RunnerUnavailable(RunnerError)`.
   A launch that gets it leaves the task as it is (no block), writes one event and is retried next tick; a send is retried as any
