@@ -79,7 +79,7 @@ A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and
   agent (`agent.kind` `parent`, no worktree, status stays backlog): it is told each subtask merged or canceled and
   nothing else (`notified` lists those told; message kind `subtask`), proposes the next Go and changes to the owner, may
   file (`--triage`) and edit only its own subtasks, and closes the parent with `foreman done` (refused while a subtask is
-  open) after the owner's yes. `foreman cancel` of a parent cancels its open subtasks and closes their PRs.
+  open) after the owner's yes. `foreman cancel` of a parent cancels its open subtasks and closes their PRs. A `lens` entry files a chain: see Improvement chains.
 - A question (`foreman ask`) does not change the state: it is a decision tied to the task and its agent. Its agent ends
   its turn; the owner answers in the panel (or talks to that agent directly); the loop resumes *that* session with the
   answer.
@@ -349,7 +349,119 @@ scope: reading approvals or comments from GitHub, merge queues, other platforms.
 - Trigger: `every_merges = N` (N merged tasks) or `every = "12h" | "7d" | "2w"` (plain durations: h, d, w, at most 100 years; no cron).
 - Each tick (the `sources` step, which calls `foreman/steps/schedule.py` over the pure rules of `foreman/core/tasks/recurring.py`) an entry that is due files one task: in `triage` when `triage = true` (the owner's Go), `backlog` when false and it has criteria. Its `source` is `recurring:NAME`, so `backlog.add` files none while one is open, and the mark survives the entry's removal (tasks it filed stay as they are). Its detail ends with what it covers: the merged tasks since its last run (ids, titles) or the period.
 - Anchor: the count or period starts when the entry's last task closed (done, canceled or duplicate), else when fm first saw the entry (`state/recurring.json`, the one store). A time trigger that fell due while fm was off files once. Merges are `done` tasks not filed by an entry and not parents; their closing time is that of the `→ done` event.
-- `foreman list`, `foreman show` and the panel's data mark an entry's task (`recurring`: the name); `foreman health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it.
+- `foreman list`, `foreman show` and the panel's data mark an entry's task (`recurring`: the name); `foreman health` and the panel's system view list each entry with merges left or the next date. A project with no entries sees none of it. A `lens` entry files a chain: see Improvement chains.
+
+## Improvement chains (defined in FN-207; not built yet)
+
+This section defines how fm improves itself one finding at a time; the subtasks listed in FN-207's report build it. Until
+then the `design-audit` entry files one task every 10 merges. Paths are under `plugins/foreman/`; a `file:line` names
+today's code.
+
+A **lens** is a question asked of fm, with the evidence that proves a finding. A **chain** is a run of one lens: the
+parent a lens entry files and its **steps**, its subtasks, one at a time, until its parent agent closes it. The **lens
+report** carries a lens from one chain to the next. Nothing new is stored but `chain` on the parent: its steps are its
+subtasks (`foreman/core/tasks/subtasks.py:6`).
+
+### The entry and its trigger
+
+```toml
+[[recurring]]
+name = "rules"
+title = "Lens rules: do CLAUDE.md and the configs hold?"
+lens = "rules"
+max_steps = 5        # the cap of steps per chain
+max_lines = 150      # the size budget of each step
+every_merges = 10
+type = "change"      # every step's type
+goal = "…"           # what each step meets, filed unchanged on every step
+criteria = "…"
+detail = "…"         # the lens's question and the evidence of a finding
+```
+
+`lens`, `max_steps` and `max_lines` come together, else the entry is refused at load naming the key (as the other keys
+today, `foreman/core/project/recurring_table.py:11-12,57-66`). A chain starts on its own: a lens entry files in backlog,
+`triage` defaults to false for it and `triage = true` is refused. The count starts when the previous chain closed
+(`foreman/core/tasks/recurring.py:48`) and no chain is filed while one is open (`:47,55`, `foreman/core/tasks/backlog.py:152`).
+**Steps never count as merges for any entry**: today a merge is a done task not filed by an entry and not a parent
+(`recurring.py:52`), so a step would count; the rule becomes «and not the subtask of a task an entry filed».
+
+### The chain parent and its agent
+
+A due lens entry files its parent in backlog with `chain = {lens, max_steps, max_lines}` (`schedule._fields`,
+`foreman/steps/schedule.py:34-44`). Today a parent is a task with subtasks: it is never planned (`foreman/loop/launch.py:25`),
+has no type (`foreman/core/tasks/tasktypes.py:20`) and gets its agent only once it has a subtask (`foreman/steps/parents.py:72`).
+A new pure module `foreman/core/tasks/chains.py` (area `tasks`) has `is_parent(tasks, i)`: it has subtasks or `chain`;
+those three sites use it, so a chain parent gets its agent before its first step. The agent's kind stays `parent`, with
+planning's model and effort (`parents.py:18`); `parents.launch` renders `briefs/chain.md` instead of `parent.md`
+(`parents.py:21`), with `extra` = lens, report path, `max_steps`, `max_lines` (`foreman/services/agents/brief.py:83,87`).
+`parent.md` makes every Go, add and the close wait for the owner's yes (`foreman/briefs/parent.md:18,24,31`); the chain
+agent waits for none. Its steps enter backlog (today an agent's `foreman add --parent` is always triage,
+`foreman/ui/cli/owner.py:33`); it closes the chain with `foreman done` (`foreman/ui/cli/agent.py:27-29`), done also with
+no step (today refused, `parents.py:76-84`, `subtasks.py:32-36`); it `foreman ask`s the owner only at the cap. A parent
+with an agent is not closed by its subtasks (`foreman/services/delivery/merge.py:130`): a chain ends only by its agent.
+
+### The audit and a step
+
+The audit is the agent's first act: it reads the lens report (writes it with its three headings if missing; the first
+`rules` report starts from `<home>/plans/FN-205-findings.md`), checks each Frontier item against main, adds what is new,
+drops what no longer holds, then files the first step, or closes the chain «enough for now» when no item has evidence.
+A step is `foreman add "title" --parent ID --detail "the finding and its evidence"`: on a chain parent fm fills goal,
+criteria, model, effort and type from the parent (today they come from the flags, `owner.py:39-52`), so the agent
+writes only title and detail and no agent writes criteria. A step fixes exactly one finding within `max_lines` changed
+lines (not counting tests, generated and lock files, as `large_lines`); its report shows the evidence before and after;
+it writes its History line in the lens report. It is planned, built, reviewed and accepted as any task (merging without
+the owner is FN-112's). When it closes the agent is told (`parents.py:42-58`) with a chain wording of `subtasks.notice`
+(`subtasks.py:62-71`): «file the next step or close the chain»; it reads the report, rewrites the Frontier, and files
+the next step or closes.
+
+### The lens report
+
+`<home>/reports/lens-NAME.md`, one per lens, kept across chains and never re-created; task reports are `ID.md`
+(`brief.py:17`), so the names never meet. One writer per section:
+
+| Section | Writer | What |
+|---|---|---|
+| `## Direction` | the owner only, whenever he wants; agents only read it | where the lens should look, what it should leave |
+| `## Frontier` | the chain agent, rewritten after every step | the next steps, each with its evidence and its size |
+| `## History` | each step; the chain agent for a canceled step | done: step, PR, what it learned, what it would do next; rejected or canceled: the kind and the owner's reason, read before proposing so a rejected kind is not proposed again |
+
+### Lenses
+
+| Lens | Question | Evidence that makes a finding |
+|---|---|---|
+| `rules` (first) | do CLAUDE.md and the configs hold? | a deliberate violation that passes `make check`: its file:line and the command that passes |
+| stale or duplicated prose | does a name, path or command in prose still exist; is a rule stated once? | the grep or command that finds nothing, or the two places |
+| simplification | unused code, duplication, functions near the limits? | the metric before and after: lines, copies, longest function |
+
+A finding without its evidence is not filed. Later, not now: tests that do not protect (a mutation not caught),
+redundant tests, brittle tests.
+
+### Brakes
+
+| Brake | Number | Enforced by |
+|---|---|---|
+| one open step per chain; the next only after the previous merged | 1 | code: `chains.refusal` refuses `--parent` filing while a step is open |
+| cap of steps per chain | 5 | code: the sixth is refused with «ask the owner to renew»; renewal is the owner's `foreman edit PARENT --max-steps N`, only on a chain parent and only from his shell (an agent may not edit a parent, `owner.py:63`) |
+| no evidence, no next step | | brief and review: a Frontier item has its evidence or is dropped; a step whose after-evidence does not show the fix is rejected |
+| a canceled step ends the chain | | code: no further step; the agent writes the owner's reason in History and closes |
+| size budget per step | 150 changed lines | criteria and review; `large_lines` (400) stays the risk mark |
+| one chain per entry at a time | 1 | code: `backlog.add` files none while the entry's task is open (`backlog.py:152`) |
+| steps never count as merges | | code: the merges rule above |
+| how often a chain starts | every 10 merges | the entry's `every_merges`, as design-audit (owner, 2026-11-15) |
+
+### Seen in list, show and health
+
+`foreman list`: the parent row adds `[chain: rules, step 2 of 5]` after `[recurring: NAME]` (`foreman/ui/cli/view.py:23`),
+its steps indented under it as every subtask (`view.py:16,21`). `foreman show PARENT`: the stored `chain` gains `step`
+(steps filed) beside `subtasks` (`view.py:36-37`). `foreman health` (`schedule.line`, `schedule.py:70-75`, printed by
+`foreman/ui/cli/ops.py:28-29`): `recurring rules: every 10 merges; waits for FN-300 to close (chain step 2 of 5, FN-305
+open)`; the same rows feed the panel's system data (`foreman/ui/panel/views.py:103,113`); the panel's UI is untouched.
+
+### Rollout and left out
+
+The first lens entry runs beside design-audit; the lens entries replace design-audit once the first chain has closed and
+the owner has looked at it (his edit of foreman.toml, a guarded `config` action). Left out on purpose: lenses on tests,
+merging steps without the owner, a second open chain per lens, per-step models, a port or a store for chains.
 
 ## Several repos (defined in FN-148; not built yet)
 
