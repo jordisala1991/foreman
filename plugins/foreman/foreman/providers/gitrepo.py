@@ -118,7 +118,7 @@ class GitRepo:
 
     def _restore(self) -> None:
         self._run("merge", "--abort", check=False)
-        self._run("reset", "--hard", "-q", "HEAD", check=False)  # a failed squash leaves no merge to abort
+        self._run("reset", "--hard", "-q", "HEAD")  # a failed squash leaves no merge to abort; RepoError when git cannot restore
 
     def merge(self, main: str, branch: str, message: str, squash: bool) -> MergeOutcome:
         try:
