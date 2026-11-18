@@ -113,6 +113,16 @@ class Project:
         return self.path("repo")
 
     @property
+    def repo_keys(self) -> list[str]:
+        """The `[repos.K]` keys; none in the `[project] repo` form."""
+        return list(self.cfg["repos"])
+
+    @property
+    def several(self) -> bool:
+        """The project has more than one repo."""
+        return len(self.cfg["repos"]) > 1
+
+    @property
     def repos(self) -> list[Path]:
         return [self._abs(r["path"]) for r in self.cfg["repos"].values()] or [self.repo]
 

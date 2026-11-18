@@ -48,7 +48,7 @@ def add(p: Project, body: str) -> Obj:
         p,
         f["title"].strip(),
         detail=str(f.get("detail", "")).strip(),
-        status="backlog",
+        status="triage" if p.several else "backlog",  # the panel has no repo field: a task with criteria needs its repo before Go
         criteria=crit,
         goal=str(f.get("goal", "")).strip(),
     )

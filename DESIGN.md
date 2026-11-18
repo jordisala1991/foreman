@@ -742,8 +742,9 @@ test = "make build"
   let in as they are (the mechanic diagnoses, the owner files the real task).
 - Showing: `foreman show` prints `repo`; `foreman list` adds a repo column between status and agent; the panel's `state` and
   `task` data carry `repo` per task, and `state` carries `repos` (the keys).
-- **Only with more than one repo.** With one repo the key is never stored, asked, listed or sent, and `--repo` is
-  refused (`foreman: this project has one repo`).
+- **Only with more than one repo.** With one repo the key is never stored, asked, listed or sent; `--repo KEY` with the
+  one `[repos.K]` key is accepted and ignored, any other key is refused naming it, and the `[project] repo` form, which has
+  no key, refuses every `--repo` (`foreman: this project has one repo`).
 - A change across repos is a parent with one subtask per repo (`foreman add --parent`), ordered with `--blocked-by`: the
   dependent subtask launches once the first is merged. No PR links across repos, no merge of several repos at once.
   A planning agent that finds a task needs two repos runs `foreman block` with that split proposed.
@@ -825,7 +826,7 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 | adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo | one per platform, and `gitrepo` (the one module that runs git on a repo); they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
-| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
 Core areas, in their `depends_on` order: `project` (foreman.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
 `tasks` (the backlog file, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
@@ -885,7 +886,8 @@ A module that grows past its size is split along its area's seams, inside its ar
 
 - **Per-repo settings and execution (FN-150..154):** the repo key rules, `Project.for_task` and the strict tables →
   `core/project/repos.py` and `config.py`; `--repo` → `ui/cli/parser.py` and `owner.py`, shown by `view.py` and
-  `ui/panel/views.py`; dropping the plan on edit → `core/tasks/editing.py`; worktree and `post_create` →
+  `ui/panel/views.py`; dropping the plan on edit → `core/tasks/editing.py`; the shown repo and the Go and add refusals →
+  `core/tasks/taskrepo.py`; worktree and `post_create` →
   `services/agents/worktree.py`; check, merged check, PR and merge in the task's repo → `services/delivery/*` and
   `providers/registry.py`; the `publishes` fact → `core/rules/risk.py`; per-repo health checks → `steps/health/`
   (a new `repos.py`), the path matching pure in `core/project/repos.py`; the loop calls `for_task` once per task step,
