@@ -264,7 +264,7 @@ and appends the diagnosis to the task's `detail`, so `foreman show` has it. The 
 Defined, not built. FN-203 wants every agent of a project set to `runner = "orca"` to be an Orca tab the owner can open
 and write to (also from Orca on the phone), while foreman keeps launching, messaging, watching and stopping it. This
 section answers how, from commands run on this Mac; the evidence log is `<home>/plans/FN-204-evidence.md` («E1»-«E8» below
-are its sections; E8 holds the round 1 re-runs). The owner's questions Q1-Q5 at the end gate the Orca adapter (subtasks 2-3), not this definition.
+are its sections; E8 and E9 hold the review's re-runs). The owner's questions Q1-Q5 at the end gate the Orca adapter (subtasks 2-3), not this definition.
 
 ### How it was tried
 
@@ -274,7 +274,8 @@ the owner's tabs were never touched; the owner's `~/.claude/settings.json` holds
 `permissions.defaultMode: "auto"`. Terminals and worktrees made were closed and removed and the second runtime killed;
 Orca has no verb to delete a repo or a Run, so the scratch repo (hidden with `orca repo hide`) and one Run named
 «fn-204 scratch (remove)» stay in the owner's Orca (E, last section).
-E8 (round 1 of the review) ran D1's exact line, a multi-line send, titles and a restart on a second headless Orca only.
+E8 and E9 (rounds 1 and 2 of the review) ran D1's exact line, a multi-line send, titles, a restart and the word after `exec` on a
+second headless Orca only.
 
 ### Answers
 
@@ -284,7 +285,7 @@ E8 (round 1 of the review) ran D1's exact line, a multi-line send, titles and a 
 |---|---|---|
 | Launch with model, effort, permission mode, settings (the guard hook) and the brief | A tab made by `orca terminal create` running `unset CLAUDE_CODE_OAUTH_TOKEN; exec claude …` with every flag foreman passes today (D1). Orca's own verbs cannot: `agent launch` and `orchestration worker-start` take only model and effort | `orca terminal create --worktree path:WT --title "FN-77 responsible · test" --command "$LINE" --json`, `LINE` = `claude --model sonnet --effort low --permission-mode bypassPermissions --settings JSON PROMPT` → claude's footer `⏵⏵ bypass permissions on`; the agent's `echo task=$FOREMAN_TASK` → `task=FN-77`; the stand-in guard hook received the PreToolUse JSON (`session_id`, `cwd`); a 24,700-byte brief passed as `"$(cat brief.md)"` → the agent answered `4242`, its last line. `agent launch --help`, `worker-start --help`: no flag for settings or permission mode (E2). D1's exact line, run (E8): row with the `paneKey` `terminal create` returned, `state: done`, `4242`, the hook's `session_id` = the `--session-id` given, the transcript holds `task=FN-77`; with `exec env -u … claude` instead, every send → `provider: "unsupported"`, no `turn_started` |
 | Send a message as foreman does today | `orca terminal send` to a live idle tab; an ended session gets a new tab with `--resume SID` and the same flags (D4) | `orca terminal send --terminal T --text MSG --enter --wait-submit 10 --json` → `accepted: true`, `prompt.stages: ["input_accepted","turn_started"]` (E3); a three-line `--text $'…\n…\n…'` → the same stages, one turn, all three lines answered (E8); `exec claude --resume 11111111-… --model sonnet --effort low --permission-mode bypassPermissions --settings JSON "msg"` → the same transcript grew 46 → 79 lines, no new file, the hook's `session_id` the same (E2) |
-| Tell idle, busy, waiting for input and ended apart | `orca worktree ps --json`, `agents[].state`, matched by `paneKey`; ended = the terminal gone from `terminal list` (D3) | busy: `state: "working"`, `toolName: "Bash"`; idle: `state: "done"`; waiting: `state: "waiting"` (`toolName: "ExitPlanMode"`, and the trust dialog with no tool), worktree `sidebarStatus: "permission"`; ended: `/exit` in an `exec claude` tab → `terminal wait --for exit` → `status: "exited"`, `exitCode: 0`, `terminal list` → `totalCount: 0`. `terminal wait --for tui-idle` → `satisfied: true` while the row said `working`: not a guide (E4) |
+| Tell idle, busy, waiting for input and ended apart | `orca worktree ps --json`, `agents[].state`, matched by `paneKey`; ended = the terminal gone from `terminal list` (D3) | busy: `state: "working"`, `toolName: "Bash"`; idle: `state: "done"`; waiting: `state: "waiting"` (`toolName: "ExitPlanMode"`; the trust dialog with no tool in E2, on the desktop Orca, launch line not recorded), worktree `sidebarStatus: "permission"`; but with D1's own line on the headless Orca the trust dialog left no row at all (`agents: []`, E8), so the adapter also reads the screen (D3); ended: `/exit` in an `exec claude` tab → `terminal wait --for exit` → `status: "exited"`, `exitCode: 0`, `terminal list` → `totalCount: 0`. `terminal wait --for tui-idle` → `satisfied: true` while the row said `working`: not a guide (E4) |
 | Stop it and close its tab | `orca terminal close --terminal T --tab` (D5) | → `closeMode: tab`; then `terminal list` → `totalCount: 0`, `ps` shows no claude of it. An orphaned tab: `close --tab` → `terminal_handle_stale`, `close` → `tab_not_found`, and it was gone from `terminal list` (E5) |
 | Must Orca know the repo; how a foreman worktree becomes an Orca worktree without Orca making one | Yes: `repo add` once, then `path:<worktree>` addresses foreman's own worktree; Orca creates none (D2) | unregistered: `terminal create --worktree path:WT2 …` → `"code": "selector_not_found"`; after `orca repo add --path REPO --json` → `orca worktree show --worktree path:WT --json` → the existing worktree, `isMainWorktree: false`; `worktree list` shows it only after `orca repo set --repo path:REPO --external-worktree-visibility show` (E1) |
 | Titles | `--title` at launch, `orca terminal rename` once after, the worktree's display name (D9) | `--title` names the tab and becomes the agent's `conversationName`; `terminal list` later shows claude's own title (`FOREMAN_TASK echo test`); `orca terminal rename --terminal T --title "…"` sets the tab's custom title (E6), and `terminal list` shows it after a turn (E8). Foreman finds a tab by its stored handle, never by its title (D3) |
@@ -295,15 +296,20 @@ E8 (round 1 of the review) ran D1's exact line, a multi-line send, titles and a 
 - **D1 Launch.** `orca terminal create --worktree path:<cwd> --title "<title>" --command '<line>' --json`, `<line>` =
   `unset CLAUDE_CODE_OAUTH_TOKEN; exec <claude> --session-id <uuid4> --model M --effort E --permission-mode bypassPermissions --settings '<json>' "$(cat <brief file>)"`
   (`shlex.join` for all but the brief; the brief in `<home>/state/briefs/<task>-<role>-<uuid>.md`; the JSON the same dict `sessions.settings` builds).
-  `exec` makes the tab end with claude (E4, ended (b): without it the shell stays and no agent row is left); claude must be the program `exec` starts:
-  through `env -u` Orca cannot report a send's delivery (E8). `terminal create` returns the tab's `handle` and `paneKey`; both are kept (the port below). Not `agent launch`
+  `exec` makes the tab end with claude (E4, ended (b): without it the shell stays and no agent row is left); the word after `exec` must be the bare name `claude`:
+  Orca reports a send's delivery (`turn_started`) only then. Run (E9): `exec claude` and `PATH=<dir>:$PATH exec claude` (a wrapper named
+  `claude` in `<dir>`, which ran) → `provider: "claude"`, `turn_started`; `exec /abs/path/claude` (the same binary), `exec <wrapper>` and
+  `exec env -u … claude` → `provider: "unsupported"`, `input_accepted` only, while rows and states still came. So when `[agents] claude`
+  is a path, the adapter writes `PATH=<its folder>:$PATH exec claude`; a value whose file name is not `claude` is a config error under
+  `runner = "orca"` (D10). `terminal create` returns the tab's `handle` and `paneKey`; both are kept (the port below). Not `agent launch`
   (no settings nor permission mode; Orca refused `haiku` + `low`, E2) nor `worker-start` (the same, plus a
   structured chat worker with Orca's own flags that needs a calling Orca terminal, `--from`, which the launchd loop is not).
 - **D2 Repo.** The adapter's `ensure_repo(path)`: `orca repo list --json`, else `orca repo add --path P --json`; then
   `orca repo set --repo path:P --external-worktree-visibility show` (foreman's worktrees show in the sidebar). Planning, mechanic
   and parent agents run in the repo's main checkout, the worktree Orca lists as `main`.
 - **D3 State.** One `orca worktree ps --json` per tick; a row is matched to its terminal by `paneKey` (what `terminal create`
-  returned). `working` → WORKING, `waiting` → WAITING, `done` → IDLE; a terminal listed with no row yet → WORKING (starting);
+  returned). `working` → WORKING, `waiting` → WAITING, `done` → IDLE; a terminal listed with no row: the adapter reads its screen (`orca terminal read --terminal T --screen --json`), and
+  `Yes, I trust this folder` on it → WAITING (D6 answers it when it may), anything else → WORKING (starting);
   a terminal absent from `orca terminal list` → ENDED; a session with no terminal kept → GONE. The row has no claude session id
   (`orcaSessionId` is Orca's own, E8), so the adapter goes from the kept `pane` to the row and from the kept `terminal` to the tab. WORKING and WAITING are busy:
   nothing is sent to them. Any field but `state` and `paneKey` may be missing (`hasLivePty` was).
@@ -315,6 +321,8 @@ E8 (round 1 of the review) ran D1's exact line, a multi-line send, titles and a 
 - **D6 Trust dialog.** Right after start, while the tab has no agent row (E8) or its row is WAITING with no tool (E2), the adapter reads
   `orca terminal read --terminal T --screen --json`; when the screen holds `Yes, I trust this folder` it sends `$'\x1b[B'` then `$'\r'`
   (E2, E8: the agent went on and answered its brief). Only for a folder inside the project's repos or worktrees folder. Pending Q2.
+  A dialog D6 may not answer stays WAITING (D3), so nothing is sent to the agent and the loop writes one event on its task, which the
+  owner sees in `foreman show` and the panel.
 - **D7 Orca down.** `orca status --json` says it (`app.running: false`); any other call's `runtime_unavailable` → `RunnerUnavailable(RunnerError)`.
   A launch that gets it leaves the task as it is (no block), writes one event and is retried next tick; a send is retried as any
   failure. Foreman never runs `orca open` (Q3). The binary is `$ORCA_BIN`, else `orca` on PATH, else
@@ -324,7 +332,8 @@ E8 (round 1 of the review) ran D1's exact line, a multi-line send, titles and a 
   (inferred: the owner's file holds them for every event and `ps` showed no other source).
 - **D9 Titles.** `--title` at launch, then `orca terminal rename --terminal T --title "<title>"` once (claude overwrites the shown pty
   title, E6; the renamed title held in `terminal list`, E8); a responsible agent's worktree gets `orca worktree set --worktree path:W --display-name "<id> <task title>"` (E1).
-- **D10 Config.** `[agents] runner = "claude" | "orca"` per project, default `claude`; an unknown value is a config error naming it
+- **D10 Config.** `[agents] runner = "claude" | "orca"` per project, default `claude`; under `orca`, `[agents] claude` must name a file
+  called `claude` (D1); an unknown value is a config error naming it
   (as `provider_error` does). No fallback from one runner to the other.
 
 ### What the claude runner does that Orca cannot
@@ -338,7 +347,7 @@ E8 (round 1 of the review) ran D1's exact line, a multi-line send, titles and a 
 | the state comes from claude itself | the state comes only from Orca's hooks in `~/.claude/settings.json` (inferred: the owner's file holds them for every event and `ps` showed no other source) | D8 |
 | `busy` = `status idle` of a `working` row | Orca keeps `working` ~30 s while a background task runs, and `tui-idle` is no guide (E4) | the adapter trusts `agents[].state` only |
 | the short id for `claude attach SHORT` | no short id | `agent.short` = the first 8 characters of the session id foreman chose (`--session-id`), so `fill_sessions` has nothing to fill |
-| `login.child_env()` strips `CLAUDE_CODE_OAUTH_TOKEN` | the tab's shell inherits Orca's environment (inferred: a pty child's) | `unset CLAUDE_CODE_OAUTH_TOKEN;` before `exec` in the tab's command (D1; `env -u … exec claude` fails: `env: exec: No such file or directory`; `exec env -u … claude` hides claude from Orca's delivery report, E8) |
+| `login.child_env()` strips `CLAUDE_CODE_OAUTH_TOKEN` | the tab's shell inherits Orca's environment (inferred: a pty child's) | `unset CLAUDE_CODE_OAUTH_TOKEN;` before `exec` in the tab's command (D1; `env -u … exec claude` fails: `env: exec: No such file or directory`; `exec env -u … claude` hides claude from Orca's delivery report, E8, E9) |
 
 ### The port
 
@@ -360,6 +369,7 @@ class Rows(Protocol):                                                           
     def busy(self, ref: SessionRef | None) -> bool                                        # WORKING or WAITING
     def alive(self, ref: SessionRef | None) -> bool
     def find(self, short: str) -> str | None
+    def short(self, session: str) -> str | None                                          # claude: the listing's id (today merge.py:117); orca: session[:8]
 class Runner(Protocol):
     def start(self, agent: Agent, brief: str, cwd: Path) -> SessionRef
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef                # today's resume; orca: a new tab when ended
@@ -370,8 +380,12 @@ class RunnerError(Exception); class RunnerUnavailable(RunnerError)              
 
 `stop_live` and `settings` stay shared (they use only the above). No dict crosses the port: where a caller reads
 `rows.get(sid).get("id")` (`merge.py:117`) or `row.get("status")`, it gets `Rows`. The backlog's agent keeps the four fields of
-`SessionRef`; the task's `sessions` list (every session it ever started, read by `merge.stop_all`) keeps each one's `SessionRef` too, so a replaced
-review's tab can be closed.
+`SessionRef`. The task's `sessions` list keeps its shape (session ids, `launch.py:87`), so its readers `ui/panel/views.py:83`,
+`steps/metrics.py:79` and `merge.py:117` read it as today; next to it, as `session_kinds` is, a new map `session_tabs`
+(session id → `[terminal, pane]`) is written by the orca runner only. `merge.stop_all` builds each old session's `SessionRef` from the id,
+`Rows.short(id)` and its `session_tabs` entry; an id with none (every entry written before, and every claude one) has `terminal` and `pane`
+empty, which the claude adapter never reads and the orca adapter reads as GONE; an id with an entry gets its tab closed, a replaced
+review's too.
 
 ### Questions for the owner
 
