@@ -24,8 +24,9 @@ def go_refusal(i: backlog.Task, tasks: list[backlog.Task], keys: list[str]) -> s
     return f"{i['id']}: choose its repo first (foreman edit {i['id']} --repo {'|'.join(keys)})"
 
 
-def add_refusal(keys: list[str], repo: str, status: str, criteria: str) -> str:
-    """Why a new task cannot be filed: several repos, criteria, to be let in (backlog) and no repo; else empty."""
+def add_refusal(keys: list[str], repo: str, status: str, criteria: str, step: bool) -> str:
+    """Why a new task cannot be filed: several repos, criteria, to be let in (backlog) and no repo; else empty. A chain's
+    step always enters backlog, so it is not pointed to --triage."""
     if len(keys) < 2 or repo or status != "backlog" or not criteria:
         return ""
-    return f"choose its repo first (--repo {'|'.join(keys)}, or --triage)"
+    return f"choose its repo first (--repo {'|'.join(keys)}{'' if step else ', or --triage'})"

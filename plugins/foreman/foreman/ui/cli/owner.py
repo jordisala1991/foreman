@@ -39,7 +39,7 @@ def cmd_add(a: argparse.Namespace) -> None:
     by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FOREMAN_TASK", ""), a.parent, "subtasks are filed")
     flags = chains.StepFields(goal=a.goal or "", criteria=a.criteria or "", model=a.model or "", effort=a.effort or "", type=a.type or "")
     fields = step or flags
-    by_repo = taskrepo.add_refusal(p.repo_keys, repo, status, fields["criteria"])
+    by_repo = taskrepo.add_refusal(p.repo_keys, repo, status, fields["criteria"], step is not None)
     by_parent = a.parent and (subtasks.refusal(tasks, a.parent) or chains.refusal(tasks, a.parent))
     if why := by_agent or by_parent or blockers.refusal(tasks, "", ids) or by_repo:
         sys.exit(f"foreman: {why}")

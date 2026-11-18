@@ -66,6 +66,14 @@ class TestTaskRepo:
         assert self.e.task(tid)["status"] == "backlog"
         assert self.add("--triage")
 
+    def test_several_repos_a_chain_step_needs_its_repo_and_is_not_told_to_triage(self):
+        use(self.e, "app", "api")
+        P = backlog.add(self.e.p, "chain", criteria="a", chain={"lens": "rules", "max_steps": 5, "max_lines": 150})
+        msg = refused(self.e, "add", "s", "--parent", P)
+        assert "app|api" in msg and "--triage" not in msg
+        tid = self.add("--parent", P, "--repo", "api")
+        assert (self.e.task(tid)["status"], self.e.task(tid)["repo"]) == ("backlog", "api")
+
     def test_go_lets_in_a_task_that_has_subtasks_without_a_repo(self):
         use(self.e, "app", "api")
         parent = self.add("--criteria", "a", "--triage")

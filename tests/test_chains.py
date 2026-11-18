@@ -170,12 +170,26 @@ class TestChainParent:
         (["canceled"], 5, True),
         (["done", "canceled"], 5, True),
         (["done"] * 5, 5, True),
+        (["duplicate"], 5, False),
     ],
 )
 def test_refusal_table(statuses, max_steps, refused):
     parent = {"id": "P", "status": "backlog", "chain": {**CHAIN, "max_steps": max_steps}}
     steps = [{"id": f"S{n}", "status": st, "parent": "P"} for n, st in enumerate(statuses)]
     assert bool(chains.refusal([parent, *steps], "P")) == refused
+
+
+@pytest.mark.parametrize(
+    ("status", "how", "next_step"),
+    [("done", "merged", True), ("canceled", "canceled", False), ("duplicate", "closed as duplicate", True)],
+)
+def test_notice_table(status, how, next_step):
+    parent = {"id": "P", "status": "backlog", "chain": CHAIN}
+    step = {"id": "S", "title": "t", "status": status, "parent": "P"}
+    text = chains.notice(step, [step], parent)
+    assert f"was {how}." in text
+    assert ("foreman add" in text) == next_step
+    assert "foreman done" in text
 
 
 def test_no_refusal_under_a_parent_that_is_not_a_chain():

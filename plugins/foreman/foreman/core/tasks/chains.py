@@ -63,11 +63,11 @@ def step_fields(tasks: list[backlog.Task], pid: str) -> StepFields | None:
 
 def notice(sub: backlog.Task, subs: list[backlog.Task], parent: backlog.Task) -> str:
     """The message the chain agent gets when one of its steps closes: file the next step or close; after a canceled step,
-    close (filing is refused then)."""
+    close (filing is refused then, `refusal`)."""
     pid = parent["id"]
-    how = "merged" if sub["status"] == "done" else "canceled"
+    how = {"done": "merged", "canceled": "canceled"}.get(sub["status"], f"closed as {sub['status']}")
     text = f"Step {sub['id']} «{sub['title']}» was {how}. Steps of {pid}: " + ", ".join(f"{s['id']} {s['status']}" for s in subs) + "."
     close = 'close the chain (foreman done --summary "…")'
-    if sub["status"] == "done":
+    if sub["status"] != "canceled":
         return text + f' Read the lens report, rewrite its Frontier, then file the next step (foreman add "title" --parent {pid} --detail "…") or {close}.'
     return text + f" A chain ends after a canceled step: write the owner's reason in History of the lens report, then {close}."
