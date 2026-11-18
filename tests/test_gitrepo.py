@@ -2,10 +2,12 @@
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 from helpers import git
 
+from foreman import proc
 from foreman.providers.gitrepo import GitRepo
 from foreman.providers.repo import FileDiff, MergeOutcome, RepoError
 
@@ -96,6 +98,37 @@ def test_merge_of_a_conflicting_branch_leaves_main_as_it_was(repo: Path, squash:
     assert out == MergeOutcome("", True, out.why)
     assert r.dirty() is False
     assert r.head("main") == before
+
+
+def test_a_git_that_times_out_mid_merge_leaves_main_as_it_was(repo: Path, monkeypatch: pytest.MonkeyPatch):
+    real = proc.run
+
+    def run(*a: Any, **kw: Any) -> proc.Result:
+        if "commit" in a[0]:
+            raise proc.ProcError("git commit: timed out after 60s", timed_out=True)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(proc, "run", run)
+    r = GitRepo(repo)
+    before = r.head("main")
+    with pytest.raises(RepoError):
+        r.merge("main", "b", "Merge FN-1: b", True)
+    assert r.dirty() is False
+    assert r.head("main") == before
+
+
+def test_a_checkout_git_cannot_restore_after_a_failed_merge_is_an_error_that_says_so(repo: Path, monkeypatch: pytest.MonkeyPatch):
+    real = proc.run
+
+    def run(*a: Any, **kw: Any) -> proc.Result:
+        if "commit" in a[0]:
+            (repo / ".git" / "index.lock").write_text("")  # what a git killed mid-commit leaves
+            raise proc.ProcError("git commit: timed out after 60s", timed_out=True)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(proc, "run", run)
+    with pytest.raises(RepoError, match="git reset"):
+        GitRepo(repo).merge("main", "b", "Merge FN-1: b", True)
 
 
 def test_worktrees(repo: Path):
