@@ -1,6 +1,7 @@
 """Several repos: a task's check, merged check, PR, merge and close run in its own repo, with its settings; merges stay
 one at a time across the project."""
 
+import os
 import shutil
 import tempfile
 import threading
@@ -15,9 +16,9 @@ from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
 from foreman.loop import queue, tick
-from foreman.providers import Change, ConfigError, registry
+from foreman.providers import Change, ConfigError, Provider, registry
 from foreman.providers.repo import FileDiff
-from foreman.services.delivery import merge
+from foreman.services.delivery import merge, pulls
 
 TABLES = (
     '[repos.api]\npath = "$T/api"\n[repos.api.merge]\ntest = "echo api >> $T/ran"\n'
@@ -84,7 +85,8 @@ def test_remote_picks_the_provider(monkeypatch, fake_git):
         registry.get(s.p.for_task({"repo": "web"}))
 
 
-def test_github_pushes_to_the_repos_remote():
+def github_app() -> tuple[Path, Provider]:
+    """A real repo `app` whose only remote is `up` (a bare repo), and its github provider; branch foreman/ty-1 at HEAD."""
     tmp = Path(tempfile.mkdtemp(prefix="fmtest-")).resolve()
     app, bare, home = tmp / "app", tmp / "up.git", tmp / "home"
     shutil.copytree(template_repo(), app, symlinks=True)
@@ -96,12 +98,47 @@ def test_github_pushes_to_the_repos_remote():
         f'[project]\nname = "toy"\nprefix = "TY"\nworktrees = "{tmp / "wts"}"\n'
         f'[repos.app]\npath = "{app}"\nremote = "up"\n[repos.app.merge]\nprovider = "github"\n'
     )
-    gh = registry.get(Project.load(home).for_task({}))
+    return app, registry.get(Project.load(home).for_task({}))
+
+
+def test_github_pushes_to_the_repos_remote():
+    app, gh = github_app()
     change = Change("TY-1", branch="foreman/ty-1", head=git(app, "rev-parse", "HEAD").strip())
     assert gh.pushed(change) is False
     gh.push(change)
     assert gh.pushed(change) is True
     assert "refs/heads/foreman/ty-1" in git(app, "ls-remote", "up")
+
+
+def test_github_evidence_and_catch_up_use_the_repos_remote(monkeypatch):
+    app, gh = github_app()
+    bin_ = app.parent / "bin"
+    bin_.mkdir()
+    (bin_ / "gh").write_text("#!/bin/sh\necho o/r\n")  # `gh repo view`: the slug for the links
+    (bin_ / "gh").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}:{os.environ['PATH']}")
+    for name in ("x.png", "y.png"):  # the second finds the branch on `up` and fetches it
+        (app.parent / name).write_bytes(b"png")
+        assert gh.evidence(Change("TY-1"), {name: app.parent / name})
+    assert git(app, "ls-tree", "-r", "--name-only", "up/foreman-evidence").split() == ["TY-1/x.png", "TY-1/y.png"]
+    other = app.parent / "other"
+    git(app, "push", "-q", "up", "main")
+    git(app.parent, "clone", "-q", "-b", "main", str(app.parent / "up.git"), str(other))
+    git(other, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "moved")
+    git(other, "push", "-q", "origin", "main")
+    gh.catch_up()
+    assert git(app, "rev-parse", "main") == git(other, "rev-parse", "HEAD")
+
+
+def test_run_pulls_syncs_each_task_in_its_repo(monkeypatch, fake_git):
+    s = setup(monkeypatch, fake_git)
+    tid = s.task("web")
+    tick.tick(s.p)
+    seen: list[Path] = []
+    monkeypatch.setattr(pulls, "running", lambda p: [s.e.task(tid)])
+    monkeypatch.setattr(pulls, "sync", lambda p, i: seen.append(p.repo))
+    tick.run_pulls(s.p)
+    assert seen == [s.e.tmp / "web"]
 
 
 def test_no_merged_check_starts_while_another_runs(monkeypatch, fake_git):
