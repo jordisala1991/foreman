@@ -18,6 +18,10 @@ def _type(s: argparse.ArgumentParser) -> None:
     s.add_argument("--type", choices=tasktypes.TYPES, help="change (default), bug, mechanical or definition: the instructions of the task's agents")
 
 
+def _repo(s: argparse.ArgumentParser) -> None:
+    s.add_argument("--repo", metavar="KEY", help="the task's repo: a [repos.K] key (projects with several repos)")
+
+
 def _filing(c: Command) -> None:
     s = c("init", "make a project home and register it")
     s.add_argument("--repo", required=True)
@@ -34,6 +38,7 @@ def _filing(c: Command) -> None:
     s.add_argument("--priority", default="none", choices=backlog.PRIORITIES)
     _model_effort(s)
     _type(s)
+    _repo(s)
     s = c("list", "the backlog and the open questions")
     s.add_argument("--all", action="store_true")
     s = c("show", "one task, as stored")
@@ -92,6 +97,7 @@ def _owner_side(c: Command) -> None:
     blocked_by(s)
     _model_effort(s)
     _type(s)
+    _repo(s)
     s = c("cancel", "cancel a task (stops its agent)")
     s.add_argument("id")
     s.add_argument("why", nargs="?")
