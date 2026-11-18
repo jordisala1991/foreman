@@ -301,7 +301,7 @@ second headless Orca only.
   `claude` in `<dir>`, which ran) → `provider: "claude"`, `turn_started`; `exec /abs/path/claude` (the same binary), `exec <wrapper>` and
   `exec env -u … claude` → `provider: "unsupported"`, `input_accepted` only, while rows and states still came. So when `[agents] claude`
   is a path, the adapter writes `PATH=<its folder>:$PATH exec claude`; a value whose file name is not `claude` is a config error under
-  `runner = "orca"` (D10). `terminal create` returns the tab's `handle` and `paneKey`; both are kept (the port below). Not `agent launch`
+  `runner = "orca"` (D10). Not run: that `PATH` change for a `[agents] claude` in a folder shared with other programs. `terminal create` returns the tab's `handle` and `paneKey`; both are kept (the port below). Not `agent launch`
   (no settings nor permission mode; Orca refused `haiku` + `low`, E2) nor `worker-start` (the same, plus a
   structured chat worker with Orca's own flags that needs a calling Orca terminal, `--from`, which the launchd loop is not).
 - **D2 Repo.** The adapter's `ensure_repo(path)`: `orca repo list --json`, else `orca repo add --path P --json`; then
@@ -309,8 +309,8 @@ second headless Orca only.
   and parent agents run in the repo's main checkout, the worktree Orca lists as `main`.
 - **D3 State.** One `orca worktree ps --json` per tick; a row is matched to its terminal by `paneKey` (what `terminal create`
   returned). `working` → WORKING, `waiting` → WAITING, `done` → IDLE; a terminal listed with no row: the adapter reads its screen (`orca terminal read --terminal T --screen --json`), and
-  `Yes, I trust this folder` on it → WAITING (D6 answers it when it may), anything else → WORKING (starting) for 2 minutes after
-  `agent.started` (a start took 6-15 s in E8, E9), then WAITING with the event of D6 naming the screen's last line;
+  `Yes, I trust this folder` on it → WAITING (D6 answers it when it may), anything else → WORKING (starting) until 2 minutes after
+  `SessionRef.started` (a limit chosen, not measured: no start was timed), then WAITING;
   a terminal absent from `orca terminal list` → ENDED; a session with no terminal kept → GONE. The row has no claude session id
   (`orcaSessionId` is Orca's own, E8), so the adapter goes from the kept `pane` to the row and from the kept `terminal` to the tab. WORKING and WAITING are busy:
   nothing is sent to them. Any field but `state` and `paneKey` may be missing (`hasLivePty` was).
@@ -322,15 +322,16 @@ second headless Orca only.
 - **D6 Trust dialog.** Right after start, while the tab has no agent row (E8) or its row is WAITING with no tool (E2), the adapter reads
   `orca terminal read --terminal T --screen --json`; when the screen holds `Yes, I trust this folder` it sends `$'\x1b[B'` then `$'\r'`
   (E2, E8: the agent went on and answered its brief). Only for a folder inside the project's repos or worktrees folder. Pending Q2.
-  A dialog D6 may not answer stays WAITING (D3), so nothing is sent to the agent and the loop writes one event on its task, which the
-  owner sees in the panel (`foreman show` prints no events); written once, marked as a nudge is (`agent.waiting_seen`, as `agent.nudged`
-  in `steps/talk.py`), cleared when the agent leaves WAITING.
+  A dialog D6 may not answer stays WAITING (D3), so nothing is sent to the agent. For any WAITING agent the loop writes one event on its
+  task, «NAME waits in its Orca tab» (the tab shows why); the owner sees it in the panel, with the agent's state WAITING (`agent_state`,
+  `ui/panel/views.py:66`); `foreman list` and `foreman show` print neither. Written once, marked as a nudge is (`agent.waiting_seen`, as
+  `agent.nudged` in `steps/talk.py`), cleared when the agent leaves WAITING.
 - **D7 Orca down.** `orca status --json` says it (`app.running: false`); any other call's `runtime_unavailable` → `RunnerUnavailable(RunnerError)`.
   A launch that gets it leaves the task as it is (no block), writes one event and is retried next tick; a send is retried as any
   failure. Foreman never runs `orca open` (Q3). The binary is `$ORCA_BIN`, else `orca` on PATH, else
   `/Applications/Orca.app/Contents/Resources/bin/orca`, because launchd's PATH is short.
 - **D8 Health**, `runner = "orca"` only: the binary is found; `orca status` answers (a warning, not a finding, when Orca is merely
-  closed); Orca's hooks are in `~/.claude/settings.json`: without them no state ever appears and every agent would read WORKING
+  closed); Orca's hooks are in `~/.claude/settings.json`: without them no state ever appears and every agent would read WAITING once past D3's start limit
   (inferred: the owner's file holds them for every event and `ps` showed no other source).
 - **D9 Titles.** `--title` at launch, then `orca terminal rename --terminal T --title "<title>"` once (claude overwrites the shown pty
   title, E6; the renamed title held in `terminal list`, E8); a responsible agent's worktree gets `orca worktree set --worktree path:W --display-name "<id> <task title>"` (E1).
@@ -366,6 +367,7 @@ class State(Enum): WORKING, WAITING, IDLE, ENDED, GONE            # today: worki
 @dataclass(frozen=True) class SessionRef:                                                 # what the backlog's agent keeps of its session
     short: str; session: str | None                                                       # orca: session known at once; claude: from the listing, maybe None
     terminal: str | None = None; pane: str | None = None                                  # orca: the tab's handle and paneKey; claude: None
+    started: str | None = None                                                            # the agent's `started` (launch, each send): D3's start limit
 class Rows(Protocol):                                                                     # one snapshot per tick; replaces dict rows
     def state(self, ref: SessionRef | None) -> State
     def busy(self, ref: SessionRef | None) -> bool                                        # WORKING or WAITING
@@ -381,11 +383,11 @@ class RunnerError(Exception); class RunnerUnavailable(RunnerError)              
 ```
 
 `stop_live` and `settings` stay shared (they use only the above). No dict crosses the port: where a caller reads
-`rows.get(sid).get("id")` (`merge.py:117`) or `row.get("status")`, it gets `Rows`. The backlog's agent keeps the four fields of
-`SessionRef`. The task's `sessions` list keeps its shape (session ids, `launch.py:87`), so its readers `ui/panel/views.py:83`,
+`rows.get(sid).get("id")` (`merge.py:117`) or `row.get("status")`, it gets `Rows`. The backlog's agent keeps the five fields of
+`SessionRef` (`started` as today). The task's `sessions` list keeps its shape (session ids, `launch.py:87`), so its readers `ui/panel/views.py:83`,
 `steps/metrics.py:79` and `merge.py:117` read it as today; next to it, as `session_kinds` is, a new map `session_tabs`
 (session id → `[terminal, pane]`) is written by `launch.record_session` (`launch.py:85`) from the `SessionRef` `start` or `send` returned,
-only when its `terminal` is set (never for claude); `record_session` takes that `SessionRef` instead of the id. `merge.stop_all` builds each old session's `SessionRef` from the id,
+only when its `terminal` is set (never for claude); the adapter writes nothing to the backlog; `record_session` takes that `SessionRef` instead of the id. `merge.stop_all` builds each old session's `SessionRef` from the id,
 `Rows.short(id)` and its `session_tabs` entry; an id with none (every entry written before, and every claude one) has `terminal` and `pane`
 empty, which the claude adapter never reads and the orca adapter reads as GONE; an id with an entry gets its tab closed, a replaced
 review's too.
