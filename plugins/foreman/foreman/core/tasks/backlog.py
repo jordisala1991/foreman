@@ -126,6 +126,14 @@ def event(p: Project, tid: str | None, text: str) -> None:
     util.append_jsonl(p.state / "events.jsonl", {"time": util.now(), "task": tid, "text": text})
 
 
+class Chain(TypedDict):
+    """What makes a parent a chain: its lens, the cap of steps and the size budget of each step."""
+
+    lens: str
+    max_steps: int
+    max_lines: int
+
+
 class NewTask(TypedDict, total=False):
     """The optional fields of a new task."""
 
@@ -139,6 +147,7 @@ class NewTask(TypedDict, total=False):
     model: str
     effort: str
     type: str
+    chain: Chain
 
 
 def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewTask]) -> str:
@@ -169,7 +178,7 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewTask]
             task["parent"] = parent
         if ids := f.get("blocked_by"):
             task["blocked_by"] = ids
-        for k in ("model", "effort", "type"):
+        for k in ("model", "effort", "type", "chain"):
             if v := f.get(k):
                 task[k] = v
         d["tasks"].append(task)

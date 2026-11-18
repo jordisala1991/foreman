@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from typing import Any
 
-from . import backlog, subtasks
+from . import backlog, chains
 
 TYPES = ("change", "bug", "mechanical", "definition")
 DEFAULT = "change"
@@ -17,7 +17,7 @@ PARAGRAPHS = {
 
 def of(i: backlog.Task, tasks: list[backlog.Task]) -> str:
     """The task's type; empty for a parent, which has none of its own."""
-    return "" if subtasks.of(tasks, i["id"]) else i.get("type") or DEFAULT
+    return "" if chains.is_parent(tasks, i) else i.get("type") or DEFAULT
 
 
 def shown(i: backlog.Task, tasks: list[backlog.Task]) -> backlog.Task:

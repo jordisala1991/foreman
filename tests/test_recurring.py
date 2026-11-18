@@ -81,6 +81,17 @@ class TestRecurring:
         self.refused('[[recurring]]\ntitle = "t"\nevery_merges = 1\n', "#1", "name")
         self.refused(head + "every_merges = 1\n" + head + "every_merges = 1\n", '"cleanup"', "twice")
 
+    def test_refused_at_load_for_lens_entries(self) -> None:
+        head = '[[recurring]]\nname = "cleanup"\ntitle = "t"\nevery_merges = 1\n'
+        lens = {"lens": '"rules"', "max_steps": "5", "max_lines": "150", "criteria": '"c"'}
+        for missing in lens:
+            self.refused(head + "".join(f"{k} = {v}\n" for k, v in lens.items() if k != missing), '"cleanup"', missing)
+        full = head + "".join(f"{k} = {v}\n" for k, v in lens.items())
+        self.refused(full.replace("max_steps = 5", "max_steps = 0"), '"cleanup"', "max_steps")
+        self.refused(full.replace("max_lines = 150", 'max_lines = "1"'), '"cleanup"', "max_lines")
+        self.refused(full + "triage = true\n", '"cleanup"', "triage")
+        assert self.entries(full).cfg["recurring"]["cleanup"]["triage"] is False
+
     # ---- due
 
     def test_every_merges_files_one_in_triage(self) -> None:
@@ -160,6 +171,17 @@ class TestRecurring:
         assert two in detail
         assert mine not in detail
         assert "parent" not in detail
+
+    def test_steps_of_a_recurring_parent_do_not_count(self) -> None:
+        self.entries(CLEANUP)
+        self.seen()
+        parent = backlog.add(self.p, "chain", criteria="c", source="recurring:other")
+        self.merged("step", "2026-11-15 01:00:00", parent=parent)
+        self.merged("one", "2026-11-15 02:00:00")
+        assert schedule.run(self.p, T0) == []
+        assert schedule.rows(self.p, T0)[0]["left"] == 1
+        self.merged("two", "2026-11-15 03:00:00")
+        assert len(schedule.run(self.p, T0)) == 1
 
     def test_first_run_starts_counting_there(self) -> None:
         self.entries(CLEANUP)

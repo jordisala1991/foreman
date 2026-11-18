@@ -49,7 +49,9 @@ def status(entry: dict[str, Any], tasks: list[Task], closed: dict[str, str], see
     if (span := interval(entry["every"])) is not None:
         due = (datetime.strptime(since, STAMP) + span).strftime(STAMP)
         return Status(open_, since, [], 0, due, not open_ and now.strftime(STAMP) >= due)
-    merged = [i for i in tasks if i["status"] == "done" and not name_of(i) and not subtasks.of(tasks, i["id"]) and closed.get(i["id"], "") > since]
+    filed = {i["id"] for i in tasks if name_of(i)}  # an entry's task, whose subtasks (a chain's steps) are no merges either
+    merged = [i for i in tasks if i["status"] == "done" and not name_of(i) and i.get("parent") not in filed]
+    merged = [i for i in merged if not subtasks.of(tasks, i["id"]) and closed.get(i["id"], "") > since]
     merged.sort(key=lambda i: closed[i["id"]])
     left = max(0, entry["every_merges"] - len(merged))
     return Status(open_, since, merged, left, "", not open_ and left == 0)

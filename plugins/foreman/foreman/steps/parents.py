@@ -1,13 +1,14 @@
 """The parent agent: a session per let-in parent task, with no worktree, that follows its subtasks with the owner. The
 parent keeps status backlog while it lives; it is told when a subtask is merged or canceled (`notified` lists those
-already told), and closes only by its own `foreman done` after the owner's yes."""
+already told), and closes only by its own `foreman done` after the owner's yes. A chain parent (filed by a lens entry,
+`core/tasks/chains.py`) gets its agent before any subtask, and its agent closes it without the owner's yes."""
 
 from typing import Any
 
 from .. import util
 from ..core.project.config import Project
-from ..core.tasks import backlog, blockers, questions, subtasks
-from ..services.agents.brief import agent_name, brief
+from ..core.tasks import backlog, blockers, chains, questions, subtasks
+from ..services.agents.brief import agent_name, brief, lens_file
 from ..services.agents.launch import record_session
 from ..services.claude import sessions
 
@@ -18,7 +19,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
     try:
         title = util.session_title(tid, "parent", i["title"])
-        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, title), brief(p, i, "parent"), p.repo)
+        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, title), _brief(p, i), p.repo)
     except sessions.SessionError as e:
         backlog.update(p, tid, blocked=f"could not launch its agent: {e}")
         backlog.event(p, tid, f"launch failed: {e}")
@@ -37,6 +38,15 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")
         return
     backlog.event(p, tid, f"launched {name} (parent, {model}, {effort}, session {short})")
+
+
+def _brief(p: Project, i: dict[str, Any]) -> str:
+    """A chain parent's agent reads `chain.md`, told its lens report, cap and budget; any other parent's reads `parent.md`."""
+    c: backlog.Chain | None = i.get("chain")
+    if not c:
+        return brief(p, i, "parent")
+    extra = {"lens": c["lens"], "lens_report": str(lens_file(p, c["lens"])), "max_steps": c["max_steps"], "max_lines": c["max_lines"]}
+    return brief(p, i, "chain", extra)
 
 
 def notify(p: Project) -> None:
@@ -69,14 +79,16 @@ def run(p: Project, rows: dict[str, Any]) -> None:
         return
     tasks = backlog.tasks(backlog.load(p))
     for i in tasks:
-        if i["status"] == "backlog" and not i.get("blocked") and not i.get("agent") and subtasks.of(tasks, i["id"]) and not blockers.pending(i, tasks):
+        if i["status"] == "backlog" and not i.get("blocked") and not i.get("agent") and chains.is_parent(tasks, i) and not blockers.pending(i, tasks):
             launch(p, i)
 
 
 def finish(p: Project, tid: str, summary: str) -> str:
-    """Closes a parent from its agent's `foreman done`: done if any subtask is done, else canceled; refused while one is open."""
-    subs = subtasks.of(backlog.tasks(backlog.load(p)), tid)
-    status = subtasks.outcome(subs)
+    """Closes a parent from its agent's `foreman done`: done if any subtask is done, else canceled; refused while one is open.
+    A chain parent with no step closes as done."""
+    tasks = backlog.tasks(backlog.load(p))
+    subs = subtasks.of(tasks, tid)
+    status = chains.outcome(next(i for i in tasks if i["id"] == tid), subs)
     if not status:
         open_ = ", ".join(s["id"] for s in subs if s["status"] not in backlog.CLOSED)
         raise backlog.BacklogError(f"{tid} still has open subtasks: {open_}; it closes once every one is done or canceled")

@@ -31,6 +31,10 @@ def seed_report(p: Project, tid: str, worktree: Path) -> None:
     f.write_text(text, encoding="utf-8")
 
 
+def lens_file(p: Project, lens: str) -> Path:
+    return p.home / "reports" / f"lens-{lens}.md"
+
+
 def plan_file(p: Project, tid: str) -> Path:
     return p.home / "plans" / f"{tid}.md"
 
