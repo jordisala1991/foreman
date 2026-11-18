@@ -339,6 +339,70 @@ second headless Orca only.
   called `claude` (D1); an unknown value is a config error naming it
   (as `provider_error` does). No fallback from one runner to the other.
 
+### Chat view or terminal tab (FN-218)
+
+Answers Q1 (below) from commands run on this Mac; the evidence log is `<home>/plans/FN-218-evidence.md` («F1»-«F14» below are its
+sections). Orca 1.4.261, Claude Code 2.1.325, a scratch git repo with worktrees made by git, and a headless Orca of its own
+(`ORCA_USER_DATA_PATH=… orca serve --port 6795`, started from an environment without foreman's variables); the owner's Orca,
+`~/.claude` settings and repo untouched. Every chat: `orca agent launch --agent claude --surface chat --worktree path:WT --prompt P
+--model sonnet --effort low --json` → `outcome.kind: "structured"` (never a terminal fallback). A guard stand-in hook logged its env and
+stdin and denied any Bash command with `BLOCKME`; `P` asked for `echo task=$FOREMAN_TASK`, `echo BLOCKME`, `touch probe.txt` and the agent's skills.
+The chat's process: `claude --output-format stream-json … --permission-prompt-tool=stdio --setting-sources=user,project,local …
+--session-id=<uuid Orca picks> --replay-user-messages --dangerously-skip-permissions --settings {"fastMode":false}` (F1).
+
+**The eight answers** (for the chat view; (a) is the worktree's `.claude/settings.local.json`):
+
+| Question | Answer | Command → decisive output |
+|---|---|---|
+| Reads the worktree's `.claude/settings.local.json` | Yes, and live: a rewrite reaches a running chat. A session in a git worktree also reads the main checkout's file (hooks of both run, the main checkout's env wins); Claude Code does this, not Orca | (a) → hook `ev=start TASK=FN-901 … cwd=…/wt/fn-1` (F2); planning chat started as `FN-903`, the file rewritten for the parent → its next call `task=FN-904 agent=parent`; a chat in a worktree with no file → `TASK=FN-904 … tag=main`; the same with `claude -p` outside Orca (F3) |
+| Its guard PreToolUse hook blocks a tool call | Yes; the real `foreman guard` reads the chat's hook input as it is | `echo BLOCKME` → `PreToolUse:Bash hook error: guard stand-in: BLOCKME denied` (F2); the captured stdin with `git push origin main` → `foreman guard` → `permissionDecision: deny` (push-main); without `FOREMAN_HOME` → allowed (F13) |
+| `permissions.defaultMode = bypassPermissions` honoured | Not by the file: the mode comes from Orca's host setting `nativeChatPermissionMode`. At its default `full-access` Orca adds `--dangerously-skip-permissions`; at `ask` it adds `--permission-mode=default`, which beats the file, and the agent waits on a prompt | `full-access` → `touch probe.txt` ran under an `ask` rule, `permissionMode: bypassPermissions` (F2); `settings.update {nativeChatPermissionMode: ask}` → argv `--permission-mode=default`, transcript `"permissionMode":"default"`, `worktree ps` `state: blocked`, `sidebarStatus: permission` (F5) |
+| The `FOREMAN_*` env reaches the agent | Yes, from (a) or a `--settings` file; not from (b) or a shared config (c) | `task=FN-901 home=…/S/home` (F2); (b) → `task= home=` (F9); (c) → `task= home=…/S/home` (F10) |
+| The Claude session id: recorded, how foreman reads it | Orca picks it (`--session-id`, no launch flag); the `worktree ps` row has only Orca's id (`claude_d3123690_…`). Foreman reads it from the hook's stdin `session_id` (a SessionStart hook in the same settings); the newest transcript of the folder is wrong (Orca's naming call writes one) | `--session-id=32b47fdb-…` = hook `session_id` = transcript `32b47fdb-….jsonl`; a send's result `providerItemId: "claude:be82ef77-…"` (F6, F8) |
+| A message from Orca on the phone reaches the agent | Yes, through a paired client as the phone connects; the real phone not used | `phone.js` with the pairing link, capability `agent-session.structured.v1`, `agentSession.send` → `dispatchState: accepted`; transcript 49 → 91 lines, `PHONE` (F8) (inferred: the phone uses the same method and transport) |
+| The foreman plugin kept off | Yes with `enabledPlugins {"foreman@foreman": false}` in the carried settings; not when the guard lives in the plugin (b) | (a) → no `foreman:*` skill, no `session-context` (F2); (b) → `foreman:define-task` listed, SessionStart ran in the agent's session (F9) |
+| An agent in the main checkout (planning, parent) | Needs a folder of its own: two agents sharing one file swap tasks (row 1), and a file in the main checkout reaches every worktree. A detached worktree per agent works, and Orca accepts it by `path:` | `git worktree add --detach …/agents/fn-903-planning main` (and `fn-904-parent`), two chats at once → `TASK=FN-903 AGENT=planning` and `TASK=FN-904 AGENT=parent` (F3) |
+
+Foreman's own side, which Q1 also needs: **state** reads as for tabs (`worktree ps` row per chat, `paneKey`
+`structured-agent-session-<orca id>:…`, `done` / `blocked`, F5, F7); **send and stop** have no CLI verb: `orca chat` has only `rename`,
+`terminal send` → `terminal_handle_stale`, `orchestration send` → `no_active_sender_terminal`, `terminal close --all` → `closed: 0` (F7).
+They exist only in Orca's internal protocol (`agentSession.send` → transcript 57 → 66 lines; `agentSession.close` → row gone), which
+the CLI is kept out of by design: over a paired link it declares `agent-session.rename-only.v1` and a send is refused
+`clientCapabilityMissing` (F7). **Restart**: chats die with Orca (tabs do not, E7); a later message makes Orca run `claude --resume=<same id>`
+with the settings read again (F8). No trust dialog showed in folders claude had never seen (F2).
+
+**The alternatives on the chat view** (each run end to end with `P`):
+
+| Alternative | Works? | Command → decisive output |
+|---|---|---|
+| (a) the worktree's `.claude/settings.local.json` | Works for settings, guard, env, plugin off; bypass only through Orca's setting; main-checkout agents need their own folder | F2, F3, F5 above |
+| (b) the guard as a hook of the installed foreman plugin, told by the folder | Does not: the hook acts only in agent folders, but no `FOREMAN_*` env reaches the agent and the plugin's skills and SessionStart reach it | scratch config with a plugin copy: agent folder → `plugin-hook ACT task=FN-1 env_TASK=`, `BLOCKME denied`; owner's folder → `PASS`, `BLOCKME` ran; both list `foreman:define-task` (F9) |
+| (c) a Claude config folder for agents (`CLAUDE_CONFIG_DIR`, managed account) | Does not: one config for every chat Orca starts, so no per-agent `FOREMAN_TASK`; transcripts leave `~/.claude/projects` | Orca run with `CLAUDE_CONFIG_DIR=…/cfgc` → `TASK= HOME_=…/S/home`, `BLOCKME denied`, transcript in `cfgc/projects/…` (F10). `orca account add --agent claude` → «could not be set up» without `claude login` in a terminal; `account select` picks the account of all new launches (F10) |
+| (d) an `orca.yaml` setup script | Does not: Orca runs it only for worktrees it makes, never for foreman's | git-made `fn-3` + chat → no setup log, no `.claude`; `orca worktree create --setup run` → `setup ran in ~/orca/workspaces/repo/d2`, `TASK=FN-909` (F11) |
+| (e) Orca's own settings | Command override: works, with a wrapper that adds `--settings <file foreman keeps for that folder>`; env and arguments: host-wide, arguments not passed to chats; `agent hooks`: only Orca's status hooks; permission prompts: the host setting of F5 | `mutateAgentLaunch {type: command}` + env `FOREMAN_TASK=FN-907` → wrapper ran with `FOREMAN_TASK=FN-907`, no `--append-system-prompt`; wrapper with `<home>/state/orca-settings/<cwd hash>.json` → `task=FN-908`, `BLOCKME denied`, no foreman skill (F12) |
+
+| Alternative | What foreman must do | What it changes for the owner's own sessions | Risks |
+|---|---|---|---|
+| (a) | write the file in each agent's folder; a detached worktree per main-checkout agent; never a file in a main checkout; read the session id from a SessionStart hook | his own sessions in an agent's folder get the guard, env and plugin off | an agent edits its file and the guard is gone (F4: `mv` → next `BLOCKME` ran; the `--settings` flag of D1 falls the same way to a local `disableAllHooks`); a main-checkout file leaks to all worktrees (F3); the file stays out of git only by the owner's global ignore (F3) |
+| (b) | a PreToolUse hook in the plugin mapping folder → task | a hook process on every tool call of every session | no env for the agent's `foreman` commands; skills and SessionStart reach agents |
+| (c) | a config folder with the guard; Orca started with it or a managed account selected | all his Orca chats and tabs run with the agents' config | no per-agent task; `costs.files_of` reads `~/.claude/projects` |
+| (d) | let Orca make the worktrees under `~/orca/workspaces`, an `orca.yaml` committed in each repo | every worktree he makes in Orca runs it | does not run for foreman's worktrees |
+| (e) | set Orca's command override for claude (a host setting) to a wrapper named `claude`; keep one settings file per agent folder outside it | every claude Orca starts passes through foreman's wrapper (it passes through when no file) | a wrapper in the path of all Orca agents; Orca's naming call gets the settings too (F12) |
+
+**Recommendation on Q1: the terminal tab (D1) stands.** The chat can carry the settings and the guard ((a), or (e)'s wrapper), but
+one answer fails: foreman cannot send to a chat or stop it through Orca's CLI, only through Orca's internal protocol, which Orca keeps
+the CLI out of (F7); and bypassPermissions in a chat rests on an Orca setting the owner can change (F5). D1 needs neither. The chat
+becomes the better choice if Orca gains CLI verbs to send to and close a chat (or the owner accepts foreman speaking Orca's internal
+protocol); FN-216 would then change D1 (launch: `agent launch --surface chat`, (a) with own folders), D3 (state: rows by Orca's chat id,
+`blocked` = waiting), D4 (send: `agentSession.send`; an ended chat resumes itself), D5 (stop: `agentSession.close`), D6 (no trust
+dialog) and D7 (a restart ends every chat until its next message).
+
+FN-216's launch must then:
+- launch as D1, `orca terminal create … exec claude … --settings '<json>'`; never `orca agent launch --surface chat` (no flag carries the
+  settings, F1, E2);
+- never write `.claude/settings.local.json` into a repo's main checkout: every worktree session of that repo reads it (F3);
+- leave Orca's host settings (command override, agent env, chat permission mode) alone: they apply to the owner's own sessions too (F12, F5).
+
 ### What the claude runner does that Orca cannot
 
 | Claude runner (today) | Orca | What foreman does |
