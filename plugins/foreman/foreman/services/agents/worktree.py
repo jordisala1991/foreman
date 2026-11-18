@@ -28,7 +28,8 @@ def worktree(p: Project, i: dict[str, Any]) -> tuple[Path, str]:
                 repo.remove_worktree(wt)
                 if made:
                     repo.delete_branch(branch)
-                raise PostCreateError(f"post_create step failed ({cmd}): {failed}")
+                left = f"; its worktree {wt} could not be removed: remove it before unblocking" if wt.exists() else ""
+                raise PostCreateError(f"post_create step failed ({cmd}): {failed}{left}")
     return wt, branch
 
 

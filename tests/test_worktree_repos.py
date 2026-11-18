@@ -119,3 +119,12 @@ def test_one_repos_table_gives_every_task_its_repo(monkeypatch, fake_git):
     launch_free(s.p)
     assert list(s.fakes["main"].trees) == [s.e.tmp / "mainwts" / "ty-1"]
     assert (s.e.tmp / "mainwts" / "ty-1" / "built").exists()
+
+
+def test_a_worktree_it_could_not_remove_is_named_in_the_block(monkeypatch, fake_git):
+    s = Setup(monkeypatch, fake_git, ["exit 1"])
+    monkeypatch.setattr(s.fakes["web"], "remove_worktree", lambda path: None)  # git refuses, e.g. a locked worktree
+    tid = s.task("web")
+    launch_free(s.p)
+    wt = s.e.tmp / "webwts" / "ty-1"
+    assert s.blocked(tid) == f"post_create step failed (exit 1): ; its worktree {wt} could not be removed: remove it before unblocking"
