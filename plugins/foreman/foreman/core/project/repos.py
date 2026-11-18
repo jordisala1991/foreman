@@ -23,27 +23,34 @@ def parse(raw: dict[str, Any], cfg: dict[str, dict[str, Any]]) -> dict[str, dict
     for key in tables:
         if not isinstance(tables[key], dict) or not isinstance(tables[key].get("path"), str):
             raise ValueError(f"[repos.{key}] needs a path")
-        _check_keys(f"[repos.{key}]", tables[key], SETTINGS)
-        repo: dict[str, Any] = {
-            "main": str(tables[key].get("main", "main")),
-            "remote": "origin",
-            "worktrees": cfg["project"]["worktrees"],
-            "post_create": [],
-            "publish_on_merge": False,
-            **{k: v for k, v in tables[key].items() if k not in SUB_SETTINGS and k != "main"},
-        }
-        if not isinstance(repo["worktrees"], str):
-            raise ValueError(f"[repos.{key}] worktrees is a folder path")
-        for name, allowed in SUB_SETTINGS.items():
-            if not isinstance(tables[key].get(name, {}), dict):
-                raise ValueError(f"[repos.{key}.{name}] must be a table")
-            _check_keys(f"[repos.{key}.{name}]", tables[key].get(name, {}), allowed)
-            repo[name] = {**cfg[name], **tables[key].get(name, {})}  # shallow: a repo's high or medium replaces the project's whole
-        if not isinstance(tables[key].get("post_create", []), list) or not all(isinstance(c, str) for c in tables[key].get("post_create", [])):
-            raise ValueError(f"[repos.{key}] post_create is a list of commands")
-        _check_placeholders(key, repo["post_create"])
-        out[key] = repo
+        out[key] = _repo(key, tables[key], cfg)
     return out
+
+
+def _repo(key: str, t: dict[str, Any], cfg: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """One `[repos.<key>]` table (a dict with a path) read strictly, over the project's settings."""
+    _check_keys(f"[repos.{key}]", t, SETTINGS)
+    repo: dict[str, Any] = {
+        "main": str(t.get("main", "main")),
+        "remote": "origin",
+        "worktrees": cfg["project"]["worktrees"],
+        "post_create": [],
+        "publish_on_merge": False,
+        **{k: v for k, v in t.items() if k not in SUB_SETTINGS and k != "main"},
+    }
+    if not isinstance(repo["remote"], str):
+        raise ValueError(f'[repos.{key}] remote is a remote name, or "none"')
+    if not isinstance(repo["worktrees"], str):
+        raise ValueError(f"[repos.{key}] worktrees is a folder path")
+    for name, allowed in SUB_SETTINGS.items():
+        if not isinstance(t.get(name, {}), dict):
+            raise ValueError(f"[repos.{key}.{name}] must be a table")
+        _check_keys(f"[repos.{key}.{name}]", t.get(name, {}), allowed)
+        repo[name] = {**cfg[name], **t.get(name, {})}  # shallow: a repo's high or medium replaces the project's whole
+    if not isinstance(t.get("post_create", []), list) or not all(isinstance(c, str) for c in t.get("post_create", [])):
+        raise ValueError(f"[repos.{key}] post_create is a list of commands")
+    _check_placeholders(key, repo["post_create"])
+    return repo
 
 
 def _check_keys(where: str, table: dict[str, Any], allowed: tuple[str, ...]) -> None:

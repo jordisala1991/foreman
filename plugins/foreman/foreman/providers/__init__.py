@@ -12,7 +12,7 @@ closed?), `ci` (the platform's checks), `failed_checks` (the name and link of ea
 `pushed` (is the branch on the platform at its tip?), `push` (put it there:
 never forced, never main; a failure is `Transient`, with the platform's own error).
 Operations take a `Change` and return `Published` / `ChangeState`: no dict crosses the port.
-Config: `[merge] provider` (`auto` default: github when `origin` is on GitHub, else local; or `local` | `github`),
+Config: `[merge] provider` (`auto` default: github when the repo's remote is on GitHub, else local; or `local` | `github`),
 `merge` (`squash` default | `merge` | `rebase`; local has no rebase) and `pr` (`draft` default | `done`)."""
 
 from dataclasses import dataclass

@@ -729,7 +729,7 @@ test = "make build"
 
 - A task's repo is its `repo` key (a `[repos.K]` key). The project hands every step a **view** of itself for that repo:
   `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`worktrees`/`post_create`, `[merge]` and `[risk]`
-  are the repo's (`remote` joins the view in FN-152), merged by the rule above; home, state, agents, guard, resources
+  are the repo's (`remote` too), merged by the rule above; home, state, agents, guard, resources
   and backlog are the project's. The code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls `for_task` once per
   task step. A task with no repo (a task that has subtasks, a loop finding) gets the project as it is, that is the first
   repo.
@@ -891,7 +891,7 @@ A module that grows past its size is split along its area's seams, inside its ar
   `services/agents/worktree.py`; check, merged check, PR and merge in the task's repo → `services/delivery/*` and
   `providers/registry.py`; the `publishes` fact → `core/rules/risk.py`; per-repo health checks → `steps/health/`
   (a new `repos.py`), the path matching pure in `core/project/repos.py`; the loop calls `for_task` once per task step,
-  in `loop/queue.py`.
+  in `loop/tick.py` and `loop/queue.py`, and in `services/delivery/merge.py` for the owner's accept and close.
 - **Task types (FN-157, built):** the type names and rules → `core/tasks/tasktypes.py`; each type's paragraph stays data
   in `foreman/briefs/*.md`, read by `services/agents/brief.py`; `--type` → `ui/cli/parser.py`. A new type is one entry and
   one paragraph, no other layer.

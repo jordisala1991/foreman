@@ -125,3 +125,10 @@ class TestReposTest:
     def test_for_task_one_repo_form_is_the_project(self) -> None:
         p = self.load("", project=f'repo = "{self.root / "api"}"')
         assert p.for_task({"repo": "x"}).repo == self.root / "api"
+
+    def test_remote_joins_the_view(self) -> None:
+        p = self.load(self.tables(extra_web='remote = "none"'), project=f'worktrees = "{self.root / "wts"}"')
+        assert p.for_task({"repo": "web"}).remote == "none"
+        assert p.for_task({"repo": "api"}).remote == "origin"
+        assert self.load("", project=f'repo = "{self.root / "api"}"').remote == "origin"
+        self.refused(self.tables(extra_web="remote = 3"), "[repos.web] remote is a remote name")

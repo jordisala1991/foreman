@@ -145,7 +145,7 @@ def test_the_main_checkout(repo: FakeRepo):
     assert repo.is_ancestor("main", "nope") is False  # git exits 128: not an ancestor, no error
     assert repo.current_branch() == "main"
     assert repo.dirty() is False
-    assert repo.origin_url() == ""
+    assert repo.remote_url("origin") == ""
 
 
 def test_commit_files(repo: FakeRepo, tmp_path: Path):

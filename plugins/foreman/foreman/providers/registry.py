@@ -18,8 +18,10 @@ def repo(p: Project) -> Repo:
 
 
 def detect(p: Project) -> str:
-    """github when the repo's origin is on GitHub, else local."""
-    return "github" if re.search(r"github\.com[:/]", repo(p).origin_url()) else "local"
+    """github when the repo's remote is on GitHub, else local (always local with remote = "none")."""
+    if p.remote == "none":
+        return "local"
+    return "github" if re.search(r"github\.com[:/]", repo(p).remote_url(p.remote)) else "local"
 
 
 def get(p: Project) -> Provider:
@@ -28,6 +30,8 @@ def get(p: Project) -> Provider:
     providers: dict[str, type[Provider]] = {"local": Local, "github": GitHub}
     if name == "auto":
         name = detect(p)
+    if name == "github" and p.remote == "none":
+        raise ConfigError('remote = "none" cannot use the github provider')
     merges = {n: c.merges for n, c in providers.items()}
     m = decide.MergeConfig(name, p.get("merge", "strategy"), p.get("merge", "pr"))
     if err := decide.provider_error(m, merges, MERGES, PRS):

@@ -35,7 +35,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "merge": {
         "autonomy": "manual",
-        "provider": "auto",  # auto (github if origin is on GitHub, else local) | local | github (foreman/providers/)
+        "provider": "auto",  # auto (github if the repo's remote is on GitHub, else local) | local | github (foreman/providers/)
         "strategy": "squash",  # squash | merge (--no-ff) | rebase (github only)
         "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `foreman done`
         "test": "",
@@ -105,8 +105,13 @@ class Project:
         if key not in self.cfg["repos"]:
             raise ProjectError(f"repo {key} is not in foreman.toml")
         r = self.cfg["repos"][key]
-        own = {"repo": r["path"], "main": r["main"], "worktrees": r["worktrees"], "post_create": r["post_create"]}
+        own = {"repo": r["path"], "main": r["main"], "worktrees": r["worktrees"], "post_create": r["post_create"], "remote": r["remote"]}
         return dataclasses.replace(self, cfg={**self.cfg, "project": {**self.cfg["project"], **own}, "merge": r["merge"], "risk": r["risk"]})
+
+    @property
+    def remote(self) -> str:
+        """The remote of the repo, "none" for a repo without one (the local provider); the `[project] repo` form says origin."""
+        return self.cfg["project"].get("remote", "origin")
 
     def get(self, section: str, key: str) -> Any:
         return self.cfg[section][key]

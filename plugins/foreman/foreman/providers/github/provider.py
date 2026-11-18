@@ -69,18 +69,18 @@ class GitHub(Provider):
             raise ProviderError(f"gh pr view: not JSON: {r.out.strip()[:200]!r}") from None
 
     def pushed(self, change: Change) -> bool:
-        r = self.run("git", "ls-remote", "origin", f"refs/heads/{change.branch}", check=False)
+        r = self.run("git", "ls-remote", self.p.remote, f"refs/heads/{change.branch}", check=False)
         return r.code == 0 and r.out.split()[:1] == [change.head]
 
     def push(self, change: Change) -> None:
-        """`git push origin refs/heads/<branch>:refs/heads/<branch>` from the main repo (worktree branches live there):
+        """`git push <remote> refs/heads/<branch>:refs/heads/<branch>` from the main repo (worktree branches live there):
         never forced, never the main branch. Any failure is Transient with git's error; the text is not classified."""
         branch = change.branch
         if branch == self.p.get("project", "main"):
             raise ProviderError(f"refusing to push {branch}: it is the main branch")
         ref = f"refs/heads/{branch}"
         try:
-            r = proc.run(["git", "-C", str(self.p.repo), "push", "origin", f"{ref}:{ref}"], timeout=PUSH_TIMEOUT)
+            r = proc.run(["git", "-C", str(self.p.repo), "push", self.p.remote, f"{ref}:{ref}"], timeout=PUSH_TIMEOUT)
         except proc.ProcError as e:
             raise TransientError(f"git push {branch}: {e}") from None
         if r.code != 0:
@@ -112,21 +112,21 @@ class GitHub(Provider):
 
     def evidence(self, change: Change, files: dict[str, Path]) -> dict[str, str]:
         """Puts the images in `ID/` of the orphan branch `foreman-evidence` (added to what is there, one commit, a plain push
-        that origin refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
+        that the remote refuses if it moved: retried next tick); nothing is pushed when they are all there already."""
         files = {n: f for n, f in files.items() if evidence.bare(n) and f.stat().st_size <= evidence.MAX_BYTES}
         if not files:
             return {}
         tid = change.id
         ref = f"refs/heads/{evidence.BRANCH}"
-        parent = (self.run("git", "ls-remote", "origin", ref).out.split() or [""])[0]
+        parent = (self.run("git", "ls-remote", self.p.remote, ref).out.split() or [""])[0]
         if parent:
-            self.run("git", "fetch", "-q", "origin", ref)
+            self.run("git", "fetch", "-q", self.p.remote, ref)
         try:
             commit = self.repo.commit_files(parent, tid, files, f"evidence {tid}")
         except RepoError as e:
             raise TransientError(str(e)) from None
         if commit:
-            self.run("git", "push", "-q", "origin", f"{commit}:{ref}")
+            self.run("git", "push", "-q", self.p.remote, f"{commit}:{ref}")
         slug = self.run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").out.strip()
         return {n: f"https://github.com/{slug}/blob/{evidence.BRANCH}/{tid}/{n}?raw=true" for n in files}
 
@@ -223,7 +223,7 @@ class GitHub(Provider):
         """Best effort: bring the main checkout up to the merged main so the next checks see it (fetch + fast-forward
         only; never a push)."""
         main = self.p.get("project", "main")
-        self.run("git", "fetch", "-q", "origin", main, check=False)
+        self.run("git", "fetch", "-q", self.p.remote, main, check=False)
         with contextlib.suppress(RepoError):
             if self.repo.current_branch() == main and not self.repo.dirty():
-                self.repo.fast_forward(f"origin/{main}")
+                self.repo.fast_forward(f"{self.p.remote}/{main}")

@@ -23,6 +23,7 @@ class FakeRepo:
         self.staged: dict[Path, list[str]] = {}  # worktree -> the commits merged in it, not committed (git's --no-commit)
         self.branch_at: dict[Path, str] = {}  # worktree -> the branch checked out there ("" when detached)
         self.files: dict[str, dict[str, bytes]] = {}  # commit made by commit_files -> its tree (path -> content)
+        self.remotes: dict[str, str] = {}  # remote name -> its URL
         self.heads["main"] = self._new((), [], [], "init")
 
     def _new(self, parents: tuple[str, ...], files: list[FileDiff], deleted: list[str], message: str) -> str:
@@ -194,5 +195,5 @@ class FakeRepo:
         self.heads[main] = self._new(parents, files, deleted, message)
         return MergeOutcome(self.heads[main])
 
-    def origin_url(self) -> str:
-        return ""
+    def remote_url(self, remote: str) -> str:
+        return self.remotes.get(remote, "")
