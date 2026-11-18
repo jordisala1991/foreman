@@ -728,9 +728,9 @@ test = "make build"
 ### One task, one PR, one repo
 
 - A task's repo is its `repo` key (a `[repos.K]` key). The project hands every step a **view** of itself for that repo:
-  `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`remote`/`worktrees`, `[merge]` and `[risk]`
-  are the repo's, merged by the rule above; home, state, agents, guard, resources and backlog are the project's. The
-  code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls `for_task` once per
+  `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`worktrees`/`post_create`, `[merge]` and `[risk]`
+  are the repo's (`remote` joins the view in FN-152), merged by the rule above; home, state, agents, guard, resources
+  and backlog are the project's. The code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls `for_task` once per
   task step. A task with no repo (a task that has subtasks, a loop finding) gets the project as it is, that is the first
   repo.
 - Choosing: `foreman add TITLE --repo KEY`; `foreman edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops the
