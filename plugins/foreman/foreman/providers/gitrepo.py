@@ -116,16 +116,23 @@ class GitRepo:
     def fast_forward(self, ref: str) -> None:
         self._run("merge", "-q", "--ff-only", ref)
 
+    def _restore(self) -> None:
+        self._run("merge", "--abort", check=False)
+        self._run("reset", "--hard", "-q", "HEAD", check=False)  # a failed squash leaves no merge to abort
+
     def merge(self, main: str, branch: str, message: str, squash: bool) -> MergeOutcome:
-        if squash:
-            r = self._run("merge", "--squash", branch, check=False)
-            if r.code == 0:
-                r = self._run("commit", "-q", "--allow-empty", "-m", message, check=False)
-        else:
-            r = self._run("merge", "--no-ff", "-m", message, branch, check=False)
+        try:
+            if squash:
+                r = self._run("merge", "--squash", branch, check=False)
+                if r.code == 0:
+                    r = self._run("commit", "-q", "--allow-empty", "-m", message, check=False)
+            else:
+                r = self._run("merge", "--no-ff", "-m", message, branch, check=False)
+        except RepoError:
+            self._restore()
+            raise
         if r.code != 0:
-            self._run("merge", "--abort", check=False)
-            self._run("reset", "--hard", "-q", "HEAD", check=False)  # a failed squash leaves no merge to abort
+            self._restore()
             return MergeOutcome(conflict=self.conflicts(main, branch), why=(r.err or r.out).strip()[:300])
         return MergeOutcome(commit=self.head("HEAD"))
 
