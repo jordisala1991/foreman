@@ -34,6 +34,26 @@ The file `<home>/plans/ID.md` the planning agent writes for the responsible agen
 _Chat_: plan
 _Avoid_: spec
 
+**Chain**
+A run of one lens: the parent a lens entry files and its steps, one at a time, until its parent agent closes it.
+_Chat_: cadena
+_Avoid_: campaign, pipeline
+
+**Step**
+A subtask of a chain: one finding fixed in one PR, with evidence before and after. Not one of the loop's steps.
+_Chat_: paso
+_Avoid_: iteration
+
+**Lens**
+The question a chain asks of fm, with the evidence that proves a finding.
+_Chat_: lente
+_Avoid_: audit
+
+**Lens report**
+The living file `<home>/reports/lens-NAME.md`, one per lens, never re-created: Direction (the owner's), Frontier, History.
+_Chat_: informe de la lente
+_Avoid_: chain report
+
 ## Agents
 
 **Responsible agent**
