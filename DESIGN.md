@@ -309,7 +309,8 @@ second headless Orca only.
   and parent agents run in the repo's main checkout, the worktree Orca lists as `main`.
 - **D3 State.** One `orca worktree ps --json` per tick; a row is matched to its terminal by `paneKey` (what `terminal create`
   returned). `working` → WORKING, `waiting` → WAITING, `done` → IDLE; a terminal listed with no row: the adapter reads its screen (`orca terminal read --terminal T --screen --json`), and
-  `Yes, I trust this folder` on it → WAITING (D6 answers it when it may), anything else → WORKING (starting);
+  `Yes, I trust this folder` on it → WAITING (D6 answers it when it may), anything else → WORKING (starting) for 2 minutes after
+  `agent.started` (a start took 6-15 s in E8, E9), then WAITING with the event of D6 naming the screen's last line;
   a terminal absent from `orca terminal list` → ENDED; a session with no terminal kept → GONE. The row has no claude session id
   (`orcaSessionId` is Orca's own, E8), so the adapter goes from the kept `pane` to the row and from the kept `terminal` to the tab. WORKING and WAITING are busy:
   nothing is sent to them. Any field but `state` and `paneKey` may be missing (`hasLivePty` was).
@@ -322,7 +323,8 @@ second headless Orca only.
   `orca terminal read --terminal T --screen --json`; when the screen holds `Yes, I trust this folder` it sends `$'\x1b[B'` then `$'\r'`
   (E2, E8: the agent went on and answered its brief). Only for a folder inside the project's repos or worktrees folder. Pending Q2.
   A dialog D6 may not answer stays WAITING (D3), so nothing is sent to the agent and the loop writes one event on its task, which the
-  owner sees in `foreman show` and the panel.
+  owner sees in the panel (`foreman show` prints no events); written once, marked as a nudge is (`agent.waiting_seen`, as `agent.nudged`
+  in `steps/talk.py`), cleared when the agent leaves WAITING.
 - **D7 Orca down.** `orca status --json` says it (`app.running: false`); any other call's `runtime_unavailable` → `RunnerUnavailable(RunnerError)`.
   A launch that gets it leaves the task as it is (no block), writes one event and is retried next tick; a send is retried as any
   failure. Foreman never runs `orca open` (Q3). The binary is `$ORCA_BIN`, else `orca` on PATH, else
@@ -382,7 +384,8 @@ class RunnerError(Exception); class RunnerUnavailable(RunnerError)              
 `rows.get(sid).get("id")` (`merge.py:117`) or `row.get("status")`, it gets `Rows`. The backlog's agent keeps the four fields of
 `SessionRef`. The task's `sessions` list keeps its shape (session ids, `launch.py:87`), so its readers `ui/panel/views.py:83`,
 `steps/metrics.py:79` and `merge.py:117` read it as today; next to it, as `session_kinds` is, a new map `session_tabs`
-(session id → `[terminal, pane]`) is written by the orca runner only. `merge.stop_all` builds each old session's `SessionRef` from the id,
+(session id → `[terminal, pane]`) is written by `launch.record_session` (`launch.py:85`) from the `SessionRef` `start` or `send` returned,
+only when its `terminal` is set (never for claude); `record_session` takes that `SessionRef` instead of the id. `merge.stop_all` builds each old session's `SessionRef` from the id,
 `Rows.short(id)` and its `session_tabs` entry; an id with none (every entry written before, and every claude one) has `terminal` and `pane`
 empty, which the claude adapter never reads and the orca adapter reads as GONE; an id with an entry gets its tab closed, a replaced
 review's too.
