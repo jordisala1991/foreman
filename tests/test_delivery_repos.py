@@ -21,7 +21,7 @@ from foreman.services.delivery import merge
 
 TABLES = (
     '[repos.api]\npath = "$T/api"\n[repos.api.merge]\ntest = "echo api >> $T/ran"\n'
-    '[repos.web]\npath = "$T/web"\nremote = "none"\n[repos.web.merge]\ntest = "echo web >> $T/ran"\n'
+    '[repos.web]\npath = "$T/web"\nremote = "none"\n[repos.web.merge]\nstrategy = "merge"\ntest = "echo web >> $T/ran"\n'
 )
 
 
@@ -69,6 +69,7 @@ def test_accepted_task_merges_into_its_repos_main(monkeypatch, fake_git):
     assert i["check"]["merged_with"] == web_main
     assert ran(s) == "web\nweb\n"
     assert s.fakes["web"].messages()[-1] == f"Merge {tid}: t"
+    assert len(s.fakes["web"].parents[s.fakes["web"].head("main")]) == 2  # web's strategy: a merge commit, not api's squash
     assert not any(m.startswith("Merge") for m in s.fakes["api"].messages())
 
 
