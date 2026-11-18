@@ -70,3 +70,12 @@ def layout_error(folders: list[tuple[str, Path]], repos: dict[str, Path]) -> str
             if folder == repo or repo in folder.parents:
                 return f"{what} is inside repo {key}: {folder} is in {repo}"
     return ""
+
+
+def refusal(keys: list[str], key: str) -> str:
+    """Why `--repo KEY` is refused; empty if `key` is one of the project's repo keys."""
+    if key in keys:
+        return ""
+    if not keys:
+        return "this project has one repo"
+    return f"unknown repo {key!r}: choose one of {', '.join(keys)}"

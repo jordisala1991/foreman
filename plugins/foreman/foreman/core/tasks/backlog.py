@@ -14,7 +14,7 @@ Keys added to a task: `agent` {name, session, short, kind: planning|responsible,
 `sessions` (every session id), `session_kinds` (sid → planning|responsible|review), `report` {summary, review, confused, at},
 `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent), `plan_file`, `source`
 (dedup key of a finding or signal), `blocked` (why the loop leaves it alone), `parent` (of a subtask), `misled` {planning|
-responsible|hunter|reviewer: [what misled that agent]}.
+responsible|hunter|reviewer: [what misled that agent]}, `repo` (the `[repos.K]` key of the repo it changes; several repos only).
 A question to the owner is a decision tied to its task and agent: {id: "XX-1 Q1", task, agent, title, text, kind, action?}.
 """
 
@@ -147,6 +147,7 @@ class NewTask(TypedDict, total=False):
     model: str
     effort: str
     type: str
+    repo: str
     chain: Chain
 
 
@@ -178,7 +179,7 @@ def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewTask]
             task["parent"] = parent
         if ids := f.get("blocked_by"):
             task["blocked_by"] = ids
-        for k in ("model", "effort", "type", "chain"):
+        for k in ("model", "effort", "type", "repo", "chain"):
             if v := f.get(k):
                 task[k] = v
         d["tasks"].append(task)

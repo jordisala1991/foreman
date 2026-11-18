@@ -9,7 +9,7 @@ from ...core.oversight import costs
 from ...core.project import registry
 from ...core.project.config import Project
 from ...core.review import evidence
-from ...core.tasks import backlog, recurring, tasktypes
+from ...core.tasks import backlog, recurring, taskrepo, tasktypes
 from ...services import lock
 from ...services.claude import sessions
 from ...services.delivery import pulls
@@ -72,9 +72,10 @@ def state(p: Project) -> Obj:
     rows = sessions.listing(p)
     all_tasks = backlog.tasks(d)
     recent = [i for i in all_tasks if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
-    shown = [recurring.shown(tasktypes.shown(with_session(p, i, rows), all_tasks)) for i in recent]
+    shown = [recurring.shown(taskrepo.shown(tasktypes.shown(with_session(p, i, rows), all_tasks), all_tasks, p.several)) for i in recent]
     events = util.read_jsonl(p.state / "events.jsonl")[-20:][::-1]
-    return {"name": p.name, "paused": p.paused or None, "loop": loop_beat(p), "tasks": shown, "questions": d["decisions"], "events": events}
+    repos: Obj = {"repos": p.repo_keys} if p.several else {}
+    return {"name": p.name, "paused": p.paused or None, "loop": loop_beat(p), "tasks": shown, "questions": d["decisions"], "events": events, **repos}
 
 
 def task(p: Project, tid: str) -> Obj:
@@ -82,7 +83,7 @@ def task(p: Project, tid: str) -> Obj:
     i = backlog.get(d, tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
-    shown = recurring.shown(tasktypes.shown(with_session(p, i, sessions.listing(p)), backlog.tasks(d)))
+    shown = recurring.shown(taskrepo.shown(tasktypes.shown(with_session(p, i, sessions.listing(p)), backlog.tasks(d)), backlog.tasks(d), p.several))
     if i.get("report"):
         check: Obj = i.get("check") or {}
         text = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
