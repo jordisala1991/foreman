@@ -33,7 +33,9 @@ def run(p: Project, now: datetime | None = None) -> list[str]:
 
 def _fields(e: dict[str, Any], st: recurring.Status, now: datetime) -> dict[str, Any]:
     detail = "\n\n".join(t for t in (e["detail"], recurring.covers(e, st, now)) if t)
+    chain = {"chain": {k: e[k] for k in ("lens", "max_steps", "max_lines")}} if e["lens"] else {}
     return {
+        **chain,
         "goal": e["goal"],
         "criteria": e["criteria"],
         "model": e["model"],

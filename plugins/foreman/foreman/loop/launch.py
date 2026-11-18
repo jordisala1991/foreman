@@ -2,7 +2,7 @@ import re
 from typing import Any
 
 from ..core.project.config import Project
-from ..core.tasks import backlog, blockers, subtasks
+from ..core.tasks import backlog, blockers, chains
 from ..services.agents.launch import launch
 from ..services.agents.running import running
 from .guarded import guarded
@@ -22,6 +22,6 @@ def launch_free(p: Project) -> None:
     free = int(p.get("agents", "slots")) - running(d)
     tasks = backlog.tasks(d)
     waiting = (i for i in tasks if i["status"] in ("backlog", "ready") and not i.get("blocked") and not blockers.pending(i, tasks))
-    todo = sorted((i for i in waiting if not subtasks.of(tasks, i["id"])), key=sort_key)
+    todo = sorted((i for i in waiting if not chains.is_parent(tasks, i)), key=sort_key)
     for i in todo[: max(0, free)]:
         guarded(p, i["id"], "launch it", lambda i=i: launch(p, i))
