@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from ...core.project import config, registry
+from ...core.project import config, registry, repos
 from ...core.project.config import Project
 
 
@@ -52,6 +52,15 @@ def here() -> Project:
             f"foreman: no project here: {cwd} is in none of the registered projects' folders (registered: {_names(projects, broken)}); pass --project NAME"
         )
     return Project.load(h)
+
+
+def repo_key(p: Project, key: str | None) -> str:
+    """The `--repo` key to store: empty if none was given, or with one repo (the key is accepted and never stored)."""
+    if not key:
+        return ""
+    if why := repos.refusal(p.repo_keys, key):
+        sys.exit(f"foreman: {why}")
+    return key if p.several else ""
 
 
 def mine(args: argparse.Namespace) -> str:

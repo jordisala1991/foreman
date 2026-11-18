@@ -4,19 +4,24 @@ report is; its `foreman done` closes the chain with no step, and is refused whil
 from datetime import datetime
 
 import pytest
-from helpers import Env
+from helpers import Env, fm
 from test_misled import run_as
+from test_parents import resumes
 
 from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog, chains
 from foreman.loop import tick
+from foreman.services.delivery import merge
 from foreman.steps import schedule
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
 SEEN = "2026-11-15 00:00:00"
 CHAIN = {"lens": "rules", "max_steps": 5, "max_lines": 150}
-RULES = '[[recurring]]\nname = "rules"\ntitle = "Lens rules"\nlens = "rules"\nmax_steps = 5\nmax_lines = 150\ncriteria = "c"\nevery_merges = 1\n'
+RULES = (
+    '[[recurring]]\nname = "rules"\ntitle = "Lens rules"\nlens = "rules"\nmax_steps = 5\nmax_lines = 150\ncriteria = "c"\n'
+    'goal = "g"\nmodel = "sonnet"\neffort = "low"\ntype = "bug"\nevery_merges = 1\n'
+)
 
 
 @pytest.mark.usefixtures("owner")
@@ -63,6 +68,8 @@ class TestChainParent:
             assert needle in text
         for left in ("$id", "$lens", "$max_steps", "$max_lines", "$repo", "$main"):
             assert left not in text
+        assert "--triage" not in text
+        assert "wait for his answer" not in text
 
     def test_done_closes_a_chain_with_no_step(self):
         P = self.launched()
@@ -77,6 +84,116 @@ class TestChainParent:
         with pytest.raises(SystemExit):
             run_as(self.e, P, "ty-2", "done", "--summary", "s")
         assert self.e.task(P)["status"] == "backlog"
+
+    def step(self, P: str) -> str:
+        """Files a step from the chain's agent and returns its id."""
+        before = {i["id"] for i in backlog.tasks(backlog.load(self.p))}
+        run_as(self.e, P, "ty-2", "add", "t", "--parent", P, "--detail", "d")
+        (sid,) = {i["id"] for i in backlog.tasks(backlog.load(self.p))} - before
+        return sid
+
+    def refused(self, P: str) -> str:
+        with pytest.raises(SystemExit) as x:
+            self.step(P)
+        return str(x.value)
+
+    def steps(self, P: str) -> list[backlog.Task]:
+        return [i for i in backlog.tasks(backlog.load(self.p)) if i.get("parent") == P]
+
+    @pytest.mark.parametrize("flags", [(), ("--goal", "x", "--criteria", "y", "--model", "opus", "--effort", "high", "--type", "change", "--triage")])
+    def test_a_step_is_filed_in_backlog_with_the_parents_fields(self, flags):
+        P = self.launched()
+        run_as(self.e, P, "ty-2", "add", "t", "--parent", P, "--detail", "d", *flags)
+        (s,) = self.steps(P)
+        got = (s["status"], s["acceptance"], s["model"], s["effort"], s["type"])
+        assert got == ("backlog", {"goal": "g", "criteria": "c"}, "sonnet", "low", "bug")
+
+    def test_a_second_step_is_refused_while_one_is_open(self):
+        P = self.launched()
+        S = self.step(P)
+        assert S in self.refused(P)
+        assert len(self.steps(P)) == 1
+
+    def test_a_step_after_a_canceled_one_is_refused(self):
+        P = self.launched()
+        S = self.step(P)
+        fm(self.e.home, "cancel", S)
+        assert S in self.refused(P)
+        assert len(self.steps(P)) == 1
+
+    def test_a_step_after_a_merged_one_is_filed(self):
+        P = self.launched()
+        merge.close(self.p, self.step(P), "done", "x")
+        self.step(P)
+        assert len(self.steps(P)) == 2
+
+    def test_the_sixth_step_is_refused(self):
+        P = self.launched()
+        for _ in range(5):
+            merge.close(self.p, self.step(P), "done", "x")
+        assert "5" in self.refused(P)
+        assert len(self.steps(P)) == 5
+
+    def told(self, P: str, close) -> tuple[str, str]:
+        """Files a step, closes it with `close`, idles the loop and returns the step id and the one message its agent got."""
+        sid = self.e.task(P)["agent"]["session"]
+        S = self.step(P)
+        close(S)
+        for _ in range(2):
+            self.e.set_state("ty-2", "done")
+            tick.tick(self.p)
+        (msg,) = resumes(self.e, sid)
+        return S, msg["argv"][3]
+
+    def test_the_agent_is_told_to_file_the_next_step_or_close(self):
+        P = self.launched()
+        S, text = self.told(P, lambda S: merge.close(self.p, S, "done", "x"))
+        assert S in text
+        assert "foreman add" in text
+        assert "foreman done" in text
+
+    def test_the_agent_is_told_to_close_after_a_canceled_step(self):
+        P = self.launched()
+        S, text = self.told(P, lambda S: fm(self.e.home, "cancel", S))
+        assert S in text
+        assert "foreman done" in text
+        assert "foreman add" not in text
+
+
+@pytest.mark.parametrize(
+    ("statuses", "max_steps", "refused"),
+    [
+        ([], 5, False),
+        (["done"], 5, False),
+        (["done"] * 4, 5, False),
+        (["backlog"], 5, True),
+        (["canceled"], 5, True),
+        (["done", "canceled"], 5, True),
+        (["done"] * 5, 5, True),
+        (["duplicate"], 5, False),
+    ],
+)
+def test_refusal_table(statuses, max_steps, refused):
+    parent = {"id": "P", "status": "backlog", "chain": {**CHAIN, "max_steps": max_steps}}
+    steps = [{"id": f"S{n}", "status": st, "parent": "P"} for n, st in enumerate(statuses)]
+    assert bool(chains.refusal([parent, *steps], "P")) == refused
+
+
+@pytest.mark.parametrize(
+    ("status", "how", "next_step"),
+    [("done", "merged", True), ("canceled", "canceled", False), ("duplicate", "closed as duplicate", True)],
+)
+def test_notice_table(status, how, next_step):
+    parent = {"id": "P", "status": "backlog", "chain": CHAIN}
+    step = {"id": "S", "title": "t", "status": status, "parent": "P"}
+    text = chains.notice(step, [step], parent)
+    assert f"was {how}." in text
+    assert ("foreman add" in text) == next_step
+    assert "foreman done" in text
+
+
+def test_no_refusal_under_a_parent_that_is_not_a_chain():
+    assert chains.refusal([{"id": "P", "status": "backlog"}, {"id": "S", "status": "backlog", "parent": "P"}], "P") == ""
 
 
 @pytest.mark.parametrize(

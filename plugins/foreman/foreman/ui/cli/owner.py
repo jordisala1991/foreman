@@ -10,14 +10,14 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
-from ...core.tasks import backlog, blockers, editing, questions, subtasks
+from ...core.tasks import backlog, blockers, chains, editing, questions, subtasks, taskrepo
 from ...providers.repo import RepoError
 from ...services.agents.running import review_running
 from ...services.delivery import merge
 from ...services.delivery.git import DeliveryError
 from ...steps import talk
 from . import init
-from .common import home
+from .common import home, repo_key
 
 
 def cmd_init(a: argparse.Namespace) -> None:
@@ -30,25 +30,29 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "triage" if a.triage or (a.parent and os.environ.get("FOREMAN_TASK")) else "backlog"  # a parent agent's waits for a Go
+    repo = repo_key(p, a.repo)
     tasks = backlog.tasks(backlog.load(p))
+    step = chains.step_fields(tasks, a.parent) if a.parent else None  # a chain's step: the parent's fields, its flags ignored
+    triage = not step and (a.triage or (a.parent and os.environ.get("FOREMAN_TASK")))  # a parent agent's waits for a Go
+    status = "triage" if triage else "backlog"
     ids = blockers.ids(a.blocked_by or [])
     by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FOREMAN_TASK", ""), a.parent, "subtasks are filed")
-    if why := by_agent or (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids):
+    flags = chains.StepFields(goal=a.goal or "", criteria=a.criteria or "", model=a.model or "", effort=a.effort or "", type=a.type or "")
+    fields = step or flags
+    by_repo = taskrepo.add_refusal(p.repo_keys, repo, status, fields["criteria"], step is not None)
+    by_parent = a.parent and (subtasks.refusal(tasks, a.parent) or chains.refusal(tasks, a.parent))
+    if why := by_agent or by_parent or blockers.refusal(tasks, "", ids) or by_repo:
         sys.exit(f"foreman: {why}")
     tid = backlog.add(
         p,
         a.title,
         detail=a.detail or "",
         status=status,
-        criteria=a.criteria or "",
-        goal=a.goal or "",
         priority=a.priority,
         parent=a.parent or "",
         blocked_by=ids,
-        model=a.model or "",
-        effort=a.effort or "",
-        type=a.type or "",
+        repo=repo,
+        **fields,
     )
     print(tid)
 
@@ -58,11 +62,17 @@ def cmd_edit(a: argparse.Namespace) -> None:
     fields: dict[str, Any] = {f: v for f in editing.FIELDS if (v := getattr(a, f))}
     if a.blocked_by:
         fields["blocked_by"] = blockers.ids(a.blocked_by)
+    fields.pop("repo", None)
+    if key := repo_key(p, a.repo):
+        fields["repo"] = key
     with backlog.edit(p) as d:
         i = backlog.get(d, a.id)
         by_agent = subtasks.agent_refusal(backlog.tasks(d), os.environ.get("FOREMAN_TASK", ""), i.get("parent", ""), "tasks are edited")
-        if why := by_agent or editing.refusal(i, fields, backlog.tasks(d)):
+        if why := by_agent or editing.refusal(i, fields or ({"repo": a.repo} if a.repo else {}), backlog.tasks(d)):
             sys.exit(f"foreman: {why}")
+        if not fields:  # the one repo's own key: accepted, nothing to store
+            print(f"{a.id}: nothing to change, this project has one repo")
+            return
         old = dict(i)
         new = editing.edited(i, fields)
         i.clear()
@@ -131,6 +141,8 @@ def cmd_go(a: argparse.Namespace) -> None:
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
     if not acceptance.get("criteria"):
         sys.exit(f"foreman: {a.id}: define its acceptance criteria with the owner first")
+    if why := taskrepo.go_refusal(i, backlog.tasks(backlog.load(p)), p.repo_keys):
+        sys.exit(f"foreman: {why}")
     backlog.set_status(p, a.id, "backlog", "let in by the owner", blocked="")
 
 
