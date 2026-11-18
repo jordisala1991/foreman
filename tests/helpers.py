@@ -16,10 +16,12 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from fakerepo import FakeRepo
 
 from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
+from foreman.providers.repo import FileDiff
 from foreman.services.claude import sessions
 
 sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
@@ -152,10 +154,15 @@ def template_repo() -> Path:
 
 
 class Env:
-    def __init__(self, test: str = "", autonomy: str = "manual", slots: int = 2) -> None:
+    def __init__(self, test: str = "", autonomy: str = "manual", slots: int = 2, repo: FakeRepo | None = None) -> None:
+        """With `repo` (the `fake_git` fixture), the repo folder is empty and the fake answers for git."""
         self.tmp = Path(tempfile.mkdtemp(prefix="fmtest-")).resolve()
         self.repo = self.tmp / "repo"
-        shutil.copytree(template_repo(), self.repo, symlinks=True)
+        self.fake = repo
+        if repo:
+            self.repo.mkdir()
+        else:
+            shutil.copytree(template_repo(), self.repo, symlinks=True)
         self.bin = self.tmp / "bin"
         self.bin.mkdir()
         (self.bin / "claude_fake.py").write_text(FAKE)
@@ -240,6 +247,15 @@ class Env:
             fm(self.home, "verdict", "--open", str(open_findings), "--file", str(self.home / f"reviews/{tid}.md"))
         finally:
             os.environ.pop("FOREMAN_TASK")
+
+    def change(self, tid: str, lines: int = 1) -> None:
+        """The task's agent commits `lines` lines added to app.py on its branch."""
+        if self.fake:
+            self.fake.commit(self.task(tid)["branch"], FileDiff("app.py", lines, 0))
+            return
+        with open(Path(self.task(tid)["worktree"]) / "app.py", "a") as f:
+            f.write("".join(f"# {n}\n" for n in range(lines)))
+        git(Path(self.task(tid)["worktree"]), "commit", "-qam", "change")
 
     def task(self, tid: str) -> dict:
         return backlog.get(backlog.load(self.p), tid)
