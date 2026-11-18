@@ -2,7 +2,7 @@ import os
 from unittest import mock
 
 import pytest
-from helpers import install_fm, version_folder
+from helpers import Env, install_fm, version_folder
 
 from foreman import launcher, util
 from foreman.loop import tick
@@ -12,8 +12,8 @@ class TestVersion:
     """A loop started by the launcher (FOREMAN_PINNED) exits as soon as another foreman@foreman version is installed."""
 
     @pytest.fixture(autouse=True)
-    def set_up(self, request, env):
-        self.e = env
+    def set_up(self, request, fake_git):
+        self.e = Env(repo=fake_git)
         self.p = self.e.p
         cache = self.e.tmp / "cache/foreman/foreman"
         self.a, self.b = version_folder(cache, "aaa"), version_folder(cache, "bbb")

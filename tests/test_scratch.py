@@ -3,6 +3,7 @@ import re
 from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.services.agents import launch
+from foreman.steps.reviewing import sweep_scratch
 from tests.helpers import Env, fm
 
 
@@ -14,8 +15,8 @@ def launched(e: Env, tid: str) -> str:
 
 
 class TestScratch:
-    def test_each_review_has_its_own_folder_told_in_its_brief(self):
-        e = Env()
+    def test_each_review_has_its_own_folder_told_in_its_brief(self, fake_git):
+        e = Env(repo=fake_git)
         for _ in range(2):
             launched(e, backlog.add(e.p, "x", status="ready", criteria="y"))
         folders = sorted((e.home / "scratch").iterdir())
@@ -26,43 +27,43 @@ class TestScratch:
             assert sum(str(f) in b for b in briefs) == 1
         assert not (e.home / "reviews" / "scratch").exists()
 
-    def test_gone_with_its_verdict(self):
-        e = Env(test="true")
+    def test_gone_with_its_verdict(self, fake_git):
+        e = Env(test="true", repo=fake_git)
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.review(tid)
-        tick.tick(e.p)
-        tick.tick(e.p)
+        sweep_scratch(e.p)
+        sweep_scratch(e.p)
         assert list((e.home / "scratch").iterdir()) == []
 
-    def test_gone_when_canceled(self):
-        e = Env(test="true")
+    def test_gone_when_canceled(self, fake_git):
+        e = Env(test="true", repo=fake_git)
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         tick.tick(e.p)
         backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
         e.hunt_then_review(tid)
         fm(e.home, "cancel", tid)
-        tick.tick(e.p)
-        tick.tick(e.p)
+        sweep_scratch(e.p)
+        sweep_scratch(e.p)
         assert list((e.home / "scratch").iterdir()) == []
 
-    def test_a_folder_no_review_owns_is_swept(self):
-        e = Env(test="true")
+    def test_a_folder_no_review_owns_is_swept(self, fake_git):
+        e = Env(test="true", repo=fake_git)
         dead = e.home / "scratch" / "TY-9-r1-abc123-reviewer"
         dead.mkdir(parents=True)
-        tick.tick(e.p)
+        sweep_scratch(e.p)
         assert not dead.exists()
 
-    def test_a_session_unlisted_at_launch_is_swept_with_its_round(self):
-        e = Env(test="true")
+    def test_a_session_unlisted_at_launch_is_swept_with_its_round(self, fake_git):
+        e = Env(test="true", repo=fake_git)
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         backlog.update(e.p, tid, status="in review", worktree=str(e.repo))
         launch.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
         launch.launch_reviewer(e.p, e.task(tid), "abc123")
         mine = e.home / "scratch" / f"{tid}-r1-abc123-reviewer"
-        tick.tick(e.p)
+        sweep_scratch(e.p)
         assert mine.exists()  # round 1 is not over
         backlog.update(e.p, tid, reviews=[{"tip": "abc123"}])
-        tick.tick(e.p)
+        sweep_scratch(e.p)
         assert not mine.exists()
