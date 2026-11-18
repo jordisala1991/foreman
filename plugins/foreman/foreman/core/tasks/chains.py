@@ -1,6 +1,8 @@
 """Chains (pure): a chain parent is filed by a lens entry and stores `chain`; its steps are its subtasks (DESIGN.md
 `## Improvement chains`)."""
 
+from typing import TypedDict
+
 from . import backlog, subtasks
 
 
@@ -12,3 +14,60 @@ def is_parent(tasks: list[backlog.Task], i: backlog.Task) -> bool:
 def outcome(i: backlog.Task, subs: list[backlog.Task]) -> str:
     """How the parent closes on its agent's `foreman done`: a chain with no step is done; else as its subtasks say."""
     return "done" if i.get("chain") and not subs else subtasks.outcome(subs)
+
+
+def _parent(tasks: list[backlog.Task], pid: str) -> backlog.Task | None:
+    return next((i for i in tasks if i["id"] == pid and i.get("chain")), None)
+
+
+def refusal(tasks: list[backlog.Task], pid: str) -> str:
+    """Why a step cannot be filed under the chain parent `pid` ("" if it can, or if `pid` is no chain): the brakes of
+    DESIGN.md `### Brakes`. A canceled step ends the chain, one step is open at a time, at most `max_steps` steps."""
+    parent = _parent(tasks, pid)
+    if parent is None:
+        return ""
+    steps = subtasks.of(tasks, pid)
+    if canceled := next((s["id"] for s in steps if s["status"] == "canceled"), ""):
+        return f"{canceled} was canceled: a chain ends after a canceled step; write the owner's reason in History and close the chain with foreman done"
+    if open_ := next((s["id"] for s in steps if s["status"] not in backlog.CLOSED), ""):
+        return f"{open_} is still open: file the next step once it is merged"
+    if len(steps) >= parent["chain"]["max_steps"]:
+        return f"{pid} has {len(steps)} steps, the cap of its chain: ask the owner to renew"
+    return ""
+
+
+class StepFields(TypedDict):
+    """What a step takes from its chain parent."""
+
+    goal: str
+    criteria: str
+    model: str
+    effort: str
+    type: str
+
+
+def step_fields(tasks: list[backlog.Task], pid: str) -> StepFields | None:
+    """What a step takes from its chain parent, whoever files it (None for no chain)."""
+    parent = _parent(tasks, pid)
+    if parent is None:
+        return None
+    acceptance: dict[str, str] = parent.get("acceptance") or {}
+    return StepFields(
+        goal=acceptance.get("goal", ""),
+        criteria=acceptance.get("criteria", ""),
+        model=parent.get("model", ""),
+        effort=parent.get("effort", ""),
+        type=parent.get("type", ""),
+    )
+
+
+def notice(sub: backlog.Task, subs: list[backlog.Task], parent: backlog.Task) -> str:
+    """The message the chain agent gets when one of its steps closes: file the next step or close; after a canceled step,
+    close (filing is refused then)."""
+    pid = parent["id"]
+    how = "merged" if sub["status"] == "done" else "canceled"
+    text = f"Step {sub['id']} «{sub['title']}» was {how}. Steps of {pid}: " + ", ".join(f"{s['id']} {s['status']}" for s in subs) + "."
+    close = 'close the chain (foreman done --summary "…")'
+    if sub["status"] == "done":
+        return text + f' Read the lens report, rewrite its Frontier, then file the next step (foreman add "title" --parent {pid} --detail "…") or {close}.'
+    return text + f" A chain ends after a canceled step: write the owner's reason in History of the lens report, then {close}."

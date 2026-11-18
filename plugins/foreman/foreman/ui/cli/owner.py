@@ -10,7 +10,7 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
-from ...core.tasks import backlog, blockers, editing, questions, subtasks
+from ...core.tasks import backlog, blockers, chains, editing, questions, subtasks
 from ...providers.repo import RepoError
 from ...services.agents.running import review_running
 from ...services.delivery import merge
@@ -30,25 +30,23 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
-    status = "triage" if a.triage or (a.parent and os.environ.get("FOREMAN_TASK")) else "backlog"  # a parent agent's waits for a Go
     tasks = backlog.tasks(backlog.load(p))
+    step = chains.step_fields(tasks, a.parent) if a.parent else None  # a chain's step: the parent's fields, its flags ignored
+    triage = not step and (a.triage or (a.parent and os.environ.get("FOREMAN_TASK")))  # a parent agent's waits for a Go
+    status = "triage" if triage else "backlog"
     ids = blockers.ids(a.blocked_by or [])
     by_agent = a.parent and subtasks.agent_refusal(tasks, os.environ.get("FOREMAN_TASK", ""), a.parent, "subtasks are filed")
-    if why := by_agent or (a.parent and subtasks.refusal(tasks, a.parent)) or blockers.refusal(tasks, "", ids):
+    if why := by_agent or (a.parent and (subtasks.refusal(tasks, a.parent) or chains.refusal(tasks, a.parent))) or blockers.refusal(tasks, "", ids):
         sys.exit(f"foreman: {why}")
     tid = backlog.add(
         p,
         a.title,
         detail=a.detail or "",
         status=status,
-        criteria=a.criteria or "",
-        goal=a.goal or "",
         priority=a.priority,
         parent=a.parent or "",
         blocked_by=ids,
-        model=a.model or "",
-        effort=a.effort or "",
-        type=a.type or "",
+        **(step or chains.StepFields(goal=a.goal or "", criteria=a.criteria or "", model=a.model or "", effort=a.effort or "", type=a.type or "")),
     )
     print(tid)
 
