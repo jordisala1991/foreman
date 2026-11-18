@@ -64,14 +64,14 @@ def cmd_edit(a: argparse.Namespace) -> None:
     fields.pop("repo", None)
     if key := repo_key(p, a.repo):
         fields["repo"] = key
-    elif a.repo and not fields:  # the one repo's own key: accepted, nothing to store
-        print(f"{a.id}: nothing to change, this project has one repo")
-        return
     with backlog.edit(p) as d:
         i = backlog.get(d, a.id)
         by_agent = subtasks.agent_refusal(backlog.tasks(d), os.environ.get("FOREMAN_TASK", ""), i.get("parent", ""), "tasks are edited")
-        if why := by_agent or editing.refusal(i, fields, backlog.tasks(d)):
+        if why := by_agent or editing.refusal(i, fields or ({"repo": a.repo} if a.repo else {}), backlog.tasks(d)):
             sys.exit(f"foreman: {why}")
+        if not fields:  # the one repo's own key: accepted, nothing to store
+            print(f"{a.id}: nothing to change, this project has one repo")
+            return
         old = dict(i)
         new = editing.edited(i, fields)
         i.clear()

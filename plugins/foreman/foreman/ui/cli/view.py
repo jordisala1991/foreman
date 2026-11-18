@@ -12,7 +12,7 @@ def cmd_list(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
     all_ = backlog.tasks(d)
-    width = max(len(k) for k in [*p.repo_keys, "-"])
+    width = max(len(k) for k in [*p.repo_keys, "-"]) if p.several else 0
     status = {i["id"]: i["status"] for i in all_}
     for i in subtasks.ordered(all_):
         if i["status"] in backlog.CLOSED and not a.all:
