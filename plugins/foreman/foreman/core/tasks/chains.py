@@ -16,6 +16,24 @@ def outcome(i: backlog.Task, subs: list[backlog.Task]) -> str:
     return "done" if i.get("chain") and not subs else subtasks.outcome(subs)
 
 
+class Progress(TypedDict):
+    """Where a chain stands: `step` steps filed of `cap`, `open` the id of the step not closed ("" if none)."""
+
+    lens: str
+    step: int
+    cap: int
+    open: str
+
+
+def progress(tasks: list[backlog.Task], i: backlog.Task) -> Progress | None:
+    """Where the chain of parent `i` stands (None if `i` is no chain parent)."""
+    if not i.get("chain"):
+        return None
+    steps = subtasks.of(tasks, i["id"])
+    open_ = next((s["id"] for s in steps if s["status"] not in backlog.CLOSED), "")
+    return Progress(lens=i["chain"]["lens"], step=len(steps), cap=i["chain"]["max_steps"], open=open_)
+
+
 def _parent(tasks: list[backlog.Task], pid: str) -> backlog.Task | None:
     return next((i for i in tasks if i["id"] == pid and i.get("chain")), None)
 
