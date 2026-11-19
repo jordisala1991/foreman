@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from fakerepo import FakeRepo
 from helpers import Env, fm
 
 from foreman import util
@@ -18,7 +19,7 @@ def events(e: Env, tid: str) -> list[str]:
 
 class TestBlockers:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, fake_git):
+    def set_up(self, owner: None, fake_git: FakeRepo):
         self.fake = fake_git
         self.fresh()
 
@@ -60,7 +61,7 @@ class TestBlockers:
         assert "waiting_for" not in json.loads(fm(self.e.home, "show", a))
 
     @pytest.mark.parametrize(("status", "started"), (("backlog", "refining"), ("ready", "in progress")))
-    def test_not_launched_until_the_last_blocker_is_done(self, status, started):
+    def test_not_launched_until_the_last_blocker_is_done(self, status: str, started: str):
         y = self.y("--blocked-by", self.X1, self.X2)
         backlog.set_status(self.e.p, y, status)
         self.step()
@@ -140,6 +141,7 @@ class TestBlockers:
             assert self.e.task(y) == before
 
     def test_pending_and_dead_by_status(self):
-        for status, want in (("done", ([], [])), ("canceled", (["B"], ["B"])), ("in progress", (["B"], []))):
+        cases: list[tuple[str, tuple[list[str], list[str]]]] = [("done", ([], [])), ("canceled", (["B"], ["B"])), ("in progress", (["B"], []))]
+        for status, want in cases:
             tasks = [{"id": "A", "status": "backlog", "blocked_by": ["B"]}, {"id": "B", "status": status}]
             assert (blockers.pending(tasks[0], tasks), blockers.dead(tasks[0], tasks)) == want
