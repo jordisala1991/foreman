@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from typing import Unpack
 from unittest import mock
 
 import pytest
@@ -36,8 +37,9 @@ class TestRecurring:
     def seen(self, stamp: str = SEEN, name: str = "cleanup") -> None:
         util.write_json(self.p.state / "recurring.json", {name: stamp})
 
-    def merged(self, title: str, at: str, **kw: str) -> str:
-        tid = backlog.add(self.p, title, criteria="c", **kw)
+    def merged(self, title: str, at: str, **kw: Unpack[backlog.NewTask]) -> str:
+        kw.setdefault("criteria", "c")
+        tid = backlog.add(self.p, title, **kw)
         self.close(tid, "done", at)
         return tid
 
@@ -229,6 +231,17 @@ class TestRecurring:
         row = next(r for r in schedule.rows(self.p) if r["name"] == "weekly")
         assert (row["open"], row["next"]) == (weekly, None)
         assert f"waits for {weekly} to close" in fm(self.e.home, "health")
+
+    def test_a_project_without_lens_entries_sees_no_chain(self) -> None:
+        self.entries(CLEANUP.replace("every_merges = 2", "every_merges = 1"))
+        self.seen()
+        self.merged("one", "2026-11-15 01:00:00")
+        (tid,) = schedule.run(self.p, T0)
+        (line,) = [ln for ln in fm(self.e.home, "list").splitlines() if ln.startswith(tid)]
+        assert "chain" not in line
+        assert "chain" not in json.loads(fm(self.e.home, "show", tid))
+        assert "chain" not in schedule.rows(self.p, T0)[0]
+        assert "(chain" not in fm(self.e.home, "health")
 
     def test_removed_entry_stops(self) -> None:
         self.entries(CLEANUP.replace("every_merges = 2", "every_merges = 1"))

@@ -16,7 +16,8 @@ from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
 from foreman.loop import queue, tick
-from foreman.providers import Change, ConfigError, Provider, registry
+from foreman.providers import Change, ConfigError, registry
+from foreman.providers.github.provider import GitHub
 from foreman.providers.repo import FileDiff
 from foreman.services.delivery import merge, pulls
 
@@ -91,7 +92,7 @@ def test_remote_picks_the_provider(monkeypatch, fake_git):
         registry.get(s.p.for_task({"repo": "web"}))
 
 
-def github_app() -> tuple[Path, Provider]:
+def github_app() -> tuple[Path, GitHub]:
     """A real repo `app` whose only remote is `up` (a bare repo), and its github provider; branch foreman/ty-1 at HEAD."""
     tmp = Path(tempfile.mkdtemp(prefix="fmtest-")).resolve()
     app, bare, home = tmp / "app", tmp / "up.git", tmp / "home"
@@ -104,7 +105,9 @@ def github_app() -> tuple[Path, Provider]:
         f'[project]\nname = "toy"\nprefix = "TY"\nworktrees = "{tmp / "wts"}"\n'
         f'[repos.app]\npath = "{app}"\nremote = "up"\n[repos.app.merge]\nprovider = "github"\n'
     )
-    return app, registry.get(Project.load(home).for_task({}))
+    gh = registry.get(Project.load(home).for_task({}))
+    assert isinstance(gh, GitHub)
+    return app, gh
 
 
 def test_github_pushes_to_the_repos_remote():

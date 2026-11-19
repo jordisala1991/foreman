@@ -4,7 +4,7 @@ import argparse
 import json
 
 from ...core.rules import decide
-from ...core.tasks import backlog, blockers, questions, recurring, subtasks, taskrepo, tasktypes
+from ...core.tasks import backlog, blockers, chains, questions, recurring, subtasks, taskrepo, tasktypes
 from .common import home
 
 
@@ -22,6 +22,7 @@ def cmd_list(a: argparse.Namespace) -> None:
         title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
         note = (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
         note += f"  [recurring: {name}]" if (name := recurring.name_of(i)) else ""
+        note += f"  [chain: {c['lens']}, step {c['step']} of {c['cap']}]" if (c := chains.progress(all_, i)) else ""
         repo = f"{taskrepo.of(i, all_, True):{width}} " if p.several else ""
         print(f"{i['id']:8} {i['status']:12} {repo}{tasktypes.of(i, all_):10} {ag:14} {title}{note}")
     for q in questions.open_questions(d):
@@ -31,10 +32,12 @@ def cmd_list(a: argparse.Namespace) -> None:
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
     d = backlog.load(p)
-    i = recurring.shown(taskrepo.shown(tasktypes.shown(backlog.get(d, a.id), backlog.tasks(d)), backlog.tasks(d), p.several))
+    i: backlog.Task = recurring.shown(taskrepo.shown(tasktypes.shown(backlog.get(d, a.id), backlog.tasks(d)), backlog.tasks(d), p.several))
     i = {**i, "checked_on": decide.ran_on(i["check"])} if i.get("check") else i
     if wait := blockers.pending(i, backlog.tasks(d)):
         i = {**i, "waiting_for": wait}
     if subs := subtasks.of(backlog.tasks(d), a.id):
         i = {**i, "subtasks": [subtasks.summary(s, questions.open_questions(d, s["id"]), backlog.tasks(d)) for s in subs]}
+    if c := chains.progress(backlog.tasks(d), i):
+        i = {**i, "chain": {**i["chain"], "step": c["step"]}}
     print(json.dumps(i, indent=2, ensure_ascii=False))

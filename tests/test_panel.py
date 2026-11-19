@@ -8,7 +8,9 @@ import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 import pytest
@@ -21,7 +23,7 @@ from foreman.core.tasks import backlog, questions
 from foreman.ui.panel import server
 
 
-def start_panel(t) -> None:
+def start_panel(t: Any) -> None:
     """A demo project with a task in progress, a question and a permission, and the panel serving it, on `t`."""
     t.tmp = tempfile.TemporaryDirectory()
     root = Path(t.tmp.name)
@@ -44,7 +46,7 @@ def start_panel(t) -> None:
     threading.Thread(target=t.srv.serve_forever, daemon=True).start()
 
 
-def stop_panel(t) -> None:
+def stop_panel(t: Any) -> None:
     t.srv.shutdown()
     t.srv.server_close()
     for k, v in t.env.items():
@@ -56,13 +58,24 @@ def stop_panel(t) -> None:
 
 
 class TestPanel:
+    tmp: tempfile.TemporaryDirectory[str]
+    env: dict[str, str | None]
+    p: Project
+    triage: str
+    work: str
+    qid: str
+    perm: str
+    srv: ThreadingHTTPServer
+    key: str
+    base: str
+
     @pytest.fixture(autouse=True)
     def set_up(self) -> Iterator[None]:
         start_panel(self)
         yield
         stop_panel(self)
 
-    def call(self, path: str, body: str | None = None, key: bool = True, headers: dict[str, str] | None = None) -> tuple[int, object]:
+    def call(self, path: str, body: str | None = None, key: bool = True, headers: dict[str, str] | None = None) -> tuple[int, Any]:
         url = self.base + path + ((("&" if "?" in path else "?") + "key=" + self.key) if key else "")
         req = urllib.request.Request(url, data=body.encode() if body is not None else None, method="POST" if body is not None else "GET", headers=headers or {})
         try:

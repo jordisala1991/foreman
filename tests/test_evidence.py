@@ -44,7 +44,7 @@ class TestOnGitHub:
         self.g = GH(test="true")
         request.addfinalizer(self.g.close)
 
-    def deliver(self, text=BODY, image=PNG, name="x.png"):
+    def deliver(self, text: str = BODY, image: bytes | None = PNG, name: str = "x.png") -> str:
         g = self.g
         tid = g.work()
         path = g.e.home / "reports" / f"{tid}.md"

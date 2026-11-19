@@ -1,6 +1,7 @@
 """A lens entry files a chain parent: in backlog, never planned, with a parent agent before any step, told where its lens
 report is; its `foreman done` closes the chain with no step, and is refused while a step is open."""
 
+import json
 from datetime import datetime
 
 import pytest
@@ -14,6 +15,7 @@ from foreman.core.tasks import backlog, chains
 from foreman.loop import tick
 from foreman.services.delivery import merge
 from foreman.steps import schedule
+from foreman.ui.panel import views
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
 SEEN = "2026-11-15 00:00:00"
@@ -44,6 +46,25 @@ class TestChainParent:
         P = self.filed()
         tick.tick(self.p)
         return P
+
+    def test_list_show_health_and_panel_carry_the_step(self):
+        P = self.launched()
+        merge.close(self.p, self.step(P), "done", "x")
+        S2 = self.step(P)
+        (line,) = [ln for ln in fm(self.e.home, "list").splitlines() if ln.startswith(P)]
+        assert "[chain: rules, step 2 of 5]" in line
+        assert json.loads(fm(self.e.home, "show", P))["chain"] == {**CHAIN, "step": 2}
+        health = fm(self.e.home, "health")
+        assert f"(chain step 2 of 5, {S2} open)" in health
+        assert f"waits for {P} to close" in health
+        assert views.system(self.p)["recurring"][0]["chain"] == {"lens": "rules", "step": 2, "cap": 5, "open": S2}
+
+    def test_before_the_first_step_it_is_step_0(self):
+        P = self.launched()
+        (line,) = [ln for ln in fm(self.e.home, "list").splitlines() if ln.startswith(P)]
+        assert "step 0 of 5" in line
+        assert "(chain step 0 of 5)" in fm(self.e.home, "health")
+        assert schedule.rows(self.p)[0]["chain"]["open"] == ""
 
     def test_a_lens_entry_files_a_chain_parent_in_backlog(self):
         t = self.e.task(self.filed())
@@ -207,3 +228,15 @@ def test_no_refusal_under_a_parent_that_is_not_a_chain():
 )
 def test_outcome_table(task, subs, status):
     assert chains.outcome(task, subs) == status
+
+
+@pytest.mark.parametrize(
+    ("statuses", "want"),
+    [([], (0, "")), (["done"], (1, "")), (["done", "backlog"], (2, "S2"))],
+)
+def test_progress_table(statuses: list[str], want: tuple[int, str]) -> None:
+    tasks: list[backlog.Task] = [{"id": "P", "status": "backlog", "chain": CHAIN}]
+    tasks += [{"id": f"S{n}", "parent": "P", "status": s} for n, s in enumerate(statuses, 1)]
+    got = chains.progress(tasks, tasks[0])
+    assert got == {"lens": "rules", "step": want[0], "cap": 5, "open": want[1]}
+    assert chains.progress(tasks, {"id": "Q", "status": "backlog"}) is None

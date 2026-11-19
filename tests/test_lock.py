@@ -27,7 +27,7 @@ class TestLock:
         yield
         os.environ.pop("FOREMAN_LOCKS")
 
-    def fm_lock(self, name: str, who: str, *cmd: str) -> subprocess.Popen:
+    def fm_lock(self, name: str, who: str, *cmd: str) -> subprocess.Popen[str]:
         env = {**os.environ, "FOREMAN_AGENT": who, "FOREMAN_TASK": who.upper()}
         proc = subprocess.Popen(
             [sys.executable, FM, "--home", str(self.e.home), "lock", name, "run", f"job {who}", *cmd], env=env, stderr=subprocess.PIPE, text=True
@@ -100,6 +100,7 @@ class TestLock:
             f.write("\n[resources.stop]\nmax_minutes = 0\n")
         pr = self.fm_lock("stop", "a", "sleep", "30")
         assert pr.wait(timeout=20) == 124
+        assert pr.stderr is not None
         assert "split long work" in pr.stderr.read()
         assert lock.uses(["stop"])[-1]["event"] == "timeout"
 
