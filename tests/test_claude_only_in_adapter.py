@@ -8,7 +8,12 @@ from helpers import PLUGIN
 FLAGS = {"--bg", "--permission-mode", "--settings", "bypassPermissions", "--resume"}
 ALLOWED = {"providers/claude/sessions.py"}
 # These three name "claude" as the config key / runner name, not in a command line; they may name no flag.
-NAMING_CLAUDE = ALLOWED | {"core/project/config.py", "providers/registry.py", "steps/health/checks.py"}
+NAMING_CLAUDE = ALLOWED | {
+    "core/project/config.py",
+    "providers/registry.py",
+    "steps/health/checks.py",
+    "providers/orca/sessions.py",  # names Orca's agent id claude, not a command line
+}
 
 
 def names_a_flag(source: str) -> bool:
