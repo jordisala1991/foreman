@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from helpers import PLUGIN, Env, fm, git
@@ -120,7 +121,7 @@ class TestLaunchRace:
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         real = Claude.start
 
-        def start_and_cancel(self, *a, **k):
+        def start_and_cancel(self: Claude, *a: Any, **k: Any):
             r = real(self, *a, **k)
             backlog.set_status(e.p, tid, "canceled", "owner")
             return r

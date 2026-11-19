@@ -28,7 +28,7 @@ def leaked(registry: Path) -> list[str]:
 
 class TestSandbox:
     @pytest.fixture(autouse=True)
-    def keep_request(self, request):
+    def keep_request(self, request: pytest.FixtureRequest) -> None:
         self.request = request  # for the cleanups of helpers
 
     def unset(self, *names: str) -> None:
@@ -54,7 +54,7 @@ class TestSandbox:
         assert server.token_file() == Path.home() / ".config/foreman/panel.token"
         assert lock.root() == Path.home() / ".local/state/foreman/locks"
 
-    def test_init_registers_in_the_sandbox(self, request) -> None:
+    def test_init_registers_in_the_sandbox(self, request: pytest.FixtureRequest) -> None:
         self.unset("FOREMAN_REGISTRY")
         d = Path(tempfile.mkdtemp(prefix="fmtest-")).resolve()
         request.addfinalizer(functools.partial(shutil.rmtree, d, ignore_errors=True))

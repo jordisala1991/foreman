@@ -52,7 +52,7 @@ class TestPause:
             assert e.task(t)["status"] == s
             assert "agent" not in e.task(t)
 
-    def test_paused_launches_no_parent_agent(self, owner):
+    def test_paused_launches_no_parent_agent(self, owner: None):
         e = Env(test="true")
         parent = backlog.add(e.p, "parent", status="backlog", criteria="c")
         fm(e.home, "add", "s", "--parent", parent, "--triage", "--criteria", "c")

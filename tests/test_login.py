@@ -20,7 +20,7 @@ from foreman.steps.health import checks
 
 class TestLogin:
     @pytest.fixture(autouse=True)
-    def set_up(self, request):
+    def set_up(self, request: pytest.FixtureRequest):
         self.e = Env(slots=1)
         self.p = self.e.p
         env = {k: v for k, v in os.environ.items() if k != login.ENV}
@@ -40,7 +40,7 @@ class TestLogin:
         (self.e.bin / "login.json").write_text(json.dumps(data))
 
     @pytest.mark.parametrize("working", (True, False))
-    def test_agents_never_get_the_token(self, working):
+    def test_agents_never_get_the_token(self, working: bool):
         os.environ[login.ENV] = "from-env"
         self.set_login(working, datetime.now(UTC) + timedelta(days=30))
         assert self.launch() is None
@@ -126,7 +126,7 @@ class TestLogin:
         with mock.patch.dict(os.environ, {"PATH": "/a&b:/c"}):
             assert plistlib.loads(launchd.plist().encode())["EnvironmentVariables"]["PATH"] == "/a&b:/c"
 
-    def test_launchd_dir_from_the_plugin_writes_jobs_that_name_no_version(self, request):
+    def test_launchd_dir_from_the_plugin_writes_jobs_that_name_no_version(self, request: pytest.FixtureRequest):
         cache = self.e.tmp / "cache/foreman/foreman"
         install_fm(request, version_folder(cache, "aaa"))
         version_folder(cache, "bbb")
