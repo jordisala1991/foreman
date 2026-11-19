@@ -29,6 +29,7 @@ class TestChoice:
         return json.loads(fm(self.e.home, "show", tid))
 
     def test_add_and_edit_take_every_model_and_effort(self):
+        tid = ""
         for m in config.MODELS:
             for f in config.EFFORTS:
                 tid = fm(self.e.home, "add", "T", "--criteria", "c", "--model", m, "--effort", f).strip()
@@ -88,8 +89,12 @@ class TestChoice:
         assert "(responsible, opus, medium, session" in (self.e.p.state / "events.jsonl").read_text()
 
     def test_planner_fills_only_the_empty_one(self):
-        for filed, want in (({"model": "opus"}, ("opus", "high")), ({"effort": "low"}, ("sonnet", "low"))):
-            tid = backlog.add(self.e.p, "t", criteria="c", **filed)
+        table: list[tuple[backlog.NewTask, tuple[str, str]]] = [
+            ({"criteria": "c", "model": "opus"}, ("opus", "high")),
+            ({"criteria": "c", "effort": "low"}, ("sonnet", "low")),
+        ]
+        for filed, want in table:
+            tid = backlog.add(self.e.p, "t", **filed)
             self.plan_ready(tid, "--model", "sonnet", "--effort", "high")
             i = self.shown(tid)
             assert (i["model"], i["effort"]) == want

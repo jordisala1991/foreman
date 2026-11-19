@@ -1,0 +1,7 @@
+{
+  "include": ["."],
+  "extraPaths": ["..", "../plugins/foreman"],
+  "typeCheckingMode": "strict",
+  "enableTypeIgnoreComments": false,
+  "pythonVersion": "3.12"
+}

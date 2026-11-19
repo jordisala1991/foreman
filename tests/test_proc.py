@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,7 @@ class TestRun:
         assert r == proc.Result(3, "o\n", "e\n")
 
     def test_input_cwd_and_env_reach_the_program(self):
-        r = proc.run([sys.executable, "-c", "import os, sys; print(sys.stdin.read(), os.getcwd(), os.environ['X'])"], input="hi", cwd="/", env={"X": "1"})
+        r = proc.run([sys.executable, "-c", "import os, sys; print(sys.stdin.read(), os.getcwd(), os.environ['X'])"], input="hi", cwd=Path("/"), env={"X": "1"})
         assert r.out.split() == ["hi", "/", "1"]
 
     def test_a_missing_program_is_a_clear_proc_error(self):
