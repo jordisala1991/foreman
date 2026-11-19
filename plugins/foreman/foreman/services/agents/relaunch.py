@@ -7,7 +7,8 @@ from typing import Any
 from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog
-from ..claude import sessions
+from ...providers import registry
+from ...providers.runner import Agent, RunnerError, ref_of
 from .launch import record_session
 from .running import session_lock
 
@@ -18,27 +19,28 @@ MESSAGE = (
 
 
 def relaunch(p: Project, tid: str) -> tuple[str, str]:
-    """(old short id, new short id). Every refusal is a one-line `SessionError`, raised before anything is stopped."""
+    """(old short id, new short id). Every refusal is a one-line `RunnerError`, raised before anything is stopped."""
     with session_lock(p, tid):
         return _relaunch(p, tid)
 
 
 def _relaunch(p: Project, tid: str) -> tuple[str, str]:
-    rows = sessions.read(p)
+    runner = registry.runner(p)
+    rows = runner.rows()
     if rows is None:
-        raise sessions.SessionError("claude agents is unreadable")
+        raise RunnerError("claude agents is unreadable")
     task = backlog.get(backlog.load(p), tid)
-    records: dict[str, dict[str, Any]] = {r: task.get(r) or {} for r in ("agent", "mechanic")}
-    role = next((r for r, a in records.items() if sessions.alive(rows, a.get("session"))), None)
-    if role is None:
-        raise sessions.SessionError(f"{tid} has no live agent")
-    a = records[role]
-    if sessions.busy(rows, a["session"]):
-        raise sessions.SessionError(f"{tid}'s agent {a['name']} is {sessions.state(rows, a['session'])}: relaunch it when it is idle")
-    agent = sessions.Agent(tid, a["name"], a["model"], a["effort"], util.session_title(tid, a["kind"], task["title"]))
+    live = next(((r, ref) for r in ("agent", "mechanic") if (ref := ref_of(task.get(r))) and rows.alive(ref)), None)
+    if live is None:
+        raise RunnerError(f"{tid} has no live agent")
+    role, ref = live
+    a: dict[str, Any] = task[role]
+    if rows.busy(ref):
+        raise RunnerError(f"{tid}'s agent {a['name']} is {rows.state(ref).value}: relaunch it when it is idle")
+    agent = Agent(tid, a["name"], a["model"], a["effort"], util.session_title(tid, a["kind"], task["title"]))
     try:
-        new, sid = sessions.relaunch(p, agent, a["session"], MESSAGE, Path(a.get("cwd") or p.repo))
-    except sessions.SessionError as e:
+        new = runner.relaunch(ref, agent, MESSAGE, Path(a.get("cwd") or p.repo))
+    except RunnerError as e:
         backlog.event(p, tid, f"relaunch of {a['name']} failed: {e}")
         raise
     with backlog.edit(p) as d:
@@ -46,12 +48,11 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
         now: dict[str, Any] = it.get(role) or {}
         still = it["status"] == task["status"] and now.get("session") == a["session"]
         if still:
-            it[role] = {**it[role], "short": new, "session": sid, "started": util.now(), "nudged": None}
-            if sid:
-                record_session(it, sid, a["kind"])
+            it[role] = {**it[role], **new.fields(), "started": util.now(), "nudged": None}
+            record_session(it, new, a["kind"])
     if not still:  # cancelled, merged or relaunched meanwhile: the copy has no task to work for
-        sessions.stop(p, new)
-        backlog.event(p, tid, f"relaunch of {a['name']} undone: the task changed meanwhile (copy {new} stopped)")
-        raise sessions.SessionError(f"{tid} changed while its agent restarted: the copy {new} is stopped")
-    backlog.event(p, tid, f"relaunched {a['name']} on the current foreman: session {a['short']} → {new}")
-    return a["short"], new
+        runner.stop(new)
+        backlog.event(p, tid, f"relaunch of {a['name']} undone: the task changed meanwhile (copy {new.short} stopped)")
+        raise RunnerError(f"{tid} changed while its agent restarted: the copy {new.short} is stopped")
+    backlog.event(p, tid, f"relaunched {a['name']} on the current foreman: session {a['short']} → {new.short}")
+    return a["short"], new.short

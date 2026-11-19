@@ -31,7 +31,7 @@ A *home* folder: `foreman.toml` (the owner's settings), `backlog.json`, `state/`
 folder and the umbrella folder set in `[project] umbrella` (explicit, never guessed). A command finds its project by `--project
 NAME`, `--home`, `FOREMAN_HOME`, `FOREMAN_PROJECT`, then the registered project owning the current folder (paths resolved, the
 deepest folder wins; two projects claiming it: fm refuses and `foreman health` names them), then the nearest `foreman.toml` above
-it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings; `[merge]
+it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings, `runner` (`claude`, the default); `[merge]
 autonomy`, `provider`, `strategy`, `test`, `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`;
 `[health]` timings; `[[recurring]]` entries (see Recurring tasks). With several repos, `[merge]` and `[risk]` are the defaults a repo's own tables override (see
 Several repos).
@@ -433,7 +433,7 @@ FN-216's launch must then (D1-D10 themselves are not edited here):
 
 ### The port
 
-From what foreman uses today in `services/claude/sessions.py` (`command` :68, `start` :102, `resume` :108, `listing` :134, `state` :148,
+From what foreman used in `services/claude/sessions.py` (moved to `providers/claude/`; line numbers are from before the move) (`command` :68, `start` :102, `resume` :108, `listing` :134, `state` :148,
 `alive` :154, `busy` :160, `stop` :172, `find` :97, `SessionError` :31) and its callers (`services/agents/launch.py`, `running.py`,
 `steps/mechanic.py`, `parents.py`, `reviewing.py`, `talk.py`, `services/delivery/merge.py`, `loop/queue.py`, `tick.py`,
 `ui/panel/views.py`, `ui/cli/ops.py`). Two real implementations, so a port is allowed. Package `foreman/providers/`, module
@@ -453,6 +453,7 @@ class Rows(Protocol):                                                           
     def alive(self, ref: SessionRef | None) -> bool
     def find(self, short: str) -> str | None
     def short(self, session: str) -> str | None                                          # claude: the listing's id (today merge.py:117); orca: session[:8]
+    def has_sessions(self) -> bool                                                        # the snapshot holds a session: an empty listing is no listing (mechanic.missing_why)
 class Runner(Protocol):
     def start(self, agent: Agent, brief: str, cwd: Path) -> SessionRef
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef                # today's resume; orca: a new tab when ended
@@ -787,7 +788,7 @@ test = "make build"
 | `large_lines`, `[repos.K.risk.high]`, `[repos.K.risk.medium]` | `[repos.K.risk]` | as `[risk]` | as `[risk]`; patterns relative to the repo's root, as diff paths are |
 
 - Project-wide only, never in a repo table: `[project]` (`name`, `prefix`, `branch_prefix`, `worktrees`, `umbrella`,
-  `foreman`), `[agents]` (slots, models, `claude`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
+  `foreman`), `[agents]` (slots, models, `claude`, `runner`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
   `[risk]` stay as the defaults for every repo.
 - **A setting given at both levels: the repo's wins, key by key; absent there, the project's; absent there, fm's
   default.** A `high` or `medium` table in a repo replaces the project's table of that level whole, never label by
@@ -900,10 +901,10 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 | ui | `foreman/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
 | steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
-| services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `claude/`: sessions, login · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: claude, processes, the lock, and git through `Repo`; called by steps |
-| registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo (`registry.repo(p)`) (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo | one per platform, and `gitrepo` (the one module that runs git on a repo); they see their port, never the loop or each other |
-| ports | `foreman/providers/` | `__init__.py` · repo | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome) |
+| services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
+| registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo and the runner (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`) (by convention the only caller of the adapters; not enforced by tach) |
+| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo · `claude/`: sessions, rows, login | one per platform, `gitrepo` (the one module that runs git on a repo) and `claude` (the one that builds a claude command line, the `Runner`'s adapter); they see their port, never the loop or each other |
+| ports | `foreman/providers/` | `__init__.py` · repo · runner | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
 | core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
@@ -918,7 +919,7 @@ inline comments, the description, evidence) → `rules` (`risk` on `project`; `d
 its layer. A module with `depends_on` may import, in its own layer, only what it lists (lower layers stay open): that
 fixes the order of the core areas, so no cycle can form among them, as tach does not see a cycle inside one layer
 otherwise. `cli` and `panel` are two modules: the panel imports the CLI's functions (its actions run the
-owner's commands), the CLI never imports the panel; `foreman/ui/main.py` starts `foreman panel`. Services and steps keep to the layer rule; inside services the order `claude` ← `delivery` ←
+owner's commands), the CLI never imports the panel; `foreman/ui/main.py` starts `foreman panel`. Services and steps keep to the layer rule; inside services the order `delivery` ←
 `agents` is the reviewer's.
 
 ```toml
@@ -929,7 +930,6 @@ modules = [
   { path = "foreman.loop", layer = "loop" },
   { path = "foreman.steps", layer = "steps" },
   { path = "foreman.services.agents", layer = "services" },
-  { path = "foreman.services.claude", layer = "services" },
   { path = "foreman.services.delivery", layer = "services" },
   { path = "foreman.services.lock", layer = "services" },
   { path = "foreman.services.launchd", layer = "services" },
@@ -939,8 +939,10 @@ modules = [
   { path = "foreman.providers.github", layer = "adapters", depends_on = ["foreman.providers"] },
   { path = "foreman.providers.local", layer = "adapters", depends_on = ["foreman.providers"] },
   { path = "foreman.providers.gitrepo", layer = "adapters", depends_on = ["foreman.providers.repo"] },
+  { path = "foreman.providers.claude", layer = "adapters", depends_on = ["foreman.providers.runner"] },
   { path = "foreman.providers", layer = "ports" },
   { path = "foreman.providers.repo", layer = "ports" },
+  { path = "foreman.providers.runner", layer = "ports" },
   { path = "foreman.proc", layer = "proc" },
   { path = "foreman.util", layer = "core" },
   { path = "foreman.launcher", layer = "core" },
@@ -956,7 +958,7 @@ modules = [
 ### Where new code goes
 
 Ask in this order; the first yes places it:
-1. Talks to git on a repo? → the `Repo` port (`registry.repo(p)`); runs a program, or talks to claude or gh? → `services/` (through `proc`); a platform call → a `providers/` adapter.
+1. Talks to git on a repo? → the `Repo` port (`registry.repo(p)`); runs a program, or talks to gh? → `services/` (through `proc`); talks to claude (or any agent runner) or makes a platform call? → a `providers/` adapter, behind its port.
 2. A decision from facts, reading no file and running no program? → `core/rules/`, or the core area it is about.
 3. The shape of a plain file (backlog, foreman.toml, the registry)? → `core/<area>`.
 4. One step of the tick? → `steps/`. 5. A command or a panel route? → `ui/`.
@@ -984,7 +986,7 @@ Only where there is an external system or two real implementations: `providers/`
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
 the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
 task.
-`Runner` (FN-203, planned): the agents' sessions; adapters `claude` and `orca`; two real implementations.
+`Runner` (FN-213, built): the agents' sessions, `providers/runner.py`; adapter `claude` (`providers/claude/`), `orca` planned; two real implementations.
 
 ### Rules
 
@@ -1031,6 +1033,6 @@ Every finding has three parts: what it means, the evidence fm gathered, and a hy
 needing the owner: an open question, a task waiting for his accept (`decide.after_check` says `owner`, so autonomy-merged
 tasks print nothing), a blocked task (a failed launch is one), main's tests failing, a parent agent whose session is alive
 and idle (it ended its turn waiting for him in its own chat). It decides from the backlog, `state/ci.json` and the session
-listing (`sessions.listing`), never from the text of `events.jsonl`. Every 10 s it looks again; its seen set lives in memory,
+listing (`registry.rows`), never from the text of `events.jsonl`. Every 10 s it looks again; its seen set lives in memory,
 so what needed the owner at start is not printed (`foreman list` shows it). `--once` exits after the first line; without it
 the command streams (a monitor).

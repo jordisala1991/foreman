@@ -9,7 +9,8 @@ from ... import util
 from ...core.oversight import costs
 from ...core.project.config import Project
 from ...core.tasks import backlog, questions
-from ..claude import sessions
+from ...providers import registry
+from ...providers.runner import RunnerError, ref_of
 
 
 def idle_s(a: backlog.Agent | dict[str, Any]) -> float:
@@ -61,11 +62,12 @@ def send(p: Project, i: dict[str, Any], message: str) -> bool:
     now, under the lock: a relaunch may have replaced the one in `i`."""
     with session_lock(p, i["id"]):
         a: dict[str, Any] = backlog.get(backlog.load(p), i["id"]).get("agent") or {}
-        if not a.get("session"):
+        ref = ref_of(a)
+        if not a.get("session") or ref is None:
             return False
         try:
-            sessions.resume(p, a["session"], message, Path(a.get("cwd") or p.repo))
-        except sessions.SessionError as e:
+            registry.runner(p).send(ref, message, Path(a.get("cwd") or p.repo))
+        except RunnerError as e:
             backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
             return False
     return True

@@ -22,8 +22,8 @@ from fakerepo import FakeRepo
 from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
+from foreman.providers.claude import sessions
 from foreman.providers.repo import FileDiff
-from foreman.services.claude import sessions
 
 sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent

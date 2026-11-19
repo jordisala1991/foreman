@@ -13,9 +13,9 @@ from ...core.project.config import Project
 from ...core.project.registry import register
 from ...core.tasks import backlog, blockers, chains, editing, questions, subtasks, taskrepo
 from ...providers.repo import RepoError
+from ...providers.runner import RunnerError
 from ...services.agents import relaunch
 from ...services.agents.running import review_running
-from ...services.claude.sessions import SessionError
 from ...services.delivery import merge
 from ...services.delivery.git import DeliveryError
 from ...steps import talk
@@ -168,7 +168,7 @@ def cmd_relaunch(a: argparse.Namespace) -> None:
         sys.exit("foreman: relaunch is the owner's, not an agent's")
     try:
         old, new = relaunch.relaunch(home(a), a.id)
-    except SessionError as e:
+    except RunnerError as e:
         sys.exit(f"foreman: {e}")
     print(f"{a.id}: relaunched, session {old} → {new}")
 

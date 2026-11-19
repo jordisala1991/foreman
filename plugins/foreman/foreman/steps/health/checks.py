@@ -20,8 +20,9 @@ from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog, questions
 from ...providers import registry
+from ...providers.claude import login
+from ...providers.runner import Rows, State, ref_of
 from ...services.agents.running import idle_s
-from ...services.claude import login
 
 Finding = dict[str, str]
 
@@ -79,13 +80,12 @@ def login_check(p: Project, check: Callable[[str], login.Login] = login.login_st
     return [finding("login-failed", "The Claude login does not work", meaning, evidence)]
 
 
-def agents(p: Project, rows: dict[str, Any]) -> list[Finding]:
+def agents(p: Project, rows: Rows) -> list[Finding]:
     out: list[Finding] = []
     stuck_s = 60 * int(p.get("health", "stuck_minutes"))
     for i in backlog.tasks(backlog.load(p)):
         a: backlog.Agent = i.get("agent") or {}
-        row: dict[str, Any] = rows.get(a.get("session") or "") or {}
-        if i["status"] in backlog.RUNNING and row.get("state") == "working":
+        if i["status"] in backlog.RUNNING and rows.state(ref_of(a)) is State.WORKING:
             quiet = idle_s(a)
             if quiet > stuck_s:
                 meaning = "A running agent has produced no output for longer than stuck_minutes."

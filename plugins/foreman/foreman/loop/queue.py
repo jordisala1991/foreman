@@ -7,7 +7,7 @@ from ..core.rules import decide
 from ..core.tasks import backlog
 from ..providers import registry
 from ..providers.repo import RepoError
-from ..services.claude import sessions
+from ..providers.runner import Rows, State, ref_of, stop_live
 from ..services.delivery import git, merge, pulls
 from ..services.delivery.git import DeliveryError, MergeConflict
 from ..steps.reviewing import apply_review, seen_of, working
@@ -21,7 +21,7 @@ def check_key(p: Project) -> str:
     return f"{p.state}:check"
 
 
-def run_queue(p: Project, rows: dict[str, Any]) -> None:
+def run_queue(p: Project, rows: Rows) -> None:
     """Merges first (quick); then at most one branch check is started per tick, the rest on the next ticks. Each task is
     read again just before its turn (each in its own repo, `for_task`)."""
     in_review = [i for i in backlog.tasks(backlog.load(p)) if i["status"] == "in review"]
@@ -43,20 +43,20 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
             return
 
 
-def stop_review_sessions(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:
+def stop_review_sessions(p: Project, i: dict[str, Any], rows: Rows) -> None:
     """A hunter whose findings file is written, and a reviewer whose verdict is recorded, have nothing more to do."""
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
     if h.get("file") and Path(h["file"]).exists() and live(h, rows) and not working(h, rows):
-        sessions.stop_live(p, i["id"], h, rows)
+        stop_live(p, i["id"], ref_of(h), registry.runner(p), rows)
     if v and v.get("tip") == r.get("tip") and live(r, rows):
-        sessions.stop_live(p, i["id"], r, rows)
+        stop_live(p, i["id"], ref_of(r), registry.runner(p), rows)
 
 
-def live(a: dict[str, Any], rows: dict[str, Any]) -> bool:
+def live(a: dict[str, Any], rows: Rows) -> bool:
     """Listed and not stopped: never `gone`, which is also what an unreadable listing shows."""
-    return sessions.state(rows, a.get("session")) not in ("stopped", "gone")
+    return rows.state(ref_of(a)) not in (State.ENDED, State.GONE)
 
 
 def merge_one(p: Project, i: dict[str, Any]) -> None:
@@ -99,7 +99,7 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
     return step == "merge"
 
 
-def queue_one(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:
+def queue_one(p: Project, i: dict[str, Any], rows: Rows) -> None:
     """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
     p = p.for_task(i)
     main = p.get("project", "main")

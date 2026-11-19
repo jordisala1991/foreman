@@ -1,14 +1,13 @@
-from typing import Any
-
 from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog
+from ...providers.runner import Rows
 from . import repos
 from .checks import Finding, agents, answers_undelivered, finding, login_check, loop_dead, loop_errors, orphan_worktrees
 from .main_tests import main_tests
 
 
-def findings(p: Project, rows: dict[str, Any], outside: bool = False) -> list[Finding]:
+def findings(p: Project, rows: Rows, outside: bool = False) -> list[Finding]:
     out = [*loop_dead(p), *login_check(p)] if outside else []
     checks = (
         lambda: agents(p, rows),
@@ -28,7 +27,7 @@ def findings(p: Project, rows: dict[str, Any], outside: bool = False) -> list[Fi
     return out
 
 
-def run(p: Project, rows: dict[str, Any], outside: bool = False) -> list[str]:
+def run(p: Project, rows: Rows, outside: bool = False) -> list[str]:
     """Files the new findings; the ids filed."""
     found = {f["key"]: f for f in findings(p, rows, outside)}
     filed: list[str] = []

@@ -19,8 +19,10 @@ from foreman.core.oversight import diagnosis
 from foreman.core.tasks import backlog, questions
 from foreman.loop import tick
 from foreman.loop.launch import launch_free
+from foreman.providers import registry
+from foreman.providers.claude.sessions import Claude
+from foreman.providers.runner import RunnerError, SessionRef
 from foreman.services.agents import relaunch, running
-from foreman.services.claude import sessions
 from foreman.steps import mechanic, talk
 
 CHAIN: backlog.Chain = {"lens": "rules", "max_steps": 5, "max_lines": 150}
@@ -137,7 +139,7 @@ class TestRelaunch:
             assert e.stops()[-1] == new["id"]
         else:
             questions.answer(e.p, questions.ask(e.p, tid, old["name"], "A or B?"), "B")
-            talk.deliver_answers(e.p, sessions.listing(e.p))
+            talk.deliver_answers(e.p, registry.rows(e.p))
             assert e.calls()[-1]["argv"][:3] == ["--bg", "--resume", new["sessionId"]]
             assert len(e.calls()[-1]["argv"]) == 4
 
@@ -158,7 +160,7 @@ class TestRelaunch:
         tid, role = responsible(self.e)
         idle(self.e, tid, role)
         self.e.p.cfg["agents"]["claude"] = str(Path(self.e.tmp) / "missing")
-        with pytest.raises(sessions.SessionError, match="claude agents is unreadable"):
+        with pytest.raises(RunnerError, match="claude agents is unreadable"):
             relaunch.relaunch(self.e.p, tid)
         assert self.e.stops() == []
 
@@ -183,14 +185,14 @@ class TestRelaunch:
         e = self.e
         tid, role = responsible(e)
         old = idle(e, tid, role)
-        real = sessions.relaunch
+        real = Claude.relaunch
 
-        def cancel_meanwhile(*args: Any) -> tuple[str, str | None]:
+        def cancel_meanwhile(*args: Any) -> SessionRef:
             out = real(*args)
             backlog.set_status(e.p, tid, "canceled", "by the owner")
             return out
 
-        with mock.patch.object(sessions, "relaunch", cancel_meanwhile), pytest.raises(SystemExit, match="changed while its agent restarted"):
+        with mock.patch.object(Claude, "relaunch", cancel_meanwhile), pytest.raises(SystemExit, match="changed while its agent restarted"):
             fm(e.home, "relaunch", tid)
         new = rows(e)[-1]["id"]
         assert e.stops() == [old["short"], new]
@@ -201,16 +203,16 @@ class TestRelaunch:
         tid, role = responsible(e)
         old = idle(e, tid, role)
         stale = e.task(tid)  # the loop read the task before the relaunch
-        real = sessions.relaunch
+        real = Claude.relaunch
         sender = threading.Thread(target=running.send, args=(e.p, stale, "hi"))
 
-        def send_meanwhile(*args: Any) -> tuple[str, str | None]:
+        def send_meanwhile(*args: Any) -> SessionRef:
             sender.start()
             sender.join(0.5)
             assert sender.is_alive()  # the send waits for the relaunch
             return real(*args)
 
-        with mock.patch.object(sessions, "relaunch", send_meanwhile):
+        with mock.patch.object(Claude, "relaunch", send_meanwhile):
             fm(e.home, "relaunch", tid)
         sender.join(10)
         new = e.task(tid)[role]

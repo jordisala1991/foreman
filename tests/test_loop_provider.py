@@ -9,6 +9,7 @@ from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
 from foreman.loop import queue, tick
 from foreman.providers import Change, ChangeState, registry
+from foreman.providers.runner import NO_ROWS
 from foreman.services.delivery import merge
 from foreman.steps import talk
 
@@ -99,7 +100,7 @@ class TestProvider:
         git(e.repo, "checkout", "-q", "main")
         fm(e.home, "unblock", tid)
         e.p.cfg["merge"]["strategy"] = "rebase"  # a bad provider blocks at the merge step
-        queue.run_queue(e.p, {})
+        queue.run_queue(e.p, NO_ROWS)
         assert "strategy = 'rebase'" in e.task(tid)["blocked"]
         e.p.cfg["merge"]["strategy"] = "squash"
         fm(e.home, "unblock", tid)
