@@ -11,9 +11,9 @@ from . import git, pulls
 
 def accept(p: Project, tid: str, by: str = "owner") -> str:
     """Records the owner's accept; it merges nothing. The loop's merge step does the merge (`merge_accepted`)."""
+    i = backlog.get(backlog.load(p), tid)
+    p = p.for_task(i)
     registry.get(p)  # a bad [merge] provider/merge fails here, clearly
-    d = backlog.load(p)
-    i = backlog.get(d, tid)
     if i["status"] != "in review":
         raise git.DeliveryError(f"{tid} is {i['status']}, not in review")
     head = registry.repo(p).head(i["branch"])
@@ -139,6 +139,7 @@ def close(p: Project, tid: str, status: str, why: str, *, settle: bool = True) -
     `foreman cancel` and the sources' signals use it. Canceling a parent first cancels its open subtasks."""
     d = backlog.load(p)
     i = backlog.get(d, tid)
+    p = p.for_task(i)
     if status == "canceled":
         for s in subtasks.of(backlog.tasks(d), tid):
             if backlog.get(backlog.load(p), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it

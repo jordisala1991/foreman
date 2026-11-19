@@ -23,8 +23,7 @@ def check_key(p: Project) -> str:
 
 def run_queue(p: Project, rows: dict[str, Any]) -> None:
     """Merges first (quick); then at most one branch check is started per tick, the rest on the next ticks. Each task is
-    read again just before its turn."""
-    main = p.get("project", "main")
+    read again just before its turn (each in its own repo, `for_task`)."""
     in_review = [i for i in backlog.tasks(backlog.load(p)) if i["status"] == "in review"]
     for i in in_review:
         stop_review_sessions(p, i, rows)
@@ -32,14 +31,14 @@ def run_queue(p: Project, rows: dict[str, Any]) -> None:
     for tid in waiting:
         i = backlog.get(backlog.load(p), tid)
         if decide.queue_turn(i) == "merge":
-            guarded(p, tid, "merge it", lambda i=i: merge_one(p, i, main))
+            guarded(p, tid, "merge it", lambda i=i: merge_one(p, i))
     key = check_key(p)
     started = util.STARTED.get(key, 0)  # after the merges: their merged checks are not the tick's branch check
     for tid in waiting:
         i = backlog.get(backlog.load(p), tid)
         if decide.queue_turn(i) != "check":
             continue
-        guarded(p, tid, "check it", lambda i=i: queue_one(p, i, main, rows))
+        guarded(p, tid, "check it", lambda i=i: queue_one(p, i, rows))
         if decide.queue_full(util.STARTED.get(key, 0) - started):
             return
 
@@ -60,8 +59,10 @@ def live(a: dict[str, Any], rows: dict[str, Any]) -> bool:
     return sessions.state(rows, a.get("session")) not in ("stopped", "gone")
 
 
-def merge_one(p: Project, i: dict[str, Any], main: str) -> None:
+def merge_one(p: Project, i: dict[str, Any]) -> None:
     """The merge step of an accepted task; a conflict with main returns it to its agent, keeping who accepted it."""
+    p = p.for_task(i)
+    main = p.get("project", "main")
     acc: dict[str, Any] = i.get("accepted") or {}
     try:
         if gate_merge(p, i):
@@ -98,8 +99,10 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
     return step == "merge"
 
 
-def queue_one(p: Project, i: dict[str, Any], main: str, rows: dict[str, Any]) -> None:
+def queue_one(p: Project, i: dict[str, Any], rows: dict[str, Any]) -> None:
     """One step of a branch in review. A check that takes longer than util.BACKGROUND_WAIT_S goes on in the background."""
+    p = p.for_task(i)
+    main = p.get("project", "main")
     r = registry.repo(p)
     head = r.head(i.get("branch", "HEAD"))
     main_head = r.find(main)

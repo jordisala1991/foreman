@@ -136,6 +136,6 @@ class GitRepo:
             return MergeOutcome(conflict=self.conflicts(main, branch), why=(r.err or r.out).strip()[:300])
         return MergeOutcome(commit=self.head("HEAD"))
 
-    def origin_url(self) -> str:
-        r = self._run("remote", "get-url", "origin", check=False)
+    def remote_url(self, remote: str) -> str:
+        r = self._run("remote", "get-url", remote, check=False)
         return r.out.strip() if r.code == 0 else ""
