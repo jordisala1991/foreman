@@ -1,0 +1,75 @@
+"""`foreman watch`: one line each time something starts needing the owner. It decides from the backlog, main's CI result
+(`state/ci.json`) and Claude Code's session listing, never from the text of events.jsonl."""
+
+import time
+from typing import Any
+
+from .. import util
+from ..core.project.config import Project
+from ..core.review import reviews
+from ..core.rules import decide
+from ..core.tasks import backlog, questions
+from ..providers import registry
+from ..services.claude import sessions
+
+EVERY_S = 10
+
+
+def pause() -> None:
+    time.sleep(EVERY_S)
+
+
+def _line(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
+    c, v = i.get("check"), i.get("review")
+    if i["status"] != "in review" or i.get("blocked") or i.get("accepted") or not c or not v or c.get("head") != reviews.verdict_tip(v):
+        return False
+    q = p.for_task(i)
+    return decide.after_check(c, q.get("merge", "autonomy"), registry.get(q).has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
+
+
+def needs(p: Project, rows: dict[str, Any]) -> dict[str, str]:
+    """What needs the owner now: key → one line, in the order questions, accepts, blocked, main, parents."""
+    d = backlog.load(p)
+    found: dict[str, str] = {}
+    asked = {q["task"] for q in questions.open_questions(d)}
+    for q in questions.open_questions(d):
+        found[f"q:{q['id']}"] = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
+    open_tasks = [i for i in backlog.tasks(d) if i["status"] not in backlog.CLOSED]
+    for i in backlog.tasks(d):
+        if _waits_for_accept(p, i):
+            found[f"accept:{i['id']}"] = _line(f"{i['id']} waits for the owner's accept: {i['title']}")
+    for i in open_tasks:
+        if i.get("blocked"):
+            found[f"blocked:{i['id']}"] = _line(f"{i['id']} blocked: {i['blocked']}")
+    ci = util.read_json(p.state / "ci.json", {})
+    if ci.get("result") == "fail":
+        found[f"ci:{ci.get('since')}"] = _line(f"main: tests fail (since {ci.get('since')})")
+    for i in open_tasks:
+        agent: backlog.Agent = i.get("agent") or {}
+        sid = agent.get("session")
+        if agent.get("kind") == "parent" and i["id"] not in asked and sessions.alive(rows, sid) and not sessions.busy(rows, sid):
+            found[f"parent:{i['id']}"] = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
+    return found
+
+
+def run(p: Project, once: bool) -> None:
+    """Prints each need that appears after the start (what needed the owner at start is `foreman list`'s). An unreadable
+    listing mid-run keeps the parents' entries as they were. Under `once`, returns after the first line."""
+    rows = sessions.listing(p)
+    seen = needs(p, rows)
+    while True:
+        pause()
+        rows = sessions.listing(p)
+        now = needs(p, rows)
+        if not rows:
+            now.update({k: v for k, v in seen.items() if k.startswith("parent:")})
+        for key, line in now.items():
+            if key not in seen:
+                print(line, flush=True)
+                if once:
+                    return
+        seen = now
