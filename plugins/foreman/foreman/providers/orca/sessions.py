@@ -45,8 +45,6 @@ class Orca:
             + ["--model", agent.model, "--effort", agent.effort, "--keep-open", "--task-title", agent.title, "--spec-file", str(spec)]
         )
         dispatch = str(w.get("dispatchId") or "")
-        if not dispatch:
-            raise RunnerError("Orca started no worker")
         if w.get("mode") != "structured":
             self.stop(SessionRef("", None, dispatch=dispatch))
             raise RunnerError(f"Orca started a {w.get('mode')} worker, not a chat: set Claude to Chat in Orca")

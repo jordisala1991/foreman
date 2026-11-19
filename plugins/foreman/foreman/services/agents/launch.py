@@ -152,7 +152,11 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         extra["round2"] = SCOPE[scope.rule] + " Nothing outside that diff is a finding."
     cwd = worktree.agent_folder(p, name, Path(i["worktree"]), tip)
     title = util.session_title(i["id"], "review" if role == "reviewer" else role, i["title"])
-    ref = registry.runner(p).start(Agent(i["id"], name, model, effort, title), brief.brief(p, i, role, extra), cwd)
+    try:
+        ref = registry.runner(p).start(Agent(i["id"], name, model, effort, title), brief.brief(p, i, role, extra), cwd)
+    except RunnerUnavailable as e:  # Orca is down: the review is decided again next tick
+        backlog.event(p, i["id"], f"launch postponed: {e}")
+        return
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         launch = {

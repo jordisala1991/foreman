@@ -208,6 +208,10 @@ The project's folder: `foreman.toml`, `backlog.json`, `state/`, `plans/`, `workt
 _Chat_: casa
 _Avoid_: project folder, workspace
 
+**Runner**
+The way a project's agents run, chosen by `[agents] runner` (`claude` or `orca`); the port `Runner` has one adapter for each.
+_Avoid_: engine, backend
+
 **Loop**
 The plain process, with no model, that moves tasks and launches agents.
 _Chat_: bucle

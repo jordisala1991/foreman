@@ -15,7 +15,7 @@ from foreman.providers import registry
 from foreman.providers.orca.sessions import Orca
 from foreman.providers.runner import Agent, RunnerError, SessionRef, State, ref_of, settings
 from foreman.services.agents import launch, running
-from foreman.steps import talk
+from foreman.steps import mechanic, parents, talk
 
 
 class Setup:
@@ -230,3 +230,25 @@ def test_the_claude_runner_writes_no_waiting_event(s: Setup):
     assert rows is not None
     talk.watch_waiting(s.p, rows)
     assert not [t for t in s.events() if "waits for an answer" in t]
+
+
+def test_a_review_waits_for_orca_too(s: Setup):
+    s.orca.down(opens=False)
+    tid = backlog.add(s.p, status="ready", criteria="y", title="x")
+    backlog.update(s.p, tid, worktree=str(s.wt), branch="foreman/ty-1")
+    launch.launch_reviewer(s.p, backlog.get(backlog.load(s.p), tid), s.e.fake_repo().head("main"), "hunter")
+    i = backlog.get(backlog.load(s.p), tid)
+    assert not i.get("hunter") and not i.get("blocked")
+    assert [t for t in s.events() if t.startswith("launch postponed")] == ["launch postponed: Orca is not running and could not be opened"]
+
+
+def test_a_mechanic_and_a_parent_wait_for_orca_too(s: Setup):
+    s.orca.down(opens=False)
+    triage = backlog.add(s.p, status="triage", criteria="y", title="x", source="health:x")
+    mechanic.launch(s.p, backlog.get(backlog.load(s.p), triage))
+    parent = backlog.add(s.p, status="backlog", criteria="y", title="p")
+    parents.launch(s.p, backlog.get(backlog.load(s.p), parent))
+    d = backlog.load(s.p)
+    assert not backlog.get(d, triage).get("diagnosis") and not backlog.get(d, triage).get("mechanic")
+    assert not backlog.get(d, parent).get("blocked") and not backlog.get(d, parent).get("agent")
+    assert len([t for t in s.events() if t.startswith("launch postponed")]) == 2

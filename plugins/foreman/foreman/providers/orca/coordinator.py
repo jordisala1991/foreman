@@ -34,7 +34,5 @@ def coordinator(p: Project) -> tuple[str, str]:
     term = util.json_object(orca(["terminal", "create", "--worktree", f"path:{p.repo}", "--title", name, "--command", "sleep 99999999"]).get("terminal"))
     handle = str((term or {}).get("handle") or "")
     run = str(orca(["orchestration", "run-create", "--objective", name, "--from", handle]).get("runId") or "")
-    if not handle or not run:
-        raise OrcaError("Orca made no coordinator tab or Run")
     util.write_json(f, {"coordinator": handle, "run": run})
     return handle, run

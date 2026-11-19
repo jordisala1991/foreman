@@ -19,7 +19,7 @@ def session_file(p: Project, folder: Path) -> Path:
     return p.state / "orca-sessions" / f"{hashlib.sha1(str(folder.resolve()).encode()).hexdigest()[:16]}.id"
 
 
-def carry(p: Project, agent: Agent, folder: Path) -> Path:
+def carry(p: Project, agent: Agent, folder: Path) -> None:
     """Writes the agent's settings (env, the guard hook, the plugin off) and the session hook into the folder; never
     into a repo's main checkout, where it would reach every worktree (F3)."""
     if folder.resolve() in {r.resolve() for r in p.repos}:
@@ -31,7 +31,6 @@ def carry(p: Project, agent: Agent, folder: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(s, indent=2) + "\n", encoding="utf-8")
     session_file(p, folder).parent.mkdir(parents=True, exist_ok=True)
-    return out
 
 
 def read_session(p: Project, folder: Path, wait_s: float = 30.0) -> str | None:

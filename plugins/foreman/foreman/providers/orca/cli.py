@@ -15,11 +15,7 @@ OPEN_TIMEOUT = 120
 
 
 class OrcaError(RunnerError):
-    """Orca answered a call with an error; `code` is Orca's own (`selector_not_found`, `dispatch_not_found`…)."""
-
-    def __init__(self, message: str, code: str = "") -> None:
-        super().__init__(message)
-        self.code = code
+    """Orca answered a call with an error (`terminal_handle_stale`, `dispatch_not_found`…)."""
 
 
 def binary() -> str:
@@ -40,7 +36,7 @@ def orca(args: list[str], timeout: float = 60) -> dict[str, Any]:
     why = " ".join(str(err.get("message") or r.err or r.out or f"exit {r.code}").split())[:300]
     if code == "runtime_unavailable":
         raise RunnerUnavailable(f"Orca is not running: {why}")
-    raise OrcaError(f"orca {' '.join(args[:2])}: {why}", code)
+    raise OrcaError(f"orca {' '.join(args[:2])}: {why}")
 
 
 def _json(out: str) -> object:
