@@ -24,4 +24,4 @@ def launch_free(p: Project) -> None:
     waiting = (i for i in tasks if i["status"] in ("backlog", "ready") and not i.get("blocked") and not blockers.pending(i, tasks))
     todo = sorted((i for i in waiting if not chains.is_parent(tasks, i)), key=sort_key)
     for i in todo[: max(0, free)]:
-        guarded(p, i["id"], "launch it", lambda i=i: launch(p, i))
+        guarded(p, i["id"], "launch it", lambda i=i: launch(p.for_task(i), i))

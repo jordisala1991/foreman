@@ -575,13 +575,13 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). O
 
 Retry policy, one place (`loop.guarded`, deciding with `decide.retry_step`; every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both.
 
-Config: `[merge] provider = "auto"` (default: `github` if the repo's `origin` is on github.com, else `local`; or force
+Config: `[merge] provider = "auto"` (default: `github` if the repo's `remote` is on github.com (always `local` with `remote = "none"`), else `local`; or force
 `local` | `github`) and `strategy = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An
 unknown value is a clear config error (at accept, and in the merge step). A merge never publishes: no tag, no release.
 
 ### GitHub provider: every task is a pull request
 
-The responsible agent only commits; the **loop** pushes the task branches (`provider.push`: `git push origin refs/heads/<b>:refs/heads/<b>`,
+The responsible agent only commits; the **loop** pushes the task branches (`provider.push`: `git push <remote> refs/heads/<b>:refs/heads/<b>`, `<remote>` being the repo's `remote`,
 never forced, never main, 20 s timeout; a failure is `Transient` with git's error) and, never an agent, opens, readies,
 comments on and merges PRs through `gh` (the guard keeps stopping `gh pr` for agents). `[merge] pr = "draft"`
 (default): a task in progress has its commits pushed and gets a **draft PR** as soon as it has its first commit; `pr = "done"`: no PR until
@@ -590,7 +590,7 @@ with no `[merge] test` the PR's CI **replaces the local test**. Then the draft i
 (event COMMENT) carries the verdict (decision, risk and its reasons, checks); each finding inside the diff is also a comment on its line. Accepted → `gh pr merge` with the configured type; the task
 closes only when the PR is seen `MERGED` (a PR closed unmerged blocks it). Autonomy `low`/`medium` merges **only with
 green CI** (no CI, pending or failing waits for the owner). After the merge the main checkout is fast-forwarded from
-origin when it is clean on main (fetch only, never a push). The images a report names (`![what](x.png)`, bare file
+the repo's `remote` when it is clean on main (fetch only, never a push). The images a report names (`![what](x.png)`, bare file
 names saved in `reports/ID/`) go, by git plumbing and never forced, to `ID/` on the orphan branch `foreman-evidence`, the
 only push fm makes besides the task branch (agents may not: guard `push-evidence`); the PR body links them with
 `?raw=true` blob URLs and the panel serves them at `/evidence`. Conflicts with main go back to the responsible agent once accepted, also when the merge itself is refused for a conflict after acceptance: the acceptance is carried over as `resolving`, and the resolved tip merges without a new accept unless its review leaves findings open or its checks fail. Out of
@@ -806,9 +806,9 @@ test = "make build"
 ### One task, one PR, one repo
 
 - A task's repo is its `repo` key (a `[repos.K]` key). The project hands every step a **view** of itself for that repo:
-  `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`remote`/`worktrees`, `[merge]` and `[risk]`
-  are the repo's, merged by the rule above; home, state, agents, guard, resources and backlog are the project's. The
-  code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls `for_task` once per
+  `Project.for_task(i)` returns a `Project` whose `[project] repo`/`main`/`worktrees`/`post_create`, `[merge]` and `[risk]`
+  are the repo's (`remote` too), merged by the rule above; home, state, agents, guard, resources
+  and backlog are the project's. The code that reads `p.repo`, `[merge]` or `[risk]` today does not learn about repos: the loop calls `for_task` once per
   task step. A task with no repo (a task that has subtasks, a loop finding) gets the project as it is, that is the first
   repo.
 - Choosing: `foreman add TITLE --repo KEY`; `foreman edit ID --repo KEY` (triage, backlog, ready; on backlog or ready it drops the
@@ -969,7 +969,7 @@ A module that grows past its size is split along its area's seams, inside its ar
   `services/agents/worktree.py`; check, merged check, PR and merge in the task's repo → `services/delivery/*` and
   `providers/registry.py`; the `publishes` fact → `core/rules/risk.py`; per-repo health checks → `steps/health/`
   (a new `repos.py`), the path matching pure in `core/project/repos.py`; the loop calls `for_task` once per task step,
-  in `loop/queue.py`.
+  in `loop/tick.py` and `loop/queue.py`, and in `services/delivery/merge.py` for the owner's accept and close.
 - **Task types (FN-157, built):** the type names and rules → `core/tasks/tasktypes.py`; each type's paragraph stays data
   in `foreman/briefs/*.md`, read by `services/agents/brief.py`; `--type` → `ui/cli/parser.py`. A new type is one entry and
   one paragraph, no other layer.

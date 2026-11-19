@@ -126,6 +126,6 @@ class Repo(Protocol):
         checkout as it was."""
         ...
 
-    def origin_url(self) -> str:
-        """The URL of the `origin` remote, "" when there is none."""
+    def remote_url(self, remote: str) -> str:
+        """The URL of that remote, "" when there is none."""
         ...

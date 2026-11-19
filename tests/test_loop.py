@@ -321,10 +321,10 @@ class TestQueue:
         a, b = self.deliver(e), self.deliver(e)
         real = queue.queue_one
 
-        def cancel_b_first(p, i, main, rows):
+        def cancel_b_first(p, i, rows):
             if i["id"] == a:
                 merge.close(p, b, "canceled", "x")
-            real(p, i, main, rows)
+            real(p, i, rows)
 
         queue.queue_one = cancel_b_first
         try:

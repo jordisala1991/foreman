@@ -1,10 +1,12 @@
 """A project: a home folder holding `foreman.toml` (the owner's settings), `backlog.json` and `state/`; the code lives in
-the repo `foreman.toml` points to (`[project] repo`, or several `[repos.<key>]` tables: tasks run in the first). The
+the repo `foreman.toml` points to (`[project] repo`, or several `[repos.<key>]` tables: a task runs in its own, `for_task`). The
 registry (`~/.config/foreman/projects.json`, or $FOREMAN_REGISTRY) lists the homes the loop and the panel serve. A project owns
 its home, its repos, its worktrees folder and the umbrella folder set in `[project] umbrella`: `foreman` run in any of
 them works on it (the deepest folder wins)."""
 
+import dataclasses
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
@@ -33,7 +35,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "merge": {
         "autonomy": "manual",
-        "provider": "auto",  # auto (github if origin is on GitHub, else local) | local | github (foreman/providers/)
+        "provider": "auto",  # auto (github if the repo's remote is on GitHub, else local) | local | github (foreman/providers/)
         "strategy": "squash",  # squash | merge (--no-ff) | rebase (github only)
         "pr": "draft",  # github: a draft PR from the first pushed commit | done: a PR only at `foreman done`
         "test": "",
@@ -94,6 +96,23 @@ class Project:
         if msg := repos.layout_error([(what, f.resolve()) for what, f in folders], paths):
             raise ProjectError(msg)
 
+    def for_task(self, i: Mapping[str, Any]) -> Self:
+        """The project as the task sees it (DESIGN.md "One task, one PR, one repo"): `[project]` repo, main, worktrees and
+        post_create, `[merge]` and `[risk]` are its repo's; with no `[repos.*]` tables, the project itself."""
+        if not self.cfg["repos"]:
+            return self
+        key = i.get("repo") or next(iter(self.cfg["repos"]))
+        if key not in self.cfg["repos"]:
+            raise ProjectError(f"repo {key} is not in foreman.toml")
+        r = self.cfg["repos"][key]
+        own = {"repo": r["path"], "main": r["main"], "worktrees": r["worktrees"], "post_create": r["post_create"], "remote": r["remote"]}
+        return dataclasses.replace(self, cfg={**self.cfg, "project": {**self.cfg["project"], **own}, "merge": r["merge"], "risk": r["risk"]})
+
+    @property
+    def remote(self) -> str:
+        """The remote of the repo, "none" for a repo without one (the local provider); the `[project] repo` form says origin."""
+        return self.cfg["project"].get("remote", "origin")
+
     def get(self, section: str, key: str) -> Any:
         return self.cfg[section][key]
 
@@ -111,6 +130,11 @@ class Project:
     @property
     def repo(self) -> Path:
         return self.path("repo")
+
+    @property
+    def post_create(self) -> list[str]:
+        """The commands run once in each new worktree; only `[repos.K]` tables have them."""
+        return list(self.cfg["project"].get("post_create", [])) if self.cfg["repos"] else []
 
     @property
     def repo_keys(self) -> list[str]:

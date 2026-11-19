@@ -173,9 +173,10 @@ def test_the_main_checkout(repo: Path):
     assert r.dirty() is False
     (repo / "a.txt").write_text("edited\n")
     assert r.dirty() is True
-    assert r.origin_url() == ""
-    git(repo, "remote", "add", "origin", "https://github.com/o/r")
-    assert r.origin_url() == "https://github.com/o/r"
+    assert r.remote_url("origin") == ""
+    git(repo, "remote", "add", "up", "https://github.com/o/r")
+    assert r.remote_url("up") == "https://github.com/o/r"
+    assert r.remote_url("origin") == ""
 
 
 def test_commit_files(repo: Path, tmp_path: Path):

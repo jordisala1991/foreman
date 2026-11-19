@@ -102,3 +102,33 @@ class TestReposTest:
         assert p.get("merge", "strategy") == "squash"
         p = self.load(f'[repos.api]\npath = "{api}"\nmain = 3\n', home=home)
         assert p.get("project", "main") == "3"
+
+    def test_for_task_is_the_tasks_repo(self) -> None:
+        text = self.tables(extra_web=f'worktrees = "{self.root / "webwts"}"\n[repos.web.merge]\ntest = "make web"')
+        p = self.load(text, project=f'worktrees = "{self.root / "wts"}"')
+        web = p.for_task({"repo": "web"})
+        assert web.repo == self.root / "web"
+        assert web.get("merge", "test") == "make web"
+        assert web.path("worktrees") == self.root / "webwts"
+        assert (web.home, web.get("agents", "slots")) == (p.home, p.get("agents", "slots"))
+        assert p.get("merge", "test") == ""  # the project itself is unchanged
+
+    def test_for_task_without_repo_is_the_first(self) -> None:
+        p = self.load(self.tables(), project=f'worktrees = "{self.root / "wts"}"')
+        assert p.for_task({}).repo == self.root / "api"
+
+    def test_for_task_unknown_repo_refused(self) -> None:
+        p = self.load(self.tables(), project=f'worktrees = "{self.root / "wts"}"')
+        with pytest.raises(ProjectError, match="gone"):
+            p.for_task({"repo": "gone"})
+
+    def test_for_task_one_repo_form_is_the_project(self) -> None:
+        p = self.load("", project=f'repo = "{self.root / "api"}"')
+        assert p.for_task({"repo": "x"}).repo == self.root / "api"
+
+    def test_remote_joins_the_view(self) -> None:
+        p = self.load(self.tables(extra_web='remote = "none"'), project=f'worktrees = "{self.root / "wts"}"')
+        assert p.for_task({"repo": "web"}).remote == "none"
+        assert p.for_task({"repo": "api"}).remote == "origin"
+        assert self.load("", project=f'repo = "{self.root / "api"}"').remote == "origin"
+        self.refused(self.tables(extra_web="remote = 3"), "[repos.web] remote is a remote name")

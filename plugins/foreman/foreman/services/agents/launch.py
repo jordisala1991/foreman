@@ -49,7 +49,12 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     effort = own.get("effort") or p.get("agents", "planning_effort" if kind == "planning" else "effort")
     keys: dict[str, Any] = {}
     if kind == "responsible":
-        wt, branch = worktree.worktree(p, i)
+        try:
+            wt, branch = worktree.worktree(p, i)
+        except worktree.PostCreateError as e:
+            backlog.update(p, i["id"], blocked=str(e))
+            backlog.event(p, i["id"], f"launch failed: {e}")
+            return
         i = {**i, "worktree": str(wt), "branch": branch}
         keys = {"worktree": str(wt), "branch": branch}
         cwd = wt

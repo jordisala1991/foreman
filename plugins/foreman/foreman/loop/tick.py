@@ -75,7 +75,7 @@ def tick(p: Project) -> None:
 
 def run_pulls(p: Project) -> None:
     for i in pulls.running(p):
-        guarded(p, i["id"], "push it or open its PR", lambda i=i: pulls.sync(p, i))
+        guarded(p, i["id"], "push it or open its PR", lambda i=i: pulls.sync(p.for_task(i), i))
 
 
 def forever(homes: list[str] | None = None, once: bool = False) -> None:
