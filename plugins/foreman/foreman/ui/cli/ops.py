@@ -41,9 +41,10 @@ def cmd_metrics(a: argparse.Namespace) -> None:
 
 def cmd_watch(a: argparse.Namespace) -> None:
     p = home(a)
-    if not sessions.listing(p):
+    rows = sessions.read(p)
+    if rows is None:
         sys.exit("foreman: claude agents is unreadable: foreman watch needs the session listing")
-    watch.run(p, a.once)
+    watch.run(p, a.once, rows)
 
 
 def cmd_guard(a: argparse.Namespace) -> None:

@@ -131,18 +131,24 @@ def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
         raise SessionError(f"claude started a copy ({short}) instead of resuming {sid[:8]}")
 
 
-def listing(p: Project) -> dict[str, dict[str, Any]]:
-    """Every background session Claude Code knows (done ones included), by full session id; {} when unreadable."""
+def read(p: Project) -> dict[str, dict[str, Any]] | None:
+    """Every background session Claude Code knows (done ones included), by full session id; None when unreadable (an
+    empty dict is a listing with no session)."""
     try:
         rows = util.json_list(proc.run_json([p.get("agents", "claude"), "agents", "--json", "--all"], timeout=30, env=login.child_env()))
     except proc.ProcError:
-        return {}
+        return None
     found: dict[str, dict[str, Any]] = {}
     for item in rows:
         row = util.json_object(item)
         if row and row.get("sessionId"):
             found[row["sessionId"]] = row
     return found
+
+
+def listing(p: Project) -> dict[str, dict[str, Any]]:
+    """`read`, with {} when unreadable."""
+    return read(p) or {}
 
 
 def state(rows: dict[str, dict[str, Any]], sid: str | None) -> str:

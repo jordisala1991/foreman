@@ -11,6 +11,7 @@ from ..core.rules import decide
 from ..core.tasks import backlog, questions
 from ..providers import registry
 from ..services.claude import sessions
+from ..services.delivery import pulls
 
 EVERY_S = 10
 
@@ -28,7 +29,11 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
     if i["status"] != "in review" or i.get("blocked") or i.get("accepted") or not c or not v or c.get("head") != reviews.verdict_tip(v):
         return False
     q = p.for_task(i)
-    return decide.after_check(c, q.get("merge", "autonomy"), registry.get(q).has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
+    head, main_head, provider = pulls.head_of(q, i.get("branch", "HEAD")), registry.repo(q).find(q.get("project", "main")), registry.get(q)
+    ci = provider.ci(pulls.change_of(i, head)) if i.get("pr") else None
+    if decide.checks_again(c, head, main_head, ci):  # the loop checks it again first: not decided yet
+        return False
+    return decide.after_check(c, q.get("merge", "autonomy"), provider.has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
 
 
 def needs(p: Project, rows: dict[str, Any]) -> dict[str, str]:
@@ -56,16 +61,16 @@ def needs(p: Project, rows: dict[str, Any]) -> dict[str, str]:
     return found
 
 
-def run(p: Project, once: bool) -> None:
-    """Prints each need that appears after the start (what needed the owner at start is `foreman list`'s). An unreadable
-    listing mid-run keeps the parents' entries as they were. Under `once`, returns after the first line."""
-    rows = sessions.listing(p)
+def run(p: Project, once: bool, rows: dict[str, Any]) -> None:
+    """Prints each need that appears after the start, whose listing `rows` the caller read (what needed the owner at
+    start is `foreman list`'s). An unreadable listing mid-run keeps the parents' entries as they were. Under `once`,
+    returns after the first line."""
     seen = needs(p, rows)
     while True:
         pause()
-        rows = sessions.listing(p)
-        now = needs(p, rows)
-        if not rows:
+        polled = sessions.read(p)
+        now = needs(p, polled or {})
+        if polled is None:
             now.update({k: v for k, v in seen.items() if k.startswith("parent:")})
         for key, line in now.items():
             if key not in seen:

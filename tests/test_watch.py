@@ -11,10 +11,11 @@ from helpers import Env, fm
 
 from foreman import util
 from foreman.core.tasks import backlog, questions
+from foreman.providers import registry
+from foreman.services.claude import sessions
 from foreman.steps import watch
 
-CHECK = {"head": "h1", "risk": "high", "tests": "pass", "review": "clean", "ci": "none", "conflict": False}
-REVIEW = {"round": 1, "tip": "h1", "open": 0}
+CHECK = {"risk": "high", "tests": "pass", "review": "clean", "ci": "none", "conflict": False}
 
 
 class Done(Exception):
@@ -35,8 +36,12 @@ def task(e: Env, **f: object) -> str:
     return tid
 
 
-def in_review(e: Env, **f: object) -> str:
-    return task(e, status="in review", check=dict(CHECK), review=dict(REVIEW), **f)
+def in_review(e: Env, check: dict | None = None, **f: object) -> str:
+    """In review, its check and verdict for the branch's head and main as they are now."""
+    assert e.fake
+    head, main = e.fake.commit("b"), e.fake.find("main")
+    c = {**CHECK, "head": head, "main": main, **(check or {})}
+    return task(e, status="in review", branch="b", check=c, review={"round": 1, "tip": head, "open": 0}, **f)
 
 
 def parent(e: Env, sid: str = "s1") -> str:
@@ -61,7 +66,7 @@ def drive(e: Env, monkeypatch: pytest.MonkeyPatch, *changes: Callable[[], None],
 
     monkeypatch.setattr(watch, "pause", pause)
     with contextlib.suppress(Done):
-        watch.run(e.p, once)
+        watch.run(e.p, once, sessions.read(e.p) or {})
 
 
 def printed(capsys: pytest.CaptureFixture[str]) -> list[str]:
@@ -84,15 +89,44 @@ def test_a_task_waits_for_accept_only_when_after_check_says_owner(fake_git: Fake
     assert tid in watch.needs(e.p, {})[f"accept:{tid}"]
     backlog.update(e.p, tid, accepted={"by": "owner"})
     assert watch.needs(e.p, {}) == {}
-    backlog.update(e.p, tid, accepted=None, check={**CHECK, "head": "h2"})  # a check for another tip than the verdict's
+    backlog.update(e.p, tid, accepted=None, check={**CHECK, "head": "other"})  # a check for another tip than the verdict's
     assert watch.needs(e.p, {}) == {}
-    backlog.update(e.p, tid, check={**CHECK, "review": "open 1"}, review={"round": 2, "tip": "h1", "open": 1})  # waiting after the rounds
+    head = fake_git.find("b")
+    c = {**CHECK, "head": head, "main": fake_git.find("main"), "review": "open 1"}
+    backlog.update(e.p, tid, check=c, review={"round": 2, "tip": head, "open": 1})  # waiting after the rounds
+    assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
+
+
+def test_a_check_the_loop_would_redo_is_not_decided_yet(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    tid = in_review(e)
+    fake_git.commit("main")  # main moved since the check
+    assert watch.needs(e.p, {}) == {}
+    backlog.update(e.p, tid, check={**CHECK, "head": fake_git.find("b"), "main": fake_git.find("main")})
+    assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
+
+
+def test_a_check_before_the_pr_ci_result_is_not_decided_yet(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch):
+    class Github:
+        has_ci = True
+        result = "pass"
+
+        def ci(self, change: object) -> str:
+            return self.result
+
+    e = Env(repo=fake_git, autonomy="low")
+    github = Github()
+    monkeypatch.setattr(registry, "get", lambda p: github)
+    tid = in_review(e, check={"risk": "low"}, pr={"number": 1})  # stored `ci: none`; the PR's checks have passed since
+    assert watch.needs(e.p, {}) == {}
+    github.result = "none"  # no checks at all: the loop leaves it to the owner
+    backlog.update(e.p, tid, check={**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main")})
     assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
 
 
 def test_a_task_the_autonomy_merges_is_not_a_need(fake_git: FakeRepo):
     e = Env(repo=fake_git, autonomy="low")
-    task(e, status="in review", check={**CHECK, "risk": "low"}, review=dict(REVIEW))
+    in_review(e, check={"risk": "low"})
     assert watch.needs(e.p, {}) == {}
 
 
@@ -180,7 +214,7 @@ def test_once_stops_after_the_first_line(fake_git: FakeRepo, monkeypatch: pytest
 def test_cli_watch_once_exits_after_its_first_line(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch):
     e = Env(repo=fake_git)
     tid = task(e)
-    listing(e, row("s9"))
+    listing(e)  # no session at all: a readable listing
     monkeypatch.setattr(watch, "pause", lambda: backlog.update(e.p, tid, blocked="x"))
     out = fm(e.home, "watch", "--once")
     assert len(out.splitlines()) == 1 and tid in out
@@ -190,7 +224,7 @@ def test_an_unreadable_listing_does_not_reprint_parents(fake_git: FakeRepo, monk
     e = Env(repo=fake_git)
     parent(e)
     listing(e, row())
-    drive(e, monkeypatch, (e.bin / "agents.json").unlink, lambda: listing(e, row()))
+    drive(e, monkeypatch, lambda: (e.bin / "agents.json").write_text("not json"), lambda: listing(e, row()))
     assert printed(capsys) == []
 
 
@@ -209,6 +243,6 @@ def test_events_text_does_not_change_what_is_printed(fake_git: FakeRepo):
 
 def test_watch_refuses_without_the_listing(fake_git: FakeRepo):
     e = Env(repo=fake_git)
-    (e.bin / "agents.json").write_text("[]")
+    (e.bin / "agents.json").write_text("not json")
     with pytest.raises(SystemExit, match="needs the session listing"):
         fm(e.home, "watch")
