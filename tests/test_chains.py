@@ -155,6 +155,57 @@ class TestChainParent:
         assert "5" in self.refused(P)
         assert len(self.steps(P)) == 5
 
+    def fill(self, P: str, n: int) -> None:
+        for _ in range(n):
+            merge.close(self.p, self.step(P), "done", "x")
+
+    def edit_refused(self, *args: str) -> str:
+        with pytest.raises(SystemExit) as x:
+            fm(self.e.home, "edit", *args)
+        return str(x.value)
+
+    def test_edit_max_steps_renews_the_cap_while_the_agent_runs(self):
+        P = self.launched()
+        self.fill(P, 5)
+        assert "5" in self.refused(P)
+        fm(self.e.home, "edit", P, "--max-steps", "6")
+        t = self.e.task(P)
+        assert (t["chain"], t["status"], t["agent"]["kind"]) == ({**CHAIN, "max_steps": 6}, "backlog", "parent")
+        self.step(P)
+        assert len(self.steps(P)) == 6
+
+    def test_edit_max_steps_is_refused_from_an_agent(self):
+        P = self.launched()
+        with pytest.raises(SystemExit):
+            run_as(self.e, P, "ty-2", "edit", P, "--max-steps", "9")
+        assert self.e.task(P)["chain"]["max_steps"] == 5
+
+    def test_edit_max_steps_is_refused_on_a_task_that_is_not_a_chain_parent(self):
+        t = backlog.add(self.p, "plain", criteria="c")
+        assert "not a chain parent" in self.edit_refused(t, "--max-steps", "3")
+        assert "chain" not in self.e.task(t)
+
+    def test_edit_max_steps_below_the_steps_filed_is_refused(self):
+        P = self.launched()
+        self.fill(P, 3)
+        assert "3 steps filed" in self.edit_refused(P, "--max-steps", "2")
+        assert self.e.task(P)["chain"]["max_steps"] == 5
+        fm(self.e.home, "edit", P, "--max-steps", "3")
+        assert self.e.task(P)["chain"]["max_steps"] == 3
+
+    def test_edit_max_steps_must_be_a_whole_number_of_1_or_more(self):
+        P = self.launched()
+        for bad in ("0", "-1", "x"):
+            with pytest.raises(SystemExit):
+                fm(self.e.home, "edit", P, "--max-steps", bad)
+        assert self.e.task(P)["chain"]["max_steps"] == 5
+
+    def test_edit_max_steps_alone_changes_nothing_else(self):
+        P = self.launched()
+        before = self.e.task(P)
+        fm(self.e.home, "edit", P, "--max-steps", "8")
+        assert self.e.task(P) == {**before, "chain": {**CHAIN, "max_steps": 8}}
+
     def told(self, P: str, close) -> tuple[str, str]:
         """Files a step, closes it with `close`, idles the loop and returns the step id and the one message its agent got."""
         sid = self.e.task(P)["agent"]["session"]
