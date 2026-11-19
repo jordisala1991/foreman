@@ -55,22 +55,22 @@ def tick(p: Project) -> None:
         rows = registry.rows(p)
     except providers.ConfigError as e:  # a bad [agents] runner: no agent step can run; health files it
         util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": "runner", "error": repr(e), "trace": ""})
-        health.run(p, NO_ROWS)
-        return
-    steps = [
-        ("sessions", lambda: fill_sessions(p, rows)),
-        ("scratch", lambda: sweep_scratch(p)),
-        ("sources", lambda: sources.run(p)),
-        ("answers", lambda: deliver_answers(p, rows)),
-        ("agents", lambda: watch_agents(p, rows)),
-        ("pulls", lambda: run_pulls(p)),
-        ("queue", lambda: run_queue(p, rows)),
-        ("health", lambda: health.run(p, rows)),
-        ("blockers", lambda: release.run(p)),
-        ("parents", lambda: parents.run(p, rows)),
-        ("launch", lambda: launch_free(p)),
-        ("mechanic", lambda: mechanic.run(p, rows)),
-    ]
+        steps = [("health", lambda: health.run(p, NO_ROWS))]
+    else:
+        steps = [
+            ("sessions", lambda: fill_sessions(p, rows)),
+            ("scratch", lambda: sweep_scratch(p)),
+            ("sources", lambda: sources.run(p)),
+            ("answers", lambda: deliver_answers(p, rows)),
+            ("agents", lambda: watch_agents(p, rows)),
+            ("pulls", lambda: run_pulls(p)),
+            ("queue", lambda: run_queue(p, rows)),
+            ("health", lambda: health.run(p, rows)),
+            ("blockers", lambda: release.run(p)),
+            ("parents", lambda: parents.run(p, rows)),
+            ("launch", lambda: launch_free(p)),
+            ("mechanic", lambda: mechanic.run(p, rows)),
+        ]
     for name, step in steps:
         beat(p, name)
         try:

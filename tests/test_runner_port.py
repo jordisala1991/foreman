@@ -1,6 +1,8 @@
 """The runner port (foreman/providers/runner.py): what fm asks of a Runner, checked with a fake one, and the claude adapter
 behind the default `[agents] runner = "claude"`."""
 
+from unittest import mock
+
 import pytest
 from fakerepo import FakeRepo
 from fakerunner import FakeRows, FakeRunner
@@ -17,6 +19,7 @@ from foreman.providers.runner import NO_ROWS, SessionRef
 from foreman.services.agents import launch, running
 from foreman.services.delivery import merge
 from foreman.steps import mechanic
+from foreman.steps.health import health
 
 
 def launched(e: Env) -> str:
@@ -100,6 +103,14 @@ def test_a_tick_with_an_unknown_runner_goes_on_recorded():
     rows = [r for r in util.read_jsonl(p.state / "errors.jsonl") if r["step"] == "runner"]
     assert len(rows) == 1 and "nope" in rows[0]["error"]
     assert any("nope" in str(i) for i in backlog.tasks(backlog.load(p)))  # health filed it
+
+
+def test_a_failing_health_with_an_unknown_runner_is_recorded_not_raised():
+    p = with_runner(Env(), "nope")
+    with mock.patch.object(health, "run", side_effect=RuntimeError("boom")):
+        tick.tick(p)
+    steps = [r["step"] for r in util.read_jsonl(p.state / "errors.jsonl") if "nope" in r["error"] or "boom" in r["error"]]
+    assert steps == ["runner", "health"]
 
 
 def test_a_session_found_late_keeps_its_tab(fake_git: FakeRepo):
