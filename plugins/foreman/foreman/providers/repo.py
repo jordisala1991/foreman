@@ -80,6 +80,16 @@ class Repo(Protocol):
         """The repo's worktrees, as git prints them ([] when git refuses)."""
         ...
 
+    def is_checkout(self) -> bool:
+        """Is the repo's path the root of a git work tree? A missing folder, a plain folder, a subfolder of another
+        repo and a bare repo are not."""
+        ...
+
+    def untracked(self) -> list[str]:
+        """The paths of the untracked and ignored entries of the main checkout, as git prints them (an untracked or
+        ignored folder whole, with a trailing `/`); RepoError when git fails."""
+        ...
+
     def add_worktree(self, path: Path, branch: str, base: str) -> None:
         """Checks `branch` out at `path`, creating it from `base` when it does not exist."""
         ...

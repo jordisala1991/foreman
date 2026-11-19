@@ -23,9 +23,15 @@ from foreman.providers.repo import FileDiff
 from foreman.services.delivery import merge, pulls
 from foreman.ui.panel import views
 
+
+def logs(key: str) -> str:
+    """A test command that logs its repo's key, except when health runs it on main (the tree is named main-KEY)."""
+    return f"case $PWD in *main-*) ;; *) echo {key} >> $T/ran;; esac"
+
+
 TABLES = (
-    '[repos.api]\npath = "$T/api"\n[repos.api.merge]\ntest = "echo api >> $T/ran"\n'
-    '[repos.web]\npath = "$T/web"\nremote = "none"\n[repos.web.merge]\nstrategy = "merge"\ntest = "echo web >> $T/ran"\n'
+    f'[repos.api]\npath = "$T/api"\n[repos.api.merge]\ntest = "{logs("api")}"\n'
+    f'[repos.web]\npath = "$T/web"\nremote = "none"\n[repos.web.merge]\nstrategy = "merge"\ntest = "{logs("web")}"\n'
 )
 
 

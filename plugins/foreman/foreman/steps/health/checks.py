@@ -8,7 +8,7 @@ proposes a fix.
 
 Checks: loop dead (heartbeat too old: seen from outside the loop, `foreman health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
-· orphan worktree (under the worktrees folder with no live task) · tests failing on main (the project's test command
+· orphan worktree (under the worktrees folder of any repo with no live task) · tests failing on main (the project's test command
 on main's head, every `ci_every_minutes`; one task per failing episode) · answer not delivered for 10 minutes · loop step errors."""
 
 import time
@@ -26,10 +26,24 @@ from ...services.claude import login
 Finding = dict[str, str]
 
 
-def finding(key: str, title: str, meaning: str, evidence: str) -> Finding:
-    """Every finding says what it means, the evidence fm gathered, and a hypothesis still pending; it proposes no fix."""
+def finding(key: str, title: str, meaning: str, evidence: str, repo: str = "") -> Finding:
+    """Every finding says what it means, the evidence fm gathered, and a hypothesis still pending; it proposes no fix.
+    A finding about one repo of several names it."""
     detail = f"What it means: {meaning}\n\nEvidence:\n{evidence}\n\nHypothesis: pending"
-    return {"key": key, "title": title, "meaning": meaning, "evidence": evidence, "hypothesis": "pending", "detail": detail}
+    out = {"key": key, "title": title, "meaning": meaning, "evidence": evidence, "hypothesis": "pending", "detail": detail}
+    return {**out, "repo": repo} if repo else out
+
+
+def views(p: Project) -> list[tuple[str, Project]]:
+    """The project as each repo's tasks see it, with its key; one repo is one view with no key."""
+    if p.several:
+        return [(key, p.for_task({"repo": key})) for key in p.repo_keys]
+    return [("", p.for_task({}))]
+
+
+def usable(p: Project) -> list[tuple[str, Project]]:
+    """The views whose repo can be used: with several repos, those that are a git checkout."""
+    return [(key, v) for key, v in views(p) if not p.several or registry.repo(v).is_checkout()]
 
 
 def heartbeat(p: Project) -> dict[str, Any]:
@@ -99,14 +113,16 @@ def answers_undelivered(p: Project) -> list[Finding]:
 
 
 def orphan_worktrees(p: Project) -> list[Finding]:
-    root = p.path("worktrees").resolve()
     live = {str(Path(i["worktree"]).resolve()) for i in backlog.tasks(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
     out: list[Finding] = []
-    for wt in registry.repo(p).worktrees():
-        wt = wt.resolve()
-        if root in wt.parents and str(wt) not in live:
-            meaning = "A worktree under the worktrees folder belongs to no open task."
-            out.append(finding(f"orphan:{wt.name}", f"Orphan worktree {wt.name}", meaning, str(wt)))
+    for key, v in usable(p):
+        root = v.path("worktrees").resolve()
+        for wt in registry.repo(v).worktrees():
+            wt = wt.resolve()
+            if root in wt.parents and str(wt) not in live:
+                meaning = "A worktree under the worktrees folder belongs to no open task."
+                title = f"Orphan worktree {wt.name}" + (f" (repo {key})" if key else "")
+                out.append(finding(f"orphan:{wt.name}", title, meaning, str(wt), repo=key))
     return out
 
 

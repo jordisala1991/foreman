@@ -157,13 +157,14 @@ class TestFindProjectTest:
             (home / "foreman.toml").write_text(tail + text if tail.startswith("repos") else text + tail, encoding="utf-8")
             assert "[repos" in self.refused(self.elsewhere, "--home", str(home), "list")
 
-    def test_health_says_first_repo(self) -> None:
+    def test_health_names_a_repo_that_is_not_a_checkout(self) -> None:
         api, web = self.dir("api"), self.dir("web")
         self.project("multi", tail=f'\n[repos.api]\npath = "{api}"\n\n[repos.web]\npath = "{web}"\n', repo=False)
         out = self.run_fm(self.elsewhere, "--project", "multi", "health")
-        lines = [ln for ln in out.splitlines() if "first one" in ln]
-        assert len(lines) == 1, out
-        assert str(api) in lines[0]
+        assert "first one" not in out
+        lines = [ln for ln in out.splitlines() if ln.startswith("!")]
+        assert len([ln for ln in lines if "api" in ln and "not a git checkout" in ln]) == 1, out
+        assert len([ln for ln in lines if "web" in ln and "not a git checkout" in ln]) == 1, out
 
     def test_shared_folder(self) -> None:
         u = self.dir("shared")

@@ -107,6 +107,12 @@ class FakeRepo:
         path.mkdir(parents=True, exist_ok=True)
         self.trees[path], self.branch_at[path] = commit, branch
 
+    def is_checkout(self) -> bool:
+        return True
+
+    def untracked(self) -> list[str]:
+        return []
+
     def add_worktree(self, path: Path, branch: str, base: str) -> None:
         self._checkout(path, self.heads.get(branch) or self.head(base), branch)
         self.heads.setdefault(branch, self.trees[path])

@@ -42,11 +42,6 @@ def _includes_fm_md(claude_md: Path) -> bool:
     return "@.claude/fm.md" in (line.strip() for line in lines)
 
 
-def repos_note(p: Project) -> str:
-    n = len(p.repos)
-    return f"note: {p.name} has {n} repos; its tasks run in the first one, {p.repo}" if n > 1 else ""
-
-
 def versions(p: Project) -> list[str]:
     """Which fm this command, the loop and Claude Code's install are; and that foreman@foreman cannot start the launchd jobs."""
     hb = checks.heartbeat(p)

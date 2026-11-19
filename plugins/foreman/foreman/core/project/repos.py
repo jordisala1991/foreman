@@ -8,6 +8,7 @@ from typing import Any
 SETTINGS = ("path", "main", "remote", "worktrees", "post_create", "publish_on_merge", "merge", "risk")
 SUB_SETTINGS = {"merge": ("provider", "strategy", "pr", "test", "autonomy"), "risk": ("large_lines", "high", "medium")}
 PLACEHOLDERS = ("main", "wt")
+KEPT_OUT = (".claude", "CLAUDE.md", "CLAUDE.local.md", "foreman.toml")  # the files a repo of several must stay free of
 
 
 def parse(raw: dict[str, Any], cfg: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -86,3 +87,18 @@ def refusal(keys: list[str], key: str) -> str:
     if not keys:
         return "this project has one repo"
     return f"unknown repo {key!r}: choose one of {', '.join(keys)}"
+
+
+def stray(paths: list[str]) -> list[str]:
+    """The kept-out files among `paths` (as git prints them): each path with a KEPT_OUT component, cut after that
+    component, once, in order of first appearance."""
+    out: list[str] = []
+    for path in paths:
+        parts = path.rstrip("/").split("/")
+        for i, name in enumerate(parts):
+            if name in KEPT_OUT:
+                cut = "/".join(parts[: i + 1])
+                if cut not in out:
+                    out.append(cut)
+                break
+    return out
