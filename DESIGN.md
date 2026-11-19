@@ -27,9 +27,8 @@ Python stdlib only (3.11+, `tomllib`); the panel is React/Vite source in `panel/
 A *home* folder: `foreman.toml` (the owner's settings), `backlog.json`, `state/`, `worktrees/`, optional `sources/`.
 `foreman.toml` points to the repo (`[project] repo`, `main`, `prefix`, `branch_prefix`). The registry
 (`~/.config/foreman/projects.json` or `$FOREMAN_REGISTRY`) lists the homes the loop and the panel serve. Several repos are
-`[repos.<key>]` tables (`path`, `main`) instead of `[project] repo` (both forms: fm refuses); tasks run in the first one
-listed until `## Several repos` is built (FN-144 subtask 4). A project owns its home, every repo, its worktrees folder
-and the umbrella folder set in `[project] umbrella` (explicit, never guessed). A command finds its project by `--project
+`[repos.<key>]` tables (`path`, `main`) instead of `[project] repo` (both forms: fm refuses). A project owns its home, every repo, its worktrees
+folder and the umbrella folder set in `[project] umbrella` (explicit, never guessed). A command finds its project by `--project
 NAME`, `--home`, `FOREMAN_HOME`, `FOREMAN_PROJECT`, then the registered project owning the current folder (paths resolved, the
 deepest folder wins; two projects claiming it: fm refuses and `foreman health` names them), then the nearest `foreman.toml` above
 it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings; `[merge]
@@ -720,12 +719,10 @@ The first lens entry runs beside design-audit; the lens entries replace design-a
 the owner has looked at it (his edit of foreman.toml, a guarded `config` action). Left out on purpose: lenses on tests,
 merging steps without the owner, a second open chain per lens, per-step models, a port or a store for chains.
 
-## Several repos (defined in FN-148; not built yet)
+## Several repos (defined in FN-148; built in FN-149..154, seen acting in FN-155)
 
-This section defines how a project with several repos runs its tasks; FN-144 subtask 4 builds it in the subtasks
-listed in FN-148's report. Until then fm reads only `path` and `main` of each repo table and runs every task in the
-first repo (FN-145). Two rules carry it all: **one task = one PR in one repo**, and **the project's repos stay
-untouched** (their own git sees no fm or Claude file).
+This section defines how a project with several repos runs its tasks; fm runs each task in its own repo. Two rules
+carry it all: **one task = one PR in one repo**, and **the project's repos stay untouched** (their own git sees no fm or Claude file).
 
 ### Shape of foreman.toml
 
