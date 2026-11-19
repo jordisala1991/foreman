@@ -4,6 +4,7 @@ session listing (never the text of events.jsonl). Assertions are on keys and on 
 import contextlib
 import json
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from fakerepo import FakeRepo
@@ -21,11 +22,11 @@ class Done(Exception):
     pass
 
 
-def row(sid: str = "s1", **f: object) -> dict:
+def row(sid: str = "s1", **f: object) -> dict[str, Any]:
     return {"id": sid[:2], "sessionId": sid, "name": "n", "state": "blocked", "status": "idle", "pid": 1, **f}
 
 
-def listing(e: Env, *rows: dict) -> None:
+def listing(e: Env, *rows: dict[str, Any]) -> None:
     (e.bin / "agents.json").write_text(json.dumps(list(rows)))
 
 
@@ -35,7 +36,7 @@ def task(e: Env, **f: object) -> str:
     return tid
 
 
-def in_review(e: Env, check: dict | None = None, **f: object) -> str:
+def in_review(e: Env, check: dict[str, Any] | None = None, **f: object) -> str:
     """In review, its check and verdict for the branch's head and main as they are now."""
     assert e.fake
     head, main = e.fake.commit("b"), e.fake.find("main")
@@ -54,7 +55,7 @@ def blocked(e: Env, tid: str, reason: str) -> Callable[[], None]:
     return change
 
 
-def drive(e: Env, monkeypatch: pytest.MonkeyPatch, *changes: Callable[[], None], once: bool = False) -> None:
+def drive(e: Env, monkeypatch: pytest.MonkeyPatch, *changes: Callable[[], object], once: bool = False) -> None:
     """Runs watch with the listing readable; each poll first applies the next change; after the last it stops."""
     rest = list(changes)
 
@@ -100,7 +101,7 @@ def test_accept_follows_the_stored_ci_result(fake_git: FakeRepo):
     e = Env(repo=fake_git, autonomy="low")
     tid = in_review(e, check={"risk": "low", "ci": "pass"})
     assert watch.needs(e.p, {}) == {}  # the loop merges it
-    c = {**e.task(tid)["check"], "ci": "fail"}
+    c = {**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main"), "ci": "fail"}
     backlog.update(e.p, tid, check=c, failure_streak=2)  # failures went back to its agent twice: the owner decides
     assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
 
