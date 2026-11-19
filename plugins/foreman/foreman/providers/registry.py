@@ -1,4 +1,4 @@
-"""Picks the project's provider and hands out its repo: the one place that knows the adapters (github, local, gitrepo) and
+"""Picks the project's provider and hands out its repo: the one place that knows the adapters (github, local, gitrepo, and the runners claude and orca) and
 how to tell which provider applies."""
 
 import re
@@ -11,6 +11,7 @@ from .claude.sessions import Claude
 from .github.provider import GitHub
 from .gitrepo import GitRepo
 from .local import Local
+from .orca.sessions import Orca
 from .repo import Repo
 from .runner import NO_ROWS, Rows, Runner
 
@@ -23,7 +24,7 @@ def repo(p: Project) -> Repo:
 def runner(p: Project) -> Runner:
     """The project's agent runner, behind the `Runner` port; a ConfigError naming an unknown `[agents] runner`."""
     name = p.get("agents", "runner")
-    runners: dict[str, Callable[[Project], Runner]] = {"claude": Claude}
+    runners: dict[str, Callable[[Project], Runner]] = {"claude": Claude, "orca": Orca}
     if name not in runners:
         raise ConfigError(f"[agents] runner = {name!r} is not valid: use one of {', '.join(runners)}")
     return runners[name](p)

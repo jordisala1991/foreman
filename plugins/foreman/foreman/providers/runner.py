@@ -1,5 +1,5 @@
 """The runner port: every agent session fm runs, behind one interface. One session per `SessionRef`; what crosses the port is
-typed (a `State`, a `SessionRef`, a `Rows` snapshot), never claude's raw listing. The adapter is `claude.Claude`, handed out
+typed (a `State`, a `SessionRef`, a `Rows` snapshot), never an adapter's raw listing. The adapters are `claude.Claude` and `orca.Orca`, handed out
 by `registry.runner(p)`; the registry's `rows(p)` is the tick's snapshot.
 
 `stop_live` and `settings` are shared: they use only the port."""
@@ -7,7 +7,7 @@ by `registry.runner(p)`; the registry's `rows(p)` is the tick's snapshot.
 import os
 import shlex
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -47,20 +47,44 @@ class SessionRef:
     terminal: str | None = None  # the tab's handle and pane: empty for claude
     pane: str | None = None
     started: str | None = None  # the agent's `started` (launch, each send)
+    dispatch: str | None = None  # orca: the worker's dispatch id and the coordinator tab that talks to it; claude: None
+    coordinator: str | None = None
 
     def fields(self) -> dict[str, str | None]:
-        """The agent's keys for this ref: `terminal` and `pane` only when the ref has a terminal."""
+        """The agent's keys for this ref: `terminal` and `pane` only when the ref has a terminal, `dispatch` and
+        `coordinator` only when set."""
         f: dict[str, str | None] = {"short": self.short, "session": self.session}
         if self.terminal:
             f |= {"terminal": self.terminal, "pane": self.pane}
+        if self.dispatch:
+            f |= {"dispatch": self.dispatch, "coordinator": self.coordinator}
         return f
+
+    def tab(self) -> list[str | None]:
+        """Its entry in the task's `session_tabs`: `[terminal, pane, dispatch, coordinator]`."""
+        return [self.terminal, self.pane, self.dispatch, self.coordinator]
 
 
 def ref_of(agent: Mapping[str, Any] | None) -> SessionRef | None:
     """The `SessionRef` of a task's agent record; None when it has neither a short id nor a session."""
     if not agent or not (agent.get("short") or agent.get("session")):
         return None
-    return SessionRef(agent.get("short") or "", agent.get("session"), agent.get("terminal"), agent.get("pane"), agent.get("started"))
+    return SessionRef(
+        agent.get("short") or "",
+        agent.get("session"),
+        agent.get("terminal"),
+        agent.get("pane"),
+        agent.get("started"),
+        agent.get("dispatch"),
+        agent.get("coordinator"),
+    )
+
+
+def ref_from_tab(short: str, sid: str, tab: Sequence[str | None] | None) -> SessionRef:
+    """An old session's ref from its `session_tabs` entry, `[terminal, pane, dispatch, coordinator]`; entries written
+    before the dispatch was kept have two, and a session with no entry none."""
+    t = [*(tab or []), None, None, None, None]
+    return SessionRef(short, sid, t[0], t[1], dispatch=t[2], coordinator=t[3])
 
 
 class Rows(Protocol):

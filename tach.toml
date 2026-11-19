@@ -86,6 +86,12 @@ path = "foreman.providers.claude"
 layer = "adapters"
 depends_on = ["foreman.providers.runner"]
 
+# orca: the runner port's second adapter; agents as Orca chats, through the orca command line.
+[[modules]]
+path = "foreman.providers.orca"
+layer = "adapters"
+depends_on = ["foreman.providers.runner"]
+
 # proc: the one module that runs programs; used by the loop, the services and the adapters, never by the core.
 [[modules]]
 path = "foreman.proc"

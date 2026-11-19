@@ -65,7 +65,7 @@ export function Attach({ agent }: { agent: Agent | undefined }) {
 export function AgentLine({ i }: { i: Task }) {
   if (!i.agent?.name) return null;
   const st = i.agent_state ?? "gone";
-  const tone = st === "working" ? "ok" : st === "done" ? "wait" : "off";
+  const tone = st === "working" ? "ok" : st === "done" || st === "waiting" ? "wait" : "off";
   return (
     <span className="agentline">
       <span className={`dot ${tone}`} />

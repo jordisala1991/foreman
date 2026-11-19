@@ -14,13 +14,15 @@ from typing import Any
 from urllib.parse import quote
 
 import pytest
-from helpers import install_fm, version_folder
+from fakerunner import FakeRows
+from helpers import Env, install_fm, version_folder
 
 from foreman import launcher, util
 from foreman.core.project.config import Project
 from foreman.core.project.registry import register
 from foreman.core.tasks import backlog, questions
-from foreman.ui.panel import server
+from foreman.providers.runner import State
+from foreman.ui.panel import server, views
 
 
 def start_panel(t: Any) -> None:
@@ -194,3 +196,9 @@ class TestWatchVersion:
         self.request.addfinalizer(release.set)
         assert reached.wait(5)
         assert th.is_alive()
+
+
+def test_a_waiting_agent_reads_waiting() -> None:
+    """An agent waiting for an answer (an Orca chat's `blocked`) shows «waiting» on its card's agent line."""
+    i = {"id": "TY-1", "agent": {"name": "ty-1", "short": "s", "session": "s"}}
+    assert views.with_session(Env().p, i, FakeRows({"s": State.WAITING}))["agent_state"] == "waiting"

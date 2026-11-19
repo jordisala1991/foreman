@@ -58,8 +58,13 @@ def send(p: Project, i: dict[str, Any], message: str) -> bool:
     if not a.get("session") or ref is None:
         return False
     try:
-        registry.runner(p).send(ref, message, Path(a.get("cwd") or p.repo))
+        new = registry.runner(p).send(ref, message, Path(a.get("cwd") or p.repo))
     except RunnerError as e:
         backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
         return False
+    if new != ref:  # Orca started the chat again under a new dispatch id (after a restart): keep it
+        with backlog.edit(p) as d:
+            it = backlog.get(d, i["id"])
+            it["agent"] = {**(it.get("agent") or {}), **new.fields()}
+            it["session_tabs"] = {**it.get("session_tabs", {}), a["session"]: new.tab()}
     return True

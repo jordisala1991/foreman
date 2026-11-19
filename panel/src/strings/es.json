@@ -26,6 +26,7 @@
   "copied": "Copiado",
   "attach_tip": "Abre su conversación en un terminal con esta orden, o en la vista de agentes de la app de Claude.",
   "as_working": "trabajando",
+  "as_waiting": "esperando",
   "as_done": "ha terminado su turno",
   "as_stopped": "parado",
   "as_gone": "sin sesión",

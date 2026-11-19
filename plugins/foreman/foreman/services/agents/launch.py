@@ -7,7 +7,7 @@ from ...core.review.reviews import review_round
 from ...core.rules import decide
 from ...core.tasks import backlog
 from ...providers import registry
-from ...providers.runner import Agent, Rows, RunnerError, SessionRef
+from ...providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, SessionRef
 from .. import scratch
 from . import brief, worktree
 
@@ -61,12 +61,15 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         cwd = wt
         brief.seed_report(p, i["id"], wt)
     else:
-        cwd = p.repo
+        cwd = worktree.agent_folder(p, name, p.repo, p.get("project", "main"))
         brief.plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
     backlog.update(p, i["id"], **keys)  # the guard reads the worktree from the backlog
     runner = registry.runner(p)
     try:
         ref = runner.start(Agent(i["id"], name, model, effort, util.session_title(i["id"], kind, i["title"])), brief.brief(p, i, kind), cwd)
+    except RunnerUnavailable as e:  # Orca is down: the next tick tries again
+        backlog.event(p, i["id"], f"launch postponed: {e}")
+        return
     except RunnerError as e:
         backlog.update(p, i["id"], blocked=f"could not launch its agent: {e}")
         backlog.event(p, i["id"], f"launch failed: {e}")
@@ -95,7 +98,7 @@ def record_session(it: dict[str, Any], ref: SessionRef, kind: str) -> None:
     it["sessions"] = [*it.get("sessions", []), sid]
     it["session_kinds"] = {**it.get("session_kinds", {}), sid: kind}
     if ref.terminal:
-        it["session_tabs"] = {**it.get("session_tabs", {}), sid: [ref.terminal, ref.pane]}
+        it["session_tabs"] = {**it.get("session_tabs", {}), sid: ref.tab()}
 
 
 def fill_sessions(p: Project, rows: Rows) -> None:
@@ -109,9 +112,8 @@ def fill_sessions(p: Project, rows: Rows) -> None:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        record_session(
-                            it, SessionRef(a["short"], sid, a.get("terminal"), a.get("pane")), a.get("kind", "") if role in ("agent", "mechanic") else "review"
-                        )
+                        ref = SessionRef(a["short"], sid, a.get("terminal"), a.get("pane"), dispatch=a.get("dispatch"), coordinator=a.get("coordinator"))
+                        record_session(it, ref, a.get("kind", "") if role in ("agent", "mechanic") else "review")
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
@@ -148,7 +150,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
     }
     if scope.base:
         extra["round2"] = SCOPE[scope.rule] + " Nothing outside that diff is a finding."
-    cwd = Path(i["worktree"])
+    cwd = worktree.agent_folder(p, name, Path(i["worktree"]), tip)
     title = util.session_title(i["id"], "review" if role == "reviewer" else role, i["title"])
     ref = registry.runner(p).start(Agent(i["id"], name, model, effort, title), brief.brief(p, i, role, extra), cwd)
     with backlog.edit(p) as d:

@@ -50,7 +50,7 @@ def test_launch_records_the_ref(fake_git: FakeRepo, fake_runner: FakeRunner):
     assert (i["agent"]["short"], i["agent"]["session"], i["agent"]["terminal"], i["agent"]["pane"]) == ("fk1", "fk1-sid", "T1", "P1")
     assert i["sessions"] == ["fk1-sid"]
     assert i["session_kinds"] == {"fk1-sid": "planning"}
-    assert i["session_tabs"] == {"fk1-sid": ["T1", "P1"]}
+    assert i["session_tabs"] == {"fk1-sid": ["T1", "P1", None, None]}
 
 
 def test_send_goes_through_the_port(fake_git: FakeRepo, fake_runner: FakeRunner):
@@ -74,9 +74,11 @@ def test_a_failed_send_is_an_event(fake_git: FakeRepo, fake_runner: FakeRunner):
 def test_stop_all_gives_each_old_session_its_tab(fake_git: FakeRepo, fake_runner: FakeRunner):
     e = Env(repo=fake_git)
     tid = launched(e)
-    backlog.update(e.p, tid, sessions=["old1", "fk1-sid"], session_tabs={"old1": ["T9", "P9"], "fk1-sid": ["T1", "P1"]})
+    tabs = {"old1": ["T9", "P9"], "old2": ["T8", "P8", "D8", "H"], "fk1-sid": ["T1", "P1", None, None]}  # FN-213's two entries, and orca's four
+    backlog.update(e.p, tid, sessions=["old1", "old2", "fk1-sid"], session_tabs=tabs)
     merge.stop_all(e.p, task(e, tid))
-    assert sorted((r.short, r.terminal, r.pane) for r in fake_runner.stopped) == [("fk1", "T1", "P1"), ("old1", "T9", "P9")]
+    stopped = sorted((r.short, r.terminal, r.pane, r.dispatch, r.coordinator) for r in fake_runner.stopped)
+    assert stopped == [("fk1", "T1", "P1", None, None), ("old1", "T9", "P9", None, None), ("old2", "T8", "P8", "D8", "H")]
 
 
 def test_missing_why_waits_for_a_readable_listing():
@@ -116,9 +118,9 @@ def test_a_failing_health_with_an_unknown_runner_is_recorded_not_raised():
 def test_a_session_found_late_keeps_its_tab(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     tid = backlog.add(e.p, status="ready", criteria="y", title="x")
-    backlog.update(e.p, tid, agent={"short": "aa", "terminal": "T1", "pane": "P1", "kind": "responsible"})
+    backlog.update(e.p, tid, agent={"short": "aa", "terminal": "T1", "pane": "P1", "dispatch": "D1", "coordinator": "H", "kind": "responsible"})
     launch.fill_sessions(e.p, ClaudeRows({"aa-sid": {"id": "aa"}}))
-    assert task(e, tid)["session_tabs"] == {"aa-sid": ["T1", "P1"]}
+    assert task(e, tid)["session_tabs"] == {"aa-sid": ["T1", "P1", "D1", "H"]}
 
 
 def test_health_command_names_an_unknown_runner():
