@@ -154,7 +154,7 @@ def test_a_parent_agent_idle_in_its_chat_is_a_need(fake_git: FakeRepo):
     assert list(watch.needs(e.p, idle)) == [f"q:{qid}"]
 
 
-def test_what_needed_the_owner_at_start_is_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+def test_questions_blocked_and_parents_at_start_are_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     task(e, blocked="x")
     questions.ask(e.p, task(e), "agent", "q?")
@@ -162,6 +162,65 @@ def test_what_needed_the_owner_at_start_is_not_printed(fake_git: FakeRepo, monke
     listing(e, row())
     drive(e, monkeypatch, lambda: None, lambda: None)
     assert printed(capsys) == []
+
+
+def redo(e: Env, tid: str, fake_git: FakeRepo, **check: object) -> Callable[[], None]:
+    """The check done again because main moved."""
+
+    def change() -> None:
+        fake_git.commit("main")
+        backlog.update(e.p, tid, check={**CHECK, **check, "head": fake_git.find("b"), "main": fake_git.find("main")})
+
+    return change
+
+
+def test_an_accept_waiting_at_start_is_printed_once(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    e = Env(repo=fake_git)
+    tid = in_review(e)
+    listing(e)
+    drive(e, monkeypatch, lambda: None, lambda: None)
+    out = printed(capsys)
+    assert len(out) == 1 and tid in out[0] and "waits for the owner's accept" in out[0]
+
+
+def test_a_redone_check_does_not_print_the_accept_again(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    e = Env(repo=fake_git)
+    tid = in_review(e)
+    listing(e)
+    drive(e, monkeypatch, redo(e, tid, fake_git), lambda: None, redo(e, tid, fake_git), lambda: None)  # watch started after the first check
+    assert len(printed(capsys)) == 1
+
+
+def test_an_accept_checked_after_the_start_is_printed_once_despite_redos(
+    fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    e = Env(repo=fake_git)
+    head = fake_git.commit("b")
+    tid = task(e, status="in review", branch="b", review={"round": 1, "tip": head, "open": 0})  # reviewed, not checked yet
+    listing(e)
+    first = {**CHECK, "head": head, "main": fake_git.find("main")}
+    drive(e, monkeypatch, lambda: backlog.update(e.p, tid, check=first), redo(e, tid, fake_git), redo(e, tid, fake_git), lambda: None)
+    assert [tid in line for line in printed(capsys)] == [True]
+
+
+def test_fn_216_replayed_prints_its_line(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    e = Env(repo=fake_git)
+    tid = in_review(e, check={"tests": "pass", "ci": "pass"}, pr={"number": 264, "draft": False})  # checked 09:03:30, watch starts 09:05
+    backlog.update(e.p, tid, review={"round": 2, "tip": fake_git.find("b"), "open": 0})
+    listing(e)
+    drive(e, monkeypatch, redo(e, tid, fake_git, ci="pass"), redo(e, tid, fake_git, ci="pass"), lambda: None)  # 09:23 and 09:34: main moved
+    out = printed(capsys)
+    assert len(out) == 1 and tid in out[0]
+
+
+def test_once_returns_after_the_accept_printed_at_start(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    e = Env(repo=fake_git)
+    tid = in_review(e)
+    task(e, blocked="x")
+    listing(e)
+    drive(e, monkeypatch, once=True)  # a pause would raise Done
+    out = printed(capsys)
+    assert len(out) == 1 and tid in out[0]
 
 
 def test_each_thing_is_printed_once_when_it_starts(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
