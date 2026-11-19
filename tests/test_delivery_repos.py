@@ -14,11 +14,13 @@ from test_worktree_repos import Setup
 
 from foreman import util
 from foreman.core.project.config import Project
+from foreman.core.review import verdict
 from foreman.core.tasks import backlog
 from foreman.loop import queue, tick
 from foreman.providers import Change, ConfigError, Provider, registry
 from foreman.providers.repo import FileDiff
 from foreman.services.delivery import merge, pulls
+from foreman.ui.panel import views
 
 TABLES = (
     '[repos.api]\npath = "$T/api"\n[repos.api.merge]\ntest = "echo api >> $T/ran"\n'
@@ -169,3 +171,44 @@ def test_cancel_removes_the_worktree_in_the_tasks_repo(monkeypatch, fake_git):
     assert s.fakes["web"].trees
     merge.close(s.p, tid, "canceled", "x")
     assert s.fakes["web"].trees == {}
+
+
+def test_autonomy_is_the_repos(monkeypatch, fake_git):
+    s = setup(monkeypatch, fake_git, TABLES.replace("[repos.api.merge]\n", '[repos.api.merge]\nautonomy = "low"\n'))
+    api, web = deliver(s, "api"), deliver(s, "web")
+    tick.tick(s.p)
+    assert s.e.task(api)["status"] == "done"
+    assert s.e.task(web)["status"] == "in review" and not s.e.task(web).get("accepted")
+    merge.accept(s.p, web)
+    tick.tick(s.p)
+    assert s.e.task(web)["status"] == "done"
+
+
+PUBLISHING = (
+    '[repos.site]\npath = "$T/site"\nremote = "none"\npublish_on_merge = true\n[repos.site.merge]\nautonomy = "medium"\ntest = "true"\n'
+    '[repos.api]\npath = "$T/api"\nremote = "none"\n[repos.api.merge]\nautonomy = "medium"\ntest = "true"\n'
+)
+WHY = "merging publishes this repo (site)"
+
+
+def test_publishing_repo_waits_for_the_owner(monkeypatch, fake_git):
+    s = setup(monkeypatch, fake_git, PUBLISHING)
+    site, api = deliver(s, "site"), deliver(s, "api")
+    tick.tick(s.p)
+    assert s.e.task(api)["status"] == "done"
+    i = s.e.task(site)
+    assert (i["status"], i["check"]["risk"], i["check"]["reasons"][0]) == ("in review", "high", WHY)
+    assert not i.get("accepted")
+    merge.accept(s.p, site)
+    tick.tick(s.p)
+    assert s.e.task(site)["status"] == "done"
+
+
+def test_the_reason_reaches_show_panel_and_pr(monkeypatch, fake_git):
+    s = setup(monkeypatch, fake_git, PUBLISHING)
+    site = deliver(s, "site")
+    i = backlog.get(backlog.load(s.p), site)  # what `fm show` prints whole
+    assert WHY in i["check"]["reasons"]
+    shown = next(t for t in views.state(s.p)["tasks"] if t["id"] == site)
+    assert WHY in shown["check"]["reasons"]
+    assert f"Why high: {WHY}" in verdict.render(pulls.case_of(i, i["check"]), [], set())

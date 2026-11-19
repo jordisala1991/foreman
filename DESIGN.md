@@ -475,6 +475,7 @@ Every delivered branch gets a risk score:
 - **doubt**, from the evidence: high = no changes, tests fail, CI fails; medium = no test command, or a large change: over `[risk] large_lines` (400) changed lines, not counting tests, generated and lock files; size never makes a change high by itself.
 - Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
   `[ci]`, `[git]`, `[review]`). Size is only the large-change reason; file counts are not a reason.
+  With several repos a path or size reason ends `[diff, repo KEY]`, and a `publish_on_merge` repo's branch has first the reason `merging publishes this repo (KEY)`.
 - Open review findings are a gate, not a level: they go back to the responsible agent and add a `[review]` reason, but never change the risk.
   After the last round, an open finding never merges alone, at any autonomy or risk (`decide.after_check`).
 - A conflict with main is not a level either: it is the first reason (`conflicts with main: it goes back to its agent
