@@ -6,7 +6,7 @@ from typing import Any
 
 from .. import util
 from ..core.project.config import Project
-from ..core.tasks import backlog, recurring
+from ..core.tasks import backlog, chains, recurring
 
 
 def _context(p: Project) -> tuple[list[backlog.Task], dict[str, str]]:
@@ -56,6 +56,7 @@ def rows(p: Project, now: datetime | None = None) -> list[dict[str, Any]]:
     for e in entries.values():
         st = recurring.status(e, tasks, closed, seen.get(e["name"], now.strftime(recurring.STAMP)), now)
         trigger = f"every {e['every_merges']} merges" if e["every_merges"] else f"every {e['every']}"
+        c = chains.progress(tasks, next(t for t in tasks if t["id"] == st.open)) if st.open else None
         out.append(
             {
                 "name": e["name"],
@@ -64,6 +65,7 @@ def rows(p: Project, now: datetime | None = None) -> list[dict[str, Any]]:
                 "open": st.open,
                 "left": st.left if e["every_merges"] else None,
                 "next": st.next if e["every"] and not st.open else None,
+                **({"chain": c} if c else {}),
             }
         )
     return out
@@ -73,5 +75,7 @@ def line(r: dict[str, Any]) -> str:
     """One entry for `foreman health`."""
     head = f"recurring {r['name']}: {r['trigger']}"
     if r["open"]:
-        return f"{head}; waits for {r['open']} to close"
+        c = r.get("chain")
+        step = f" (chain step {c['step']} of {c['cap']}{', ' + c['open'] + ' open' if c['open'] else ''})" if c else ""
+        return f"{head}; waits for {r['open']} to close{step}"
     return f"{head}; {r['left']} merges left" if r["left"] is not None else f"{head}; next due {r['next']}"

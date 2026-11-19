@@ -230,6 +230,17 @@ class TestRecurring:
         assert (row["open"], row["next"]) == (weekly, None)
         assert f"waits for {weekly} to close" in fm(self.e.home, "health")
 
+    def test_a_project_without_lens_entries_sees_no_chain(self) -> None:
+        self.entries(CLEANUP.replace("every_merges = 2", "every_merges = 1"))
+        self.seen()
+        self.merged("one", "2026-11-15 01:00:00")
+        (tid,) = schedule.run(self.p, T0)
+        (line,) = [ln for ln in fm(self.e.home, "list").splitlines() if ln.startswith(tid)]
+        assert "chain" not in line
+        assert "chain" not in json.loads(fm(self.e.home, "show", tid))
+        assert "chain" not in schedule.rows(self.p, T0)[0]
+        assert "(chain" not in fm(self.e.home, "health")
+
     def test_removed_entry_stops(self) -> None:
         self.entries(CLEANUP.replace("every_merges = 2", "every_merges = 1"))
         self.seen()
