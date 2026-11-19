@@ -71,8 +71,8 @@ A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and
   with a reason: the owner edits `--blocked-by` or cancels, then `foreman unblock`.
 - `type` (`foreman add/edit --type change|bug|mechanical|definition`; default and every task without one: change) only
   changes the instructions of the task's agents, one paragraph per type; a parent has none.
-- `foreman edit` changes title, goal, criteria, detail, model, effort, type or blockers of a task in triage, backlog or ready (never one with an agent,
-  nor a closed one); criteria or detail on a backlog or ready task drops its plan and returns it to backlog.
+- `foreman edit` changes title, goal, criteria, detail, model, effort, type, blockers or max steps (a chain parent's cap) of a task in triage, backlog or ready (never one with an agent,
+  nor a closed one, except a chain parent's agent running, for `--max-steps`); criteria or detail on a backlog or ready task drops its plan and returns it to backlog.
 - A task too big for one PR is a parent with subtasks (`foreman add --parent FN-n`, only while the parent is in triage or
   backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent. A parent in triage
   closes by itself when every subtask has (done if any is done, else canceled). Once let in (backlog) it gets a parent

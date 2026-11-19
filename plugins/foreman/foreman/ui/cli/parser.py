@@ -9,6 +9,12 @@ from ...core.tasks import backlog, tasktypes
 Command = Callable[[str, str], argparse.ArgumentParser]
 
 
+def _whole(text: str) -> int:
+    if not text.isdigit() or int(text) < 1:
+        raise argparse.ArgumentTypeError("a whole number of 1 or more")
+    return int(text)
+
+
 def _model_effort(s: argparse.ArgumentParser) -> None:
     s.add_argument("--model", choices=config.MODELS, help="the model of the task's responsible agent (default: the project's)")
     s.add_argument("--effort", choices=config.EFFORTS, help="the effort of the task's responsible agent (default: the project's)")
@@ -94,6 +100,7 @@ def _owner_side(c: Command) -> None:
     s.add_argument("--goal")
     s.add_argument("--detail")
     s.add_argument("--criteria", help="one criterion per line, as in foreman add")
+    s.add_argument("--max-steps", type=_whole, metavar="N", help="a chain parent's cap of steps (renew it; not below the steps filed)")
     blocked_by(s)
     _model_effort(s)
     _type(s)
