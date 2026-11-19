@@ -200,6 +200,13 @@ def test_titles(s: Setup):
     assert s.orca.verbs().count("worktree set") == 1
 
 
+def test_a_title_orca_refuses_leaves_no_chat_behind(s: Setup):
+    s.orca.fail("worktree set")
+    with pytest.raises(RunnerError, match="worktree set"):
+        s.start()
+    assert not [d for d, w in s.orca.workers().items() if w["live"]]
+
+
 def waiting_agent(s: Setup) -> tuple[str, SessionRef]:
     tid, ref = on_a_task(s)
     s.orca.set_row(str(ref.dispatch), "blocked")

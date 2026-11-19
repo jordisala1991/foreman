@@ -40,6 +40,8 @@ class Orca:
         spec = self.p.state / "briefs" / f"{agent.name}-{uuid4().hex[:8]}.md"
         spec.parent.mkdir(parents=True, exist_ok=True)
         spec.write_text(brief, encoding="utf-8")
+        if first:  # before the worker: a refusal here leaves no chat running
+            orca(["worktree", "set", "--worktree", f"path:{cwd}", "--display-name", agent.title])
         w = orca(
             ["orchestration", "worker-start", "--run", run, "--from", handle, "--worktree", f"path:{cwd}", "--agent", "claude"]
             + ["--model", agent.model, "--effort", agent.effort, "--keep-open", "--task-title", agent.title, "--spec-file", str(spec)]
@@ -52,8 +54,6 @@ class Orca:
         if not sid:
             self.stop(SessionRef("", None, dispatch=dispatch))
             raise RunnerError("the agent's SessionStart hook wrote no session id")
-        if first:
-            orca(["worktree", "set", "--worktree", f"path:{cwd}", "--display-name", agent.title])
         return SessionRef(sid[:8], sid, str(w.get("terminal") or "") or None, pane(dispatch), dispatch=dispatch, coordinator=handle)
 
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef:

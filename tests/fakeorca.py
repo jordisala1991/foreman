@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve()
 
 
 def fresh() -> dict[str, Any]:
-    return {"running": True, "opens": True, "mode": "structured", "repos": [], "terminals": [], "runs": [], "workers": {}, "n": 0}
+    return {"running": True, "opens": True, "mode": "structured", "repos": [], "terminals": [], "runs": [], "workers": {}, "n": 0, "fail": []}
 
 
 class FakeOrca:
@@ -72,6 +72,10 @@ class FakeOrca:
 
     def terminal_mode(self) -> None:
         self.set(mode="terminal")
+
+    def fail(self, verb: str) -> None:
+        """Every call of `verb` (e.g. `worktree set`) answers `selector_not_found`."""
+        self.set(fail=[*self.load()["fail"], verb])
 
     def set_row(self, dispatch: str, word: str) -> None:
         s = self.load()
@@ -230,6 +234,8 @@ def answer(s: State, a: list[str]) -> dict[str, Any]:
     verb = a[0] if a[0] in ("status", "open") else " ".join(a[:2])
     if verb not in ("status", "open") and not s["running"]:
         raise KeyError("runtime_unavailable")
+    if verb in s["fail"]:
+        raise KeyError("selector_not_found")
     return VERBS[verb](s, a, s["n"])
 
 
