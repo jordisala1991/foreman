@@ -15,7 +15,7 @@ from foreman.core.tasks import backlog, questions
 from foreman.services.claude import sessions
 from foreman.steps import watch
 
-CHECK = {"risk": "high", "tests": "pass", "review": "clean", "ci": "none", "conflict": False}
+CHECK = {"risk": "high", "tests": "pass", "review": "clean", "ci": "", "conflict": False}
 
 
 class Done(Exception):
@@ -104,6 +104,14 @@ def test_accept_follows_the_stored_ci_result(fake_git: FakeRepo):
     c = {**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main"), "ci": "fail"}
     backlog.update(e.p, tid, check=c, failure_streak=2)  # failures went back to its agent twice: the owner decides
     assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
+
+
+def test_a_pr_without_checks_waits_for_the_owner_but_a_local_branch_is_merged(fake_git: FakeRepo):
+    e = Env(repo=fake_git, autonomy="low")
+    tid = in_review(e, check={"risk": "low", "ci": "none"}, pr={"number": 1})  # the provider has CI and the PR has no checks: the loop leaves it to the owner
+    assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
+    backlog.update(e.p, tid, check={**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main")})  # local: no CI, the autonomy merges it
+    assert watch.needs(e.p, {}) == {}
 
 
 def test_a_task_the_autonomy_merges_is_not_a_need(fake_git: FakeRepo):

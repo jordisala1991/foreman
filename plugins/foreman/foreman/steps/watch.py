@@ -26,7 +26,7 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
     c, v = i.get("check"), i.get("review")
     if i["status"] != "in review" or i.get("blocked") or i.get("accepted") or not c or not v or c.get("head") != reviews.verdict_tip(v):
         return False
-    has_ci = c.get("ci") in ("pass", "fail")  # a stored CI result; none yet: the loop settles it on its next tick
+    has_ci = c.get("ci") in ("pass", "fail", "none")  # the provider has CI (a result is stored; `none`: no checks on the PR). Local stores ""
     return decide.after_check(c, p.for_task(i).get("merge", "autonomy"), has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
 
 
