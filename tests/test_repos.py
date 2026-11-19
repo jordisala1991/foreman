@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from foreman.core.project import repos as rules
 from foreman.core.project.config import Project, ProjectError
 
 
@@ -132,3 +133,8 @@ class TestReposTest:
         assert p.for_task({"repo": "api"}).remote == "origin"
         assert self.load("", project=f'repo = "{self.root / "api"}"').remote == "origin"
         self.refused(self.tables(extra_web="remote = 3"), "[repos.web] remote is a remote name")
+
+
+def test_stray_cuts_at_the_kept_out_component() -> None:
+    paths = [".claude/settings.json", ".claude/x", "docs/CLAUDE.md", "node_modules/", "src/a.py", "a/foreman.toml/b", "NOTCLAUDE.md", ".claude/"]
+    assert rules.stray(paths) == [".claude", "docs/CLAUDE.md", "a/foreman.toml"]

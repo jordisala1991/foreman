@@ -3,6 +3,7 @@ from typing import Any
 from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog
+from . import repos
 from .checks import Finding, agents, answers_undelivered, finding, login_check, loop_dead, loop_errors, orphan_worktrees
 from .main_tests import main_tests
 
@@ -13,6 +14,8 @@ def findings(p: Project, rows: dict[str, Any], outside: bool = False) -> list[Fi
         lambda: agents(p, rows),
         lambda: answers_undelivered(p),
         lambda: orphan_worktrees(p),
+        lambda: repos.not_checkouts(p),
+        lambda: repos.stray_files(p),
         lambda: main_tests(p, run=not outside),
         lambda: loop_errors(p),
     )
@@ -32,7 +35,7 @@ def run(p: Project, rows: dict[str, Any], outside: bool = False) -> list[str]:
     with util.locked_json(p.state / "seen.json", {}) as seen:
         for key, f in found.items():
             if key not in seen:
-                tid = backlog.add(p, f["title"], detail=f["detail"], status="triage", source=f"health:{key}")
+                tid = backlog.add(p, f["title"], detail=f["detail"], status="triage", source=f"health:{key}", repo=f.get("repo", ""))
                 if tid:
                     filed.append(tid)
             seen[key] = util.now()

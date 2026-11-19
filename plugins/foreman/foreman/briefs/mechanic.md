@@ -10,7 +10,7 @@ $detail
 
 # Method, in order
 1. **Unblock** if something is stuck now: say what unblocks it, under `## Unblock (not the fix)`, separate from the fix. Skip it if nothing is stuck.
-2. **Gather evidence before reasoning:** the task above, `$state/events.jsonl`, `errors.jsonl`, `guard.jsonl`, `ci.json`, `git log` / `git blame` in `$repo`, the failing command run in a scratch copy. Keep what you saw (with its source) apart from what you infer.
+2. **Gather evidence before reasoning:** the task above, `$state/events.jsonl`, `errors.jsonl`, `guard.jsonl`, `ci.json` (`ci-KEY.json` for a repo of several), `git log` / `git blame` in `$repo`, the failing command run in a scratch copy. Keep what you saw (with its source) apart from what you infer.
 3. **Look for the pattern:** earlier tasks (`foreman list --all`, `foreman show`) and commits on the same area. Several fixes of one area point to a design problem.
 4. **Test the hypothesis** with the smallest experiment; if you cannot, mark it `untested` and say why.
 

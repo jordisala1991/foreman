@@ -941,6 +941,7 @@ questions to the owner, guard stops, risk, and what misled its agents (their `--
 Health checks (`foreman/steps/health/`), each finding a triage task, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `foreman health`, the panel), agent stuck (working, its
 transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
+a repo that is not a git checkout and fm or Claude files in a repo (several repos only),
 tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing
 episode, from the first failing run until a pass, with the commit, the failing step and the output tail), loop step errors.
 Every finding has three parts: what it means, the evidence fm gathered, and a hypothesis marked pending; none proposes a fix.

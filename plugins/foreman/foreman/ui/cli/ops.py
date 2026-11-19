@@ -23,8 +23,6 @@ def cmd_health(a: argparse.Namespace) -> None:
     for line in [*notes.python_note(), *notes.shared_folders(registry.loaded())]:
         print(line)
     p = home(a)
-    if note := notes.repos_note(p):
-        print(note)
     for r in schedule.rows(p):
         print(schedule.line(r))
     for line in [*notes.versions(p), *notes.old_links(p)]:

@@ -65,6 +65,14 @@ class GitRepo:
         listing = self._run("worktree", "list", "--porcelain", check=False).out
         return [Path(ln[len("worktree ") :]) for ln in listing.splitlines() if ln.startswith("worktree ")]
 
+    def is_checkout(self) -> bool:
+        r = self._run("rev-parse", "--show-toplevel", check=False)
+        return r.code == 0 and Path(r.out.strip()).resolve() == self.path.resolve()
+
+    def untracked(self) -> list[str]:
+        out = self._run("status", "--porcelain=v1", "-z", "--ignored=matching", "--untracked-files=all").out
+        return [e[3:] for e in out.split("\0") if e.startswith(("?? ", "!! "))]
+
     def add_worktree(self, path: Path, branch: str, base: str) -> None:
         if self.find(branch):
             self._run("worktree", "add", str(path), branch)

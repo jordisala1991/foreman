@@ -209,3 +209,22 @@ def test_fast_forward(repo: Path):
     with pytest.raises(RepoError):
         r.fast_forward("c")
     assert r.head("main") == before
+
+
+def test_is_checkout(repo: Path):
+    assert GitRepo(repo).is_checkout()
+    plain, sub = repo.parent / "plain", repo / "sub"
+    plain.mkdir()
+    sub.mkdir()
+    assert not GitRepo(plain).is_checkout()
+    assert not GitRepo(repo.parent / "missing").is_checkout()
+    assert not GitRepo(sub).is_checkout()
+
+
+def test_untracked_lists_untracked_and_ignored_paths(repo: Path):
+    (repo / "d").mkdir()
+    (repo / "ig").mkdir()
+    for name in ("u.txt", "d/x.txt", "ig/y.txt", "ign.txt"):
+        (repo / name).write_text("x")
+    (repo / ".git/info/exclude").write_text("ig/\nign.txt\n")
+    assert sorted(GitRepo(repo).untracked()) == ["d/x.txt", "ig/", "ign.txt", "u.txt"]
