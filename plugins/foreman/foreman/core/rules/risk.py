@@ -34,6 +34,7 @@ class Facts:
     conflict: bool
     commits: int
     ci: str = ""
+    publishes: str = ""  # the repo's key when merging publishes it (`Project.publishes`)
 
 
 UNCOUNTED = ["tests/", "test/", "test_*", "*_test.*", "*.lock", "package-lock.json", "*.min.js", "*_pb2.py", "*.generated.*", "generated/"]
@@ -44,12 +45,12 @@ def counted_lines(files: list[dict[str, Any]]) -> int:
     return sum(x["added"] + x["deleted"] for x in files if not path_matches(x["path"], UNCOUNTED))
 
 
-def _path_reasons(rules: Mapping[str, list[str]], paths: list[str]) -> list[str]:
+def _path_reasons(rules: Mapping[str, list[str]], paths: list[str], tag: str) -> list[str]:
     out: list[str] = []
     for label, patterns in rules.items():
         hit = [x for x in paths if path_matches(x, patterns)]
         if hit:
-            out.append(f"touches {label} ({', '.join(hit[:3])}) [diff]")
+            out.append(f"touches {label} ({', '.join(hit[:3])}) {tag}")
     return out
 
 
@@ -57,21 +58,24 @@ def score(p: Project, f: Facts) -> tuple[str, list[str]]:
     """(risk, reasons): the higher of impact (paths, deletions) and doubt (tests, CI); a review never lowers it. Open
     findings and a conflict with main add a reason but not a level: they are gates in decide.after_check (a conflict goes
     back to its agent only once someone wants the merge). Up to 3 reasons, a conflict first, then high ones, each ending
-    with its source in brackets."""
+    with its source in brackets; with several repos a repo's rule (path, size) names it. A repo that publishes on merge is
+    high, that reason first."""
     paths = [x["path"] for x in f.files]
-    high = _path_reasons(p.get("risk", "high"), paths)
+    tag = f"[diff, repo {p.repo_key}]" if p.several and p.repo_key else "[diff]"
+    high = [f"merging publishes this repo ({f.publishes})"] if f.publishes else []
+    high += _path_reasons(p.get("risk", "high"), paths, tag)
     evidence = [
         (f.commits == 0 or not f.files, "the branch has no changes [diff]"),
         (f.tests == "fail", "tests fail [tests]"),
         (f.ci == "fail", "CI fails [ci]"),
     ]
     high += [why for hit, why in evidence if hit]
-    medium = _path_reasons(p.get("risk", "medium"), paths)
+    medium = _path_reasons(p.get("risk", "medium"), paths, tag)
     lines, limit = counted_lines(f.files), p.get("risk", "large_lines")
     doubt = [
         (bool(f.deleted), f"deletes files ({', '.join(f.deleted[:3])}) [diff]"),
         (f.tests == "none", "no test command to run [tests]"),
-        (lines > limit, f"large change, reviews miss more past ~{limit} lines ({lines} lines) [diff]"),
+        (lines > limit, f"large change, reviews miss more past ~{limit} lines ({lines} lines) {tag}"),
     ]
     medium += [why for hit, why in doubt if hit]
     risk = "high" if high else "medium" if medium else "low"

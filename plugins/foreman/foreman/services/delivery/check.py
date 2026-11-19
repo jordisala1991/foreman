@@ -72,7 +72,7 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     v: reviews.Review | None = i.get("review")
     review = "" if not v else "clean" if v["open"] == 0 else f"open after round {v['round']}: {v['open']}"
     conflict = git.conflicts(p, branch)
-    risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci))
+    risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci, p.publishes))
     c = {
         "tests": tests,
         "tests_output": out,

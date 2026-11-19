@@ -115,3 +115,48 @@ class TestLargeChange:
 
     def test_large_lines_is_configurable(self):
         assert risk.score(project("[risk]\nlarge_lines = 100\n"), sized(("app.py", 150)))[0] == "medium"
+
+
+def repos_project(tables: str) -> Project:
+    """A project of `[repos.*]` tables; `$T` stands for a temp folder holding the repos, the home is `$T/home`."""
+    t = Path(tempfile.mkdtemp())
+    (t / "home").mkdir()
+    (t / "home" / "foreman.toml").write_text(tables.replace("$T", str(t)))
+    return Project.load(t / "home")
+
+
+TWO = '[repos.api]\npath = "$T/api"\n[repos.web]\npath = "$T/web"\n'
+
+
+class TestPerRepo:
+    def test_repo_table_gives_impact_and_label(self):
+        p = repos_project(TWO + '[repos.api.risk.high]\nschema = ["migrations/"]\n')
+        r, why = risk.score(p.for_task({"repo": "api"}), facts("migrations/1.sql"))
+        assert r == "high"
+        assert why[0].startswith("touches schema (migrations/1.sql)") and why[0].endswith("[diff, repo api]")
+        assert risk.score(p.for_task({"repo": "web"}), facts("migrations/1.sql"))[0] == "low"
+
+    def test_large_change_names_the_repo(self):
+        p = repos_project(TWO + "[repos.web.risk]\nlarge_lines = 100\n").for_task({"repo": "web"})
+        r, why = risk.score(p, sized(("app.py", 150)))
+        assert r == "medium"
+        assert why[0].startswith("large change") and why[0].endswith("[diff, repo web]")
+
+    def test_publish_on_merge_is_high_first(self):
+        p = repos_project('[repos.site]\npath = "$T/site"\npublish_on_merge = true\n' + TWO)
+        site = p.for_task({"repo": "site"})
+        r, why = risk.score(site, facts("app.py", publishes=site.publishes))
+        assert (r, why[0]) == ("high", "merging publishes this repo (site)")
+        api = p.for_task({"repo": "api"})
+        r, why = risk.score(api, facts("app.py", publishes=api.publishes))
+        assert r == "low" and not any("publishes" in x for x in why)
+        why = risk.score(site, facts(".github/x.yml", tests="fail", ci="fail", publishes=site.publishes))[1]
+        assert why[0] == "merging publishes this repo (site)"
+
+    def test_one_repo_reasons_as_today(self):
+        one = project()
+        assert risk.score(one, facts(".github/x.yml"))[1][0].endswith("CI (.github/x.yml) [diff]")
+        assert one.publishes == ""
+        api = repos_project('[repos.api]\npath = "$T/api"\n').for_task({})
+        assert risk.score(api, facts(".github/x.yml"))[1][0].endswith("CI (.github/x.yml) [diff]")
+        assert repos_project('[repos.api]\npath = "$T/api"\npublish_on_merge = true\n').for_task({}).publishes == "api"

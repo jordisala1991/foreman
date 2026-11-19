@@ -105,7 +105,15 @@ class Project:
         if key not in self.cfg["repos"]:
             raise ProjectError(f"repo {key} is not in foreman.toml")
         r = self.cfg["repos"][key]
-        own = {"repo": r["path"], "main": r["main"], "worktrees": r["worktrees"], "post_create": r["post_create"], "remote": r["remote"]}
+        own = {
+            "repo": r["path"],
+            "main": r["main"],
+            "worktrees": r["worktrees"],
+            "post_create": r["post_create"],
+            "remote": r["remote"],
+            "repo_key": key,
+            "publish_on_merge": r["publish_on_merge"],
+        }
         return dataclasses.replace(self, cfg={**self.cfg, "project": {**self.cfg["project"], **own}, "merge": r["merge"], "risk": r["risk"]})
 
     @property
@@ -140,6 +148,16 @@ class Project:
     def repo_keys(self) -> list[str]:
         """The `[repos.K]` keys; none in the `[project] repo` form."""
         return list(self.cfg["repos"])
+
+    @property
+    def repo_key(self) -> str:
+        """The key of the task's repo in a `for_task` view; empty otherwise."""
+        return str(self.cfg["project"].get("repo_key", ""))
+
+    @property
+    def publishes(self) -> str:
+        """The repo's key when merging into its main publishes it, else empty."""
+        return self.repo_key if self.cfg["project"].get("publish_on_merge") else ""
 
     @property
     def several(self) -> bool:
