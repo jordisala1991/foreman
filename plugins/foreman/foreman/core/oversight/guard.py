@@ -180,6 +180,11 @@ def check_bash(cmd: str, sc: Scope) -> str | None:
     return None
 
 
+def main_branches(p: Project) -> set[str]:
+    """The branch names `push-main` protects: main and master, the project's main and the main of every repo (DESIGN.md «Several repos», Guard row)."""
+    return MAIN | {p.get("project", "main")} | {str(r["main"]) for r in p.cfg["repos"].values()}
+
+
 def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, task: dict[str, Any] | None) -> str | None:
     own = [Path(task["worktree"]).resolve()] if task and task.get("worktree") else []
     branch = (task or {}).get("branch", "")
@@ -189,7 +194,7 @@ def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, task: dict[str, 
             return "config"
         return None
     if tool == "Bash":
-        scope = Scope(cwd, own, branch, p.config_file, p.get("guard", "ask"), MAIN | {p.get("project", "main")})
+        scope = Scope(cwd, own, branch, p.config_file, p.get("guard", "ask"), main_branches(p))
         return check_bash(str(inp.get("command", "")), scope)
     return None
 
