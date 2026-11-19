@@ -341,7 +341,7 @@ second headless Orca only.
 
 ### Chat view or terminal tab (FN-218)
 
-Answers Q1 (below) from commands run on this Mac; the evidence log is `<home>/plans/FN-218-evidence.md` («F1»-«F16» below are its
+Answers Q1 (below) from commands run on this Mac; the evidence log is `<home>/plans/FN-218-evidence.md` («F1»-«F17» below are its
 sections). Q1's reason («the chat … cannot carry the guard hook, foreman's environment or a session id», E2) no longer holds: E2 tried
 only Orca's launch flags, and the chat reads them from a settings file (the answers below). What remains of Q1 for the owner is the choice
 itself, now between the two launches compared here. Orca 1.4.261, Claude Code 2.1.325, a scratch git repo with worktrees made by git, and a headless Orca of its own
@@ -361,7 +361,7 @@ The chat's process: `claude --output-format stream-json … --permission-prompt-
 | `permissions.defaultMode = bypassPermissions` honoured | Not by the file: the mode comes from Orca's host setting `nativeChatPermissionMode`. At its default `full-access` Orca adds `--dangerously-skip-permissions`; at `ask` it adds `--permission-mode=default`, which beats the file, and the agent waits on a prompt | `full-access` → `touch probe.txt` ran under an `ask` rule, `permissionMode: bypassPermissions` (F2); `settings.update {nativeChatPermissionMode: ask}` → argv `--permission-mode=default`, transcript `"permissionMode":"default"`, `worktree ps` `state: blocked`, `sidebarStatus: permission` (F5) |
 | The `FOREMAN_*` env reaches the agent | Yes, from (a) or a `--settings` file; from (b) only to the agent's commands, through `$CLAUDE_ENV_FILE`, not to the guard hook; not from a shared config (c) | `task=FN-901 home=…/S/home` (F2); (b) → `task= home=` (F9), with a SessionStart hook writing `$CLAUDE_ENV_FILE` → `task=FN-1`, the PreToolUse hook `env_TASK=` (F15); (c) → `task= home=…/S/home` (F10) |
 | The Claude session id: recorded, how foreman reads it | Orca picks it (`--session-id`, no launch flag); the `worktree ps` row has only Orca's id (`claude_d3123690_…`). Foreman reads it from the hook's stdin `session_id` (a SessionStart hook in the same settings); the newest transcript of the folder is wrong (Orca's naming call writes one) | `--session-id=32b47fdb-…` = hook `session_id` = transcript `32b47fdb-….jsonl`; a send's result `providerItemId: "claude:be82ef77-…"` (F6, F8) |
-| A message from Orca on the phone reaches the agent | Not shown on a real phone. A script paired as the phone pairs, sending what the phone's composer sends, reached the agent | `phone.js` with the pairing link, capability `agent-session.structured.v1`, `agentSession.send` → `dispatchState: accepted`; transcript 49 → 91 lines, `PHONE` (F8) |
+| A message from Orca on the phone reaches the agent | Yes: the owner, from Orca on his phone, talks to a Claude Code session in Orca's chat view on this Mac and his messages arrive (FN-218 Q3, 2026-11-19); a script paired as the phone pairs did the same on the scratch Orca | owner's answer (F17); `phone.js` with the pairing link, capability `agent-session.structured.v1`, `agentSession.send` → `dispatchState: accepted`; transcript 49 → 91 lines, `PHONE` (F8) |
 | The foreman plugin kept off | Yes with `enabledPlugins {"foreman@foreman": false}` in the carried settings; not when the guard lives in the plugin (b) | (a) → no `foreman:*` skill, no `session-context` (F2); (b) → `foreman:define-task` listed, SessionStart ran in the agent's session (F9) |
 | An agent in the main checkout (planning, parent) | Needs a folder of its own: two agents sharing one file swap tasks (row 1), and a file in the main checkout reaches every worktree. A detached worktree per agent works, and Orca accepts it by `path:` | `git worktree add --detach …/agents/fn-903-planning main` (and `fn-904-parent`), two chats at once → `TASK=FN-903 AGENT=planning` and `TASK=FN-904 AGENT=parent` (F3) |
 
@@ -399,11 +399,11 @@ alternative: every alternative's `touch probe.txt` ran under `full-access` (F2, 
 | (d) | let Orca make the worktrees under `~/orca/workspaces`, an `orca.yaml` committed in each repo | every worktree he makes in Orca runs it | does not run for foreman's worktrees |
 | (e) | set Orca's command override for claude (a host setting) to a wrapper named `claude`; keep one settings file per agent folder outside it | every claude Orca starts passes through foreman's wrapper (it passes through when no file) | a wrapper in the path of all Orca agents; Orca's naming call gets the settings too (F12) |
 
-**Recommendation on Q1: the chat view, launched with `orchestration worker-start` and carried by (a).** Every answer above but the phone
-works for it through Orca's CLI (F2-F6, F16), the owner prefers it, and a chat needs no trust dialog. Its terms, which D1 does not have:
+**Recommendation on Q1: the chat view, launched with `orchestration worker-start` and carried by (a).** Every answer above works for it
+through Orca's CLI (F2-F6, F16, F17), the owner prefers it, and a chat needs no trust dialog. Its terms, which D1 does not have:
 the owner's Orca keeps Claude on Chat and chats on `full-access` (FN-204's `worker-start` answered `mode: structured` and its claude had
 `--dangerously-skip-permissions`, E2) (inferred: E2's run was on the owner's Orca); Orca's worker instructions sit before foreman's brief;
-and a message from a real phone is still to be seen («seen acting», subtask 3). If the owner will not keep those two settings, D1 stands as written.
+and the phone was seen on an ordinary chat-view session, not yet on one started by `worker-start` («seen acting», subtask 3). If the owner will not keep those two settings, D1 stands as written.
 
 FN-216's launch must then (D1-D10 themselves are not edited here):
 - D1 → per project, one coordinator tab `orca terminal create --worktree path:<repo> --command "sleep …"` and a Run `run-create --from H`; per
