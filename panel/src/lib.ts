@@ -91,7 +91,7 @@ export interface Task {
   closed?: string;
   acceptance?: { goal?: string; criteria?: string; verdict?: string };
   agent?: Agent;
-  agent_state?: string | null; // working | done | stopped | gone
+  agent_state?: string | null; // working | waiting | done | stopped | gone
   description?: string;
   report?: { summary?: string; review?: string; confused?: string; at?: string };
   check?: Check;

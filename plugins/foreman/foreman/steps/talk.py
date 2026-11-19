@@ -1,11 +1,12 @@
-"""The loop's talk with running agents: the owner's answers delivered, a silent agent nudged, a task returned to its agent."""
+"""The loop's talk with running agents: the owner's answers delivered, a silent agent nudged, one waiting in its Orca chat
+noted, a task returned to its agent."""
 
 from typing import Any
 
 from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, questions
-from ..providers.runner import Rows, ref_of
+from ..providers.runner import Rows, State, ref_of
 from ..services.agents.running import idle_s, send, update_agent
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
@@ -80,6 +81,24 @@ def watch_agents(p: Project, rows: Rows) -> None:
         if (util.age_s(a.get("nudged")) or 0) > NUDGE_IDLE_S and idle_s(a) > NUDGE_IDLE_S:
             backlog.update(p, i["id"], blocked="its agent stopped without finishing, even after a nudge")
             backlog.event(p, i["id"], "blocked: agent stopped without finishing")
+
+
+def watch_waiting(p: Project, rows: Rows) -> None:
+    """Under Orca, one event when an agent starts waiting for an answer in its chat (the owner answers it there), marked
+    `waiting_seen` as a nudge is, and cleared once it no longer waits."""
+    if p.get("agents", "runner") != "orca":
+        return
+    for i in backlog.tasks(backlog.load(p)):
+        for role in ("agent", "mechanic", "hunter", "reviewer"):
+            a: dict[str, Any] = i.get(role) or {}
+            waits = bool(a) and rows.state(ref_of(a)) is State.WAITING
+            if waits == bool(a.get("waiting_seen")):
+                continue
+            with backlog.edit(p) as d:
+                it = backlog.get(d, i["id"])
+                it[role] = {**it[role], "waiting_seen": util.now() if waits else None}
+            if waits:
+                backlog.event(p, i["id"], f"{a.get('name')} waits for an answer in its Orca chat")
 
 
 def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") -> None:

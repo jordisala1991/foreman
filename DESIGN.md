@@ -261,7 +261,7 @@ and appends the diagnosis to the task's `detail`, so `foreman show` has it. The 
 
 ## Agents through Orca (FN-204)
 
-Defined, not built. FN-203 wants every agent of a project set to `runner = "orca"` to be an Orca tab the owner can open
+Built in FN-216 as «Chat view or terminal tab (FN-218)» says; D1, D3-D7 and D9 differ there. Defined in FN-204: FN-203 wants every agent of a project set to `runner = "orca"` to be an Orca tab the owner can open
 and write to (also from Orca on the phone), while foreman keeps launching, messaging, watching and stopping it. This
 section answers how, from commands run on this Mac; the evidence log is `<home>/plans/FN-204-evidence.md` («E1»-«E8» below
 are its sections; E8 and E9 hold the review's re-runs). The owner's questions Q1-Q5 at the end gate the Orca adapter (subtasks 2-3), not this definition.
@@ -447,6 +447,7 @@ class State(Enum): WORKING, WAITING, IDLE, ENDED, GONE            # today: worki
     short: str; session: str | None                                                       # orca: session known at once; claude: from the listing, maybe None
     terminal: str | None = None; pane: str | None = None                                  # orca: the tab's handle and paneKey; claude: None
     started: str | None = None                                                            # the agent's `started` (launch, each send): D3's start limit
+    dispatch: str | None = None; coordinator: str | None = None                           # orca: the worker's dispatch id and the coordinator tab (FN-216)
 class Rows(Protocol):                                                                     # one snapshot per tick; replaces dict rows
     def state(self, ref: SessionRef | None) -> State
     def busy(self, ref: SessionRef | None) -> bool                                        # WORKING or WAITING
@@ -463,10 +464,10 @@ class RunnerError(Exception); class RunnerUnavailable(RunnerError)              
 ```
 
 `stop_live` and `settings` stay shared (they use only the above). No dict crosses the port: where a caller reads
-`rows.get(sid).get("id")` (`merge.py:117`) or `row.get("status")`, it gets `Rows`. The backlog's agent keeps the five fields of
+`rows.get(sid).get("id")` (`merge.py:117`) or `row.get("status")`, it gets `Rows`. The backlog's agent keeps the fields of
 `SessionRef` (`started` as today). The task's `sessions` list keeps its shape (session ids, `launch.py:87`), so its readers `ui/panel/views.py:83`,
 `steps/metrics.py:79` and `merge.py:117` read it as today; next to it, as `session_kinds` is, a new map `session_tabs`
-(session id → `[terminal, pane]`) is written by `launch.record_session` (`launch.py:85`) from the `SessionRef` `start` or `send` returned,
+(session id → `[terminal, pane, dispatch, coordinator]`; FN-213's entries have the first two) is written by `launch.record_session` (`launch.py:85`) from the `SessionRef` `start` or `send` returned,
 only when its `terminal` is set (never for claude); the adapter writes nothing to the backlog; `record_session` takes that `SessionRef` instead of the id. `merge.stop_all` builds each old session's `SessionRef` from the id,
 `Rows.short(id)` and its `session_tabs` entry; an id with none (every entry written before, and every claude one) has `terminal` and `pane`
 empty, which the claude adapter never reads and the orca adapter reads as GONE; an id with an entry gets its tab closed, a replaced
@@ -903,7 +904,7 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 | steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
 | services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo and the runner (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`) (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo · `claude/`: sessions, rows, login | one per platform, `gitrepo` (the one module that runs git on a repo) and `claude` (the one that builds a claude command line, the `Runner`'s adapter); they see their port, never the loop or each other |
+| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo · runner | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
 | core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
@@ -940,6 +941,7 @@ modules = [
   { path = "foreman.providers.local", layer = "adapters", depends_on = ["foreman.providers"] },
   { path = "foreman.providers.gitrepo", layer = "adapters", depends_on = ["foreman.providers.repo"] },
   { path = "foreman.providers.claude", layer = "adapters", depends_on = ["foreman.providers.runner"] },
+  { path = "foreman.providers.orca", layer = "adapters", depends_on = ["foreman.providers.runner"] },
   { path = "foreman.providers", layer = "ports" },
   { path = "foreman.providers.repo", layer = "ports" },
   { path = "foreman.providers.runner", layer = "ports" },
@@ -986,7 +988,7 @@ Only where there is an external system or two real implementations: `providers/`
 launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json`,
 the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
 task.
-`Runner` (FN-213, built): the agents' sessions, `providers/runner.py`; adapter `claude` (`providers/claude/`), `orca` planned; two real implementations.
+`Runner` (FN-213, built): the agents' sessions, `providers/runner.py`; adapters `claude` (`providers/claude/`) and `orca` (`providers/orca/`, FN-216); two real implementations.
 
 ### Rules
 

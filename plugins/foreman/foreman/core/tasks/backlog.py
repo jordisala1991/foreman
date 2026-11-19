@@ -50,6 +50,8 @@ class Agent(TypedDict, total=False):
     started: str
     terminal: str
     pane: str
+    dispatch: str  # orca: the worker's dispatch id and its coordinator tab
+    coordinator: str
 
 
 class Acceptance(TypedDict, total=False):

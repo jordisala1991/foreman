@@ -59,15 +59,21 @@ def session_lock(p: Project, tid: str) -> AbstractContextManager[None]:
 
 def send(p: Project, i: dict[str, Any], message: str) -> bool:
     """Resumes the task's agent with a message; False when it has no session to resume. The session is the one recorded
-    now, under the lock: a relaunch may have replaced the one in `i`."""
+    now, under the lock: a relaunch may have replaced the one in `i`. A ref the runner gives back changed (Orca started the
+    chat again under a new dispatch id, after a restart) is kept."""
     with session_lock(p, i["id"]):
         a: dict[str, Any] = backlog.get(backlog.load(p), i["id"]).get("agent") or {}
         ref = ref_of(a)
         if not a.get("session") or ref is None:
             return False
         try:
-            registry.runner(p).send(ref, message, Path(a.get("cwd") or p.repo))
+            new = registry.runner(p).send(ref, message, Path(a.get("cwd") or p.repo))
         except RunnerError as e:
             backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
             return False
+        if new != ref:
+            with backlog.edit(p) as d:
+                it = backlog.get(d, i["id"])
+                it["agent"] = {**(it.get("agent") or {}), **new.fields()}
+                it["session_tabs"] = {**it.get("session_tabs", {}), a["session"]: new.tab()}
     return True

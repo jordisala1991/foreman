@@ -26,6 +26,7 @@
   "copied": "Copied",
   "attach_tip": "Open its conversation in a terminal with this command, or in the Claude app's agent view.",
   "as_working": "working",
+  "as_waiting": "waiting",
   "as_done": "ended its turn",
   "as_stopped": "stopped",
   "as_gone": "no session",

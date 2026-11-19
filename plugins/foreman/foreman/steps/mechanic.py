@@ -7,10 +7,11 @@ from ..core.oversight import diagnosis
 from ..core.project.config import Project
 from ..core.tasks import backlog
 from ..providers import registry
-from ..providers.runner import Agent, Rows, RunnerError, State, ref_of, stop_live
+from ..providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, State, ref_of, stop_live
 from ..services.agents.brief import brief
 from ..services.agents.launch import record_session
 from ..services.agents.running import diagnosing, idle_s, running
+from ..services.agents.worktree import agent_folder
 from .talk import NUDGE_IDLE_S
 
 TIMEOUT_S = 1800
@@ -37,12 +38,16 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     text = brief(p, i, "mechanic", {"state": str(p.state), "diagnosis": str(out)})
     runner = registry.runner(p)
+    cwd = agent_folder(p, name, p.repo, p.get("project", "main"))
     try:
-        ref = runner.start(Agent(tid, name, model, effort, util.session_title(tid, "mechanic", i["title"])), text, p.repo)
+        ref = runner.start(Agent(tid, name, model, effort, util.session_title(tid, "mechanic", i["title"])), text, cwd)
+    except RunnerUnavailable as e:  # Orca is down: the next tick tries again
+        backlog.event(p, tid, f"launch postponed: {e}")
+        return
     except RunnerError as e:
         note_missing(p, tid, f"could not launch: {e}")
         return
-    m = {"name": name, **ref.fields(), "kind": "mechanic", "model": model, "effort": effort, "started": util.now(), "cwd": str(p.repo)}
+    m = {"name": name, **ref.fields(), "kind": "mechanic", "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
     with backlog.edit(p) as d:
         it = backlog.get(d, tid)
         still = it["status"] == "triage"

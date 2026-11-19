@@ -62,7 +62,7 @@ def summary(p: Project) -> Obj:
         return {"name": p.name, "broken": str(e)}
 
 
-PANEL_STATE = {State.WORKING: "working", State.WAITING: "blocked", State.IDLE: "done", State.ENDED: "stopped", State.GONE: "gone"}  # what the panel reads
+PANEL_STATE = {State.WORKING: "working", State.WAITING: "waiting", State.IDLE: "done", State.ENDED: "stopped", State.GONE: "gone"}  # what the panel reads
 
 
 def with_session(p: Project, i: Obj, rows: Rows) -> Obj:

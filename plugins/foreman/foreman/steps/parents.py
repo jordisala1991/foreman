@@ -9,9 +9,10 @@ from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, blockers, chains, questions, subtasks
 from ..providers import registry
-from ..providers.runner import Agent, Rows, RunnerError, State, ref_of, stop_live
+from ..providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, State, ref_of, stop_live
 from ..services.agents.brief import agent_name, brief, lens_file
 from ..services.agents.launch import record_session
+from ..services.agents.worktree import agent_folder
 
 
 def launch(p: Project, i: dict[str, Any]) -> None:
@@ -19,14 +20,18 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     name = agent_name(p, tid, "parent")
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
     runner = registry.runner(p)
+    cwd = agent_folder(p, name, p.repo, p.get("project", "main"))
     try:
         title = util.session_title(tid, "parent", i["title"])
-        ref = runner.start(Agent(tid, name, model, effort, title), _brief(p, i), p.repo)
+        ref = runner.start(Agent(tid, name, model, effort, title), _brief(p, i), cwd)
+    except RunnerUnavailable as e:  # Orca is down: the next tick tries again
+        backlog.event(p, tid, f"launch postponed: {e}")
+        return
     except RunnerError as e:
         backlog.update(p, tid, blocked=f"could not launch its agent: {e}")
         backlog.event(p, tid, f"launch failed: {e}")
         return
-    agent = {"name": name, **ref.fields(), "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(p.repo)}
+    agent = {"name": name, **ref.fields(), "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
     with backlog.edit(p) as d:
         it = backlog.get(d, tid)
         still = it["status"] == "backlog" and not it.get("blocked")

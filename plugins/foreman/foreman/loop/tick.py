@@ -6,7 +6,8 @@ Then the steps, in this order (a broken one is logged in state/errors.jsonl and 
 3. scratch: removes the scratch folder of every review round that is over (steps/reviewing.py)
 4. sources: plug-in signals, and recurring entries that fell due, become tasks (steps/sources.py, steps/schedule.py)
 5. answers: the owner's answers go back to its agent (its own session, resumed) (steps/talk.py)
-6. agents: one that ended its turn without finishing (no foreman done / ready / ask / block) is nudged once, then blocked (steps/talk.py)
+6. agents: one that ended its turn without finishing (no foreman done / ready / ask / block) is nudged once, then blocked;
+   waiting: under Orca, an agent that waits for an answer in its chat gets one event (steps/talk.py)
 7. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (services/delivery/pulls.py)
 8. queue: accepted tasks are merged first; then a branch whose head or main's moved is checked (tests, diff, risk) in
    the background, one at a time, and the autonomy may merge it. A check slower than util.BACKGROUND_WAIT_S does not hold
@@ -36,7 +37,7 @@ from ..services.delivery import pulls
 from ..steps import mechanic, parents, release, sources
 from ..steps.health import health
 from ..steps.reviewing import sweep_scratch
-from ..steps.talk import deliver_answers, watch_agents
+from ..steps.talk import deliver_answers, watch_agents, watch_waiting
 from .guarded import guarded
 from .launch import launch_free
 from .queue import run_queue
@@ -63,6 +64,7 @@ def tick(p: Project) -> None:
             ("sources", lambda: sources.run(p)),
             ("answers", lambda: deliver_answers(p, rows)),
             ("agents", lambda: watch_agents(p, rows)),
+            ("waiting", lambda: watch_waiting(p, rows)),
             ("pulls", lambda: run_pulls(p)),
             ("queue", lambda: run_queue(p, rows)),
             ("health", lambda: health.run(p, rows)),
