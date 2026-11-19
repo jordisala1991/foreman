@@ -37,8 +37,8 @@ types:
 	@files=$$(find tests -name '*.py' | sort | grep -vxFf tests/standard-only.txt; [ $$? -le 1 ]) || exit 1; \
 	[ -z "$$files" ] || uv run pyright -p tests/pyright-strict.json $$files
 
-# Architecture: layers and adapters (tach.toml, DESIGN.md "Architecture"). Process-running (subprocess) is banned outside the
-# allowed modules by ruff, in `make lint`.
+# Architecture: layers and adapters (tach.toml, DESIGN.md "Architecture"). Process-running (subprocess, os.system…) is
+# banned outside the allowed modules by ruff, in `make lint`.
 arch:
 	uv run tach check
 

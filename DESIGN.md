@@ -995,7 +995,9 @@ task.
 The rules, one line each, are in `CLAUDE.md`, each marked as checked by `make check` or by the reviewer. What they need
 said once:
 - **One module runs programs**: `foreman/proc.py` (`run`, `run_json`; it knows nothing of git, gh or claude; a missing
-  program or a timeout is a `ProcError`). ruff bans `import subprocess` elsewhere (TID251; not `os.system`/`os.popen`).
+  program or a timeout is a `ProcError`). ruff bans `import subprocess` elsewhere (TID251), as do `os.system`,
+  `os.popen`, `os.exec*` and `os.spawn*` (all but `os.execv`, which `launcher.py` uses), `os.posix_spawn*`,
+  `asyncio.create_subprocess_*` and `pty.spawn`.
   The only other exceptions in `per-file-ignores` (`pyproject.toml`) are the tests and `lock.py`, which needs a process
   group and signals to stop a whole job at its time limit (`start_new_session`, `killpg`).
 - **Typed at the border**: the github adapter turns `gh`'s JSON into its own types (`PullRequest`, the check buckets)
