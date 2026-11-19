@@ -267,7 +267,7 @@ class Env:
         return backlog.get(backlog.load(self.p), tid)
 
 
-def install_fm(request: pytest.FixtureRequest, *entries: dict, version: int = 2) -> Path:
+def install_fm(request: pytest.FixtureRequest, *entries: dict[str, Any], version: int = 2) -> Path:
     """Write Claude Code's record of installed plugins in the sandbox HOME with these foreman@foreman entries; removed after the test."""
     from foreman import launcher
 
@@ -278,7 +278,7 @@ def install_fm(request: pytest.FixtureRequest, *entries: dict, version: int = 2)
     return f
 
 
-def version_folder(parent: Path, name: str) -> dict:
+def version_folder(parent: Path, name: str) -> dict[str, str]:
     """A version folder `parent/name` with a bin/foreman, and its foreman@foreman entry."""
     (parent / name / "bin").mkdir(parents=True)
     (parent / name / "bin/foreman").write_text("#!/usr/bin/env python3\n")

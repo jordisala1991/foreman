@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from foreman.core.project.config import Project
 from foreman.core.rules import risk
@@ -12,8 +13,10 @@ def project(toml: str = "") -> Project:
     return Project.load(d)
 
 
-def facts(*paths: str, **kw) -> risk.Facts:
-    base = dict(tests="pass", review="clean", files=[{"path": x, "added": 1, "deleted": 0} for x in paths], deleted=[], conflict=False, commits=1, ci="")
+def facts(*paths: str, **kw: Any) -> risk.Facts:
+    base: dict[str, Any] = dict(
+        tests="pass", review="clean", files=[{"path": x, "added": 1, "deleted": 0} for x in paths], deleted=[], conflict=False, commits=1, ci=""
+    )
     return risk.Facts(**{**base, **kw})
 
 
@@ -90,7 +93,8 @@ class TestScore:
 
 
 def sized(*pairs: tuple[str, int]) -> risk.Facts:
-    return facts(*[p for p, _ in pairs]).__class__(**{**facts().__dict__, "files": [{"path": p, "added": n, "deleted": 0} for p, n in pairs]})
+    kw: dict[str, Any] = {**facts().__dict__, "files": [{"path": p, "added": n, "deleted": 0} for p, n in pairs]}
+    return facts(*[p for p, _ in pairs]).__class__(**kw)
 
 
 class TestLargeChange:

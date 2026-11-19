@@ -15,7 +15,7 @@ from foreman.steps import talk
 
 
 class TestProvider:
-    def delivered(self, e):
+    def delivered(self, e: Env) -> str:
         return test_loop.TestQueue().deliver(e)  # via the module: an imported Queue would be collected and run twice
 
     def test_accept_only_marks_and_the_task_closes_when_the_merge_is_seen_in_main(self):
@@ -113,7 +113,7 @@ class TestProvider:
         assert e.task(tid)["status"] == "done"
         assert git(e.repo, "rev-parse", "main").strip() == merged
 
-    def accepted_then_main_moves(self, e):
+    def accepted_then_main_moves(self, e: Env) -> str:
         tid = self.delivered(e)
         tick.tick(e.p)
         merge.accept(e.p, tid)

@@ -11,7 +11,7 @@ from foreman.core.project.config import Project, ProjectError
 
 class TestReposTest:
     @pytest.fixture(autouse=True)
-    def set_up(self, request) -> None:
+    def set_up(self, request: pytest.FixtureRequest) -> None:
         tmp = tempfile.TemporaryDirectory()
         request.addfinalizer(tmp.cleanup)
         self.root = Path(tmp.name).resolve()

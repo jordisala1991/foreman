@@ -4,7 +4,7 @@ from foreman.core.review import verdict
 from foreman.core.review.verdict import FIX, LOOK, READY, Case, Finding, findings, key, render
 
 
-def case(risk="low", tests="pass", ci="pass", open=0, reasons=None) -> Case:
+def case(risk: str = "low", tests: str = "pass", ci: str = "pass", open: int = 0, reasons: list[str] | None = None) -> Case:
     return Case(risk, reasons or ["r"], tests, ci, "abcdef1234567", "does x", 3, 120, open)
 
 
@@ -14,7 +14,7 @@ def f(sev: str, what: str, place: str = "a.py:1", why: str = "") -> Finding:
 
 class TestVerdict:
     def test_the_headline_follows_the_findings_checks_and_risk(self):
-        rows = [
+        rows: list[tuple[Case, list[Finding], str]] = [
             (case(), [], READY),
             (case(open=0), [f("L", "a"), f("L", "b")], READY),
             (case(open=1), [f("M", "a")], LOOK.format(n=1)),

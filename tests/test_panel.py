@@ -106,7 +106,7 @@ class TestPanel:
         code, _ = self.call("/api/state", key=False, headers={"Cookie": "fm" + "_key=test-key"})
         assert code == 403
 
-    def test_state(self, request) -> None:
+    def test_state(self, request: pytest.FixtureRequest) -> None:
         code, d = self.call("/api/projects")
         assert code == 200
         assert d["projects"][0]["name"] == "demo"
@@ -163,7 +163,7 @@ class TestPanel:
 
 class TestWatchVersion:
     @pytest.fixture(autouse=True)
-    def keep_request(self, request):
+    def keep_request(self, request: pytest.FixtureRequest) -> None:
         self.request = request  # for the cleanups of helpers
 
     def serving(self, stale: Callable[[], str], pause: Callable[[float], None] = lambda _s: None) -> threading.Thread:
@@ -182,7 +182,8 @@ class TestWatchVersion:
 
     def test_the_same_version_keeps_it_serving(self) -> None:
         """The watcher has looked three times and is held in its pause: the panel still serves. The finalizer lets it go."""
-        reached, release, pauses = threading.Event(), threading.Event(), []
+        reached, release = threading.Event(), threading.Event()
+        pauses: list[float] = []
 
         def pause(every_s: float) -> None:
             pauses.append(every_s)

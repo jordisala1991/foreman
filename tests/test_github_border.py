@@ -24,7 +24,7 @@ class TestBorder:
         assert (merged.state, merged.merge_commit) == ("MERGED", "abc")
 
     def test_a_pull_request_of_the_wrong_shape_is_a_provider_error(self):
-        for bad in (
+        bad_pulls: list[Any] = [
             [],
             "x",
             {**self.GOOD, "state": "SIDEWAYS"},
@@ -34,15 +34,16 @@ class TestBorder:
             {**self.GOOD, "mergeCommit": "abc"},
             {**self.GOOD, "mergeCommit": {"oid": 1}},
             {k: v for k, v in self.GOOD.items() if k != "url"},
-        ):
+        ]
+        for bad in bad_pulls:
             with pytest.raises(providers.ProviderError):
                 provider.pull_request(bad)
 
     def test_the_open_prs_answer_becomes_head_and_ci_or_a_provider_error(self):
-        def node(state):
+        def node(state: Any) -> dict[str, Any]:
             return {"number": 1, "headRefOid": "abc", "commits": {"nodes": [{"commit": {"statusCheckRollup": state}}]}}
 
-        def answer(*nodes):
+        def answer(*nodes: Any) -> dict[str, Any]:
             return {"data": {"repository": {"pullRequests": {"nodes": list(nodes)}}}}
 
         assert checks.open_prs(answer(node({"state": "SUCCESS"}))) == {"1": {"head": "abc", "ci": "pass", "failed": []}}
@@ -58,7 +59,7 @@ class TestBorder:
             with pytest.raises(providers.ProviderError):
                 checks.open_prs(bad)
 
-    def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self, request):
+    def test_gh_answering_a_bad_shape_reaches_the_caller_as_a_provider_error(self, request: pytest.FixtureRequest):
         g = GH()
         request.addfinalizer(g.close)
         g.set(prs={"1": {"draft": False, "state": "OPEN", "comments": []}}, bad_view=True)

@@ -172,7 +172,7 @@ class GH:
     def state(self) -> dict:
         return json.loads((self.e.bin / "gh.json").read_text()) if (self.e.bin / "gh.json").exists() else {"prs": {}}
 
-    def set(self, **kw) -> None:
+    def set(self, **kw: object) -> None:
         s = {"prs": {}, "ci": "pass", "lag": False, **self.state, **kw}
         (self.e.bin / "gh.json").write_text(json.dumps(s))
 
