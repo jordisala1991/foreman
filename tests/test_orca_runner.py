@@ -1,6 +1,7 @@
 """The Orca adapter (foreman/providers/orca/, `[agents] runner = "orca"`), against a fake `orca` (fakeorca.py) whose
 answers have the shapes a real headless Orca gave: launch, send, state, stop, Orca down or restarted, repos and titles."""
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -121,6 +122,8 @@ def test_the_state_is_the_row_of_the_workers_pane(s: Setup, word: str, state: St
     s.orca.set_row(str(ref.dispatch), word)
     rows = Orca(s.p).rows()
     assert rows is not None and rows.state(ref) is state
+    fresh = Orca(s.p).rows()
+    assert fresh is not None and fresh.state(dataclasses.replace(ref, pane=None)) is state  # no kept pane: worker-show names it
     assert rows.busy(ref) is (state in (State.WORKING, State.WAITING))
     assert rows.state(SessionRef("x", "x")) is State.GONE
 

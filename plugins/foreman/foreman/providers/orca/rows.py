@@ -38,8 +38,8 @@ class OrcaRows:
         resumes it)."""
         if ref is None or not ref.dispatch:
             return State.GONE
-        if ref.dispatch not in self.panes:
-            self.panes[ref.dispatch] = self.pane_of(ref.dispatch)
+        if ref.dispatch not in self.panes:  # the pane kept from worker-show at start; asked again only when none was
+            self.panes[ref.dispatch] = ref.pane or self.pane_of(ref.dispatch)
         pane = self.panes[ref.dispatch]
         word = self.rows.get(chat(pane)) if pane else None
         return State.ENDED if word is None else STATES.get(word, State.WAITING)
