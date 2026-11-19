@@ -110,3 +110,21 @@ class TestHook:
     def test_a_broken_input_lets_it_run(self):
         with contextlib.redirect_stderr(io.StringIO()):  # the hook reports the broken input on stderr
             assert guard.hook("not json") == ""
+
+    def test_push_main_covers_every_repos_main(self):
+        t = self.e.tmp
+        (t / "app").mkdir()
+        (t / "api").mkdir()
+        (self.e.home / "foreman.toml").write_text(
+            f'[project]\nname = "toy"\nprefix = "TY"\nworktrees = "{t / "wt"}"\n'
+            f'[repos.app]\npath = "{t / "app"}"\n[repos.api]\npath = "{t / "api"}"\nmain = "develop"\n'
+        )
+        backlog.update(self.e.p, self.tid, repo="app")
+        for branch in ("main", "develop"):
+            out = json.loads(self.call("Bash", {"command": f"git push origin {branch}"}))
+            assert "foreman ask --action push-main" in out["hookSpecificOutput"]["permissionDecisionReason"], branch
+        assert self.call("Bash", {"command": "git push origin foreman/ty-1"}) == ""
+
+    def test_a_one_repo_project_protects_only_its_own_main(self):
+        assert self.call("Bash", {"command": "git push origin develop"}) == ""
+        assert self.call("Bash", {"command": "git push origin main"})
