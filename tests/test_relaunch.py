@@ -4,6 +4,7 @@ busy agent, no live agent, or when an agent runs it."""
 
 import json
 import os
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,7 @@ from foreman.core.oversight import diagnosis
 from foreman.core.tasks import backlog, questions
 from foreman.loop import tick
 from foreman.loop.launch import launch_free
-from foreman.services.agents import relaunch
+from foreman.services.agents import relaunch, running
 from foreman.services.claude import sessions
 from foreman.steps import mechanic, talk
 
@@ -177,3 +178,42 @@ class TestRelaunch:
         assert e.task(tid)[role]["session"] == old["session"]
         events = [ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl") if ev.get("task") == tid]
         assert events[-1].startswith(f"relaunch of {old['name']} failed: claude kept session")
+
+    def test_a_task_closed_meanwhile_gets_no_copy(self) -> None:
+        e = self.e
+        tid, role = responsible(e)
+        old = idle(e, tid, role)
+        real = sessions.relaunch
+
+        def cancel_meanwhile(*args: Any) -> tuple[str, str | None]:
+            out = real(*args)
+            backlog.set_status(e.p, tid, "canceled", "by the owner")
+            return out
+
+        with mock.patch.object(sessions, "relaunch", cancel_meanwhile), pytest.raises(SystemExit, match="changed while its agent restarted"):
+            fm(e.home, "relaunch", tid)
+        new = rows(e)[-1]["id"]
+        assert e.stops() == [old["short"], new]
+        assert e.task(tid)[role]["session"] == old["session"]
+
+    def test_a_send_waits_for_the_relaunch_and_goes_to_the_copy(self) -> None:
+        e = self.e
+        tid, role = responsible(e)
+        old = idle(e, tid, role)
+        stale = e.task(tid)  # the loop read the task before the relaunch
+        real = sessions.relaunch
+        sender = threading.Thread(target=running.send, args=(e.p, stale, "hi"))
+
+        def send_meanwhile(*args: Any) -> tuple[str, str | None]:
+            sender.start()
+            sender.join(0.5)
+            assert sender.is_alive()  # the send waits for the relaunch
+            return real(*args)
+
+        with mock.patch.object(sessions, "relaunch", send_meanwhile):
+            fm(e.home, "relaunch", tid)
+        sender.join(10)
+        new = e.task(tid)[role]
+        assert not [c for c in e.calls() if c["argv"][:3] == ["--bg", "--resume", old["session"]] and len(c["argv"]) == 4]
+        events = [ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl") if ev.get("task") == tid]
+        assert f"session {new['session'][:8]} is working" in events[-1]  # the send went to the copy (busy: retried next tick)

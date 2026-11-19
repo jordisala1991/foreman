@@ -9,6 +9,7 @@ from ...core.project.config import Project
 from ...core.tasks import backlog
 from ..claude import sessions
 from .launch import record_session
+from .running import session_lock
 
 MESSAGE = (
     "foreman restarted this session on its current build: your conversation is kept. Carry on where you left off; "
@@ -18,6 +19,11 @@ MESSAGE = (
 
 def relaunch(p: Project, tid: str) -> tuple[str, str]:
     """(old short id, new short id). Every refusal is a one-line `SessionError`, raised before anything is stopped."""
+    with session_lock(p, tid):
+        return _relaunch(p, tid)
+
+
+def _relaunch(p: Project, tid: str) -> tuple[str, str]:
     rows = sessions.read(p)
     if rows is None:
         raise sessions.SessionError("claude agents is unreadable")
@@ -37,8 +43,15 @@ def relaunch(p: Project, tid: str) -> tuple[str, str]:
         raise
     with backlog.edit(p) as d:
         it = backlog.get(d, tid)
-        it[role] = {**it[role], "short": new, "session": sid, "started": util.now(), "nudged": None}
-        if sid:
-            record_session(it, sid, a["kind"])
+        now: dict[str, Any] = it.get(role) or {}
+        still = it["status"] == task["status"] and now.get("session") == a["session"]
+        if still:
+            it[role] = {**it[role], "short": new, "session": sid, "started": util.now(), "nudged": None}
+            if sid:
+                record_session(it, sid, a["kind"])
+    if not still:  # cancelled, merged or relaunched meanwhile: the copy has no task to work for
+        sessions.stop(p, new)
+        backlog.event(p, tid, f"relaunch of {a['name']} undone: the task changed meanwhile (copy {new} stopped)")
+        raise sessions.SessionError(f"{tid} changed while its agent restarted: the copy {new} is stopped")
     backlog.event(p, tid, f"relaunched {a['name']} on the current foreman: session {a['short']} → {new}")
     return a["short"], new
