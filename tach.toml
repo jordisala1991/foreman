@@ -19,6 +19,10 @@ layer = "ui"
 path = "foreman.ui.panel"
 layer = "ui"
 
+[[modules]]
+path = "foreman.ui.main"
+layer = "ui"
+
 # loop: the process that ticks; does the I/O and calls the core.
 [[modules]]
 path = "foreman.loop"
