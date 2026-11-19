@@ -11,6 +11,7 @@ from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers.runner import NO_ROWS
 from foreman.steps.health import checks, health, repos
 
 
@@ -39,8 +40,8 @@ def triage(e: Env) -> list[backlog.Task]:
 
 def test_main_tests_file_one_finding_per_failing_repo():
     e = several({"api": "false", "web": "true"})
-    health.run(e.p, {})
-    health.run(e.p, {})
+    health.run(e.p, NO_ROWS)
+    health.run(e.p, NO_ROWS)
     (t,) = triage(e)
     assert t["repo"] == "api"
     assert "api" in t["title"]
@@ -51,13 +52,13 @@ def test_a_failing_episode_is_per_repo():
     stamps = (f"2026-01-01 00:00:{n:02d}" for n in itertools.count(1))
     with mock.patch.object(util, "now", lambda: next(stamps)):
         commit(e.tmp / "api", "broken")
-        health.run(e.p, {})
+        health.run(e.p, NO_ROWS)
         assert len(triage(e)) == 1
         commit(e.tmp / "api", "other")
-        health.run(e.p, {})
+        health.run(e.p, NO_ROWS)
         assert len(triage(e)) == 1
         commit(e.tmp / "web", "broken")
-        health.run(e.p, {})
+        health.run(e.p, NO_ROWS)
     assert {t["repo"] for t in triage(e)} == {"api", "web"}
     assert len(triage(e)) == 2
 
@@ -79,10 +80,10 @@ def test_a_repo_that_is_gone_or_not_a_checkout_is_one_finding():
     e = several({"api": "", "web": "false"})
     shutil.rmtree(e.tmp / "web")
     for _ in range(2):
-        found = [f for f in health.findings(e.p, {}) if f.get("repo") == "web"]
+        found = [f for f in health.findings(e.p, NO_ROWS) if f.get("repo") == "web"]
         assert len(found) == 1
         assert "web" in found[0]["title"]
-        assert not [f for f in health.findings(e.p, {}) if f.get("repo") == "api"]
+        assert not [f for f in health.findings(e.p, NO_ROWS) if f.get("repo") == "api"]
         shutil.rmtree(e.tmp / "web", ignore_errors=True)
         (e.tmp / "web").mkdir()
 
@@ -113,6 +114,6 @@ def test_a_one_repo_project_gets_no_new_finding():
     (e.repo / ".claude").mkdir()
     (e.repo / ".claude/x").write_text("x")
     (e.repo / "CLAUDE.md").write_text("x")
-    assert health.findings(e.p, {}) == []
+    assert health.findings(e.p, NO_ROWS) == []
     shutil.rmtree(e.repo)
-    assert health.findings(e.p, {}) == []
+    assert health.findings(e.p, NO_ROWS) == []

@@ -8,15 +8,15 @@ from ..core.project.config import Project
 from ..core.review import reviews
 from ..core.rules import decide
 from ..core.tasks import backlog
+from ..providers.runner import Rows, ref_of
 from ..services import scratch
 from ..services.agents.launch import Scope, launch_reviewer
 from ..services.agents.running import idle_s, running
-from ..services.claude import sessions
 from ..services.delivery import git
 from .talk import NUDGE_IDLE_S, return_to_agent
 
 
-def seen_of(p: Project, i: dict[str, Any], head: str, rows: dict[str, Any]) -> decide.Seen:
+def seen_of(p: Project, i: dict[str, Any], head: str, rows: Rows) -> decide.Seen:
     """What the loop sees of this branch's review: tips, a free slot, the hunter's file, the sessions, why a review would
     run (`review_for`) and how the head follows the verdict's tip (a merge of main, clean or resolved)."""
     v: dict[str, Any] = i.get("review") or {}
@@ -56,12 +56,12 @@ def apply_review(p: Project, i: dict[str, Any], head: str, step: decide.Step) ->
         backlog.update(p, i["id"], review={**v, "returned": True})
 
 
-def working(a: dict[str, Any], rows: dict[str, Any]) -> bool:
-    return bool(a.get("session")) and sessions.busy(rows, a["session"])
+def working(a: dict[str, Any], rows: Rows) -> bool:
+    return bool(a.get("session")) and rows.busy(ref_of(a))
 
 
-def ended(a: dict[str, Any], rows: dict[str, Any]) -> bool:
-    return bool(a.get("session")) and not sessions.busy(rows, a["session"]) and idle_s(a) > NUDGE_IDLE_S
+def ended(a: dict[str, Any], rows: Rows) -> bool:
+    return bool(a.get("session")) and not rows.busy(ref_of(a)) and idle_s(a) > NUDGE_IDLE_S
 
 
 def block_review(p: Project, tid: str, why: str) -> None:

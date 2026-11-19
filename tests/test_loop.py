@@ -13,8 +13,10 @@ from foreman.core.rules import decide, risk
 from foreman.core.tasks import backlog, questions
 from foreman.loop import queue, tick
 from foreman.loop.launch import launch_free
+from foreman.providers import registry
+from foreman.providers.claude.sessions import Claude
 from foreman.providers.repo import FileDiff
-from foreman.services.claude import sessions
+from foreman.providers.runner import RunnerError
 from foreman.services.delivery import check, merge, pulls
 from foreman.services.delivery.git import DeliveryError
 from foreman.steps import talk
@@ -118,14 +120,14 @@ class TestAnswers:
         launch_free(e.p)
         qid = questions.ask(e.p, tid, tid.lower(), "A or B?")
         questions.answer(e.p, qid, "B")
-        talk.deliver_answers(e.p, sessions.listing(e.p))  # its session is still working: wait
+        talk.deliver_answers(e.p, registry.rows(e.p))  # its session is still working: wait
         assert len(e.calls()) == 1
         e.set_state(tid.lower(), "blocked")
         e.set_status(tid.lower(), "active")
-        talk.deliver_answers(e.p, sessions.listing(e.p))  # nor while blocked: resuming it would start a copy
+        talk.deliver_answers(e.p, registry.rows(e.p))  # nor while blocked: resuming it would start a copy
         assert len(e.calls()) == 1
         e.set_state(tid.lower(), "done")
-        talk.deliver_answers(e.p, sessions.listing(e.p))
+        talk.deliver_answers(e.p, registry.rows(e.p))
         resume = e.calls()[-1]["argv"]
         assert "--resume" in resume
         assert resume[resume.index("--resume") + 1] == e.task(tid)["agent"]["session"]
@@ -144,7 +146,7 @@ class TestAnswers:
         questions.answer(e.p, qid, "B")
         e.set_state(tid.lower(), state)
         e.set_status(tid.lower(), status) if status else e.drop_pid(tid.lower())  # no status: its process is gone too
-        talk.deliver_answers(e.p, sessions.listing(e.p))
+        talk.deliver_answers(e.p, registry.rows(e.p))
         assert "--resume" in e.calls()[-1]["argv"]
         assert questions.undelivered(backlog.load(e.p)) == []
 
@@ -156,12 +158,12 @@ class TestStopped:
         launch_free(e.p)
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")
-        talk.watch_agents(e.p, sessions.listing(e.p))
+        talk.watch_agents(e.p, registry.rows(e.p))
         assert "not finished" in e.calls()[-1]["argv"][-1]
         assert e.task(tid)["nudges"] == 1
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")  # the nudge woke it; it ended its turn again
-        talk.watch_agents(e.p, sessions.listing(e.p))
+        talk.watch_agents(e.p, registry.rows(e.p))
         assert "stopped without finishing" in e.task(tid)["blocked"]
         assert len([c for c in e.calls() if "-mechanic" not in str(c["argv"])]) == 2  # health files the block: a mechanic follows
 
@@ -420,7 +422,7 @@ class TestQueue:
         e = Env(test="true", repo=fake_git)
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
         tick.tick(e.p)
-        with mock.patch("foreman.services.claude.sessions.stop", side_effect=sessions.SessionError("timed out")):
+        with mock.patch.object(Claude, "stop", side_effect=RunnerError("timed out")):
             merge.close(e.p, tid, "canceled", "no")
         assert e.task(tid)["status"] == "canceled"
 

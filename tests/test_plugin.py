@@ -20,7 +20,7 @@ from foreman import launcher, util
 from foreman.core.project import plugin, registry
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
-from foreman.services.claude import sessions
+from foreman.providers.runner import settings
 from foreman.ui.cli import main, parser
 from foreman.ui.cli import plugin as cli_plugin
 
@@ -153,26 +153,26 @@ class TestPluginTest:
 
     def test_agents_launch_with_the_plugin_disabled(self) -> None:
         p = self.alpha(f'repo = "{self.repo}"')
-        assert sessions.settings(p, "AL-1", "al-1")["enabledPlugins"]["foreman@foreman"] is False
+        assert settings(p, "AL-1", "al-1")["enabledPlugins"]["foreman@foreman"] is False
         p = self.alpha(f'repo = "{self.repo}"', '[agents.settings]\nenabledPlugins = {"other@x" = false}\n')
-        assert sessions.settings(p, "AL-1", "al-1")["enabledPlugins"] == {"foreman@foreman": False, "other@x": False}
+        assert settings(p, "AL-1", "al-1")["enabledPlugins"] == {"foreman@foreman": False, "other@x": False}
 
     def test_the_agents_session_env_holds_only_foreman_variables(self) -> None:
         p = self.alpha(f'repo = "{self.repo}"')
-        assert set(sessions.settings(p, "AL-1", "al-1")["env"]) == {"FOREMAN_HOME", "FOREMAN_TASK", "FOREMAN_AGENT", "PATH"}
+        assert set(settings(p, "AL-1", "al-1")["env"]) == {"FOREMAN_HOME", "FOREMAN_TASK", "FOREMAN_AGENT", "PATH"}
 
     def test_agents_run_the_loops_foreman(self) -> None:
         """Their PATH and their guard hook name the folder the loop runs from."""
         p = self.alpha(f'repo = "{self.repo}"')
         with mock.patch.object(launcher, "ROOT", self.root / "v1"):
-            s = sessions.settings(p, "AL-1", "al-1")
+            s = settings(p, "AL-1", "al-1")
         assert s["env"]["PATH"].startswith(f"{self.root / 'v1/bin'}{os.pathsep}")
         assert f"{self.root / 'v1/bin/foreman'} guard" in s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
 
     def test_the_guard_command_is_one_shell_safe_string(self) -> None:
         p = self.alpha(f'repo = "{self.repo}"')
         with mock.patch.object(launcher, "ROOT", self.root / "with space/v1"):
-            cmd = sessions.settings(p, "AL-1", "al-1")["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+            cmd = settings(p, "AL-1", "al-1")["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         assert shlex.split(cmd) == [sys.executable, str(self.root / "with space/v1/bin/foreman"), "guard"]
 
     def test_the_manifests_name_foreman_and_declare_no_version(self) -> None:

@@ -5,6 +5,7 @@ from helpers import Env
 
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers.claude.rows import ClaudeRows
 from foreman.services.agents import launch
 from foreman.steps import metrics
 
@@ -110,7 +111,7 @@ class TestRecording:
         e = Env()
         tid = backlog.add(e.p, "clear", status="ready", criteria="y")
         backlog.update(e.p, tid, agent={"short": "aa", "kind": "responsible"}, reviewer={"short": "rr"})
-        launch.fill_sessions(e.p, {"aa-full": {"id": "aa"}, "rr-full": {"id": "rr"}})
+        launch.fill_sessions(e.p, ClaudeRows({"aa-full": {"id": "aa"}, "rr-full": {"id": "rr"}}))
         i = e.task(tid)
         assert i["session_kinds"] == {"aa-full": "responsible", "rr-full": "review"}
         assert i["sessions"] == ["aa-full", "rr-full"]

@@ -14,7 +14,9 @@ from foreman import launcher, util
 from foreman.core.project import registry
 from foreman.core.tasks import backlog, questions
 from foreman.loop import tick
-from foreman.services.claude import login
+from foreman.providers.claude import login
+from foreman.providers.claude.rows import ClaudeRows
+from foreman.providers.runner import NO_ROWS
 from foreman.services.delivery import check
 from foreman.steps.health import checks, health, main_tests, notes
 from foreman.ui.panel import views
@@ -43,23 +45,23 @@ class TestHealth:
 
     def test_orphan_worktree_is_filed_once(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
-        health.run(self.p, {})
-        health.run(self.p, {})
+        health.run(self.p, NO_ROWS)
+        health.run(self.p, NO_ROWS)
         t = self.triage()
         assert len(t) == 1
         assert "ghost" in t[0]["title"]
 
     def test_a_finding_that_goes_away_and_returns_is_filed_again_only_once_its_task_closed(self):
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
-        health.run(self.p, {})
+        health.run(self.p, NO_ROWS)
         first = self.triage()[0]["id"]
         backlog.set_status(self.p, first, "done")
-        health.run(self.p, {})  # still there, seen continuously: not again
+        health.run(self.p, NO_ROWS)  # still there, seen continuously: not again
         assert self.triage() == []
         git(self.e.repo, "worktree", "remove", str(self.e.home / "worktrees/ghost"))
-        health.run(self.p, {})
+        health.run(self.p, NO_ROWS)
         git(self.e.repo, "worktree", "add", "-q", str(self.e.home / "worktrees/ghost"), "x")
-        health.run(self.p, {})
+        health.run(self.p, NO_ROWS)
         assert len(self.triage()) == 1
 
     def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
@@ -98,7 +100,7 @@ class TestHealth:
         old = time.time() - 3 * 3600
         os.utime(t / f"{sid}.jsonl", (old, old))
         backlog.update(self.p, tid, agent={**self.e.task(tid)["agent"], "started": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old))})
-        rows = {sid: {"state": "working"}}
+        rows = ClaudeRows({sid: {"state": "working"}})
         assert checks.agents(self.p, rows)[0]["title"] == f"{tid}'s agent looks stuck"
 
     def test_loop_step_errors_become_findings(self):
@@ -149,22 +151,22 @@ class TestEvidence:
         stamps = (f"2026-01-01 00:00:{n:02d}" for n in itertools.count(1))
         with mock.patch.object(util, "now", lambda: next(stamps)):
             self.commit(e, "broken")
-            health.run(e.p, {})
+            health.run(e.p, NO_ROWS)
             assert len(self.triage(e)) == 1
             self.commit(e, "other")
-            health.run(e.p, {})
+            health.run(e.p, NO_ROWS)
             assert len(self.triage(e)) == 1
             git(e.repo, "rm", "-q", "broken")
             git(e.repo, "commit", "-qm", "fix")
-            health.run(e.p, {})
+            health.run(e.p, NO_ROWS)
             assert len(self.triage(e)) == 1
             self.commit(e, "broken")
-            health.run(e.p, {})
+            health.run(e.p, NO_ROWS)
         assert len(self.triage(e)) == 2
 
     def test_failing_tests_task_names_commit_step_and_tail(self):
         e = Env(test="echo lint ok; echo boom 1>&2; exit 1")
-        health.run(e.p, {})
+        health.run(e.p, NO_ROWS)
         (i,) = self.triage(e)
         head = git(e.repo, "rev-parse", "main").strip()[:12]
         for text in (head, "echo lint ok", "boom"):
@@ -191,7 +193,7 @@ class TestEvidence:
             *checks.loop_dead(Env().p),
             *checks.orphan_worktrees(e.p),
             *checks.loop_errors(e.p),
-            *checks.agents(e.p, {}),
+            *checks.agents(e.p, NO_ROWS),
             *main_tests.main_tests(Env(test="false").p),
             *checks.login_check(e.p, check=lambda c: login.Login(False)),
             *checks.login_expiring(login.Login(True, datetime.now(UTC) + timedelta(hours=1))),
@@ -211,13 +213,13 @@ class TestEvidence:
         line = json.dumps({"step": "s", "error": "bad", "time": util.now()}) + "\n"
         git(e.repo, "worktree", "add", "-q", "-b", "x", str(wt), "main")
         errors.write_text(line)
-        health.run(e.p, {})
+        health.run(e.p, NO_ROWS)
         git(e.repo, "worktree", "remove", str(wt))
         errors.write_text("")
-        health.run(e.p, {})
+        health.run(e.p, NO_ROWS)
         git(e.repo, "worktree", "add", "-q", str(wt), "x")
         errors.write_text(line)
-        health.run(e.p, {})
+        health.run(e.p, NO_ROWS)
         assert len(self.triage(e)) == 2  # one orphan, one error: each filed once
         assert sorted(i["source"] for i in self.triage(e)) == ["health:error:s:bad", "health:orphan:ghost"]
 

@@ -2,19 +2,36 @@
 how to tell which provider applies."""
 
 import re
+from collections.abc import Callable
 
 from ..core.project.config import Project
 from ..core.rules import decide
 from . import MERGES, PRS, ConfigError, Provider
+from .claude.sessions import Claude
 from .github.provider import GitHub
 from .gitrepo import GitRepo
 from .local import Local
 from .repo import Repo
+from .runner import NO_ROWS, Rows, Runner
 
 
 def repo(p: Project) -> Repo:
     """The project's repo, behind the `Repo` port."""
     return GitRepo(p.repo)
+
+
+def runner(p: Project) -> Runner:
+    """The project's agent runner, behind the `Runner` port; a ConfigError naming an unknown `[agents] runner`."""
+    name = p.get("agents", "runner")
+    runners: dict[str, Callable[[Project], Runner]] = {"claude": Claude}
+    if name not in runners:
+        raise ConfigError(f"[agents] runner = {name!r} is not valid: use one of {', '.join(runners)}")
+    return runners[name](p)
+
+
+def rows(p: Project) -> Rows:
+    """This tick's snapshot of the runner's sessions; no session is known when it is unreadable."""
+    return runner(p).rows() or NO_ROWS
 
 
 def detect(p: Project) -> str:

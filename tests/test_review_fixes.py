@@ -2,14 +2,15 @@
 
 import os
 from pathlib import Path
+from unittest import mock
 
 from helpers import PLUGIN, Env, fm, git
 
 from foreman.core.oversight import guard
 from foreman.core.tasks import backlog, questions
 from foreman.loop import tick
+from foreman.providers.claude.sessions import Claude
 from foreman.services.agents import brief, launch
-from foreman.services.claude import sessions
 from foreman.steps import talk
 from foreman.steps.health import checks
 
@@ -117,18 +118,15 @@ class TestLaunchRace:
     def test_a_task_cancelled_while_its_session_starts_stays_cancelled(self):
         e = Env()
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        real = sessions.start
+        real = Claude.start
 
-        def start_and_cancel(*a, **k):
-            r = real(*a, **k)
+        def start_and_cancel(self, *a, **k):
+            r = real(self, *a, **k)
             backlog.set_status(e.p, tid, "canceled", "owner")
             return r
 
-        sessions.start = start_and_cancel
-        try:
+        with mock.patch.object(Claude, "start", start_and_cancel):
             launch.launch(e.p, e.task(tid))
-        finally:
-            sessions.start = real
         assert e.task(tid)["status"] == "canceled"
 
     def test_only_one_loop_per_registry(self):

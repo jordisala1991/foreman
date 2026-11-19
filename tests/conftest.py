@@ -6,6 +6,7 @@ from unittest import mock
 
 import pytest
 from fakerepo import FakeRepo
+from fakerunner import FakeRunner
 from helpers import Env
 
 from foreman.providers import registry
@@ -22,6 +23,14 @@ def fake_git(monkeypatch: pytest.MonkeyPatch) -> FakeRepo:
     """An in-memory repo (fakerepo.FakeRepo) that every `registry.repo(p)` hands out for the test: no git runs."""
     fake = FakeRepo()
     monkeypatch.setattr(registry, "repo", lambda p: fake)
+    return fake
+
+
+@pytest.fixture
+def fake_runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
+    """A fake Runner (fakerunner.FakeRunner) that every `registry.runner(p)` hands out for the test: no claude runs."""
+    fake = FakeRunner()
+    monkeypatch.setattr(registry, "runner", lambda p: fake)
     return fake
 
 

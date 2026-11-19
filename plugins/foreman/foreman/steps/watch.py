@@ -9,7 +9,8 @@ from ..core.project.config import Project, ProjectError
 from ..core.review import reviews
 from ..core.rules import decide
 from ..core.tasks import backlog, questions
-from ..services.claude import sessions
+from ..providers import registry
+from ..providers.runner import NO_ROWS, Rows, ref_of
 
 EVERY_S = 10
 
@@ -30,7 +31,7 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
     return decide.after_check(c, p.for_task(i).get("merge", "autonomy"), has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
 
 
-def needs(p: Project, rows: dict[str, Any]) -> dict[str, str]:
+def needs(p: Project, rows: Rows) -> dict[str, str]:
     """What needs the owner now: key → one line, in the order questions, accepts, blocked, main, parents."""
     d = backlog.load(p)
     found: dict[str, str] = {}
@@ -49,13 +50,13 @@ def needs(p: Project, rows: dict[str, Any]) -> dict[str, str]:
         found[f"ci:{ci.get('since')}"] = _line(f"main: tests fail (since {ci.get('since')})")
     for i in open_tasks:
         agent: backlog.Agent = i.get("agent") or {}
-        sid = agent.get("session")
-        if agent.get("kind") == "parent" and i["id"] not in asked and sessions.alive(rows, sid) and not sessions.busy(rows, sid):
+        ref = ref_of(agent)
+        if agent.get("kind") == "parent" and i["id"] not in asked and rows.alive(ref) and not rows.busy(ref):
             found[f"parent:{i['id']}"] = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
     return found
 
 
-def run(p: Project, once: bool, rows: dict[str, Any]) -> None:
+def run(p: Project, once: bool, rows: Rows) -> None:
     """Prints each need that appears after the start, whose listing `rows` the caller read (what needed the owner at
     start is `foreman list`'s). A poll that cannot read the listing keeps the parents' entries as they were; one that cannot
     read foreman's own state is skipped. It makes no platform call: an accept waits only on what the loop stored. Under `once`,
@@ -63,9 +64,9 @@ def run(p: Project, once: bool, rows: dict[str, Any]) -> None:
     seen = needs(p, rows)
     while True:
         pause()
-        polled = sessions.read(p)
+        polled = registry.runner(p).rows()
         try:
-            now = needs(p, polled or {})
+            now = needs(p, polled or NO_ROWS)
         except (backlog.BacklogError, ProjectError, OSError, ValueError):  # foreman's own state unreadable this poll
             continue
         if polled is None:

@@ -10,8 +10,9 @@ from ...core.project import registry
 from ...core.project.config import Project
 from ...core.review import evidence
 from ...core.tasks import backlog, recurring, taskrepo, tasktypes
+from ...providers import registry as provider_registry
+from ...providers.runner import Rows, State, ref_of
 from ...services import lock
-from ...services.claude import sessions
 from ...services.delivery import pulls
 from ...steps import metrics, schedule
 from ...steps.health import checks, health
@@ -61,15 +62,18 @@ def summary(p: Project) -> Obj:
         return {"name": p.name, "broken": str(e)}
 
 
-def with_session(p: Project, i: Obj, rows: dict[str, Any]) -> Obj:
+PANEL_STATE = {State.WORKING: "working", State.WAITING: "blocked", State.IDLE: "done", State.ENDED: "stopped", State.GONE: "gone"}  # what the panel reads
+
+
+def with_session(p: Project, i: Obj, rows: Rows) -> Obj:
     a: backlog.Agent = i.get("agent") or {}
-    return {**i, "agent_state": sessions.state(rows, a.get("session")) if a else None}
+    return {**i, "agent_state": PANEL_STATE[rows.state(ref_of(a))] if a else None}
 
 
 def state(p: Project) -> Obj:
     d = backlog.load(p)
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
-    rows = sessions.listing(p)
+    rows = provider_registry.rows(p)
     all_tasks = backlog.tasks(d)
     recent = [i for i in all_tasks if i["status"] not in backlog.CLOSED or (i.get("closed") or "") >= since]
     shown = [recurring.shown(taskrepo.shown(tasktypes.shown(with_session(p, i, rows), all_tasks), all_tasks, p.several)) for i in recent]
@@ -83,7 +87,7 @@ def task(p: Project, tid: str) -> Obj:
     i = backlog.get(d, tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
-    shown = recurring.shown(taskrepo.shown(tasktypes.shown(with_session(p, i, sessions.listing(p)), backlog.tasks(d)), backlog.tasks(d), p.several))
+    shown = recurring.shown(taskrepo.shown(tasktypes.shown(with_session(p, i, provider_registry.rows(p)), backlog.tasks(d)), backlog.tasks(d), p.several))
     if i.get("report"):
         check: Obj = i.get("check") or {}
         text = pulls.description(p, i, check.get("head", ""), check.get("at", ""))
@@ -98,7 +102,7 @@ def task(p: Project, tid: str) -> Obj:
 
 
 def system(p: Project) -> Obj:
-    found = health.findings(p, sessions.listing(p), outside=True)
+    found = health.findings(p, provider_registry.rows(p), outside=True)
     rows = metrics.per_task(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
     entries = schedule.rows(p)
