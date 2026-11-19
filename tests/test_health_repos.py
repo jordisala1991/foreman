@@ -33,7 +33,7 @@ def commit(repo: Path, name: str) -> None:
     git(repo, "commit", "-qm", name)
 
 
-def triage(e: Env) -> list[dict]:
+def triage(e: Env) -> list[backlog.Task]:
     return [i for i in backlog.tasks(backlog.load(e.p)) if i["status"] == "triage"]
 
 
