@@ -66,6 +66,12 @@ class Orca:
         new = str(sent.get("dispatchId") or "")
         return dataclasses.replace(ref, dispatch=new, pane=pane(new)) if new and new != ref.dispatch else ref
 
+    def relaunch(self, ref: SessionRef, agent: Agent, message: str, cwd: Path) -> SessionRef:
+        """Today's settings reach a chat with no copy of it: claude reads its folder's file again while it runs (FN-218
+        F3), so the file is carried again and the chat told; the session stays."""
+        settings.carry(self.p, agent, cwd)
+        return self.send(ref, message, cwd)
+
     def rows(self) -> OrcaRows | None:
         """None when Orca is not running or `ps` fails: the panel reads this, so it never opens Orca."""
         if not cli.running():

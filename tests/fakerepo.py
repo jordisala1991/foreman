@@ -47,7 +47,8 @@ class FakeRepo:
     # Helpers
 
     def _history(self, commit: str) -> set[str]:
-        seen, todo = set(), [commit]
+        seen: set[str] = set()
+        todo = [commit]
         while todo:
             c = todo.pop()
             if c not in seen:

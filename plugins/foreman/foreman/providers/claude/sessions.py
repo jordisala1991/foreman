@@ -5,7 +5,8 @@ measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the gua
 
 `send` continues a session that ended its turn (an owner's answer, a rejection, a nudge) under the same
 id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
-id instead, so a resume carries none."""
+id instead, so a resume carries none. `relaunch` is the one resume with flags, on purpose: the copy runs today's
+`--settings` and becomes the task's session."""
 
 import json
 import re
@@ -24,10 +25,12 @@ STOP_SETTLE_S = 3.0  # after the process is gone, a resume right away still copi
 STOP_WAIT_TRIES = 15
 
 
-def command(p: Project, agent: Agent, prompt: str) -> list[str]:
+def command(p: Project, agent: Agent, prompt: str, resume: str = "") -> list[str]:
+    """With `resume`, a copy of that session (its conversation) started with today's flags: see `Claude.relaunch`."""
     return [
         p.get("agents", "claude"),
         "--bg",
+        *(["--resume", resume] if resume else []),
         "-n",
         agent.title,
         "--model",
@@ -65,6 +68,24 @@ class Claude:
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef:
         """Wakes the session with a message. claude continues a session under its id only if it is stopped (process gone)
         and no flag is given; otherwise it starts a copy. So: stop it, wait until it is gone, resume bare; a copy is an error."""
+        sid = self._quiet(ref)
+        short = _run([self.p.get("agents", "claude"), "--bg", "--resume", sid, message], cwd)
+        if not sid.startswith(short):
+            raise RunnerError(f"claude started a copy ({short}) instead of resuming {sid[:8]}")
+        return ref
+
+    def relaunch(self, ref: SessionRef, agent: Agent, message: str, cwd: Path) -> SessionRef:
+        """Stops the session and starts a copy of it with today's flags (`--settings`: PATH, guard, env): the same
+        conversation under a new id, run by the foreman installed now."""
+        sid = self._quiet(ref)
+        short = _run(command(self.p, agent, message, resume=sid), cwd)
+        if sid.startswith(short):
+            raise RunnerError(f"claude kept session {sid[:8]} instead of starting a copy with today's settings")
+        rows = self.rows()
+        return SessionRef(short, rows.find(short) if rows else None)
+
+    def _quiet(self, ref: SessionRef) -> str:
+        """Stops an idle session and waits until its process is gone and settled; its full id."""
         sid = ref.session
         if not sid:
             raise RunnerError("no session to resume")
@@ -82,10 +103,7 @@ class Claude:
         else:
             raise RunnerError(f"session {sid[:8]} did not stop: not resuming it")
         time.sleep(STOP_SETTLE_S)
-        short = _run([self.p.get("agents", "claude"), "--bg", "--resume", sid, message], cwd)
-        if not sid.startswith(short):
-            raise RunnerError(f"claude started a copy ({short}) instead of resuming {sid[:8]}")
-        return ref
+        return sid
 
     def _listing(self) -> ClaudeRows:
         rows = self.rows()

@@ -32,7 +32,7 @@ from foreman.core.rules.decide import (
 
 def seen(**kw: Any) -> Seen:
     base: dict[str, Any] = {"head": "t2", "verdict_tip": "", "hunter_tip": "", "reviewer_tip": "", "free": True}
-    flags = {"hunter_file": False, "hunter_working": False, "hunter_ended": False, "reviewer_ended": False}
+    flags: dict[str, Any] = {"hunter_file": False, "hunter_working": False, "hunter_ended": False, "reviewer_ended": False}
     return Seen(**{**base, **flags, **kw})
 
 

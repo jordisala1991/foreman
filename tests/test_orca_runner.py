@@ -252,3 +252,14 @@ def test_a_mechanic_and_a_parent_wait_for_orca_too(s: Setup):
     assert not backlog.get(d, triage).get("diagnosis") and not backlog.get(d, triage).get("mechanic")
     assert not backlog.get(d, parent).get("blocked") and not backlog.get(d, parent).get("agent")
     assert len([t for t in s.events() if t.startswith("launch postponed")]) == 2
+
+
+def test_a_relaunch_carries_todays_settings_into_the_same_chat(s: Setup):
+    ref = s.start()
+    carried = s.wt / ".claude" / "settings.local.json"
+    carried.write_text("{}")  # an older foreman's file
+    agent = Agent("TY-1", "ty-1", "sonnet", "low", "t")
+    assert Orca(s.p).relaunch(ref, agent, "carry on", s.wt) == ref
+    assert json.loads(carried.read_text())["env"] == settings(s.p, "TY-1", "ty-1")["env"]
+    a = s.orca.call("orchestration send")
+    assert (a[a.index("--to") + 1], a[a.index("--body") + 1]) == (f"dispatch:{ref.dispatch}", "carry on")

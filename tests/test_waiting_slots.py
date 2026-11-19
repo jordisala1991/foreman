@@ -15,7 +15,7 @@ def three_ready(e: Env) -> tuple[str, str, str]:
 
 class TestWaitingSlots:
     @pytest.mark.parametrize("f", ({"kind": "question"}, {"kind": "permission", "action": "git push"}))
-    def test_a_question_or_permission_frees_the_slot(self, f):
+    def test_a_question_or_permission_frees_the_slot(self, f: dict[str, str]):
         e = Env(slots=2)
         a, b, c = three_ready(e)
         assert (e.task(c)["status"], len(e.calls())) == ("ready", 2)

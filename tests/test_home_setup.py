@@ -19,7 +19,7 @@ SHARED_FILES = (plugin.SHARED / "instructions.md", plugin.SHARED / "skills/defin
 
 class TestHomeSetup:
     @pytest.fixture(autouse=True)
-    def keep_request(self, request):
+    def keep_request(self, request: pytest.FixtureRequest) -> None:
         self.request = request  # for the cleanups of helpers
 
     def home(self) -> Path:

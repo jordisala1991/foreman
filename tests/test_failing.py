@@ -1,6 +1,7 @@
 """Failing tests or CI return a delivered branch to its agent (FN-67): one test per row of DESIGN.md's table "What the
 loop does with a task in review" that this adds. The owner only sees branches that pass."""
 
+import pytest
 from helpers import Env
 from test_github import GH
 from test_review_rules import commit, head, launched, take_note
@@ -76,7 +77,7 @@ class TestFailing:
         assert "tests fail [tests]" in i["check"]["reasons"]
         assert len(e.calls()) == before
 
-    def test_a_green_check_ends_the_row_without_a_test_command(self, request):
+    def test_a_green_check_ends_the_row_without_a_test_command(self, request: pytest.FixtureRequest):
         """With a test command only the merge ends the row (FN-113, tests/test_merged_check.py); without one, the PR's
         CI stands in and a green check ends it."""
         g = GH(test="")
@@ -95,7 +96,7 @@ class TestFailing:
         i = g.e.task(tid)
         assert (i["status"], i["failure_streak"], i["failures"]) == ("in review", 0, 1)
 
-    def test_failing_ci_goes_back_with_each_check(self, request):
+    def test_failing_ci_goes_back_with_each_check(self, request: pytest.FixtureRequest):
         g = GH(test="true")
         request.addfinalizer(g.close)
         g.set(ci="fail", failed=[["lint", "https://ci/lint"], ["unit", "https://ci/unit"]])
