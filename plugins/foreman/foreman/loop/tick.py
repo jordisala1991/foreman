@@ -30,6 +30,7 @@ from .. import launcher, providers, util
 from ..core.project.config import Project
 from ..core.project.registry import registered, registry_file
 from ..providers import registry
+from ..providers.runner import NO_ROWS
 from ..services.agents.launch import fill_sessions
 from ..services.delivery import pulls
 from ..steps import mechanic, parents, release, sources
@@ -52,8 +53,9 @@ def tick(p: Project) -> None:
     beat(p, "start")
     try:
         rows = registry.rows(p)
-    except providers.ConfigError as e:  # a bad [agents] runner: no step can run, health files it
+    except providers.ConfigError as e:  # a bad [agents] runner: no agent step can run; health files it
         util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": "runner", "error": repr(e), "trace": ""})
+        health.run(p, NO_ROWS)
         return
     steps = [
         ("sessions", lambda: fill_sessions(p, rows)),

@@ -109,7 +109,9 @@ def fill_sessions(p: Project, rows: Rows) -> None:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        record_session(it, SessionRef(a["short"], sid), a.get("kind", "") if role in ("agent", "mechanic") else "review")
+                        record_session(
+                            it, SessionRef(a["short"], sid, a.get("terminal"), a.get("pane")), a.get("kind", "") if role in ("agent", "mechanic") else "review"
+                        )
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:

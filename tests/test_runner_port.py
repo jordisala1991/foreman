@@ -12,8 +12,9 @@ from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
+from foreman.providers.claude.rows import ClaudeRows
 from foreman.providers.runner import NO_ROWS, SessionRef
-from foreman.services.agents import running
+from foreman.services.agents import launch, running
 from foreman.services.delivery import merge
 from foreman.steps import mechanic
 
@@ -98,6 +99,15 @@ def test_a_tick_with_an_unknown_runner_goes_on_recorded():
     tick.tick(p)
     rows = [r for r in util.read_jsonl(p.state / "errors.jsonl") if r["step"] == "runner"]
     assert len(rows) == 1 and "nope" in rows[0]["error"]
+    assert any("nope" in str(i) for i in backlog.tasks(backlog.load(p)))  # health filed it
+
+
+def test_a_session_found_late_keeps_its_tab(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    tid = backlog.add(e.p, status="ready", criteria="y", title="x")
+    backlog.update(e.p, tid, agent={"short": "aa", "terminal": "T1", "pane": "P1", "kind": "responsible"})
+    launch.fill_sessions(e.p, ClaudeRows({"aa-sid": {"id": "aa"}}))
+    assert task(e, tid)["session_tabs"] == {"aa-sid": ["T1", "P1"]}
 
 
 def test_health_command_names_an_unknown_runner():
