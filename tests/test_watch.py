@@ -213,14 +213,14 @@ def test_fn_216_replayed_prints_its_line(fake_git: FakeRepo, monkeypatch: pytest
     assert len(out) == 1 and tid in out[0]
 
 
-def test_once_returns_after_the_accept_printed_at_start(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+def test_once_waits_for_a_new_need_after_the_start_accept(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     tid = in_review(e)
-    task(e, blocked="x")
+    other = task(e)
     listing(e)
-    drive(e, monkeypatch, once=True)  # a pause would raise Done
+    drive(e, monkeypatch, blocked(e, other, "x"), once=True)  # a second pause would raise Done
     out = printed(capsys)
-    assert len(out) == 1 and tid in out[0]
+    assert len(out) == 2 and tid in out[0] and other in out[1]
 
 
 def test_each_thing_is_printed_once_when_it_starts(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):

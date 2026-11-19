@@ -60,13 +60,11 @@ def run(p: Project, once: bool, rows: Rows) -> None:
     """Prints the accepts already waiting at start, then each need that appears after it; `rows` is the listing the caller
     read (the other needs at start are `foreman list`'s). A poll that cannot read the listing keeps the parents' entries as they were; one that cannot
     read foreman's own state is skipped. It makes no platform call: an accept waits only on what the loop stored. Under `once`,
-    returns after the first line."""
+    returns after the first line printed after the start."""
     seen = needs(p, rows)
     for key, line in seen.items():
         if key.startswith("accept:"):
             print(line, flush=True)
-            if once:
-                return
     while True:
         pause()
         polled = registry.runner(p).rows()
