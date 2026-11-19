@@ -34,7 +34,7 @@ format:
 types:
 	uv run pyright
 	uv run pyright -p tests/pyright-standard.json
-	@files=$$(find tests -name '*.py' | sort | grep -vxFf tests/standard-only.txt || true); \
+	@files=$$(find tests -name '*.py' | sort | grep -vxFf tests/standard-only.txt; [ $$? -le 1 ]) || exit 1; \
 	[ -z "$$files" ] || uv run pyright -p tests/pyright-strict.json $$files
 
 # Architecture: layers and adapters (tach.toml, DESIGN.md "Architecture"). Process-running (subprocess) is banned outside the
