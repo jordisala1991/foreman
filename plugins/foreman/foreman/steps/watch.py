@@ -5,13 +5,11 @@ import time
 from typing import Any
 
 from .. import util
-from ..core.project.config import Project
+from ..core.project.config import Project, ProjectError
 from ..core.review import reviews
 from ..core.rules import decide
 from ..core.tasks import backlog, questions
-from ..providers import registry
 from ..services.claude import sessions
-from ..services.delivery import pulls
 
 EVERY_S = 10
 
@@ -28,12 +26,8 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
     c, v = i.get("check"), i.get("review")
     if i["status"] != "in review" or i.get("blocked") or i.get("accepted") or not c or not v or c.get("head") != reviews.verdict_tip(v):
         return False
-    q = p.for_task(i)
-    head, main_head, provider = pulls.head_of(q, i.get("branch", "HEAD")), registry.repo(q).find(q.get("project", "main")), registry.get(q)
-    ci = provider.ci(pulls.change_of(i, head)) if i.get("pr") else None
-    if decide.checks_again(c, head, main_head, ci):  # the loop checks it again first: not decided yet
-        return False
-    return decide.after_check(c, q.get("merge", "autonomy"), provider.has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
+    has_ci = c.get("ci") in ("pass", "fail")  # a stored CI result; none yet: the loop settles it on its next tick
+    return decide.after_check(c, p.for_task(i).get("merge", "autonomy"), has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
 
 
 def needs(p: Project, rows: dict[str, Any]) -> dict[str, str]:
@@ -63,13 +57,17 @@ def needs(p: Project, rows: dict[str, Any]) -> dict[str, str]:
 
 def run(p: Project, once: bool, rows: dict[str, Any]) -> None:
     """Prints each need that appears after the start, whose listing `rows` the caller read (what needed the owner at
-    start is `foreman list`'s). An unreadable listing mid-run keeps the parents' entries as they were. Under `once`,
+    start is `foreman list`'s). A poll that cannot read the listing keeps the parents' entries as they were; one that cannot
+    read foreman's own state is skipped. It makes no platform call: an accept waits only on what the loop stored. Under `once`,
     returns after the first line."""
     seen = needs(p, rows)
     while True:
         pause()
         polled = sessions.read(p)
-        now = needs(p, polled or {})
+        try:
+            now = needs(p, polled or {})
+        except (backlog.BacklogError, ProjectError, OSError, ValueError):  # foreman's own state unreadable this poll
+            continue
         if polled is None:
             now.update({k: v for k, v in seen.items() if k.startswith("parent:")})
         for key, line in now.items():

@@ -11,7 +11,6 @@ from helpers import Env, fm
 
 from foreman import util
 from foreman.core.tasks import backlog, questions
-from foreman.providers import registry
 from foreman.services.claude import sessions
 from foreman.steps import watch
 
@@ -97,30 +96,12 @@ def test_a_task_waits_for_accept_only_when_after_check_says_owner(fake_git: Fake
     assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
 
 
-def test_a_check_the_loop_would_redo_is_not_decided_yet(fake_git: FakeRepo):
-    e = Env(repo=fake_git)
-    tid = in_review(e)
-    fake_git.commit("main")  # main moved since the check
-    assert watch.needs(e.p, {}) == {}
-    backlog.update(e.p, tid, check={**CHECK, "head": fake_git.find("b"), "main": fake_git.find("main")})
-    assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
-
-
-def test_a_check_before_the_pr_ci_result_is_not_decided_yet(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch):
-    class Github:
-        has_ci = True
-        result = "pass"
-
-        def ci(self, change: object) -> str:
-            return self.result
-
+def test_accept_follows_the_stored_ci_result(fake_git: FakeRepo):
     e = Env(repo=fake_git, autonomy="low")
-    github = Github()
-    monkeypatch.setattr(registry, "get", lambda p: github)
-    tid = in_review(e, check={"risk": "low"}, pr={"number": 1})  # stored `ci: none`; the PR's checks have passed since
-    assert watch.needs(e.p, {}) == {}
-    github.result = "none"  # no checks at all: the loop leaves it to the owner
-    backlog.update(e.p, tid, check={**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main")})
+    tid = in_review(e, check={"risk": "low", "ci": "pass"})
+    assert watch.needs(e.p, {}) == {}  # the loop merges it
+    c = {**e.task(tid)["check"], "ci": "fail"}
+    backlog.update(e.p, tid, check=c, failure_streak=2)  # failures went back to its agent twice: the owner decides
     assert list(watch.needs(e.p, {})) == [f"accept:{tid}"]
 
 
@@ -226,6 +207,23 @@ def test_an_unreadable_listing_does_not_reprint_parents(fake_git: FakeRepo, monk
     listing(e, row())
     drive(e, monkeypatch, lambda: (e.bin / "agents.json").write_text("not json"), lambda: listing(e, row()))
     assert printed(capsys) == []
+
+
+def test_a_poll_that_cannot_read_the_backlog_does_not_end_watch(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    e = Env(repo=fake_git)
+    tid = task(e)
+    good = e.p.backlog_file.read_text()
+    listing(e)
+
+    def corrupt() -> None:
+        e.p.backlog_file.write_text('{"schema_version": 1}')
+
+    def restore() -> None:
+        e.p.backlog_file.write_text(good)
+        backlog.update(e.p, tid, blocked="x")
+
+    drive(e, monkeypatch, corrupt, restore)
+    assert [tid in line for line in printed(capsys)] == [True]
 
 
 def test_events_text_does_not_change_what_is_printed(fake_git: FakeRepo):
