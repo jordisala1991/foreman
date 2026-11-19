@@ -106,7 +106,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
    session is not busy: the idle session is stopped, fm waits until its process is gone (+3 s), then resumes; at most
    one answer per task per tick; a copy (different short id) or an unreadable `claude agents` fails the send; dropped if the task closed meanwhile;
    a failed try is retried next tick; the answer stays not delivered and `foreman health` shows it after 10 minutes. A session id not listed yet at launch is
-   filled in from its short id on a later tick.
+   filled in from its short id on a later tick. `foreman relaunch` is the one resume that sends flags, on purpose: a
+   copy under a new id with today's `--settings` (PATH, guard, env), recorded as the task's session.
 4. **agents**: an agent whose session ended its turn without `foreman done`/`ready`/`ask`/`block`, and whose transcript
    has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
 5. **queue**: accepted tasks are merged first, one at a time; with a test command, each only once its tests pass on it

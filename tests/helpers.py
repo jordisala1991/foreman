@@ -14,6 +14,7 @@ import sys
 import tempfile
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fakerepo import FakeRepo
@@ -99,7 +100,8 @@ FAKE = textwrap.dedent("""\
         sid = a[a.index("--resume") + 1]
         rows = rows_of("agents.json")
         row = next(r for r in rows if r["sessionId"] == sid)
-        if row.get("pid") or len(a) != 4 or os.path.exists(os.path.join(d, "copy_next")):  # alive, or with flags: a copy, as claude does
+        same = os.path.exists(os.path.join(d, "resume_same_id"))  # claude keeps the id even with flags
+        if not same and (row.get("pid") or len(a) != 4 or os.path.exists(os.path.join(d, "copy_next"))):  # alive, or with flags: a copy, as claude does
             new = hashlib.sha1((sid + "copy" + str(len(rows))).encode()).hexdigest()[:8]
             save("agents.json", rows + [{"id": new, "sessionId": new + "-0000-0000", "name": row["name"], "state": "working", "pid": 1}])
             print(f"note: started a copy as {new}")
@@ -194,7 +196,7 @@ class Env:
         assert self.fake is not None
         return self.fake
 
-    def calls(self) -> list[dict]:
+    def calls(self) -> list[dict[str, Any]]:
         return util.read_jsonl(self.bin / "calls.jsonl")
 
     def stops(self) -> list[str]:
@@ -261,7 +263,7 @@ class Env:
             f.write("".join(f"# {n}\n" for n in range(lines)))
         git(Path(self.task(tid)["worktree"]), "commit", "-qam", "change")
 
-    def task(self, tid: str) -> dict:
+    def task(self, tid: str) -> dict[str, Any]:
         return backlog.get(backlog.load(self.p), tid)
 
 

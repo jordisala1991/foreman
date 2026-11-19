@@ -50,6 +50,9 @@ class FakeRunner:
         self.sent.append((ref, message, cwd))
         return ref
 
+    def relaunch(self, ref: SessionRef, agent: Agent, message: str, cwd: Path) -> SessionRef:
+        return self.start(agent, message, cwd)
+
     def rows(self) -> FakeRows:
         return FakeRows()
 

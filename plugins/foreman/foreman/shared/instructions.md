@@ -32,7 +32,7 @@ per PR. Agents never split tasks.
 - **The integration queue:** `foreman accept {prefix}-3` (the loop merges its PR) or `foreman reject {prefix}-3 "note"` (back to
   its agent; the note counts as the owner's decision for the reviewer).
 - **Others:** `foreman watch` (one line each time something starts needing you: run it with `--once`, relaunched, as a background command, or without `--once` in a monitor), `foreman metrics`, `foreman health`, `foreman pause` / `foreman pause --off`, `foreman cancel {prefix}-n`,
-  `foreman unblock {prefix}-n --relaunch`.
+  `foreman unblock {prefix}-n --relaunch`, `foreman relaunch {prefix}-n` (its agent restarts on today's foreman, same conversation).
 - **Talk with a task's agent:** `claude attach <short id>` (in `foreman show`, under `agent.short`), or in the panel.
 
 ## What is not done here
