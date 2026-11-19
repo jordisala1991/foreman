@@ -190,6 +190,10 @@ class Env:
         self.p = Project.load(self.home)
         os.environ["FOREMAN_CLAUDE_PROJECTS"] = str(self.tmp / "transcripts")
 
+    def fake_repo(self) -> FakeRepo:
+        assert self.fake is not None
+        return self.fake
+
     def calls(self) -> list[dict]:
         return util.read_jsonl(self.bin / "calls.jsonl")
 

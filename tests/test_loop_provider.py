@@ -5,6 +5,7 @@ import test_loop
 from helpers import Env, fm, git
 
 from foreman import providers
+from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
 from foreman.loop import queue, tick
 from foreman.providers import Change, ChangeState, registry
@@ -169,16 +170,17 @@ class TestRequestMerge:
         e = Env(test="true")
         tid = backlog.add(e.p, "x", status="ready", criteria="y")
 
-        class Refuses:
-            def __init__(self, error):
+        class Refuses(providers.Provider):
+            def __init__(self, p: Project, error: Exception) -> None:
+                super().__init__(p, registry.repo(p))
                 self.error = error
 
-            def merge(self, change, strategy):
+            def merge(self, change: providers.Change, strategy: str) -> str:
                 raise self.error
 
-        def ask(error):
+        def ask(error: Exception) -> None:
             i = {"id": tid, "branch": "main"}  # main does not conflict with itself
-            merge.request_merge(e.p, i, Refuses(error), providers.Change(tid))
+            merge.request_merge(e.p, i, Refuses(e.p, error), providers.Change(tid))
 
         with pytest.raises(providers.Transient):
             ask(providers.Transient("hiccup"))
