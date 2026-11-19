@@ -376,7 +376,7 @@ handle `H`, a Run from `run-create --from H`): **launch** `orca orchestration wo
 `worker-release` once the agent reported itself done (`worker-stop` then answers `alreadySettled`). Its terms: `worker-start` has no
 `--surface`: it makes a chat only when Orca's Chat|CLI choice for claude is Chat (a fresh Orca's is `terminal` → `"mode": "terminal"`);
 Orca puts its own worker instructions before the brief («You are a dispatched worker … Reach it with the `orca orchestration` …») and
-wraps each message («From: TERM_… Subject: …»); a follow-up gets a new dispatch id. **Restart** (on a headless Orca): chats die with Orca
+wraps each message («From: TERM_… Subject: …»); a send to a live chat returns only a `messageId`, and only a send after an Orca restart returns a new `dispatchId`. **Restart** (on a headless Orca): chats die with Orca
 (tabs did not, E7); the next message makes Orca run `claude --resume=<same id>` with the settings read again (F8, F16). No trust dialog
 showed in folders claude had never seen (F2).
 
@@ -412,7 +412,8 @@ FN-216's launch must then (D1-D10 themselves are not edited here):
   `"mode"` other than `structured` → `RunnerError` (no fallback, D10); planning, mechanic and parent agents get a detached worktree each
   (`git worktree add --detach <home>/…/<task>-<role> <main>`), never the main checkout (F3);
 - D3 → the row whose `paneKey` is `worker-show`'s `assigneePaneKey`; `blocked` → WAITING;
-- D4 → `orchestration send --from H --to dispatch:<newest> --subject … --body MSG`, keeping the dispatch id it returns (F16);
+- D4 → `orchestration send --from H --to dispatch:D --subject … --body MSG`, `D` the dispatch id kept from `worker-start`; a send to a live chat
+  returns only `messageId`; a send after an Orca restart returns a new `dispatchId`, which replaces `D` (F16);
 - D5 → `worker-stop --dispatch D`, and `worker-release` when it answers `alreadySettled`;
 - D6 → not needed for chats; D7 → a restart ends every chat until its next message (F8, F16);
 - never write `.claude/settings.local.json` into a repo's main checkout, and leave Orca's host settings (command override, agent env) alone (F3, F12).
@@ -475,6 +476,7 @@ review's too.
 - **Q1** The agent's tab is Claude Code's terminal screen, not Orca's chat view: the chat (structured) worker cannot carry the guard
   hook, foreman's environment or a session id (E2). Is a terminal tab acceptable, also from Orca on the phone? Recommend yes: without
   it the guard hook is lost; «seen acting» (subtask 3) checks the phone.
+  Superseded: see «Chat view or terminal tab (FN-218)»; the recommendation is now the chat view.
 - **Q2** May foreman press «Yes, I trust this folder» for its own worktrees (the click the owner would make; claude records the folder
   in `~/.claude.json`)? Recommend yes, only inside the project's repos and worktrees folder; otherwise every new agent waits until
   the owner clicks.
