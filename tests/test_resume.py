@@ -1,6 +1,7 @@
 """A resume continues an agent's own session: the session is stopped first, no flag is given, a copy fails the send."""
 
 import json
+from unittest import mock
 
 import pytest
 from helpers import Env
@@ -8,7 +9,10 @@ from helpers import Env
 from foreman import proc, util
 from foreman.core.tasks import backlog, questions
 from foreman.loop.launch import launch_free
-from foreman.services.claude import sessions
+from foreman.providers import registry
+from foreman.providers.claude import sessions
+from foreman.providers.claude.sessions import Claude
+from foreman.providers.runner import RunnerError, SessionRef
 from foreman.steps import talk
 from foreman.steps.health import checks
 
@@ -38,7 +42,7 @@ class TestResume:
         sid = e.task(tid)["agent"]["session"]
         e.set_state(tid.lower(), "done")  # idle but alive: the fake copies it unless it was stopped first
         answer(e, tid)
-        talk.deliver_answers(e.p, sessions.listing(e.p))
+        talk.deliver_answers(e.p, registry.rows(e.p))
         assert e.task(tid)["agent"]["session"] == sid
         assert len(rows(e)) == 1
         assert questions.undelivered(backlog.load(e.p)) == []
@@ -52,7 +56,7 @@ class TestResume:
         (e.bin / "copy_next").write_text("")
         e.set_state(tid.lower(), "done")
         answer(e, tid)
-        talk.deliver_answers(e.p, sessions.listing(e.p))
+        talk.deliver_answers(e.p, registry.rows(e.p))
         i = e.task(tid)
         assert (i["agent"]["session"], i["undelivered"]) == (sid, 1)
         assert any("started a copy" in ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl"))
@@ -62,8 +66,9 @@ class TestResume:
         tid = launched(e)
         e.set_state(tid.lower(), "done")
         (e.bin / "agents.json").unlink()
-        with pytest.raises(sessions.SessionError):
-            sessions.resume(e.p, e.task(tid)["agent"]["session"], "hi", e.repo)
+        with pytest.raises(RunnerError):
+            sid = e.task(tid)["agent"]["session"]
+            Claude(e.p).send(SessionRef(sid[:8], sid), "hi", e.repo)
         assert len(e.calls()) == 1
 
     def failed_send(self, flag: str, tries: int = 15):
@@ -74,7 +79,7 @@ class TestResume:
         answer(e, tid)
         old, sessions.STOP_WAIT_TRIES = sessions.STOP_WAIT_TRIES, tries
         try:
-            talk.deliver_answers(e.p, sessions.listing(e.p))
+            talk.deliver_answers(e.p, registry.rows(e.p))
         finally:
             sessions.STOP_WAIT_TRIES = old
         assert e.task(tid)["undelivered"] == 1
@@ -82,14 +87,11 @@ class TestResume:
         assert any("could not reach" in ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl"))
 
     def test_a_failed_stop_fails_the_send(self):
-        def boom(p, short):
-            raise sessions.SessionError("claude stop: timed out after 30s")
+        def boom(self, ref):
+            raise RunnerError("claude stop: timed out after 30s")
 
-        old, sessions.stop = sessions.stop, boom
-        try:
+        with mock.patch.object(Claude, "stop", boom):
             self.failed_send("stop_ok")
-        finally:
-            sessions.stop = old
 
     def test_stop_raises_the_sessions_error(self):
         e = Env(repo=self.fake)
@@ -99,8 +101,8 @@ class TestResume:
 
         old, proc.run = proc.run, boom
         try:
-            with pytest.raises(sessions.SessionError, match="timed out"):
-                sessions.stop(e.p, "abc")
+            with pytest.raises(RunnerError, match="timed out"):
+                Claude(e.p).stop(SessionRef("abc", None))
         finally:
             proc.run = old
 
@@ -116,10 +118,10 @@ class TestResume:
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         (e.bin / "copy_next").write_text("")
         e.set_state(tid.lower(), "done")
-        talk.watch_agents(e.p, sessions.listing(e.p))
+        talk.watch_agents(e.p, registry.rows(e.p))
         assert e.task(tid)["agent"]["nudged"]
         backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
-        talk.watch_agents(e.p, sessions.listing(e.p))
+        talk.watch_agents(e.p, registry.rows(e.p))
         assert "even after a nudge" in e.task(tid)["blocked"]
         assert len([r for r in rows(e) if "-mechanic" not in r["name"]]) == 2  # health files the block: a mechanic follows
 
@@ -129,13 +131,13 @@ class TestResume:
         e.set_state(tid.lower(), "done")
         answer(e, tid, "B")
         answer(e, tid, "C")
-        talk.deliver_answers(e.p, sessions.listing(e.p))
+        talk.deliver_answers(e.p, registry.rows(e.p))
         assert len(e.calls()) == 2
         assert len(questions.undelivered(backlog.load(e.p))) == 1
-        talk.deliver_answers(e.p, sessions.listing(e.p))  # the session is working now
+        talk.deliver_answers(e.p, registry.rows(e.p))  # the session is working now
         assert len(e.calls()) == 2
         e.set_state(tid.lower(), "done")
-        talk.deliver_answers(e.p, sessions.listing(e.p))
+        talk.deliver_answers(e.p, registry.rows(e.p))
         assert len(e.calls()) == 3
         assert questions.undelivered(backlog.load(e.p)) == []
         assert len(rows(e)) == 1
@@ -145,7 +147,7 @@ class TestResume:
         tid = launched(e)
         e.set_state(tid.lower(), "done")
         answer(e, tid)
-        stale = sessions.listing(e.p)
+        stale = registry.rows(e.p)
         e.set_state(tid.lower(), "working")  # the owner opened it meanwhile
         talk.deliver_answers(e.p, stale)
         assert len(e.calls()) == 1
@@ -158,7 +160,7 @@ class TestResume:
         (e.bin / "fail_resume").write_text("")
         answer(e, tid, "B")
         answer(e, tid, "C")
-        talk.deliver_answers(e.p, sessions.listing(e.p))
+        talk.deliver_answers(e.p, registry.rows(e.p))
         assert len(e.calls()) == 2
         assert e.task(tid)["undelivered"] == 1
 
@@ -169,7 +171,7 @@ class TestResume:
         (e.bin / "fail_resume").write_text("")
         answer(e, tid)
         for _ in range(4):
-            talk.deliver_answers(e.p, sessions.listing(e.p))
+            talk.deliver_answers(e.p, registry.rows(e.p))
         assert len(questions.undelivered(backlog.load(e.p))) == 1
         assert e.task(tid)["blocked"] == ""
         with backlog.edit(e.p) as d:

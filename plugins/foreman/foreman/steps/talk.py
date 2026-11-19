@@ -5,8 +5,8 @@ from typing import Any
 from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, questions
+from ..providers.runner import Rows, ref_of
 from ..services.agents.running import idle_s, send, update_agent
-from ..services.claude import sessions
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
 
@@ -27,7 +27,7 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
         return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
 
 
-def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
+def deliver_answers(p: Project, rows: Rows) -> None:
     d = backlog.load(p)
     sent: set[str] = set()  # one answer per task per tick: the session is working after the first
     for q in questions.undelivered(d):
@@ -38,7 +38,7 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
         agent: dict[str, Any] = i.get("agent") or {}
         if i["id"] in sent:
             continue  # one answer per task per tick, sent or failed: the rest waits
-        if sessions.busy(rows, agent.get("session")):
+        if rows.busy(ref_of(agent)):
             continue  # it is busy (maybe talking with the owner): next tick
         msg = message_for(i, q)
         if send(p, i, msg):
@@ -51,14 +51,14 @@ def deliver_answers(p: Project, rows: dict[str, Any]) -> None:
             backlog.update(p, i["id"], undelivered=i.get("undelivered", 0) + 1)
 
 
-def watch_agents(p: Project, rows: dict[str, Any]) -> None:
+def watch_agents(p: Project, rows: Rows) -> None:
     d = backlog.load(p)
     waiting = {q["task"] for q in questions.open_questions(d)} | {q["task"] for q in questions.undelivered(d)}
     for i in backlog.tasks(d):
         a: dict[str, Any] = i.get("agent") or {}
         if i["status"] not in backlog.RUNNING or i.get("blocked") or i["id"] in waiting:
             continue
-        if not a.get("session") or sessions.busy(rows, a.get("session")):
+        if not a.get("session") or rows.busy(ref_of(a)):
             continue  # unknown yet (fill_sessions), or busy
         if idle_s(a) < NUDGE_IDLE_S:
             continue  # it may be waiting for the owner, who is talking to it

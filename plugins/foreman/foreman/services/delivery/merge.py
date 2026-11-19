@@ -5,7 +5,7 @@ from ... import providers, util
 from ...core.project.config import Project
 from ...core.tasks import backlog, questions, subtasks
 from ...providers import Change, registry
-from ..claude import sessions
+from ...providers.runner import SessionRef, ref_of, stop_live
 from . import git, pulls
 
 
@@ -112,14 +112,16 @@ def close_pull(p: Project, i: dict[str, Any], why: str) -> None:
 def stop_all(p: Project, i: dict[str, Any]) -> None:
     """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
     session it ever started (a replaced review keeps no record but its id in `sessions`)."""
-    rows = sessions.listing(p)
-    every: list[dict[str, Any]] = [i.get(role) or {} for role in ("agent", "hunter", "reviewer", "mechanic")]
-    every += [{"short": rows.get(sid, {}).get("id"), "session": sid} for sid in i.get("sessions", [])]
+    rows = registry.rows(p)
+    runner = registry.runner(p)
+    refs = [ref_of(i.get(role)) for role in ("agent", "hunter", "reviewer", "mechanic")]
+    tabs: dict[str, list[str]] = i.get("session_tabs", {})
+    refs += [SessionRef(rows.short(sid) or "", sid, *(tabs.get(sid) or (None, None))) for sid in i.get("sessions", [])]
     done: set[str] = set()
-    for a in every:
-        if a.get("short") not in done:
-            done.add(str(a.get("short")))
-            sessions.stop_live(p, i["id"], a, rows)
+    for ref in refs:
+        if ref and ref.short not in done:
+            done.add(ref.short)
+            stop_live(p, i["id"], ref, runner, rows)
 
 
 def settle_parent(p: Project, tid: str) -> None:

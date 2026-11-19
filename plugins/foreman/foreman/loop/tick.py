@@ -26,11 +26,11 @@ import os
 import time
 import traceback
 
-from .. import launcher, util
+from .. import launcher, providers, util
 from ..core.project.config import Project
 from ..core.project.registry import registered, registry_file
+from ..providers import registry
 from ..services.agents.launch import fill_sessions
-from ..services.claude import sessions
 from ..services.delivery import pulls
 from ..steps import mechanic, parents, release, sources
 from ..steps.health import health
@@ -50,7 +50,11 @@ def beat(p: Project, step: str) -> None:
 
 def tick(p: Project) -> None:
     beat(p, "start")
-    rows = sessions.listing(p)
+    try:
+        rows = registry.rows(p)
+    except providers.ConfigError as e:  # a bad [agents] runner: no step can run, health files it
+        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": "runner", "error": repr(e), "trace": ""})
+        return
     steps = [
         ("sessions", lambda: fill_sessions(p, rows)),
         ("scratch", lambda: sweep_scratch(p)),

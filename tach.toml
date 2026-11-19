@@ -29,12 +29,9 @@ layer = "loop"
 path = "foreman.steps"
 layer = "steps"
 
-# services: git, claude and the lock: the outside world, called by the steps.
+# services: git and the lock: the outside world, called by the steps.
 [[modules]]
 path = "foreman.services.agents"
-layer = "services"
-[[modules]]
-path = "foreman.services.claude"
 layer = "services"
 [[modules]]
 path = "foreman.services.delivery"
@@ -57,12 +54,15 @@ layer = "services"
 path = "foreman.providers.registry"
 layer = "registry"
 
-# ports: the provider interface, and the repo interface (every git operation on a repo).
+# ports: the provider interface, the repo interface (every git operation on a repo) and the runner interface (every agent session).
 [[modules]]
 path = "foreman.providers"
 layer = "ports"
 [[modules]]
 path = "foreman.providers.repo"
+layer = "ports"
+[[modules]]
+path = "foreman.providers.runner"
 layer = "ports"
 
 # adapters: one per platform. Layer "adapters" keeps the core from importing them; a layer rule keeps them from the loop, and their `depends_on` from each other.
@@ -79,6 +79,12 @@ depends_on = ["foreman.providers"]
 path = "foreman.providers.gitrepo"
 layer = "adapters"
 depends_on = ["foreman.providers.repo"]
+
+# claude: the runner port's adapter; the one place that builds a claude command line.
+[[modules]]
+path = "foreman.providers.claude"
+layer = "adapters"
+depends_on = ["foreman.providers.runner"]
 
 # proc: the one module that runs programs; used by the loop, the services and the adapters, never by the core.
 [[modules]]

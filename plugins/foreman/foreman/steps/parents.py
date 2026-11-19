@@ -8,36 +8,37 @@ from typing import Any
 from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, blockers, chains, questions, subtasks
+from ..providers import registry
+from ..providers.runner import Agent, Rows, RunnerError, State, ref_of, stop_live
 from ..services.agents.brief import agent_name, brief, lens_file
 from ..services.agents.launch import record_session
-from ..services.claude import sessions
 
 
 def launch(p: Project, i: dict[str, Any]) -> None:
     tid = i["id"]
     name = agent_name(p, tid, "parent")
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
+    runner = registry.runner(p)
     try:
         title = util.session_title(tid, "parent", i["title"])
-        short, sid = sessions.start(p, sessions.Agent(tid, name, model, effort, title), _brief(p, i), p.repo)
-    except sessions.SessionError as e:
+        ref = runner.start(Agent(tid, name, model, effort, title), _brief(p, i), p.repo)
+    except RunnerError as e:
         backlog.update(p, tid, blocked=f"could not launch its agent: {e}")
         backlog.event(p, tid, f"launch failed: {e}")
         return
-    agent = {"name": name, "short": short, "session": sid, "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(p.repo)}
+    agent = {"name": name, **ref.fields(), "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(p.repo)}
     with backlog.edit(p) as d:
         it = backlog.get(d, tid)
         still = it["status"] == "backlog" and not it.get("blocked")
         if still:
             it["agent"] = agent
             it["notified"] = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]
-            if sid:
-                record_session(it, sid, "parent")
+            record_session(it, ref, "parent")
     if not still:  # the owner cancelled or changed it while the session started
-        sessions.stop(p, short)
+        runner.stop(ref)
         backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")
         return
-    backlog.event(p, tid, f"launched {name} (parent, {model}, {effort}, session {short})")
+    backlog.event(p, tid, f"launched {name} (parent, {model}, {effort}, session {ref.short})")
 
 
 def _brief(p: Project, i: dict[str, Any]) -> str:
@@ -69,12 +70,12 @@ def notify(p: Project) -> None:
         backlog.event(p, tid, f"its agent is told {sid} closed")
 
 
-def run(p: Project, rows: dict[str, Any]) -> None:
+def run(p: Project, rows: Rows) -> None:
     d = backlog.load(p)
     for i in backlog.tasks(d):
         a: dict[str, Any] = i.get("agent") or {}
-        if i["status"] in backlog.CLOSED and a.get("kind") == "parent" and sessions.state(rows, a.get("session")) not in ("stopped", "gone"):
-            sessions.stop_live(p, i["id"], a, rows)
+        if i["status"] in backlog.CLOSED and a.get("kind") == "parent" and rows.state(ref_of(a)) not in (State.ENDED, State.GONE):
+            stop_live(p, i["id"], ref_of(a), registry.runner(p), rows)
     notify(p)
     if p.paused:
         return

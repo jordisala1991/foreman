@@ -11,8 +11,10 @@ from helpers import Env, fm, install_fm, version_folder
 from foreman import launcher, proc
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers.claude import login
+from foreman.providers.claude.sessions import Claude
+from foreman.providers.runner import SessionRef
 from foreman.services import launchd
-from foreman.services.claude import login, sessions
 from foreman.steps.health import checks
 
 
@@ -60,8 +62,8 @@ class TestLogin:
     def test_no_claude_command_gets_the_token(self):
         os.environ[login.ENV] = "from-env"
         with mock.patch("foreman.proc.run", wraps=proc.run) as run:
-            sessions.listing(self.p)
-            sessions.stop(self.p, "abc")
+            Claude(self.p).rows()
+            Claude(self.p).stop(SessionRef("abc", None))
             login.login_status(self.p.get("agents", "claude"))
         assert len(run.call_args_list) == 3
         for c in run.call_args_list:

@@ -31,6 +31,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "review_effort": "high",
         "settings": {},
         "claude": "claude",
+        "runner": "claude",  # which runs the agents' sessions: claude (foreman/providers/runner.py)
     },
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "merge": {

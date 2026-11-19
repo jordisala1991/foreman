@@ -6,8 +6,9 @@ from ...core.project.config import Project
 from ...core.review.reviews import review_round
 from ...core.rules import decide
 from ...core.tasks import backlog
+from ...providers import registry
+from ...providers.runner import Agent, Rows, RunnerError, SessionRef
 from .. import scratch
-from ..claude import sessions
 from . import brief, worktree
 
 ROUND2 = (
@@ -63,48 +64,52 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         cwd = p.repo
         brief.plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
     backlog.update(p, i["id"], **keys)  # the guard reads the worktree from the backlog
+    runner = registry.runner(p)
     try:
-        short, sid = sessions.start(
-            p, sessions.Agent(i["id"], name, model, effort, util.session_title(i["id"], kind, i["title"])), brief.brief(p, i, kind), cwd
-        )
-    except sessions.SessionError as e:
+        ref = runner.start(Agent(i["id"], name, model, effort, util.session_title(i["id"], kind, i["title"])), brief.brief(p, i, kind), cwd)
+    except RunnerError as e:
         backlog.update(p, i["id"], blocked=f"could not launch its agent: {e}")
         backlog.event(p, i["id"], f"launch failed: {e}")
         return
-    agent = {"name": name, "short": short, "session": sid, "kind": kind, "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
+    agent = {"name": name, **ref.fields(), "kind": kind, "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         still = it["status"] == i["status"] and not it.get("blocked")
         if still:
             it["status"] = "refining" if kind == "planning" else "in progress"
             it["agent"] = agent
-            if sid:
-                record_session(it, sid, kind)
+            record_session(it, ref, kind)
     if not still:  # the owner cancelled or changed it while the session started
-        sessions.stop(p, short)
+        runner.stop(ref)
         backlog.event(p, i["id"], f"launch of {name} undone: the task changed meanwhile")
         return
-    backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, {effort}, session {short})")
+    backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, {effort}, session {ref.short})")
 
 
-def record_session(it: dict[str, Any], sid: str, kind: str) -> None:
-    """Stores a session id in the task's `sessions` and its kind (planning|responsible|review) in `session_kinds`."""
+def record_session(it: dict[str, Any], ref: SessionRef, kind: str) -> None:
+    """Stores a session's id in the task's `sessions`, its kind (planning|responsible|review) in `session_kinds` and, when
+    it has a terminal, its tab in `session_tabs`. Nothing for a session whose id is not known yet."""
+    sid = ref.session
+    if sid is None:
+        return
     it["sessions"] = [*it.get("sessions", []), sid]
     it["session_kinds"] = {**it.get("session_kinds", {}), sid: kind}
+    if ref.terminal:
+        it["session_tabs"] = {**it.get("session_tabs", {}), sid: [ref.terminal, ref.pane]}
 
 
-def fill_sessions(p: Project, rows: dict[str, Any]) -> None:
+def fill_sessions(p: Project, rows: Rows) -> None:
     """A session not listed yet at launch: its full id from the short one, on a later tick."""
     for i in backlog.tasks(backlog.load(p)):
         for role in ("agent", "hunter", "reviewer", "mechanic"):
             a: dict[str, Any] = i.get(role) or {}
             if a.get("short") and not a.get("session"):
-                sid = sessions.find(rows, a["short"])
+                sid = rows.find(a["short"])
                 if sid:
                     with backlog.edit(p) as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
-                        record_session(it, sid, a.get("kind", "") if role in ("agent", "mechanic") else "review")
+                        record_session(it, SessionRef(a["short"], sid), a.get("kind", "") if role in ("agent", "mechanic") else "review")
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
@@ -143,13 +148,12 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         extra["round2"] = SCOPE[scope.rule] + " Nothing outside that diff is a finding."
     cwd = Path(i["worktree"])
     title = util.session_title(i["id"], "review" if role == "reviewer" else role, i["title"])
-    short, sid = sessions.start(p, sessions.Agent(i["id"], name, model, effort, title), brief.brief(p, i, role, extra), cwd)
+    ref = registry.runner(p).start(Agent(i["id"], name, model, effort, title), brief.brief(p, i, role, extra), cwd)
     with backlog.edit(p) as d:
         it = backlog.get(d, i["id"])
         launch = {
             "name": name,
-            "short": short,
-            "session": sid,
+            **ref.fields(),
             "model": model,
             "effort": effort,
             "started": util.now(),
@@ -161,6 +165,5 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         it[role] = launch
         if role == "reviewer":
             it["reviewers"] = [*it.get("reviewers", []), launch]
-        if sid:
-            record_session(it, sid, "review")
-    backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {short}); rule: {decide.RULES[scope.rule]}")
+        record_session(it, ref, "review")
+    backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {ref.short}); rule: {decide.RULES[scope.rule]}")

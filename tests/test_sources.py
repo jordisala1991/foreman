@@ -8,6 +8,7 @@ from helpers import git
 from foreman import util
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers.claude.sessions import Claude
 from foreman.services import runsource
 from foreman.services.delivery import check
 from foreman.steps import sources
@@ -140,7 +141,7 @@ class TestSignals:
 
         a, b = self.running(), backlog.add(self.p, "second", status="triage")
         backlog.set_status(self.p, b, "in progress")
-        with mock.patch("foreman.services.claude.sessions.stop", side_effect=OSError("hung")):
+        with mock.patch.object(Claude, "stop", side_effect=OSError("hung")):
             self.emit({"key": "x1", "task": a, "action": "cancel"}, {"key": "x2", "task": b, "action": "done"})
         assert self.e.task(b)["status"] == "done"
         assert self.e.task(a)["status"] == "in progress"
