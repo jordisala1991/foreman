@@ -111,6 +111,8 @@ def _operations(c: Command) -> None:
     s.add_argument("--off", action="store_true")
     s = c("loop", "run the loop (launchd keeps it alive)")
     s.add_argument("--once", action="store_true")
+    s = c("watch", "print one line each time something starts needing the owner (--once: exit after the first)")
+    s.add_argument("--once", action="store_true")
     s = c("health", "the health checks, from outside the loop")
     s = c("metrics", "cost, time, rework, questions, what misled agents")
     s = c("lock", 'use a shared resource: foreman lock NAME run "what" command…, or foreman lock NAME status')

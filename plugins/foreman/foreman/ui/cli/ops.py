@@ -10,7 +10,7 @@ from ...core.project import registry
 from ...loop import tick
 from ...services import lock
 from ...services.claude import sessions
-from ...steps import metrics, schedule
+from ...steps import metrics, schedule, watch
 from ...steps.health import health, notes
 from .common import home
 
@@ -37,6 +37,14 @@ def cmd_health(a: argparse.Namespace) -> None:
 def cmd_metrics(a: argparse.Namespace) -> None:
     rows = metrics.per_task(home(a))
     print(metrics.text(rows))
+
+
+def cmd_watch(a: argparse.Namespace) -> None:
+    p = home(a)
+    rows = sessions.read(p)
+    if rows is None:
+        sys.exit("foreman: claude agents is unreadable: foreman watch needs the session listing")
+    watch.run(p, a.once, rows)
 
 
 def cmd_guard(a: argparse.Namespace) -> None:

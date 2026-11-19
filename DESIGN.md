@@ -1026,3 +1026,11 @@ transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or
 tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing
 episode, from the first failing run until a pass, with the commit, the failing step and the output tail), loop step errors.
 Every finding has three parts: what it means, the evidence fm gathered, and a hypothesis marked pending; none proposes a fix.
+
+`foreman watch` (FN-221, `foreman/steps/watch.py`) prints one line, with the task id and why, each time something starts
+needing the owner: an open question, a task waiting for his accept (`decide.after_check` says `owner`, so autonomy-merged
+tasks print nothing), a blocked task (a failed launch is one), main's tests failing, a parent agent whose session is alive
+and idle (it ended its turn waiting for him in its own chat). It decides from the backlog, `state/ci.json` and the session
+listing (`sessions.listing`), never from the text of `events.jsonl`. Every 10 s it looks again; its seen set lives in memory,
+so what needed the owner at start is not printed (`foreman list` shows it). `--once` exits after the first line; without it
+the command streams (a monitor).

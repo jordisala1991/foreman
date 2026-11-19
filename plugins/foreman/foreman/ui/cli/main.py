@@ -8,7 +8,7 @@ from collections.abc import Callable
 from ...core.project import config
 from ...core.tasks import backlog
 from .agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
-from .ops import cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics
+from .ops import cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics, cmd_watch
 from .owner import (
     cmd_accept,
     cmd_add,
@@ -55,6 +55,7 @@ HANDLERS: dict[str, Handler] = {
     "health": cmd_health,
     "metrics": cmd_metrics,
     "lock": cmd_lock,
+    "watch": cmd_watch,
     "guard": cmd_guard,
     "launchd": cmd_launchd,
     "project": cmd_project,
