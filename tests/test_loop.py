@@ -194,7 +194,7 @@ class TestQueue:
         ids = [self.deliver(e) for _ in range(3)]
         tick.tick(e.p)
         merge.accept(e.p, ids[0])
-        e.fake.commit("main", FileDiff("other.py", 1, 0))  # main moves: every branch is now stale
+        e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves: every branch is now stale
         checks: list[str] = []
         real = check.check
         check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
@@ -212,7 +212,7 @@ class TestQueue:
         ids = [self.deliver(e) for _ in range(3)]
         tick.tick(e.p)
         merge.accept(e.p, ids[0])  # its merged check starts in the tick
-        e.fake.commit("main", FileDiff("other.py", 1, 0))  # main moves
+        e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
         checks: list[str] = []
         real, step = check.check, queue.queue_one
         check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
@@ -225,7 +225,7 @@ class TestQueue:
     def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self, request, fake_git):
         e = Env(test="true", repo=fake_git)
         ids = [self.deliver(e) for _ in range(3)]
-        e.fake.commit("main", FileDiff("other.py", 1, 0))  # main moves
+        e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
         checks: list[str] = []
         real, deliver = check.check, pulls.deliver
         check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
@@ -248,22 +248,22 @@ class TestQueue:
         request.addfinalizer(functools.partial(os.write, fd, b"release\n" * 2))  # a failing assertion never leaves the check hanging
         e = Env(test=f"case $PWD in */trees/*) if [ -e {armed} ]; then read line < {gate}; fi;; esac", repo=fake_git)
         a = self.deliver(e)
-        e.fake.commit("main", FileDiff("other.py", 1, 0))  # main moves
+        e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
         ready = backlog.add(e.p, "later", status="ready", criteria="z")
         monkeypatch.setattr(util, "BACKGROUND_WAIT_S", 0)
         armed.touch()
         tick.tick(e.p)
         assert e.task(ready)["status"] == "in progress"  # launched while the check still runs
-        assert (e.task(a).get("check") or {}).get("main") != e.fake.head("main")
+        assert (e.task(a).get("check") or {}).get("main") != e.fake_repo().head("main")
         os.write(fd, b"release\n" * 2)  # one line for each check blocked: main's tests and the branch's
         for t in list(util.BACKGROUND.values()):
             t.join()
-        assert e.task(a)["check"]["main"] == e.fake.head("main")
+        assert e.task(a)["check"]["main"] == e.fake_repo().head("main")
 
     def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self, request, monkeypatch, fake_git):
         e = Env(test="true", repo=fake_git)
         a = self.deliver(e)
-        e.fake.commit("main", FileDiff("other.py", 1, 0))  # main moves
+        e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
 
         tick_over = threading.Event()
 

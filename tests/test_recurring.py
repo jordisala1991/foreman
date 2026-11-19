@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from typing import Unpack
 from unittest import mock
 
 import pytest
@@ -36,8 +37,9 @@ class TestRecurring:
     def seen(self, stamp: str = SEEN, name: str = "cleanup") -> None:
         util.write_json(self.p.state / "recurring.json", {name: stamp})
 
-    def merged(self, title: str, at: str, **kw: str) -> str:
-        tid = backlog.add(self.p, title, criteria="c", **kw)
+    def merged(self, title: str, at: str, **kw: Unpack[backlog.NewTask]) -> str:
+        kw.setdefault("criteria", "c")
+        tid = backlog.add(self.p, title, **kw)
         self.close(tid, "done", at)
         return tid
 

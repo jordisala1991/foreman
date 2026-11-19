@@ -33,7 +33,7 @@ SKIPPED = [
     ("10:20:00", "accepted by owner: waiting for the merge"),
     ("10:25:00", "→ done: merged, accepted by owner, as c"),
 ]
-NONE = {**{k: None for k in (*metrics.PARTS, "total")}, "merged_at": None}
+NONE: dict[str, str | None] = {**{k: None for k in (*metrics.PARTS, "total")}, "merged_at": None}
 
 
 class TestCycle:
