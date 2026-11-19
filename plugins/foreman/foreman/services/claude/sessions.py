@@ -5,7 +5,8 @@ measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the gua
 
 `resume` continues a session that ended its turn (an owner's answer, a rejection, a nudge) under the same
 id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
-id instead, so a resume carries none."""
+id instead, so a resume carries none. `relaunch` is the one resume with flags, on purpose: the copy runs today's
+`--settings` and becomes the task's session."""
 
 import json
 import os
@@ -65,10 +66,12 @@ class Agent:
     title: str  # display only («ID role · title», util.session_title): `name` stays the identity
 
 
-def command(p: Project, agent: Agent, prompt: str) -> list[str]:
+def command(p: Project, agent: Agent, prompt: str, resume: str = "") -> list[str]:
+    """With `resume`, a copy of that session (its conversation) started with today's flags: see `relaunch`."""
     return [
         p.get("agents", "claude"),
         "--bg",
+        *(["--resume", resume] if resume else []),
         "-n",
         agent.title,
         "--model",
@@ -108,6 +111,24 @@ def start(p: Project, agent: Agent, prompt: str, cwd: Path) -> tuple[str, str | 
 def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
     """Wakes `sid` with a message. claude continues a session under its id only if it is stopped (process gone) and no
     flag is given; otherwise it starts a copy. So: stop it, wait until it is gone, resume bare; a copy is an error."""
+    _quiet(p, sid)
+    short = _run([p.get("agents", "claude"), "--bg", "--resume", sid, message], cwd)
+    if not sid.startswith(short):
+        raise SessionError(f"claude started a copy ({short}) instead of resuming {sid[:8]}")
+
+
+def relaunch(p: Project, agent: Agent, sid: str, message: str, cwd: Path) -> tuple[str, str | None]:
+    """Stops `sid` and starts a copy of it with today's flags (`--settings`: PATH, guard, env): the same conversation
+    under a new id, run by the foreman installed now. (short id, full session id or None)."""
+    _quiet(p, sid)
+    short = _run(command(p, agent, message, resume=sid), cwd)
+    if sid.startswith(short):
+        raise SessionError(f"claude kept session {sid[:8]} instead of starting a copy with today's settings")
+    return short, find(listing(p), short)
+
+
+def _quiet(p: Project, sid: str) -> None:
+    """Stops an idle `sid` and waits until its process is gone and settled."""
     if not listing(p):
         raise SessionError("claude agents is unreadable: not resuming")
     if busy(listing(p), sid):  # fresh: the tick's listing may be old, and the owner may be in the session now
@@ -126,9 +147,6 @@ def resume(p: Project, sid: str, message: str, cwd: Path) -> None:
     else:
         raise SessionError(f"session {sid[:8]} did not stop: not resuming it")
     time.sleep(STOP_SETTLE_S)
-    short = _run([p.get("agents", "claude"), "--bg", "--resume", sid, message], cwd)
-    if not sid.startswith(short):
-        raise SessionError(f"claude started a copy ({short}) instead of resuming {sid[:8]}")
 
 
 def read(p: Project) -> dict[str, dict[str, Any]] | None:

@@ -20,6 +20,7 @@ from .owner import (
     cmd_init,
     cmd_pause,
     cmd_reject,
+    cmd_relaunch,
     cmd_review,
     cmd_unblock,
 )
@@ -50,6 +51,7 @@ HANDLERS: dict[str, Handler] = {
     "go": cmd_go,
     "cancel": cmd_cancel,
     "unblock": cmd_unblock,
+    "relaunch": cmd_relaunch,
     "pause": cmd_pause,
     "loop": cmd_loop,
     "health": cmd_health,

@@ -1,4 +1,5 @@
-"""The owner's commands: set up a project, file and edit tasks, answer, allow, accept, reject, go, cancel, unblock, pause."""
+"""The owner's commands: set up a project, file and edit tasks, answer, allow, accept, reject, go, cancel, unblock, relaunch,
+pause."""
 
 import argparse
 import os
@@ -12,7 +13,9 @@ from ...core.project.config import Project
 from ...core.project.registry import register
 from ...core.tasks import backlog, blockers, chains, editing, questions, subtasks, taskrepo
 from ...providers.repo import RepoError
+from ...services.agents import relaunch
 from ...services.agents.running import review_running
+from ...services.claude.sessions import SessionError
 from ...services.delivery import merge
 from ...services.delivery.git import DeliveryError
 from ...steps import talk
@@ -158,6 +161,16 @@ def cmd_unblock(a: argparse.Namespace) -> None:
     i = backlog.update(p, a.id, blocked="", pr_error="", retry_error="", retry_count=0)
     if i["status"] in backlog.RUNNING and a.relaunch:
         backlog.set_status(p, a.id, "backlog" if i["status"] == "refining" else "ready", "relaunch")
+
+
+def cmd_relaunch(a: argparse.Namespace) -> None:
+    if os.environ.get("FOREMAN_TASK"):
+        sys.exit("foreman: relaunch is the owner's, not an agent's")
+    try:
+        old, new = relaunch.relaunch(home(a), a.id)
+    except SessionError as e:
+        sys.exit(f"foreman: {e}")
+    print(f"{a.id}: relaunched, session {old} → {new}")
 
 
 def cmd_pause(a: argparse.Namespace) -> None:

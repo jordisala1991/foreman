@@ -111,6 +111,8 @@ def _owner_side(c: Command) -> None:
     s = c("unblock", "clear a task's block")
     s.add_argument("id")
     s.add_argument("--relaunch", action="store_true", help="and launch a new agent for it")
+    s = c("relaunch", "restart a task's live agent on the current foreman, keeping its conversation")
+    s.add_argument("id")
 
 
 def _operations(c: Command) -> None:
