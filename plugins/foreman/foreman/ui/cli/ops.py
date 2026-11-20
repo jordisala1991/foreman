@@ -12,7 +12,7 @@ from ...loop import tick
 from ...providers import registry as provider_registry
 from ...services import lock
 from ...steps import metrics, schedule, watch
-from ...steps.health import health, notes
+from ...steps.health import health, notes, orca
 from .common import home
 
 
@@ -26,7 +26,7 @@ def cmd_health(a: argparse.Namespace) -> None:
     p = home(a)
     for r in schedule.rows(p):
         print(schedule.line(r))
-    for line in [*notes.versions(p), *notes.old_links(p)]:
+    for line in [*notes.versions(p), *notes.old_links(p), *orca.warnings(p)]:
         print(line)
     try:
         rows = provider_registry.rows(p)

@@ -203,3 +203,20 @@ def test_a_waiting_agent_reads_waiting() -> None:
     """An agent waiting for an answer (an Orca chat's `blocked`) shows «waiting» on its card's agent line."""
     i = {"id": "TY-1", "agent": {"name": "ty-1", "short": "s", "session": "s"}}
     assert views.with_session(Env().p, i, FakeRows({"s": State.WAITING}))["agent_state"] == "waiting"
+
+
+def orca_task(kind: str) -> dict[str, Any]:
+    return {"id": "TY-1", "title": "Fix the thing", "agent": {"name": "ty-1", "short": "s", "session": "s", "kind": kind}}
+
+
+def test_an_orca_agent_names_its_chat() -> None:
+    """On an orca project the panel names the agent's Orca chat by its title, not `claude attach`."""
+    e = Env()
+    e.p.cfg["agents"]["runner"] = "orca"
+    for kind in ("responsible", "planning"):
+        assert views.with_session(e.p, orca_task(kind), FakeRows({"s": State.WORKING}))["agent"]["chat"] == f"TY-1 {kind} · Fix the thing"
+
+
+def test_a_claude_agent_has_no_chat() -> None:
+    """On a claude project the agent carries no chat, so the panel keeps `claude attach SHORT`."""
+    assert "chat" not in views.with_session(Env().p, orca_task("responsible"), FakeRows({"s": State.WORKING}))["agent"]

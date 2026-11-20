@@ -39,11 +39,11 @@ export const LoadFailed = ({ retry }: { retry: () => void }) => (
 
 const Err = ({ text }: { text: string }) => (text ? <p className="error" role="alert">{text}</p> : null);
 
-// how to open an agent's conversation: `claude attach SHORT` (it is also in the Claude app's agent view)
+// how to open an agent's conversation: `claude attach SHORT` (it is also in the Claude app's agent view), or on an Orca project its chat's title
 export function Attach({ agent }: { agent: Agent | undefined }) {
   const [copied, setCopied] = useState(false);
   if (!agent?.short) return null;
-  const cmd = `claude attach ${agent.short}`;
+  const cmd = agent.chat ?? `claude attach ${agent.short}`;
   const copy = () => {
     void navigator.clipboard?.writeText(cmd).then(() => {
       setCopied(true);
@@ -51,7 +51,7 @@ export function Attach({ agent }: { agent: Agent | undefined }) {
     });
   };
   return (
-    <span className="attach" title={t("attach_tip")}>
+    <span className="attach" title={t(agent.chat ? "chat_tip" : "attach_tip")}>
       <Small name="talk" />
       <code>{cmd}</code>
       <button type="button" className="link small" onClick={copy}>
