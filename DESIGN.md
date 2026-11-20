@@ -290,7 +290,7 @@ second headless Orca only.
 | Must Orca know the repo; how a foreman worktree becomes an Orca worktree without Orca making one | Yes: `repo add` once, then `path:<worktree>` addresses foreman's own worktree; Orca creates none (D2) | unregistered: `terminal create --worktree path:WT2 …` → `"code": "selector_not_found"`; after `orca repo add --path REPO --json` → `orca worktree show --worktree path:WT --json` → the existing worktree, `isMainWorktree: false`; `worktree list` shows it only after `orca repo set --repo path:REPO --external-worktree-visibility show` (E1) |
 | Titles | `--title` at launch, `orca terminal rename` once after, the worktree's display name (D9) | `--title` names the tab and becomes the agent's `conversationName`; `terminal list` later shows claude's own title (`FOREMAN_TASK echo test`); `orca terminal rename --terminal T --title "…"` sets the tab's custom title (E6), and `terminal list` shows it after a turn (E8). Foreman finds a tab by its stored handle, never by its title (D3) |
 | Orca not running | Every call but `status` fails with `runtime_unavailable`: launches wait, nothing is blocked (D7) | `orca status --json` → exit 0, `app.running: false`; any other → exit 1, `error.code: "runtime_unavailable"` («Start the Orca app first»); `terminal send` → «no input was sent» (E7) |
-| Orca restarts | Shown on a second, headless Orca only: the agent kept running, its handle stayed valid and its state came back. The owner's desktop Orca was not restarted (inferred: the same terminal daemon design) | `kill -TERM` of `orca serve`, then `serve` again on the same port: the claude process kept its pid; `terminal show` → same handle, `connected: true`, `writable: true`; a message after it → `turn_started` and answered (E7, E8); the row went `working` (`toolName: Bash`) then `done` (E8); `conversationName` was lost in E7, kept in E8 |
+| Orca restarts | On a second, headless Orca (tabs of `terminal create`): the agent kept running, its handle stayed valid and its state came back. On the owner's desktop Orca (FN-217, chats of `worker-start`): quit with the app, the chat ended with it and the next message resumed the same session (see «Seen in a real project (FN-217)») | `kill -TERM` of `orca serve`, then `serve` again on the same port: the claude process kept its pid; `terminal show` → same handle, `connected: true`, `writable: true`; a message after it → `turn_started` and answered (E7, E8); the row went `working` (`toolName: Bash`) then `done` (E8); `conversationName` was lost in E7, kept in E8 |
 
 **The design** (each line answers a row above or a gap below):
 - **D1 Launch.** `orca terminal create --worktree path:<cwd> --title "<title>" --command '<line>' --json`, `<line>` =
@@ -376,7 +376,7 @@ handle `H`, a Run from `run-create --from H`): **launch** `orca orchestration wo
 `worker-release` once the agent reported itself done (`worker-stop` then answers `alreadySettled`). Its terms: `worker-start` has no
 `--surface`: it makes a chat only when Orca's Chat|CLI choice for claude is Chat (a fresh Orca's is `terminal` → `"mode": "terminal"`);
 Orca puts its own worker instructions before the brief («You are a dispatched worker … Reach it with the `orca orchestration` …») and
-wraps each message («From: TERM_… Subject: …»); a send to a live chat returns only a `messageId`, and only a send after an Orca restart returns a new `dispatchId`. **Restart** (on a headless Orca): chats die with Orca
+wraps each message («From: TERM_… Subject: …»); a send to a live chat returns only a `messageId`, and only a send after an Orca restart returns a new `dispatchId` (FN-217 could not see it: the kept dispatch did not change, see «Seen in a real project (FN-217)»). **Restart** (on a headless Orca): chats die with Orca
 (tabs did not, E7); the next message makes Orca run `claude --resume=<same id>` with the settings read again (F8, F16). No trust dialog
 showed in folders claude had never seen (F2).
 
@@ -417,6 +417,10 @@ FN-216's launch must then (D1-D10 themselves are not edited here):
 - D5 → `worker-stop --dispatch D`, and `worker-release` when it answers `alreadySettled`;
 - D6 → not needed for chats; D7 → a restart ends every chat until its next message (F8, F16);
 - never write `.claude/settings.local.json` into a repo's main checkout, and leave Orca's host settings (command override, agent env) alone (F3, F12).
+
+### Seen in a real project (FN-217)
+
+A sandbox task (`runner = "orca"`) ran planning, responsible, hunter and reviewer as chats of the project's coordinator tab. Quitting the owner's desktop Orca ended the chat; the next message (a loop send) was delivered to the same session 32 s later, Orca being open again within 31 s of it (who opened it is not shown). The kept dispatch was the same before and after, `run-show` lists no dispatch, so whether the real answer carries a new `dispatchId` is not observable from outside. The panel showed `waiting`; `foreman list`, `health` and the panel's `claude attach SHORT` hint differ from what an Orca chat needs. The owner's desktop message was not sent, by his choice. Details and files: `reports/FN-217/evidence.md`.
 
 ### What the claude runner does that Orca cannot
 
