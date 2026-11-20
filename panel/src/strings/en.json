@@ -24,6 +24,7 @@
   "cancel": "Cancel",
   "copy": "Copy",
   "copied": "Copied",
+  "chat_tip": "Find this chat in Orca, on the desktop or the phone, by this title.",
   "attach_tip": "Open its conversation in a terminal with this command, or in the Claude app's agent view.",
   "as_working": "working",
   "as_waiting": "waiting",

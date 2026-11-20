@@ -2,7 +2,7 @@ from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog
 from ...providers.runner import Rows
-from . import repos
+from . import orca, repos
 from .checks import Finding, agents, answers_undelivered, finding, login_check, loop_dead, loop_errors, orphan_worktrees
 from .main_tests import main_tests
 
@@ -17,6 +17,7 @@ def findings(p: Project, rows: Rows, outside: bool = False) -> list[Finding]:
         lambda: repos.stray_files(p),
         lambda: main_tests(p, run=not outside),
         lambda: loop_errors(p),
+        lambda: orca.findings(p),
     )
     for step in checks:
         try:

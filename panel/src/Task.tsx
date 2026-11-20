@@ -160,7 +160,7 @@ export function Task({ project, id }: { project: Project; id: string }) {
             {rows.map(([k, v]) => (<span key={k} className="kv"><dt>{k}</dt><dd>{v}</dd></span>))}
           </dl>
           <Attach agent={i.agent} />
-          {i.agent?.short ? <p className="quietline">{t("attach_tip")}</p> : null}
+          {i.agent?.short ? <p className="quietline">{t(i.agent.chat ? "chat_tip" : "attach_tip")}</p> : null}
           {!closed ? <Cancel p={p} id={i.id} done={reload} /> : null}
         </aside>
       </div>

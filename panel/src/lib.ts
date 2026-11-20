@@ -67,6 +67,7 @@ export interface Agent {
   short?: string;
   session?: string | null;
   kind?: "planning" | "responsible";
+  chat?: string; // the agent's Orca chat title; only on a runner = "orca" project
   model?: string;
   started?: string;
 }

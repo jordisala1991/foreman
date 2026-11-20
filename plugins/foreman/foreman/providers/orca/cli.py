@@ -5,6 +5,7 @@ answer's `ok` decides, never the exit code alone."""
 import json
 import os
 import shutil
+from pathlib import Path
 from typing import Any
 
 from ... import proc, util
@@ -20,6 +21,10 @@ class OrcaError(RunnerError):
 
 def binary() -> str:
     return os.environ.get("ORCA_BIN") or shutil.which("orca") or APP_BIN
+
+
+def found() -> bool:
+    return Path(binary()).is_file()
 
 
 def orca(args: list[str], timeout: float = 60) -> dict[str, Any]:

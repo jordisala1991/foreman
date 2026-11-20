@@ -1,6 +1,7 @@
 import itertools
 import json
 import os
+import re
 import tempfile
 import time
 from datetime import UTC, datetime, timedelta
@@ -8,17 +9,20 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from fakeorca import FakeOrca
 from helpers import Env, fm, git, install_fm, version_folder
 
 from foreman import launcher, util
 from foreman.core.project import registry
+from foreman.core.project.config import Project
 from foreman.core.tasks import backlog, questions
 from foreman.loop import tick
 from foreman.providers.claude import login
 from foreman.providers.claude.rows import ClaudeRows
+from foreman.providers.orca import hooks
 from foreman.providers.runner import NO_ROWS
 from foreman.services.delivery import check
-from foreman.steps.health import checks, health, main_tests, notes
+from foreman.steps.health import checks, health, main_tests, notes, orca
 from foreman.ui.panel import views
 
 
@@ -256,3 +260,60 @@ class TestVersions:
             assert lines[1].startswith("! foreman@foreman cannot start the loop and the panel: foreman@foreman is not installed"), lines
         install_fm(request, version_folder(self.e.tmp / "cache", "ccc"))
         assert len(notes.versions(self.p)) == 1
+
+
+class TestOrcaHealth:
+    """`foreman health` on a runner = "orca" project (DESIGN D8): the binary, Orca answering, Orca's hooks."""
+
+    @pytest.fixture(autouse=True)
+    def set_up(self, env, monkeypatch):
+        self.e = env
+        self.runner("orca")
+        self.fake = FakeOrca(env.tmp)
+        monkeypatch.setenv("ORCA_BIN", str(self.fake.bin))
+        self.settings = env.tmp / "settings.json"
+
+    def runner(self, name):
+        toml = self.e.home / "foreman.toml"
+        text = re.sub(r"(?m)^runner = .*\n", "", toml.read_text())
+        toml.write_text(text.replace("[agents]\n", f'[agents]\nrunner = "{name}"\n', 1))
+        self.p = Project.load(self.e.home)
+
+    def hooked(self, events=hooks.STATE_EVENTS):
+        cmd = {"hooks": [{"type": "command", "command": "/x/Orca/hooks/claude-hook.sh"}]}
+        self.settings.write_text(json.dumps({"hooks": {ev: [cmd] for ev in events}}))
+
+    def keys(self):
+        return [f["key"] for f in orca.findings(self.p, self.settings)]
+
+    def test_a_missing_binary_is_a_finding(self, monkeypatch):
+        monkeypatch.setenv("ORCA_BIN", str(self.e.tmp / "nope"))
+        self.hooked()
+        assert self.keys() == ["orca-missing"]
+
+    def test_missing_hooks_are_a_finding(self):
+        assert self.keys() == ["orca-hooks"]  # no file
+        self.settings.write_text("{}")
+        assert self.keys() == ["orca-hooks"]
+        self.hooked(hooks.STATE_EVENTS[:-1])
+        f = orca.findings(self.p, self.settings)[0]
+        assert f["key"] == "orca-hooks" and hooks.STATE_EVENTS[-1] in f["evidence"] and hooks.STATE_EVENTS[0] not in f["evidence"]
+        self.hooked()
+        assert self.keys() == []
+
+    def test_a_closed_orca_is_a_warning_not_a_finding(self):
+        self.hooked()
+        assert orca.warnings(self.p) == []
+        self.fake.down()
+        assert [w[:21] for w in orca.warnings(self.p)] == ["! Orca is not running"]
+        assert self.keys() == []
+
+    def test_health_prints_the_warning(self):
+        self.fake.down()
+        assert "! Orca is not running" in fm(self.p.home, "health")
+
+    def test_a_claude_project_has_no_orca_line(self, monkeypatch):
+        self.runner("claude")
+        monkeypatch.setenv("ORCA_BIN", str(self.e.tmp / "nope"))
+        assert orca.findings(self.p, self.settings) == [] and orca.warnings(self.p) == []
+        assert "Orca" not in fm(self.p.home, "health")

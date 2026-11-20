@@ -67,7 +67,10 @@ PANEL_STATE = {State.WORKING: "working", State.WAITING: "waiting", State.IDLE: "
 
 def with_session(p: Project, i: Obj, rows: Rows) -> Obj:
     a: backlog.Agent = i.get("agent") or {}
-    return {**i, "agent_state": PANEL_STATE[rows.state(ref_of(a))] if a else None}
+    shown = {**i, "agent_state": PANEL_STATE[rows.state(ref_of(a))] if a else None}
+    if a and p.get("agents", "runner") == "orca":  # the owner finds the agent's chat in Orca by its title
+        shown["agent"] = {**a, "chat": util.session_title(i["id"], a.get("kind", "responsible"), i["title"])}
+    return shown
 
 
 def state(p: Project) -> Obj:
