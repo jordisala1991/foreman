@@ -376,7 +376,7 @@ handle `H`, a Run from `run-create --from H`): **launch** `orca orchestration wo
 `worker-release` once the agent reported itself done (`worker-stop` then answers `alreadySettled`). Its terms: `worker-start` has no
 `--surface`: it makes a chat only when Orca's Chat|CLI choice for claude is Chat (a fresh Orca's is `terminal` → `"mode": "terminal"`);
 Orca puts its own worker instructions before the brief («You are a dispatched worker … Reach it with the `orca orchestration` …») and
-wraps each message («From: TERM_… Subject: …»); a send to a live chat returns only a `messageId`, and only a send after an Orca restart returns a new `dispatchId` (FN-217, desktop Orca: the loop's send after a restart left the kept dispatch unchanged, so its answer carried no new `dispatchId`; inferred from `running.py:81-85` and `sessions.py:66-67`, which keep a changed one). **Restart** (on a headless Orca): chats die with Orca
+wraps each message («From: TERM_… Subject: …»); a send to a live chat returns only a `messageId`, and only a send after an Orca restart returns a new `dispatchId` (FN-217 on the desktop Orca: see «Seen in a real project (FN-217)»). **Restart** (on a headless Orca): chats die with Orca
 (tabs did not, E7); the next message makes Orca run `claude --resume=<same id>` with the settings read again (F8, F16). No trust dialog
 showed in folders claude had never seen (F2).
 
@@ -413,14 +413,14 @@ FN-216's launch must then (D1-D10 themselves are not edited here):
   (`git worktree add --detach <home>/…/<task>-<role> <main>`), never the main checkout (F3);
 - D3 → the row whose `paneKey` is `worker-show`'s `assigneePaneKey`; `blocked` → WAITING;
 - D4 → `orchestration send --from H --to dispatch:D --subject … --body MSG`, `D` the dispatch id kept from `worker-start`; a send to a live chat
-  returns only `messageId`; a send after an Orca restart returns a new `dispatchId`, which replaces `D` (F16; FN-217 saw none on the desktop Orca, see «Seen in a real project (FN-217)»);
+  returns only `messageId`; a send after an Orca restart returns a new `dispatchId`, which replaces `D` (F16; FN-217: see «Seen in a real project (FN-217)»);
 - D5 → `worker-stop --dispatch D`, and `worker-release` when it answers `alreadySettled`;
 - D6 → not needed for chats; D7 → a restart ends every chat until its next message (F8, F16);
 - never write `.claude/settings.local.json` into a repo's main checkout, and leave Orca's host settings (command override, agent env) alone (F3, F12).
 
 ### Seen in a real project (FN-217)
 
-A sandbox task (`runner = "orca"`) ran planning, responsible, hunter and reviewer as chats of the project's coordinator tab. After the owner quit the desktop Orca, the next message (a loop send) was delivered to the same session; measured from that send, Orca was open again within 31 s and the message arrived at 32 s (who opened Orca is not shown). The chat ended with the app (inferred from the process list). The kept dispatch was the same before and after, so that answer carried no new `dispatchId` (inferred from the code that keeps a changed one). The owner's desktop message was not sent, by his choice. Details and files: `reports/FN-217/evidence.md`.
+A sandbox task (`runner = "orca"`) ran planning, responsible, hunter and reviewer as chats of the project's coordinator tab. After the owner quit the desktop Orca, the next message (a loop send) was delivered to the same session; measured from that send, Orca was open again within 31 s and the message arrived at 32 s (who opened Orca is not shown). The chat ended with the app (inferred from the process list). The kept dispatch was the same before and after, so that answer carried no new `dispatchId` (inferred, the raw answer was not seen: the loop keeps a changed one, `services/agents/running.py:74-78` and `providers/orca/sessions.py:66-67`). The owner's desktop message was not sent, by the owner's choice. Details and files: `reports/FN-217/evidence.md`.
 
 ### What the claude runner does that Orca cannot
 
