@@ -588,14 +588,14 @@ One label: `needs-owner`.
 | `status` | Board field `Status` + issue state | «The statuses» |
 | `blocked` | Board field `Blocked` | the reason; empty = not blocked |
 | `priority` | Board field `Priority` | unset = none |
-| `created` | issue `createdAt` | |
-| `closed` | issue `closedAt` | |
+| `created` | issue `createdAt` | a migrated task's old `created` is kept local (the issue's is the cutover's); shown in today's format (`util.now`) |
+| `closed` | issue `closedAt` | when fm closes a task it keeps the read-back task in `<home>/state/closed.json`: with the old file, the source of closed tasks for the panel's recent list and the metrics (`ui/panel/views.py:81`, `steps/metrics.py:98`), as the pass reads only open issues |
 | `model`, `effort`, `type` | Board fields `Model`, `Effort`, `Task type` | unset = the project's default / `change` |
 | `repo` | Board field `Repo key` | the `[repos.K]` key |
 | `chain` {lens, max_steps, max_lines} | Board fields `Lens`, `Max steps`, `Max lines` | a task is a chain parent iff `Lens` is set |
-| `source` | Board field `Source` | the dedup key (`health:…`, `NAME:KEY`); dedup looks among the open tasks of the pass's read |
-| `parent` | native sub-issue (the issue's parent) | a parent stores no list: its subtasks are its sub-issues; one level stays fm's rule |
-| `blocked_by` | native issue dependencies (blocked by) | a blocker's state and reason come with the read: closed `COMPLETED` = done; other closed reasons = closed undone |
+| `source` | Board field `Source` | the dedup key (`health:…`, `NAME:KEY`); dedup looks among the open tasks of the pass's read; a filing cut short before the fields leaves a card with no `Source`, so the finding is filed again (see «Reads and writes per pass») |
+| `parent` | native sub-issue (the issue's parent) | a parent stores no list: its subtasks are its sub-issues; one level stays fm's rule; an open migrated parent's closed subtasks stay in the old file and the port adds them to its sub-issues (the old file's tasks whose `parent` is its legacy id) |
+| `blocked_by` | native issue dependencies (blocked by) | a blocker's state and reason come with the read: closed `COMPLETED` = done; other closed reasons = closed undone; a migrated task's blockers already closed in the old file are read from there |
 | open question | label `needs-owner` | on while the task has an open question; the text stays local |
 | `agent` {name, short, session, cwd, started, terminal, pane, dispatch, coordinator, kind, model, effort, nudged, waiting_seen} | local | keyed by task id |
 | `sessions`, `session_kinds`, `session_tabs` | local | |
@@ -618,28 +618,29 @@ Local state sits in `<home>/state/runs.json`, one object per task id holding the
 
 | fm status | Board `Status` | Issue state | Who moves it |
 |---|---|---|---|
-| triage | Triage | open | filing: `foreman add` without criteria, the panel, the loop (health, sources, recurring entries). A card with no Status (added by hand) reads as triage |
-| backlog | Backlog | open | `foreman go`; filing with criteria; `foreman edit` of criteria, detail or repo on a ready task (drops its plan); `foreman unblock --relaunch` of a refining task |
+| triage | Triage | open | filing without criteria (any filer, `core/tasks/backlog.py:165`); `foreman add --triage`; a parent agent's `foreman add --parent`; the panel when the project has several repos; the loop's health checks and sources always, recurring entries marked `triage`. A card with no Status (added by hand) reads as triage |
+| backlog | Backlog | open | `foreman go`; filing with criteria (`foreman add`, the panel in a one-repo project, recurring entries not marked `triage`); `foreman edit` of criteria, detail or repo on a ready task (drops its plan); `foreman unblock --relaunch` of a refining task |
 | refining | Refining | open | the loop (launch step, `services/agents/launch.py:82`) |
-| ready | Ready | open | `foreman ready` (planning agent); filing with `--ready`; `foreman unblock --relaunch` of an in-progress task |
+| ready | Ready | open | `foreman ready` (planning agent); `foreman unblock --relaunch` of an in-progress task. (`foreman add --ready` is declared and read by nothing: it files in backlog) |
 | in progress | In progress | open | the loop (launch step); `foreman reject` and the loop's returns to the agent (`steps/talk.py:111`: review, conflict, failing tests or CI) |
 | in review | In review | open | `foreman done` (responsible agent; a parent agent's `foreman done` closes its parent instead) |
-| done | Done | closed, completed | the loop's merge step (`services/delivery/merge.py:90`) after the owner's accept or the autonomy; a parent that closes by itself or by its agent's `foreman done`; a source's `done` |
-| canceled | Canceled | closed, not planned | `foreman cancel`; the loop when a parent is canceled (its open subtasks) or a source says `cancel` |
+| done | Done | closed, completed | the loop's merge step (`services/delivery/merge.py:90`) after the owner's accept or the autonomy; a parent that closes by itself or by its agent's `foreman done` with at least one subtask done (`core/tasks/subtasks.py:37`, `steps/parents.py:102`); a source's `done` |
+| canceled | Canceled | closed, not planned | `foreman cancel`; the loop when a parent is canceled (its open subtasks) or a source says `cancel`; a parent that closes with no subtask done (same lines as done) |
 | duplicate | Duplicate | closed, duplicate | nothing sets it today (no code path; none of the 234 tasks has it); the column and the mapping exist so a command can later |
 
 No GitHub workflow moves anything: the setup deletes them all. `blocked` is not a status but the `Blocked` field. A close sets the issue's state
-reason and the Status in one request. `Status` is the truth for open tasks: an owner's drag between open columns is a move (a drag Triage → Backlog
-is a Go); a card dragged to a closed column while its issue is open, or an issue closed by hand while its card is open, is an error line in
+reason and the Status in one request. `Status` is the truth for open tasks, and fm moves every card: the pass compares each card with the last pass's snapshot, and a change
+fm did not make is a drag. A drag Triage → Backlog is a Go, with `foreman go`'s checks (`ui/cli/owner.py:141-148`: criteria, repo); a refused Go,
+or any other drag between open columns, is an error line and fm moves the card back to the snapshot's Status. A card dragged to a closed column while its issue is open, or an issue closed by hand while its card is open, is an error line in
 `state/errors.jsonl` (health files it) and changes nothing.
 
 ### Ids
 
 - A new task's id is `FN-<issue number>`, found on GitHub as `gh issue view <number>`; PRs share the numbering, so ids skip the numbers PRs take.
-- `foreman show FN-302` when #302 is a PR: `foreman: no task FN-302: #302 is a pull request` (one `issueOrPullRequest` read). A number that is an issue but not on the Board: `no task FN-n: #n is not on the board`.
+- `foreman show FN-302` when #302 is a PR: `foreman: no task FN-302: #302 is a pull request` (one `issueOrPullRequest` read). A number that is an issue but not on the Board: `no task FN-n: #n is not on the Board`. A number the map holds: `no task FN-272: #272 is FN-140`, so a task has one id.
 - Migrated open tasks keep their old id: `<home>/legacy-ids.json` (`{"FN-140": 272, …}`) is written once at the cutover and read by the port (`number("FN-140")` = the map's value, else the digits); the issue's first body line is `<!-- foreman:legacy-id=FN-140 -->` for people reading GitHub. Their local state (worktree, branch `fm/FN-140…`, `plans/FN-140.md`, reports) is keyed by the old id and needs no rename.
-- The cutover refuses unless the repo's newest issue or PR number is ≥ the highest legacy id (today 271 ≥ 234): every number fm gives later is then above every legacy id, so an id never means two tasks.
-- Closed tasks stay in the old file, read-only, under their old ids; an id is looked up in the legacy map first, then as a number.
+- The cutover refuses unless the repo's newest issue or PR number is ≥ the highest id of the old file, open or closed (today 271 ≥ 234): every number fm gives later is then above every legacy id, so an id never means two tasks.
+- Closed tasks stay in the old file, read-only, under their old ids; an id is looked up in the legacy map first, then in the old file (so `FN-100`, a closed task, is never #100, a PR), then as a number.
 
 Worked example: FN-140 is migrated as issue #272 and stays `FN-140` (`legacy-ids.json` holds `"FN-140": 272`); a task filed later as issue #301 is
 `FN-301`; #302 is a PR, so `foreman show FN-302` prints `foreman: no task FN-302: #302 is a pull request`; the next task, #303, is `FN-303`.
@@ -654,14 +655,16 @@ Each run 8 times, median (min–max):
 |---|---|---|---|
 | cheap read: `number updatedAt projectItems.updatedAt` of the 19 open | 0.67 s (0.59–0.72) | 1 | 2.4 KB |
 | full read, first:25 (19 open) | 0.87 s (0.80–1.07) | 1 | 60 KB |
-| full read, first:50 | not timed | 2 | 60 KB |
+| full read, first:50 | not run | 2 (inferred) | |
 | full read, first:100 | 0.82 s (0.77–1.14) | 4 | 60 KB |
 | full read without body, first:100 | 0.81 s | 4 | 10 KB |
 | one task by number (`issue(number:)`, full fields) | 0.65 s | 1 | |
 | cold read of every issue (247, 100 per page, 3 pages) | 4.96 s | 12 (3×4) | |
 
-Cost grows with `first`, not with what is returned (first:25 → 1, 50 → 2, 100 → 4). The cheap read would save 0.15 s and 0–3 points, so a pass
-makes one full read with `first:50`; more than 50 open tasks, or `hasNextPage` true, is an error naming the count.
+Cost grows with `first`, not with what is returned (first:25 → 1, 100 → 4). The chosen `first:50` was not run: its 2 points are inferred from
+GitHub's documented rule (connections requested ÷ 100, rounded: 1 + 4 per issue, for labels, sub-issues, blockers and the Board item), which gives the measured 1 and 4. The cheap read would save 0.15 s and 0–3 points, so a pass
+makes one full read with `first:50`; more than 50 open tasks, or `hasNextPage` true, is an error naming the count, and so is a nested list over its cap: a `totalCount` above
+`labels(first:10)`, `subIssues(first:30)` or `blockedBy(first:20)`.
 
 Writes, each with its read-back (E3; median over n, seconds):
 
@@ -678,8 +681,10 @@ Writes, each with its read-back (E3; median over n, seconds):
 | close as done: closeIssue + Status Done in one request, read back | 2 | 1.92 | 1 |
 | reopen + Status in one request, read back | 2 | 1.92 | 1 |
 
-- An idle pass (nothing changed) = 1 call. A task's life (file, go, refining, ready, in progress, in review, done) = 4 + 6×2 = 16 calls, about 20 s of waiting spread over days.
-- Headroom: the loop passes every `[health] loop_seconds` = 30 s plus the pass (`loop/tick.py:103`), so ≤ 120 passes/hour × 2 points = 240 of 5000 points/hour (4.8%) for fm's size (about 230 tasks, 20 open). The GraphQL limit measured is 5000/hour (`gh api rate_limit`); a mutation request costs 1 point, several aliased mutations in one request still 1; no secondary limit was reached (247 issues created in 684 s, 23 batches of 10 with a 3 s pause).
+- An idle pass (nothing changed) = 1 call. A task's life (file, go, refining, ready, in progress, in review, done) = 4 + 6×2 = 16 calls, about 13 s of waiting (4.74 + 5×1.35 + 1.92) spread over days.
+- Filing runs in order: createIssue, addProjectV2ItemById, the fields, the read-back. One cut short leaves an issue with no card (not a task: the read skips issues with no card on the Board, though they count toward the 50) or a card with no fields (read as triage with no `Source`); the filer writes an error line naming the issue and the owner closes it. A step that writes both the Board and local keys (the merge: Status Done, then `commit` and `result`) writes the Board first, reads it back, then `state/runs.json`; a crash between leaves the local record missing, and the step is not redone, as the Status already moved.
+- Headroom: the loop passes every `[health] loop_seconds` = 30 s plus the pass (`loop/tick.py:103`), so ≤ 120 passes/hour × 2 points = 240 of 5000 points/hour (4.8%) for fm's size (about 230 tasks, 20 open), counting the backlog reads only: the writes' read-backs (1 point each) and
+the delivery steps' calls fm makes today (`gh pr view` and `gh api graphql`, `providers/github/provider.py:65,100,165`) share the same 5000/hour and are not counted. The GraphQL limit measured is 5000/hour (`gh api rate_limit`); a mutation request costs 1 point, several aliased mutations in one request still 1; no secondary limit was reached (247 issues created in 684 s, 23 batches of 10 with a 3 s pause).
 - Measured 2026-11-21 on 247 issues, 19 open; one day's numbers, not a promise.
 
 ### Questions and the decisions list
@@ -687,13 +692,13 @@ Writes, each with its read-back (E3; median over n, seconds):
 - Questions (`foreman ask`, permissions, answers) stay in foreman: `<home>/state/questions.json`, `foreman answer/allow/deny`, the panel. While a task has an open question its GitHub issue carries `needs-owner`: the loop sets it when the question opens and removes it when none is open, both read back. The Board shows the label on the card; the question's text is on no GitHub page.
 - The decisions list is the `decision.key=value` lines the owner and agents write in a task's detail: part of the issue body (`## Detail`), nothing more. The answered questions and the agents' messages (`decisions_resolved`) are local.
 - Blocked: the `Blocked` column shows the reason. Agent, branch, PR and review state are not on the Board (the PR names its task with the text `Task: #n`).
-- The panel, `foreman watch` and the guard hook read the loop's snapshot of the last pass (`<home>/state/backlog-snapshot.json`, written each pass): the panel polls every few seconds (`panel/src/feed.ts:78`, at the repo root) and the guard runs on every agent tool call (`core/oversight/guard.py:226`), so neither may call GitHub. Owner commands (`list`, `show`, `add`…) read the task live (`issue(number:)`, 0.65 s, 1 point) and write through the port.
+- The panel and `foreman watch` read through the port, which serves them from its snapshot (`<home>/state/backlog-snapshot.json`), written after each pass's read and after each write's read-back, so an owner's Go in the panel shows at once: the panel polls every few seconds (`panel/src/feed.ts:78`, at the repo root) and may not call GitHub. The guard hook runs on every agent tool call (`core/oversight/guard.py:226`) and uses only the task's `worktree` and `branch` (`guard.py:189-190`): it reads them from `state/runs.json`, never GitHub nor the snapshot; a task with no entry there is «no task», as an unreadable file is today. `diagnosis.record` (`core/oversight/diagnosis.py:19`) appends to `detail`: a write, so it goes through the port. Owner commands (`list`, `show`, `add`…) read the task live (`issue(number:)`, 0.65 s, 1 point) and write through the port.
 
 ### The split
 
 These replace FN-140's planned subtasks 2-5: 2 (the port) and 5 (migration) kept, 3 (the GitHub adapter) split in two, reads and writes, and 4
 (commands and panel) reshaped into a full task seen on the sandbox. Drafted with their criteria in `<home>/reports/FN-234.md`; not filed yet.
-- **D2 The backlog port, with the local file behind it** (type change). Every read and write of the backlog goes through one port with the local file as its adapter, and the owner sees no difference: `foreman list, show, add, go, edit, accept, reject, answer` and the panel print the same on the sandbox, no module outside the adapter opens `backlog.json`, the guard hook and the panel read the pass's snapshot and a tick loads the backlog once; `core/oversight/guard.py:226` and `diagnosis.py:20` stop importing the file module (core cannot import a port).
+- **D2 The backlog port, with the local file behind it** (type change). Every read and write of the backlog goes through one port with the local file as its adapter, and the owner sees no difference: `foreman list, show, add, go, edit, accept, reject, answer` and the panel print the same on the sandbox, no module outside the adapter opens `backlog.json`, the panel reads through the port, the guard hook reads its task's local keys, and a tick loads the backlog once; `core/oversight/guard.py:226` stops importing the file module and `diagnosis.py:20`'s write moves behind the port (core cannot import a port).
 - **D3 A project on GitHub: Board setup and reads** (after D2). With `[backlog]` pointing at a repo and Board, `foreman list`, `show` and the panel read the tasks from it: `foreman backlog setup` creates the 9 Status options, the 10 other fields and the label and deletes the workflows, idempotently; every field shown from a scratch Board of 20 open tasks; `FN-<number>` ids, a PR's number refused with its text, legacy ids through `legacy-ids.json`; one request per pass, over 50 open an error naming the count, a rate limit stops calls until the reset; a project without `[backlog]` still runs on its file.
 - **D4 A project on GitHub: writes** (after D3). Every write of the backlog lands on the Board and is read back: `add`, `go`, `edit` (dropping the plan), `ready`, `done`, `cancel`, `block`/`unblock`, `ask`/`answer` (the label), sub-issue and blocker writes; a write that did not stick is an error naming the field; a close sets its reason and the Status in one request; a rate limit waits for the reset with no retry loop in the adapter (retrying stays in `loop.guarded`); calls per operation equal the table above (±1).
 - **D5 A full task on GitHub, seen on the sandbox** (after D4). The loop runs a task end to end on a scratch Board: filed, let in, planned, worked, reviewed, accepted and merged, with a screenshot of the Board after each move; the panel and `foreman watch` match `foreman list`/`show` and the file's output; a project without `[backlog]` is unchanged.
@@ -706,7 +711,7 @@ These replace FN-140's planned subtasks 2-5: 2 (the port) and 5 (migration) kept
 - Repairing a card/issue mismatch (a card dragged to a closed column, an issue closed by hand): an error line only.
 - A Board `Id` field or a title prefix: the id is the number.
 - The PR's link to its task beyond the text `Task: #n` (no `Closes`, no linked-branch API): not tried.
-- Migrating closed tasks: they stay in the old file.
+- Migrating closed tasks: they stay in the old file (an open task's closed subtasks and blockers are read from there).
 
 ## Shared resources
 
