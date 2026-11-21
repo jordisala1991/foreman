@@ -6,7 +6,7 @@ import ast
 
 from helpers import PLUGIN
 
-ALLOWED = {"providers/github/provider.py", "providers/github/review.py", "core/oversight/guard.py"}
+ALLOWED = {"providers/github/provider.py", "providers/github/review.py", "providers/github/api.py", "core/oversight/guard.py"}
 
 
 def names_gh(source: str) -> bool:

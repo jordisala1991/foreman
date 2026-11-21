@@ -123,6 +123,8 @@ def _operations(c: Command) -> None:
     s = c("watch", "print one line each time something starts needing the owner (--once: exit after the first)")
     s.add_argument("--once", action="store_true")
     s = c("health", "the health checks, from outside the loop")
+    s = c("backlog", "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows")
+    s.add_argument("action", choices=("setup",))
     s = c("metrics", "cost, time, rework, questions, what misled agents")
     s = c("lock", 'use a shared resource: foreman lock NAME run "what" command…, or foreman lock NAME status')
     s.add_argument("name")

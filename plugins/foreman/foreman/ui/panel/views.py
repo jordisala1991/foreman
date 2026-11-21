@@ -86,8 +86,9 @@ def state(p: Project) -> Obj:
 
 
 def task(p: Project, tid: str) -> Obj:
-    d = provider_registry.backlog(p).load()
-    i = backlog.get(d, tid)
+    b = provider_registry.backlog(p)
+    d = b.load()
+    i = b.find(tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
     shown = recurring.shown(taskrepo.shown(tasktypes.shown(with_session(p, i, provider_registry.rows(p)), backlog.tasks(d)), backlog.tasks(d), p.several))

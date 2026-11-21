@@ -1,5 +1,6 @@
-"""The backlog port: every read and write of the backlog (tasks and the owner's questions). The adapter is
-`backlogfile.BacklogFile` (the local file), handed out by `registry.backlog(p)`. Tasks cross it as dicts (`Task`)."""
+"""The backlog port: every read and write of the backlog (tasks and the owner's questions). The adapters are
+`backlogfile.BacklogFile` (the local file) and `github.backlog.GitHubBacklog` (a repo's issues on a Board, `[backlog]`), handed
+out by `registry.backlog(p)`. Tasks cross it as dicts (`Task`)."""
 
 from contextlib import AbstractContextManager
 from typing import Any, Protocol, Unpack
@@ -15,6 +16,10 @@ class Backlog(Protocol):
 
     def reload(self) -> Data:
         """The backlog read now, past a tick's shared load (which it refreshes): for a decision on another process's writes."""
+        ...
+
+    def find(self, tid: str) -> Task:
+        """One task by id, read now, also one `load()` does not hold; BacklogError «no task ID…» when there is none."""
         ...
 
     def edit(self) -> AbstractContextManager[Data]:
