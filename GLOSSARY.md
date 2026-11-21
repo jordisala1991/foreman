@@ -198,6 +198,11 @@ _Avoid_: human, operator, boss
 A repo plus its home, served by fm.
 _Chat_: proyecto
 
+**Board**
+The GitHub Project (v2) that holds a project's tasks, one card per task.
+_Chat_: tablero
+_Avoid_: GitHub Project, project board
+
 **foreman**
 The command that runs fm (`bin/foreman` of the plugin). Not `fm`: macOS ships its own /usr/bin/fm.
 _Chat_: foreman
