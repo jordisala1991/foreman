@@ -63,22 +63,27 @@ def _back(w: Where, tid: str, number: int, want: Task, names: list[str]) -> Issu
     return back
 
 
-def _links(w: Where, read: Read, node: str, was: Task, now: Task) -> None:
-    """The parent (when it changed) and the blockers added and removed, in one request."""
+def _links(w: Where, read: Read, was: Task, now: Task) -> writes.Links:
+    """The parent (when it changed) and the blockers added and removed, as issue nodes."""
     parent = now.get("parent", "") if now.get("parent") != was.get("parent") else ""
     had, has = set(was.get("blocked_by") or []), set(now.get("blocked_by") or [])
     add, remove = sorted(has - had), sorted(had - has)
     found = _nodes(w, read, [x for x in (parent, *add, *remove) if x])
-    writes.links(writes.Target(w.api, w.b, read.meta), node, found.get(parent, ""), [found[x] for x in add], [found[x] for x in remove])
+    return writes.Links(found.get(parent, ""), [found[x] for x in add], [found[x] for x in remove])
 
 
-def _write(w: Where, read: Read, old: Task, now: Task, label: bool | None) -> Issue:
-    """One task's writes, in order: title and body, fields (and the close), links, label; then its read-back. `now` is
-    the part of the task GitHub holds."""
-    tid, was, t = old["id"], split(old)[0], writes.Target(w.api, w.b, read.meta)
-    changed = stuck(was, now)
+def _issue(w: Where, read: Read, tid: str) -> Issue | None:
+    """The task's open issue in the pass's read; None when it is closed."""
     n = ids.number(w.prefix, tid, w.legacy)
-    i = next((i for i in read.issues if i.number == n), None)
+    return next((i for i in read.issues if i.number == n), None)
+
+
+def _write(w: Where, read: Read, old: Task, x: Task, label: bool | None) -> Issue:
+    """One task's writes, in order: title and body, fields (and the close), links, label; then its read-back. `x` is
+    the task after the edit."""
+    tid, was, (now, local), t = old["id"], split(old)[0], split(x), writes.Target(w.api, w.b, read.meta)
+    changed = stuck(was, now)
+    i = _issue(w, read, tid)
     if i is None:
         raise BacklogError(f"{tid} is {old['status']}: fm changes no closed task on the Board")
     if "parent" in changed and not now.get("parent"):
@@ -87,9 +92,13 @@ def _write(w: Where, read: Read, old: Task, now: Task, label: bool | None) -> Is
         writes.body(t, i.node, now["title"], body_of(now, i.body))
     if names := [c for c in changed if c in FIELDS]:
         values = fields_of(now)
-        writes.fields(t, i.node, i.item, {f: values.get(f) for f in names}, CLOSE.get(now["status"], "") if "Status" in names else "")
+        close = CLOSE.get(now["status"], "") if "Status" in names else ""
+        writes.fields(t, i.node, i.item, {f: values.get(f) for f in names}, close)
+        if close:  # it is closed: kept now with its local keys, as the open read no longer has it, should the read-back fail
+            w.files.keep(now)
+            w.files.save_runs({k: v for k, v in (w.files.runs() | {tid: local}).items() if v})
     if "parent" in changed or "blocked_by" in changed:
-        _links(w, read, i.node, was, now)
+        writes.links(t, i.node, _links(w, read, was, now))
     if label is not None:
         writes.label(t, i.node, label)
     back = _back(w, tid, i.number, now, changed)
@@ -109,10 +118,12 @@ def _save(w: Where, before: Data, after: Data, backs: dict[str, Issue]) -> None:
     if (before["decisions"], before["decisions_resolved"]) != (after["decisions"], after["decisions_resolved"]):
         w.files.save_questions(after["decisions"], after["decisions_resolved"])
     if (snap := w.files.snapshot()) is not None and backs:
-        for tid, back in backs.items():
-            snap.pop(tid, None)
-            if back.state == "OPEN":
-                snap[tid] = w.task(back)["status"]
+        news = {x["id"]: x["status"] for x in after["tasks"]}
+        for tid, back in backs.items():  # a status fm did not write here stays as the snapshot has it: a drag is the pass's
+            if back.state == "CLOSED":
+                snap.pop(tid, None)
+            elif news[tid] != olds[tid]["status"]:
+                snap[tid] = news[tid]
         w.files.save_snapshot(snap)
 
 
@@ -125,8 +136,10 @@ def apply(w: Where, read: Read, before: Data, after: Data) -> Read:
         if x["id"] not in olds:
             raise BacklogError(f"{x['id']}: a new task is filed with add, not in an edit")
         now, label = split(x)[0], _label(before, after, x["id"])
+        if _issue(w, read, x["id"]) is None:
+            label = None  # an answer on a closed task: its questions only
         if stuck(split(olds[x["id"]])[0], now) or label is not None:
-            backs[x["id"]] = _write(w, read, olds[x["id"]], now, label)
+            backs[x["id"]] = _write(w, read, olds[x["id"]], x, label)
     _save(w, before, after, backs)
     by_number = {b.number: b for b in backs.values()}
     kept = (by_number.get(i.number, i) for i in read.issues)
@@ -134,15 +147,13 @@ def apply(w: Where, read: Read, before: Data, after: Data) -> Read:
 
 
 def file(w: Where, read: Read, task: Task) -> Issue:
-    """Files the task: createIssue, its card, its fields in one request, its parent and blockers in one more, the read-back.
+    """Files the task: createIssue, its card with its parent and blockers, its fields in one request, the read-back.
     One cut short after the issue exists leaves an error line naming it, for the owner to close."""
     t = writes.Target(w.api, w.b, read.meta)
     node, number = writes.create(t, task["title"], body_of(task, ""))
     try:
-        item = writes.card(t, node)
+        item = writes.card(t, node, _links(w, read, {}, task))
         writes.fields(t, node, item, fields_of(task))
-        if task.get("parent") or task.get("blocked_by"):
-            _links(w, read, node, {}, task)
         return _back(w, f"#{number}", number, task, list(facets(task)))
     except Exception as e:
         why = f"#{number} was filed but not finished: close it by hand ({e})"

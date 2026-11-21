@@ -204,6 +204,7 @@ class FakeGh:
     def _Card(self, v: dict[str, Any]) -> dict[str, Any]:
         self.mutations += 1
         self._spec(v["issue"]).carded = True
+        self._link(v)
         return {"data": {"addProjectV2ItemById": {"item": {"id": v["issue"].replace("I", "IT", 1)}}}}
 
     def _Body(self, v: dict[str, Any]) -> dict[str, Any]:
@@ -234,13 +235,17 @@ class FakeGh:
 
     def _Links(self, v: dict[str, Any]) -> dict[str, Any]:
         self.mutations += 1
+        self._link(v)
+        return {"data": {}}
+
+    def _link(self, v: dict[str, Any]) -> None:
+        """The parent and blocker mutations of the request (Links, or a Card's)."""
         s = self._spec(v["issue"])
         if "addSubIssue" in self.query:
             s.parent = self._spec(v["parent"]).number
         for op, name in re.findall(r"\w+:(addBlockedBy|removeBlockedBy)\(input:\{issueId:\$issue,blockingIssueId:\$(\w+)\}", self.query):
             n = self._spec(v[name]).number
             s.blockers = [*s.blockers, n] if op == "addBlockedBy" else [b for b in s.blockers if b != n]
-        return {"data": {}}
 
     def _Label(self, v: dict[str, Any]) -> dict[str, Any]:
         self.mutations += 1

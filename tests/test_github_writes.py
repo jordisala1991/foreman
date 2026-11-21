@@ -218,6 +218,7 @@ def test_calls_per_operation(fake: FakeGh, e: Env):
 
     table = {
         "add": (4, lambda: b().add("t", criteria="c")),
+        "add with links": (4, lambda: b().add("u", criteria="c", parent="TY-10", blocked_by=["TY-12"])),
         "set_status": (2, lambda: b().set_status("TY-5", "ready")),
         "blocked": (2, lambda: b().update("TY-5", blocked="x")),
         "ask": (2, lambda: b().ask("TY-5", "a", "q")),
@@ -300,3 +301,37 @@ def test_any_other_drag_is_an_error_and_moved_back(fake: FakeGh, e: Env):
     registry.backlog(e.p).set_status("TY-3", "in progress")  # a move through the port is no drag
     tick(e)
     assert len(errors(e)) == 2 and fake.issues[3].fields["Status"] == "In progress"
+
+
+def test_a_write_after_a_drag_keeps_the_drag_for_the_pass(fake: FakeGh, e: Env):
+    fake.add(3, fields={"Status": "Ready"})
+    tick(e)
+    fake.issues[3].fields["Status"] = "In progress"
+    registry.backlog(e.p).update("TY-3", blocked="why")
+    tick(e)
+    assert errors(e) == ["TY-3: dragged ready → in progress on the Board; moved back to ready"]
+    assert fake.issues[3].fields == {"Status": "Ready", "Blocked": "why"}
+
+
+def test_a_close_whose_read_back_fails_is_kept(fake: FakeGh, e: Env):
+    fake.add(5, fields={"Status": "In review"})
+    fake.hook = lambda op: setattr(fake, "limited", fake.limited or op == "Fields")
+    b = registry.backlog(e.p)
+    with pytest.raises(RateLimited):
+        b.set_status("TY-5", "done", commit="abc")
+    assert fake.issues[5].state == "CLOSED"
+    assert [(t["id"], t["status"]) for t in state(e, "closed.json")] == [("TY-5", "done")]
+    util.write_json(e.p.state / "github-rate-limit.json", {"reset": int(time.time()) - 1})
+    fake.limited = False
+    t = get(b.load(), "TY-5")
+    assert (t["status"], t["commit"]) == ("done", "abc")
+
+
+def test_an_answer_on_a_closed_task(fake: FakeGh, e: Env):
+    fake.add(5, fields={"Status": "In progress"})
+    b = registry.backlog(e.p)
+    qid = b.ask("TY-5", "a", "q")
+    b.set_status("TY-5", "canceled")
+    n = fake.mutations
+    b.answer(qid, "late")
+    assert fake.mutations == n and [q["id"] for q in state(e, "questions.json")["decisions_resolved"]] == [qid]
