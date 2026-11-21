@@ -160,13 +160,13 @@ def test_writes_are_refused(fake: FakeGh):
         fm(e.home, "add", "t", "--criteria", "c")
 
 
-def test_a_card_at_a_closed_status_stays_in_the_recent_list(fake: FakeGh):
+def test_no_closed_at_no_closed_date(fake: FakeGh):
     e = board_env()
     fake.add(5, title="dragged to Done", fields={"Status": "Done"})
     fake.add(6, title="closed, no date", state="CLOSED", reason="COMPLETED", fields={"Status": "Done"})
     util.write_json(e.home / "legacy-ids.json", {})
-    assert [t["id"] for t in views.state(e.p)["tasks"]] == ["TY-5"]
-    assert json.loads(fm(e.home, "show", "TY-6"))["closed"] == date.today().isoformat()
+    assert [t["id"] for t in views.state(e.p)["tasks"]] == []  # an open issue at a closed Status is an error line (D4), not recent
+    assert "closed" not in json.loads(fm(e.home, "show", "TY-6"))
 
 
 def test_load_and_find_agree_on_an_old_closed_id(fake: FakeGh):

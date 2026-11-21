@@ -4,9 +4,9 @@
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 
-from .backlog import CLOSED, STATUSES, BacklogError, Task
+from .backlog import STATUSES, BacklogError, Task
 from .ids import task_id
 
 CLOSED_AS = {"COMPLETED": "done", "NOT_PLANNED": "canceled", "DUPLICATE": "duplicate"}  # other closed reasons: closed undone
@@ -66,8 +66,8 @@ def _local(iso: str, fmt: str) -> str:
 
 
 def _closed(iso: str) -> str:
-    """The local date it closed; today when GitHub gives none (an open issue, or a closed one with no `closedAt`)."""
-    return _local(iso, "%Y-%m-%d") if iso else date.today().isoformat()
+    """The local date it closed; empty when GitHub gives no `closedAt` (no date is made up)."""
+    return _local(iso, "%Y-%m-%d") if iso else ""
 
 
 def _closed_status(reason: str) -> str:
@@ -96,7 +96,7 @@ def to_task(i: Issue, prefix: str, legacy: Mapping[str, int]) -> Task:
         "priority": str(f.get("Priority", "none")),
         "created": _local(i.created, "%Y-%m-%d %H:%M:%S"),
     }
-    if t["status"] in CLOSED:  # also a card at a closed Status on an open issue, so the recent list shows it
+    if i.closed:
         t["closed"] = _closed(i.closed)
     if goal or criteria:
         t["acceptance"] = {"goal": goal, "criteria": criteria}
