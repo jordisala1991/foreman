@@ -29,13 +29,13 @@ def run_queue(p: Project, rows: Rows) -> None:
         stop_review_sessions(p, i, rows)
     waiting = [tid for tid, _ in decide.queue_order(in_review)]
     for tid in waiting:
-        i = backlog.get(registry.backlog(p).load(), tid)
+        i = backlog.get(registry.backlog(p).reload(), tid)
         if decide.queue_turn(i) == "merge":
             guarded(p, tid, "merge it", lambda i=i: merge_one(p, i))
     key = check_key(p)
     started = util.STARTED.get(key, 0)  # after the merges: their merged checks are not the tick's branch check
     for tid in waiting:
-        i = backlog.get(registry.backlog(p).load(), tid)
+        i = backlog.get(registry.backlog(p).reload(), tid)
         if decide.queue_turn(i) != "check":
             continue
         guarded(p, tid, "check it", lambda i=i: queue_one(p, i, rows))
@@ -76,7 +76,7 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
     now (run here, in the background, one at a time); a failure goes back to its agent, or past the row, to the owner."""
     tid = i["id"]
     for first in (True, False):
-        i = backlog.get(registry.backlog(p).load(), tid)
+        i = backlog.get(registry.backlog(p).reload(), tid)
         c: dict[str, Any] = i.get("check") or {}
         head, main_head = (registry.repo(p).head(r) for r in (i["branch"], p.get("project", "main")))
         has_test = bool(p.get("merge", "test"))

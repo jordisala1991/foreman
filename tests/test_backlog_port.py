@@ -13,6 +13,7 @@ from foreman.core.tasks import backlog
 from foreman.core.tasks.backlog import Local
 from foreman.loop import tick
 from foreman.providers import registry
+from foreman.providers.backlogfile import BacklogFile
 from foreman.ui.panel import views
 
 
@@ -84,3 +85,14 @@ def test_an_edit_in_a_tick_is_seen_by_the_next_load():
     backlog.get(d, tid)["status"] = "in progress"
     util.write_json(e.home / "backlog.json", d)
     assert backlog.get(registry.backlog(e.p).load(), tid)["status"] == "in progress"
+
+
+def test_a_reload_in_a_tick_sees_another_process():
+    e = Env()
+    tid = registry.backlog(e.p).add("t", criteria="c")
+    with registry.tick_scope(e.p):
+        registry.backlog(e.p).load()
+        BacklogFile(e.p).set_status(tid, "canceled", "owner")  # another process: the owner's CLI
+        assert backlog.get(registry.backlog(e.p).load(), tid)["status"] == "backlog"
+        assert backlog.get(registry.backlog(e.p).reload(), tid)["status"] == "canceled"
+        assert backlog.get(registry.backlog(e.p).load(), tid)["status"] == "canceled"

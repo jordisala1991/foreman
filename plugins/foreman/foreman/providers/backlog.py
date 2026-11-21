@@ -13,6 +13,10 @@ class Backlog(Protocol):
         """The whole backlog, a copy: the caller may change it, nothing is saved."""
         ...
 
+    def reload(self) -> Data:
+        """The backlog read now, past a tick's shared load (which it refreshes): for a decision on another process's writes."""
+        ...
+
     def edit(self) -> AbstractContextManager[Data]:
         """The backlog to change under its lock; saved when the block ends, nothing saved if it raises."""
         ...

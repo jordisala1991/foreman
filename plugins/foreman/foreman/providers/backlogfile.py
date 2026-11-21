@@ -39,6 +39,13 @@ class BacklogFile:
                 self.kept = self._read()
             return copy.deepcopy(self.kept)
 
+    def reload(self) -> Data:
+        d = self._read()
+        if self.shared:
+            with self.guard:
+                self.kept = copy.deepcopy(d)
+        return d
+
     @contextlib.contextmanager
     def edit(self) -> Generator[Data, None, None]:
         with util.file_lock(self.file):
@@ -46,9 +53,9 @@ class BacklogFile:
             yield d
             d["updated"] = date.today().isoformat()
             util.write_json(self.file, d)
-        if self.shared:
-            with self.guard:
-                self.kept = copy.deepcopy(d)
+            if self.shared:  # under the file lock: the kept data follows the order of the writes
+                with self.guard:
+                    self.kept = copy.deepcopy(d)
 
     def create(self) -> None:
         if not self.file.exists():

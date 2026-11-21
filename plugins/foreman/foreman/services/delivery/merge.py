@@ -56,7 +56,7 @@ def merge_accepted(p: Project, tid: str) -> str:
     """The one place that merges: asks the provider to merge an accepted task (once), then closes the task, removing
     its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
     provider = registry.get(p)
-    i = backlog.get(registry.backlog(p).load(), tid)
+    i = backlog.get(registry.backlog(p).reload(), tid)
     acc = i.get("accepted")
     if i["status"] != "in review" or not acc:
         raise git.DeliveryError(f"{tid} is not accepted")
@@ -145,7 +145,7 @@ def close(p: Project, tid: str, status: str, why: str, *, settle: bool = True) -
     p = p.for_task(i)
     if status == "canceled":
         for s in subtasks.of(backlog.tasks(d), tid):
-            if backlog.get(registry.backlog(p).load(), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it
+            if backlog.get(registry.backlog(p).reload(), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it
                 close(p, s["id"], "canceled", f"its parent {tid} was canceled: {why}", settle=False)
     if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
         close_pull(p, i, why)
