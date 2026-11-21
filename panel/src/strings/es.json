@@ -59,6 +59,7 @@
   "gh_closed": "Los últimos siete días.",
   "n_open": "{n} abiertas",
   "no_tasks": "Aún no hay tareas: añade la primera.",
+  "no_snapshot": "El bucle aún no ha leído el Board: las tareas aparecen tras su primera pasada.",
   "has_question": "Su agente te pregunta algo",
   "blocked_why": "Bloqueada: {why}",
   "latest": "Lo último",

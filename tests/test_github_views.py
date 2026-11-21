@@ -5,10 +5,11 @@ import json
 from typing import Any
 
 import pytest
-from fakegh import FakeGh, board_env
+from fakegh import FakeGh, board_env, passed
 from helpers import Env, fm
 
-from foreman import proc
+from foreman import proc, util
+from foreman.core.tasks.backlog import BacklogError, NoSnapshot
 from foreman.providers import registry
 from foreman.providers.runner import NO_ROWS
 from foreman.steps import watch
@@ -33,6 +34,7 @@ def test_the_panel_list_and_task_page_match_list_and_show(fake: FakeGh):
     fake.add(7, title="to triage", fields={"Status": "Triage"})
     listed = [ln.split()[:2] for ln in fm(e.home, "list").splitlines()]
     assert listed == [["TY-5", "ready"], ["TY-6", "backlog"], ["TY-7", "triage"]]
+    passed(e)
     assert [[t["id"], t["status"]] for t in views.state(e.p)["tasks"]] == listed
     for tid in ("TY-5", "TY-6", "TY-7"):
         shown, page = json.loads(fm(e.home, "show", tid)), views.task(e.p, tid)["task"]
@@ -66,3 +68,70 @@ def test_watch_prints_the_same_lines_on_github_as_on_the_file(fake: FakeGh):
         "blocked:TY-1": "TY-1 blocked: needs X",
     }
     assert on_github == on_file
+
+
+CRITERIA = "## Acceptance criteria\n- c"
+
+
+def test_panel_and_watch_make_no_github_call(fake: FakeGh):
+    e = board_env()
+    for n in (1, 2, 3):
+        fake.add(n, title=f"t{n}", fields={"Status": "Backlog"})
+    passed(e)
+    n = len(fake.calls)
+    for _ in range(2):
+        views.summary(e.p)
+        assert len(views.state(e.p)["tasks"]) == 3
+        assert views.task(e.p, "TY-1")["task"]["title"] == "t1"
+        views.system(e.p)
+        watch.needs(e.p, NO_ROWS)
+    assert len(fake.calls) == n
+
+
+def test_a_go_and_a_local_write_show_at_once(fake: FakeGh):
+    e = board_env()
+    registry.setup_board(e.p)
+    fake.add(1, title="t", body=CRITERIA, fields={"Status": "Triage"})
+    passed(e)
+    b = registry.backlog(e.p)
+    b.set_status("TY-1", "backlog", "let in by the owner", blocked="")
+    b.update("TY-1", accepted={"by": "owner", "head": "h", "at": "t"})
+    n = len(fake.calls)
+    assert [t["status"] for t in views.state(e.p)["tasks"]] == ["backlog"]
+    assert views.task(e.p, "TY-1")["task"]["accepted"]["by"] == "owner"
+    assert len(fake.calls) == n
+
+
+def test_without_a_snapshot_they_say_so(fake: FakeGh):
+    e = board_env()
+    fake.add(1, fields={"Status": "Backlog"})
+    state = views.state(e.p)
+    assert (state["tasks"], state["notice"]) == ([], "no_snapshot")
+    assert "broken" not in views.summary(e.p)
+    with pytest.raises(NoSnapshot, match="the loop has not read the Board yet"):
+        watch.run(e.p, True, NO_ROWS)
+    assert fake.calls == []
+    util.write_json(e.p.state / "backlog-cards.json", [1])
+    with pytest.raises(BacklogError) as err:
+        views.state(e.p)
+    assert not isinstance(err.value, NoSnapshot)
+
+
+def test_owner_commands_still_read_live(fake: FakeGh):
+    e = board_env()
+    fake.add(1, fields={"Status": "Backlog"})
+    passed(e)
+    fake.add(9, fields={"Status": "Backlog"})
+    reads = fake.reads
+    assert "TY-9" in fm(e.home, "list")
+    assert fake.reads == reads + 1
+    assert [t["id"] for t in views.state(e.p)["tasks"]] == ["TY-1"]
+    passed(e)
+    assert [t["id"] for t in views.state(e.p)["tasks"]] == ["TY-1", "TY-9"]
+
+
+def test_a_project_without_backlog_is_unchanged():
+    e = Env()
+    tid = registry.backlog(e.p).add("t", criteria="c")
+    assert [t["id"] for t in views.state(e.p)["tasks"]] == [tid]
+    assert watch.needs(e.p, NO_ROWS) == {}

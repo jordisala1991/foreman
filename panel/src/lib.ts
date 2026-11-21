@@ -128,6 +128,7 @@ export interface State {
   tasks: Task[];
   questions: Question[];
   events: Event[];
+  notice?: string;
 }
 export interface TaskAnswer {
   task: Task;

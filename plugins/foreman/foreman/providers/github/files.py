@@ -1,13 +1,21 @@
 """The local files of a project whose backlog is on GitHub (DESIGN.md «Every key of a task», «The statuses»), in
 `<home>/state/`: `runs.json` (each task's local keys), `questions.json` (the owner's questions and the agents' messages),
-`closed.json` (the tasks fm closed, as read back) and `backlog-snapshot.json` (each open task's status after the last pass or
-write). Read and written under the backlog lock by `GitHubBacklog`."""
+`closed.json` (the tasks fm closed, as read back), `backlog-snapshot.json` (each open task's status after the last pass or
+write) and `backlog-cards.json` (the Board's side of each open task after the last pass or write: what the panel and watch
+show). Read and written under the backlog lock by `GitHubBacklog`."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ... import util
 from ...core.tasks.backlog import CLOSED, BacklogError, Task
+
+
+class Cards(NamedTuple):
+    """The Board's side of the open tasks, as the pass read them, and the closed blockers: what the panel and watch show."""
+
+    tasks: list[Task]
+    stubs: list[Task]
 
 
 class Files:
@@ -62,3 +70,18 @@ class Files:
 
     def save_snapshot(self, statuses: dict[str, str]) -> None:
         util.write_json(self.state / "backlog-snapshot.json", {"statuses": statuses})
+
+    def cards(self) -> Cards | None:
+        """The Board's side of the open tasks after the last pass or write; None before the first pass."""
+        f = self.state / "backlog-cards.json"
+        o = self._object("backlog-cards.json", None)
+        if o is None:
+            return None
+        lists = [util.json_list(o.get(k)) for k in ("tasks", "stubs")]
+        rows = [[x for t in r if (x := util.json_object(t)) is not None] for r in lists]
+        if any(len(a) != len(b) for a, b in zip(rows, lists, strict=True)) or "tasks" not in o or "stubs" not in o:
+            raise BacklogError(f"{f}: expected the tasks and the stubs, each a list of tasks")
+        return Cards(rows[0], rows[1])
+
+    def save_cards(self, cards: Cards) -> None:
+        util.write_json(self.state / "backlog-cards.json", {"tasks": cards.tasks, "stubs": cards.stubs})

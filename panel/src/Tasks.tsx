@@ -90,7 +90,8 @@ export function Tasks({ project }: { project: Project }) {
       </ScreenHead>
       {!d && !s.failed ? <div className="card quiet">{t("loading")}</div> : null}
       {s.failed && !d ? <LoadFailed retry={s.reload} /> : null}
-      {d && !d.tasks.length ? <div className="card quiet">{t("no_tasks")}</div> : null}
+      {d?.notice ? <div className="card quiet">{t("no_snapshot")}</div> : null}
+      {d && !d.notice && !d.tasks.length ? <div className="card quiet">{t("no_tasks")}</div> : null}
       <div className="groups">
         {GROUPS.filter((g) => by.get(g)?.length).map((g) => (
           <section key={g} className={`group g-${g.replace(" ", "-")}`} aria-label={t(`g_${g.replace(" ", "_")}` as Key)}>
