@@ -78,7 +78,7 @@ class TestShowing:
         s = fm(e.home, "add", "s", "--parent", a).strip()
         merge.close(e.p, a, "done", "x")
         line = fm(e.home, "list").rstrip("\n")
-        assert line == f"{s:8} {'triage':12} {'change':10} {'':14} s"
+        assert line == f"{s:8} {'triage':12} {'change':10} {'':14} s  [parent: {a}]"
 
 
 class TestOutcome:

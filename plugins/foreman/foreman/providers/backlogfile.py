@@ -47,6 +47,9 @@ class BacklogFile:
                     self.kept = copy.deepcopy(d)
         return d
 
+    def find(self, tid: str) -> Task:
+        return get(self.load(), tid)
+
     @contextlib.contextmanager
     def edit(self) -> Generator[Data, None, None]:
         with util.file_lock(self.file):

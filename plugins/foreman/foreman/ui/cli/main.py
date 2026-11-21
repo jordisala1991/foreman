@@ -7,7 +7,9 @@ from collections.abc import Callable
 
 from ...core.project import config
 from ...core.tasks import backlog
+from ...providers import ConfigError, Permanent, ProviderError, Transient
 from .agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
+from .board import cmd_backlog
 from .ops import cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics, cmd_watch
 from .owner import (
     cmd_accept,
@@ -56,6 +58,7 @@ HANDLERS: dict[str, Handler] = {
     "loop": cmd_loop,
     "health": cmd_health,
     "metrics": cmd_metrics,
+    "backlog": cmd_backlog,
     "lock": cmd_lock,
     "watch": cmd_watch,
     "guard": cmd_guard,
@@ -70,5 +73,5 @@ def main(argv: list[str] | None = None, outside: dict[str, Handler] | None = Non
     a = parser(__doc__).parse_args(argv)
     try:
         ({**HANDLERS, **(outside or {})})[a.cmd](a)
-    except (backlog.BacklogError, config.ProjectError) as e:
+    except (backlog.BacklogError, config.ProjectError, ConfigError, ProviderError, Transient, Permanent) as e:
         sys.exit(f"foreman: {e}")

@@ -9,6 +9,12 @@ from ...providers import registry
 from .common import home
 
 
+def _model(i: backlog.Task) -> str:
+    """`  [model: opus, effort: xhigh]`, either alone, or nothing when the task sets neither."""
+    shown = ", ".join(f"{k}: {i[k]}" for k in ("model", "effort") if i.get(k))
+    return f"  [{shown}]" if shown else ""
+
+
 def cmd_list(a: argparse.Namespace) -> None:
     p = home(a)
     d = registry.backlog(p).load()
@@ -21,7 +27,9 @@ def cmd_list(a: argparse.Namespace) -> None:
         agent: backlog.Agent = i.get("agent") or {}
         ag = agent.get("name", "")
         title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
-        note = (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
+        note = (f"  [priority: {i['priority']}]" if i.get("priority", "none") != "none" else "") + _model(i)
+        note += f"  [parent: {i['parent']}]" if i.get("parent") else ""
+        note += (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
         note += f"  [recurring: {name}]" if (name := recurring.name_of(i)) else ""
         note += f"  [chain: {c['lens']}, step {c['step']} of {c['cap']}]" if (c := chains.progress(all_, i)) else ""
         repo = f"{taskrepo.of(i, all_, True):{width}} " if p.several else ""
@@ -32,8 +40,9 @@ def cmd_list(a: argparse.Namespace) -> None:
 
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
-    d = registry.backlog(p).load()
-    i: backlog.Task = recurring.shown(taskrepo.shown(tasktypes.shown(backlog.get(d, a.id), backlog.tasks(d)), backlog.tasks(d), p.several))
+    b = registry.backlog(p)
+    d = b.load()
+    i: backlog.Task = recurring.shown(taskrepo.shown(tasktypes.shown(b.find(a.id), backlog.tasks(d)), backlog.tasks(d), p.several))
     i = {**i, "checked_on": decide.ran_on(i["check"])} if i.get("check") else i
     if wait := blockers.pending(i, backlog.tasks(d)):
         i = {**i, "waiting_for": wait}

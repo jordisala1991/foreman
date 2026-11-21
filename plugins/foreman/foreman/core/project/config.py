@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Self
 
 from ... import util
-from . import recurring_table, repos
+from . import backlog_table, recurring_table, repos
 
 MODELS = ("haiku", "sonnet", "opus", "fable")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -61,6 +61,7 @@ class ProjectError(Exception):
 class Project:
     home: Path
     cfg: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    board: backlog_table.Board | None = None  # [backlog]: the tasks are the issues of a repo on a Board; None: the local file
 
     @classmethod
     def load(cls, home: str | Path) -> Self:
@@ -74,6 +75,7 @@ class Project:
         try:
             cfg["repos"] = repos.parse(raw, cfg)
             cfg["recurring"] = recurring_table.parse(raw)
+            board = backlog_table.parse(raw)
         except ValueError as e:
             raise ProjectError(str(e)) from None
         if cfg["repos"]:  # several repos: tasks run in the first one listed
@@ -81,7 +83,7 @@ class Project:
             cfg["project"]["repo"], cfg["project"]["main"] = first["path"], first["main"]
         if not cfg["project"]["name"]:
             cfg["project"]["name"] = home.name
-        p = cls(home, cfg)
+        p = cls(home, cfg, board)
         if len(cfg["repos"]) > 1:
             p._check_layout()
         return p

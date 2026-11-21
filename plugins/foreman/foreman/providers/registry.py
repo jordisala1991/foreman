@@ -12,6 +12,9 @@ from . import MERGES, PRS, ConfigError, Provider
 from .backlog import Backlog
 from .backlogfile import BacklogFile
 from .claude.sessions import Claude
+from .github import board
+from .github.api import Api
+from .github.backlog import GitHubBacklog
 from .github.provider import GitHub
 from .gitrepo import GitRepo
 from .local import Local
@@ -25,18 +28,32 @@ def repo(p: Project) -> Repo:
     return GitRepo(p.repo)
 
 
-TICKS: dict[Path, BacklogFile] = {}  # the shared backlog of each home whose tick is running
+TICKS: dict[Path, Backlog] = {}  # the shared backlog of each home whose tick is running
+
+
+def _make(p: Project, shared: bool) -> Backlog:
+    """The local file, or with `[backlog]` the repo's issues on the Board (the old file still holds the closed tasks)."""
+    if p.board is None:
+        return BacklogFile(p, shared)
+    return GitHubBacklog(p, p.board, BacklogFile(p).load, shared)
 
 
 def backlog(p: Project) -> Backlog:
     """The project's backlog, behind the `Backlog` port: within a tick, the tick's shared one (loaded once)."""
-    return TICKS.get(p.home) or BacklogFile(p)
+    return TICKS.get(p.home) or _make(p, False)
+
+
+def setup_board(p: Project) -> list[str]:
+    """`foreman backlog setup`: makes the project's Board fm's; one line per change."""
+    if p.board is None:
+        raise ConfigError("no [backlog] table in foreman.toml")
+    return board.setup(p.board, Api(p.state / "github-rate-limit.json"))
 
 
 @contextmanager
 def tick_scope(p: Project) -> Generator[None]:
     """While open, `backlog(p)` hands out one shared backlog for `p`'s home: the tick loads it once."""
-    TICKS[p.home] = BacklogFile(p, shared=True)
+    TICKS[p.home] = _make(p, True)
     try:
         yield
     finally:

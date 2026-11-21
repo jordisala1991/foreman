@@ -17,6 +17,10 @@ class TransientError(Transient):
     pass
 
 
+class RateLimited(TransientError):
+    """GitHub's rate limit is spent: no call until its reset (the stop file); the loop's retry finds it still spent."""
+
+
 class PermanentError(Permanent):
     pass
 
