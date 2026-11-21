@@ -168,6 +168,13 @@ class FakeGh:
             return {"data": {"repository": {"issueOrPullRequest": None}}, "errors": [{"type": "NOT_FOUND", "message": f"no issue {n}"}]}
         return {"data": {"repository": {"issueOrPullRequest": {"__typename": "Issue", **self.node(self.issues[n])}}}}
 
+    def _Newest(self, v: dict[str, Any]) -> dict[str, Any]:
+        """The newest issue and pull request (the cutover's collision check)."""
+        self.reads += 1
+        issues = [{"number": max(self.issues)}] if self.issues else []
+        prs = [{"number": max(self.prs)}] if self.prs else []
+        return {"data": {"repository": {"issues": {"nodes": issues}, "pullRequests": {"nodes": prs}}}}
+
     # --- an issue as GitHub answers it ---
 
     def linked(self, n: int) -> dict[str, Any]:

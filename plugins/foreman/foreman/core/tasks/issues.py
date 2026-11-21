@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from . import board
-from .backlog import STATUSES, Acceptance, BacklogError, Task
+from .backlog import CLOSED, STATUSES, Acceptance, BacklogError, Task
 from .ids import task_id
 
 CLOSED_AS = {"COMPLETED": "done", "NOT_PLANNED": "canceled", "DUPLICATE": "duplicate"}  # other closed reasons: closed undone
@@ -126,6 +126,23 @@ def to_task(i: Issue, prefix: str, legacy: Mapping[str, int]) -> Task:
     if "Lens" in f:
         t["chain"] = {"lens": str(f["Lens"]), "max_steps": int(f.get("Max steps", 0)), "max_lines": int(f.get("Max lines", 0))}
     return t
+
+
+def with_old_blockers(t: Task, old: Mapping[str, Task]) -> Task:
+    """The task with the blockers its old-file task (same id) has that are closed there, after GitHub's: a migrated task's
+    closed blockers stay in the old file (DESIGN.md «Every key of a task», `blocked_by`)."""
+    was = old.get(t["id"]) or {}
+    have = list(t.get("blocked_by") or [])
+    if extra := [x for x in was.get("blocked_by", []) if x not in have and (old.get(x) or {}).get("status") in CLOSED]:
+        return {**t, "blocked_by": have + extra}
+    return t
+
+
+def without_old_blockers(t: Task, old: Mapping[str, Task]) -> Task:
+    """The task with only the blockers that can be issues: those closed in the old file are none, so a write leaves them."""
+    kept = [x for x in t.get("blocked_by", []) if (old.get(x) or {}).get("status") not in CLOSED]
+    out = {k: v for k, v in t.items() if k != "blocked_by"}
+    return {**out, "blocked_by": kept} if kept else out
 
 
 def stub(b: Linked, prefix: str, legacy: Mapping[str, int]) -> Task:

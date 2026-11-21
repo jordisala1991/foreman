@@ -17,7 +17,7 @@ from ...core.project.backlog_table import Board
 from ...core.project.config import Project
 from ...core.tasks import changes, drags, ids
 from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks
-from ...core.tasks.issues import Issue, joined, stub
+from ...core.tasks.issues import Issue, joined, stub, with_old_blockers, without_old_blockers
 from ...core.tasks.questions import Question
 from .api import Api
 from .apply import Where, apply, file
@@ -47,10 +47,10 @@ class GitHubBacklog:
 
     def _join(self, cards: Cards) -> Data:
         """The backlog from the Board's cards, the closed tasks and the local files, read now."""
-        runs = self.files.runs()
-        closed = [t for t in self.old()["tasks"] if t["status"] in CLOSED]
+        runs, old = self.files.runs(), {t["id"]: t for t in self.old()["tasks"]}
+        closed = [t for t in old.values() if t["status"] in CLOSED]
         held = {t["id"] for t in closed}  # an id is looked up in the old file before the number, as `find` does
-        mine = [t for t in cards.tasks if t["id"] not in held]
+        mine = [with_old_blockers(t, old) for t in cards.tasks if t["id"] not in held]
         out: dict[str, Task] = {}
         for t in [*(joined(t, runs.get(t["id"], {})) for t in mine), *closed, *(joined(t, runs.get(t["id"], {})) for t in self.files.closed()), *cards.stubs]:
             out.setdefault(t["id"], t)
@@ -152,7 +152,8 @@ class GitHubBacklog:
             raise BacklogError(f"no task {tid}: there is no #{n}")
         if not i.carded:
             raise BacklogError(f"no task {tid}: #{n} is not on the Board")
-        return joined(self._where().task(i), self.files.runs().get(tid, {}))
+        old = {t["id"]: t for t in self.old()["tasks"]}
+        return joined(with_old_blockers(self._where().task(i), old), self.files.runs().get(tid, {}))
 
     def create(self) -> None:
         """Nothing to create: the repo and the Board exist (`foreman backlog setup` makes the Board fm's)."""
@@ -173,7 +174,8 @@ class GitHubBacklog:
             before = self._data(read)
             after = copy.deepcopy(before)
             yield after
-            new = apply(self._where(), read, before, after)
+            old = {t["id"]: t for t in self.old()["tasks"]}  # its closed blockers are no issues: a write leaves them
+            new = apply(self._where(), read, *({**x, "tasks": [without_old_blockers(t, old) for t in x["tasks"]]} for x in (before, after)))
             if new != read:
                 self.files.save_cards(self._cards(new))
             read = new

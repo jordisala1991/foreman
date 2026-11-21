@@ -145,11 +145,12 @@ def apply(w: Where, read: Read, before: Data, after: Data) -> Read:
     return dataclasses.replace(read, issues=tuple(i for i in kept if i.state == "OPEN"))
 
 
-def file(w: Where, read: Read, task: Task) -> Issue:
+def file(w: Where, read: Read, task: Task, old: str = "") -> Issue:
     """Files the task: createIssue, its card with its parent and blockers, its fields in one request, the read-back.
-    One cut short after the issue exists leaves an error line naming it, for the owner to close."""
+    One cut short after the issue exists leaves an error line naming it, for the owner to close. `old`'s legacy-id line
+    (the cutover's) stays the body's first."""
     t = writes.Target(w.api, w.b, read.meta)
-    node, number = writes.create(t, task["title"], body_of(task, ""))
+    node, number = writes.create(t, task["title"], body_of(task, old))
     try:
         item = writes.card(t, node, _links(w, read, {}, task))
         writes.fields(t, node, item, fields_of(task))
