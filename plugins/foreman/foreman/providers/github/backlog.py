@@ -44,12 +44,23 @@ class GitHubBacklog:
         legacy = self._legacy()
         found = read_open(self.api, self.b)
         closed = [t for t in self.old()["tasks"] if t["status"] in CLOSED]
-        closed += [o for t in util.json_list(util.read_json(self.p.state / "closed.json", [])) if (o := util.json_object(t)) is not None]
+        held = {t["id"] for t in closed}  # an id is looked up in the old file before the number, as `find` does
+        closed += self._closed_json()
         stubs = [stub(x, self.prefix, legacy) for i in found for x in i.blockers if x.state == "CLOSED"]
         out: dict[str, Task] = {}
-        for t in [*(self._task(i, legacy) for i in found), *closed, *stubs]:
+        for t in [*(t for t in (self._task(i, legacy) for i in found) if t["id"] not in held), *closed, *stubs]:
             out.setdefault(t["id"], t)
         return {**empty(), "tasks": list(out.values())}
+
+    def _closed_json(self) -> list[Task]:
+        """The tasks fm closed on GitHub, as it kept them (D4 writes the file): a list of tasks, each with its id and status."""
+        f = self.p.state / "closed.json"
+        raw: object = util.read_json(f, [])
+        rows = util.json_list(raw)
+        tasks = [o for t in rows if (o := util.json_object(t)) is not None]
+        if rows is not raw or len(tasks) != len(rows) or not all(isinstance(t.get("id"), str) and t.get("status") in CLOSED for t in tasks):
+            raise BacklogError(f"{f}: expected a list of closed tasks, each with its id and status")
+        return tasks
 
     def load(self) -> Data:
         if not self.shared:

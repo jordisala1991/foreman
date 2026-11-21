@@ -22,6 +22,7 @@ from foreman.core.project.config import Project
 from foreman.core.project.registry import register
 from foreman.core.tasks import backlog
 from foreman.providers import registry
+from foreman.providers.github.types import RateLimited
 from foreman.providers.runner import State
 from foreman.ui.panel import server, views
 
@@ -88,6 +89,14 @@ class TestPanel:
         except urllib.error.HTTPError as e:
             with e:
                 return e.code, e.read().decode()
+
+    def test_a_rate_limit_is_answered_as_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def spent(q: dict[str, list[str]]) -> views.Obj:
+            raise RateLimited("GitHub's rate limit is spent: no call until 12:00:00")
+
+        monkeypatch.setitem(server.VIEWS, "/api/state", spent)
+        code, body = self.call("/api/state?p=demo")
+        assert (code, json.loads(body)) == (503, {"error": "GitHub's rate limit is spent: no call until 12:00:00"})
 
     def test_task_view_carries_the_description(self) -> None:
         report = Path(self.tmp.name) / "r.md"

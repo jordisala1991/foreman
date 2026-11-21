@@ -158,3 +158,30 @@ def test_writes_are_refused(fake: FakeGh):
         registry.backlog(e.p).add("t")
     with pytest.raises(SystemExit, match="foreman: the backlog on GitHub is read-only"):
         fm(e.home, "add", "t", "--criteria", "c")
+
+
+def test_a_card_at_a_closed_status_stays_in_the_recent_list(fake: FakeGh):
+    e = board_env()
+    fake.add(5, title="dragged to Done", fields={"Status": "Done"})
+    fake.add(6, title="closed, no date", state="CLOSED", reason="COMPLETED", fields={"Status": "Done"})
+    util.write_json(e.home / "legacy-ids.json", {})
+    assert [t["id"] for t in views.state(e.p)["tasks"]] == ["TY-5"]
+    assert json.loads(fm(e.home, "show", "TY-6"))["closed"] == date.today().isoformat()
+
+
+def test_load_and_find_agree_on_an_old_closed_id(fake: FakeGh):
+    e = board_env()
+    fake.add(100, title="new open", fields={"Status": "Backlog"})
+    old = BacklogFile(e.p)
+    old.add("old closed", criteria="c")
+    old.update("TY-1", id="TY-100", status="done", closed=date.today().isoformat())
+    assert [(t["id"], t["title"]) for t in registry.backlog(e.p).load()["tasks"]] == [("TY-100", "old closed")]
+    assert registry.backlog(e.p).find("TY-100")["title"] == "old closed"
+
+
+@pytest.mark.parametrize("raw", [[{"title": "x"}], {"a": 1}, "junk"])
+def test_a_malformed_closed_json_is_refused(fake: FakeGh, raw: object):
+    e = board_env()
+    util.write_json(e.p.state / "closed.json", raw)
+    with pytest.raises(BacklogError, match="closed.json"):
+        registry.backlog(e.p).load()

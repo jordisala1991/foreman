@@ -62,6 +62,8 @@ class FakeGh:
         self.prs: set[int] = set()
         self.total: int | None = None  # issues.totalCount, when it is not the open count
         self.next_page = False
+        self.field_total: int | None = None  # fields.totalCount, when it is not the number of fields
+        self.workflow_total: int | None = None
         self.limited = False
         self.reset = int(time.time()) + 3600
         self.reads = 0  # Open and Issue requests
@@ -103,7 +105,9 @@ class FakeGh:
 
     def _Setup(self, v: dict[str, Any]) -> dict[str, Any]:
         repo = {"id": "R", "label": {"id": "L"} if v["label"] in self.labels else None}
-        project = {"id": "P", "fields": {"nodes": list(self.fields.values())}, "workflows": {"nodes": list(self.workflows)}}
+        fields = {"totalCount": self.field_total or len(self.fields), "nodes": list(self.fields.values())}
+        workflows = {"totalCount": self.workflow_total or len(self.workflows), "nodes": list(self.workflows)}
+        project = {"id": "P", "fields": fields, "workflows": workflows}
         return {"data": {"repository": repo, "repositoryOwner": {"projectV2": project}, "rateLimit": {"cost": 1}}}
 
     def _UpdateStatus(self, v: dict[str, Any]) -> dict[str, Any]:

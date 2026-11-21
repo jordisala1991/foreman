@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from ... import launcher
 from ...core.review import evidence
 from ...core.tasks import backlog
+from ...providers import Permanent, ProviderError, Transient
 from ...services.delivery import pulls
 from .actions import Refused, act
 from .views import Obj, project, projects, state, summary, system, task
@@ -115,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
             self.json(view(q))
         except (KeyError, backlog.BacklogError) as e:
             self.json({"error": str(e).strip("'\"")}, 404)
+        except (Transient, Permanent, ProviderError) as e:  # the backlog on GitHub: the rate limit's stop, a failed call
+            self.json({"error": str(e)}, 503)
 
     def evidence(self, q: dict[str, list[str]]) -> None:
         """An image of a task's report, only a plain file name inside `reports/ID/`."""

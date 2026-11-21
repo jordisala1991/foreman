@@ -57,3 +57,21 @@ def test_without_a_board_setup_says_so(fake: FakeGh):
     with pytest.raises(SystemExit, match=r"foreman: no \[backlog\] table in foreman.toml"):
         fm(Env().home, "backlog", "setup")
     assert fake.calls == []
+
+
+def test_a_board_without_status_is_refused(fake: FakeGh):
+    e = board_env()
+    del fake.fields["Status"]
+    with pytest.raises(SystemExit, match="foreman: Board 1 of o has no Status field"):
+        fm(e.home, "backlog", "setup")
+
+
+def test_more_fields_than_one_page_is_refused(fake: FakeGh):
+    e = board_env()
+    fake.field_total = 51
+    with pytest.raises(SystemExit, match="foreman: Board 1 of o has 51 fields: fm reads at most 50"):
+        fm(e.home, "backlog", "setup")
+    fake.field_total, fake.workflow_total = None, 51
+    with pytest.raises(SystemExit, match="foreman: Board 1 of o has 51 workflows: fm reads at most 50"):
+        fm(e.home, "backlog", "setup")
+    assert fake.mutations == 0
