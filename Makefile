@@ -47,9 +47,10 @@ arch:
 suppressions:
 	@! git grep -nE '#[[:space:]]*(pyright|pylint):' -- plugins/foreman/foreman tests || { echo "suppressions: fix the cause, do not silence it"; exit 1; }
 
-# File length: ruff has no rule for it. plugins/foreman/foreman/ 300 lines (limit in pyproject.toml), tests 600.
+# File length: ruff has no rule for it. plugins/foreman/foreman/ 300 lines (limit in pyproject.toml), tests 600. Given a package,
+# pylint walks only its subpackages, so foreman/ goes as a file list; tests/ is no package, so pylint walks all of it.
 size:
-	uv run pylint plugins/foreman/foreman
+	uv run pylint $$(find plugins/foreman/foreman -name '*.py')
 	uv run pylint --max-module-lines=600 tests
 
 # -W error::ResourceWarning: a file or pipe left open is reported loudly (traceback of where it was opened), not swallowed.
