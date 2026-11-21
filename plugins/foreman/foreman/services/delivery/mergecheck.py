@@ -14,19 +14,19 @@ from . import check, pulls
 def merged_check(p: Project, tid: str) -> None:
     """Runs the tests on the branch merged with main and stores them in `check`. Nothing is stored on a conflict (the
     merge step returns it, as today) or when the branch moved meanwhile (its new head is checked first)."""
-    i = backlog.get(backlog.load(p), tid)
+    i = backlog.get(registry.backlog(p).load(), tid)
     head = pulls.head_of(p, i["branch"])
     r = registry.repo(p)
     main_head = r.head(p.get("project", "main"))
     if r.conflicts(main_head, head):
         return
     tests, out = check.tests_at(p, main_head, tid.lower(), merge=head)
-    c: dict[str, Any] = backlog.get(backlog.load(p), tid).get("check") or {}
+    c: dict[str, Any] = backlog.get(registry.backlog(p).load(), tid).get("check") or {}
     if c.get("head") != head:
         return
     new: dict[str, Any] = {**c, "tests": tests, "tests_output": out, "main": main_head, "merged_with": main_head, "at": util.now()}
     if tests == "fail":
         why = f"tests fail merged with main {main_head[:9]}, not on the branch alone [tests]"
         new = {**new, "risk": "high", "reasons": [why, *c.get("reasons", [])][:3]}
-    backlog.update(p, tid, check=new)
+    registry.backlog(p).update(tid, check=new)
     backlog.event(p, tid, f"checked merged with main {main_head[:9]}: tests {tests}")

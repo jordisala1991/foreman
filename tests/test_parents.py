@@ -7,8 +7,9 @@ import pytest
 from helpers import Env, fm
 from test_misled import run_as
 
-from foreman.core.tasks import backlog, questions, subtasks
+from foreman.core.tasks import backlog, subtasks
 from foreman.loop import tick
+from foreman.providers import registry
 
 
 def resumes(e: Env, sid: str) -> list[dict]:
@@ -19,7 +20,7 @@ def resumes(e: Env, sid: str) -> list[dict]:
 class TestLaunch:
     def test_go_launches_its_agent(self):
         e = Env()
-        P = backlog.add(e.p, "parent", status="triage", criteria="c")
+        P = registry.backlog(e.p).add("parent", status="triage", criteria="c")
         fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c")
         tick.tick(e.p)
         assert e.calls() == []
@@ -35,17 +36,17 @@ class TestLaunch:
 
     def test_an_existing_parent_in_backlog_gets_its_agent(self):
         e = Env()
-        P = backlog.add(e.p, "parent", status="backlog", criteria="c")
+        P = registry.backlog(e.p).add("parent", status="backlog", criteria="c")
         fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c")
         tick.tick(e.p)
         assert (e.task(P)["agent"]["kind"], e.task(P)["status"]) == ("parent", "backlog")
 
     def test_the_parent_agent_takes_no_slot(self):
         e = Env(slots=1)
-        P = backlog.add(e.p, "parent", status="backlog", criteria="c")
+        P = registry.backlog(e.p).add("parent", status="backlog", criteria="c")
         s = fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c").strip()
         tick.tick(e.p)
-        backlog.set_status(e.p, s, "ready")
+        registry.backlog(e.p).set_status(s, "ready")
         tick.tick(e.p)
         assert e.task(s)["status"] == "in progress"
         assert len(e.calls()) == 2
@@ -55,7 +56,7 @@ class TestNotices:
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
         self.e = env
-        self.P = backlog.add(self.e.p, "parent", status="backlog", criteria="c")
+        self.P = registry.backlog(self.e.p).add("parent", status="backlog", criteria="c")
         self.S0 = fm(self.e.home, "add", "zero", "--parent", self.P, "--triage", "--criteria", "c").strip()
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--triage", "--criteria", "c").strip()
         self.S2 = fm(self.e.home, "add", "two", "--parent", self.P, "--triage", "--criteria", "c").strip()
@@ -78,8 +79,8 @@ class TestNotices:
         assert len(told) == 1
         assert self.S1 in told[0]["argv"][3]
         assert "canceled" in told[0]["argv"][3]
-        questions.ask(self.e.p, self.S2, "ty-3", "q?")
-        backlog.update(self.e.p, self.S2, blocked="why")
+        registry.backlog(self.e.p).ask(self.S2, "ty-3", "q?")
+        registry.backlog(self.e.p).update(self.S2, blocked="why")
         self.idle_ticks(3)
         assert len(resumes(self.e, self.sid)) == 1
 
@@ -95,7 +96,7 @@ class TestClosing:
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
         self.e = env
-        self.P = backlog.add(self.e.p, "parent", status="backlog", criteria="c")
+        self.P = registry.backlog(self.e.p).add("parent", status="backlog", criteria="c")
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--triage", "--criteria", "c").strip()
         self.S2 = fm(self.e.home, "add", "two", "--parent", self.P, "--triage", "--criteria", "c").strip()
         tick.tick(self.e.p)
@@ -104,22 +105,22 @@ class TestClosing:
         run_as(self.e, self.P, "ty-1", "done", "--summary", "s")
 
     def test_refused_while_a_subtask_is_open(self):
-        backlog.set_status(self.e.p, self.S1, "done")
+        registry.backlog(self.e.p).set_status(self.S1, "done")
         with pytest.raises(SystemExit):
             self.done()
         assert self.e.task(self.P)["status"] == "backlog"
 
     def test_done_on_the_owners_yes_and_its_session_stops(self):
-        backlog.set_status(self.e.p, self.S1, "done")
-        backlog.set_status(self.e.p, self.S2, "canceled")
+        registry.backlog(self.e.p).set_status(self.S1, "done")
+        registry.backlog(self.e.p).set_status(self.S2, "canceled")
         self.done()
         assert self.e.task(self.P)["status"] == "done"
         tick.tick(self.e.p)
         assert self.e.task(self.P)["agent"]["short"] in self.e.stops()
 
     def test_canceled_when_every_subtask_is(self):
-        backlog.set_status(self.e.p, self.S1, "canceled")
-        backlog.set_status(self.e.p, self.S2, "canceled")
+        registry.backlog(self.e.p).set_status(self.S1, "canceled")
+        registry.backlog(self.e.p).set_status(self.S2, "canceled")
         self.done()
         assert self.e.task(self.P)["status"] == "canceled"
 
@@ -128,18 +129,18 @@ class TestAuthority:
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
         self.e = env
-        self.P = backlog.add(self.e.p, "parent", status="backlog", criteria="c")
-        self.Q = backlog.add(self.e.p, "other", status="backlog", criteria="c")
+        self.P = registry.backlog(self.e.p).add("parent", status="backlog", criteria="c")
+        self.Q = registry.backlog(self.e.p).add("other", status="backlog", criteria="c")
         self.S = fm(self.e.home, "add", "s", "--parent", self.P, "--triage", "--criteria", "c").strip()
         self.T = fm(self.e.home, "add", "t", "--parent", self.Q, "--triage", "--criteria", "c").strip()
         tick.tick(self.e.p)
 
     def test_its_own_subtasks_only(self):
         run_as(self.e, self.P, "ty-1", "add", "new", "--parent", self.P, "--triage", "--criteria", "c")
-        assert len(subtasks.of(backlog.tasks(backlog.load(self.e.p)), self.P)) == 2
+        assert len(subtasks.of(backlog.tasks(registry.backlog(self.e.p).load()), self.P)) == 2
         run_as(self.e, self.P, "ty-1", "edit", self.S, "--criteria", "x")
         assert self.e.task(self.S)["acceptance"]["criteria"] == "x"
-        backlog.set_status(self.e.p, self.S, "in progress")
+        registry.backlog(self.e.p).set_status(self.S, "in progress")
         for args in (("edit", self.S, "--criteria", "y"), ("edit", self.P, "--criteria", "y"), ("edit", self.T, "--criteria", "y")):
             with pytest.raises(SystemExit):
                 run_as(self.e, self.P, "ty-1", *args)
@@ -150,12 +151,12 @@ class TestAuthority:
     def test_a_subtask_it_files_waits_for_a_go(self):
         for flags in ((), ("--ready",)):
             run_as(self.e, self.P, "ty-1", "add", "new", "--parent", self.P, "--criteria", "c", *flags)
-            new = subtasks.of(backlog.tasks(backlog.load(self.e.p)), self.P)[-1]
+            new = subtasks.of(backlog.tasks(registry.backlog(self.e.p).load()), self.P)[-1]
             tick.tick(self.e.p)
             assert self.e.task(new["id"])["status"] == "triage"
 
     def test_refused_from_a_planning_agent(self):
-        backlog.update(self.e.p, self.T, agent={"kind": "planning", "name": "ty-4-planning"})
+        registry.backlog(self.e.p).update(self.T, agent={"kind": "planning", "name": "ty-4-planning"})
         with pytest.raises(SystemExit):
             run_as(self.e, self.T, "ty-4-planning", "add", "x", "--parent", self.T, "--criteria", "c")
         with pytest.raises(SystemExit):
@@ -165,10 +166,10 @@ class TestAuthority:
 class TestRealData:
     def test_show_gives_each_subtasks_state(self, owner):
         e = Env()
-        P = backlog.add(e.p, "parent", status="triage", criteria="c")
+        P = registry.backlog(e.p).add("parent", status="triage", criteria="c")
         s = fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c").strip()
-        backlog.update(e.p, s, pr={"url": "http://x/1"}, reviews=[{}, {}], blocked="why")
-        questions.ask(e.p, s, "ty-2", "q?")
+        registry.backlog(e.p).update(s, pr={"url": "http://x/1"}, reviews=[{}, {}], blocked="why")
+        registry.backlog(e.p).ask(s, "ty-2", "q?")
         shown = json.loads(fm(e.home, "show", P))["subtasks"][0]
         qs = [{"id": f"{s} Q1", "text": "q?"}]
         want = {"id": s, "status": "triage", "title": "s", "pr": "http://x/1", "review_rounds": 2, "questions": qs, "blocked": "why", "waiting_for": []}

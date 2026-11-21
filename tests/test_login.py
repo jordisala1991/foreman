@@ -9,8 +9,8 @@ import pytest
 from helpers import Env, fm, install_fm, version_folder
 
 from foreman import launcher, proc
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.providers.claude import login
 from foreman.providers.claude.sessions import Claude
 from foreman.providers.runner import SessionRef
@@ -29,7 +29,7 @@ class TestLogin:
         request.addfinalizer(patcher.stop)
 
     def launch(self):
-        backlog.add(self.p, "x", status="ready", criteria="y")
+        registry.backlog(self.p).add("x", status="ready", criteria="y")
         tick.tick(self.p)
         return self.e.calls()[0]["token"]
 

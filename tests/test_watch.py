@@ -11,7 +11,7 @@ from fakerepo import FakeRepo
 from helpers import Env, fm
 
 from foreman import util
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import backlog
 from foreman.providers import registry
 from foreman.providers.claude.rows import ClaudeRows
 from foreman.providers.runner import NO_ROWS
@@ -33,8 +33,8 @@ def listing(e: Env, *rows: dict[str, Any]) -> None:
 
 
 def task(e: Env, **f: object) -> str:
-    tid = backlog.add(e.p, "a task", status="ready", criteria="c")
-    backlog.update(e.p, tid, **f)
+    tid = registry.backlog(e.p).add("a task", status="ready", criteria="c")
+    registry.backlog(e.p).update(tid, **f)
     return tid
 
 
@@ -52,7 +52,7 @@ def parent(e: Env, sid: str = "s1") -> str:
 
 def blocked(e: Env, tid: str, reason: str) -> Callable[[], None]:
     def change() -> None:
-        backlog.update(e.p, tid, blocked=reason)
+        registry.backlog(e.p).update(tid, blocked=reason)
 
     return change
 
@@ -78,7 +78,7 @@ def printed(capsys: pytest.CaptureFixture[str]) -> list[str]:
 def test_an_open_question_is_a_need(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     tid = task(e)
-    qid = questions.ask(e.p, tid, "agent", "which   way?")
+    qid = registry.backlog(e.p).ask(tid, "agent", "which   way?")
     found = watch.needs(e.p, NO_ROWS)
     assert list(found) == [f"q:{qid}"]
     assert tid in found[f"q:{qid}"] and qid in found[f"q:{qid}"] and "which way?" in found[f"q:{qid}"]
@@ -89,13 +89,13 @@ def test_a_task_waits_for_accept_only_when_after_check_says_owner(fake_git: Fake
     tid = in_review(e)
     assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
     assert tid in watch.needs(e.p, NO_ROWS)[f"accept:{tid}"]
-    backlog.update(e.p, tid, accepted={"by": "owner"})
+    registry.backlog(e.p).update(tid, accepted={"by": "owner"})
     assert watch.needs(e.p, NO_ROWS) == {}
-    backlog.update(e.p, tid, accepted=None, check={**CHECK, "head": "other"})  # a check for another tip than the verdict's
+    registry.backlog(e.p).update(tid, accepted=None, check={**CHECK, "head": "other"})  # a check for another tip than the verdict's
     assert watch.needs(e.p, NO_ROWS) == {}
     head = fake_git.find("b")
     c = {**CHECK, "head": head, "main": fake_git.find("main"), "review": "open 1"}
-    backlog.update(e.p, tid, check=c, review={"round": 2, "tip": head, "open": 1})  # waiting after the rounds
+    registry.backlog(e.p).update(tid, check=c, review={"round": 2, "tip": head, "open": 1})  # waiting after the rounds
     assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
 
 
@@ -104,7 +104,7 @@ def test_accept_follows_the_stored_ci_result(fake_git: FakeRepo):
     tid = in_review(e, check={"risk": "low", "ci": "pass"})
     assert watch.needs(e.p, NO_ROWS) == {}  # the loop merges it
     c = {**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main"), "ci": "fail"}
-    backlog.update(e.p, tid, check=c, failure_streak=2)  # failures went back to its agent twice: the owner decides
+    registry.backlog(e.p).update(tid, check=c, failure_streak=2)  # failures went back to its agent twice: the owner decides
     assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
 
 
@@ -112,7 +112,9 @@ def test_a_pr_without_checks_waits_for_the_owner_but_a_local_branch_is_merged(fa
     e = Env(repo=fake_git, autonomy="low")
     tid = in_review(e, check={"risk": "low", "ci": "none"}, pr={"number": 1})  # the provider has CI and the PR has no checks: the loop leaves it to the owner
     assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
-    backlog.update(e.p, tid, check={**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main")})  # local: no CI, the autonomy merges it
+    registry.backlog(e.p).update(
+        tid, check={**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main")}
+    )  # local: no CI, the autonomy merges it
     assert watch.needs(e.p, NO_ROWS) == {}
 
 
@@ -129,7 +131,7 @@ def test_a_blocked_task_is_a_need_with_its_reason(fake_git: FakeRepo, reason: st
     found = watch.needs(e.p, NO_ROWS)
     assert list(found) == [f"blocked:{tid}"]
     assert tid in found[f"blocked:{tid}"] and reason in found[f"blocked:{tid}"]
-    backlog.update(e.p, tid, status="done")
+    registry.backlog(e.p).update(tid, status="done")
     assert watch.needs(e.p, NO_ROWS) == {}
 
 
@@ -150,14 +152,14 @@ def test_a_parent_agent_idle_in_its_chat_is_a_need(fake_git: FakeRepo):
     assert tid in watch.needs(e.p, idle)[f"parent:{tid}"]
     assert watch.needs(e.p, ClaudeRows({"s1": row(state="working", status="busy")})) == {}
     assert watch.needs(e.p, ClaudeRows({"s1": row(pid=None)})) == {}  # stopped
-    qid = questions.ask(e.p, tid, "agent", "q?")
+    qid = registry.backlog(e.p).ask(tid, "agent", "q?")
     assert list(watch.needs(e.p, idle)) == [f"q:{qid}"]
 
 
 def test_questions_blocked_and_parents_at_start_are_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     task(e, blocked="x")
-    questions.ask(e.p, task(e), "agent", "q?")
+    registry.backlog(e.p).ask(task(e), "agent", "q?")
     parent(e)
     listing(e, row())
     drive(e, monkeypatch, lambda: None, lambda: None)
@@ -169,7 +171,7 @@ def redo(e: Env, tid: str, fake_git: FakeRepo, **check: object) -> Callable[[], 
 
     def change() -> None:
         fake_git.commit("main")
-        backlog.update(e.p, tid, check={**CHECK, **check, "head": fake_git.find("b"), "main": fake_git.find("main")})
+        registry.backlog(e.p).update(tid, check={**CHECK, **check, "head": fake_git.find("b"), "main": fake_git.find("main")})
 
     return change
 
@@ -199,14 +201,14 @@ def test_an_accept_checked_after_the_start_is_printed_once_despite_redos(
     tid = task(e, status="in review", branch="b", review={"round": 1, "tip": head, "open": 0})  # reviewed, not checked yet
     listing(e)
     first = {**CHECK, "head": head, "main": fake_git.find("main")}
-    drive(e, monkeypatch, lambda: backlog.update(e.p, tid, check=first), redo(e, tid, fake_git), redo(e, tid, fake_git), lambda: None)
+    drive(e, monkeypatch, lambda: registry.backlog(e.p).update(tid, check=first), redo(e, tid, fake_git), redo(e, tid, fake_git), lambda: None)
     assert [tid in line for line in printed(capsys)] == [True]
 
 
 def test_fn_216_replayed_prints_its_line(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     tid = in_review(e, check={"tests": "pass", "ci": "pass"}, pr={"number": 264, "draft": False})  # checked 09:03:30, watch starts 09:05
-    backlog.update(e.p, tid, review={"round": 2, "tip": fake_git.find("b"), "open": 0})
+    registry.backlog(e.p).update(tid, review={"round": 2, "tip": fake_git.find("b"), "open": 0})
     listing(e)
     drive(e, monkeypatch, redo(e, tid, fake_git, ci="pass"), redo(e, tid, fake_git, ci="pass"), lambda: None)  # 09:23 and 09:34: main moved
     out = printed(capsys)
@@ -241,10 +243,10 @@ def test_progress_merges_and_unblocked_print_nothing(fake_git: FakeRepo, monkeyp
     drive(
         e,
         monkeypatch,
-        lambda: backlog.update(e.p, tid, blocked="", status="in progress"),
-        lambda: backlog.update(e.p, tid, status="done"),
+        lambda: registry.backlog(e.p).update(tid, blocked="", status="in progress"),
+        lambda: registry.backlog(e.p).update(tid, status="done"),
         lambda: listing(e, row(state="working", status="busy", pid=2)),
-        lambda: backlog.update(e.p, parent_id, notified=["TY-9"]),
+        lambda: registry.backlog(e.p).update(parent_id, notified=["TY-9"]),
     )
     assert printed(capsys) == []
 
@@ -255,8 +257,8 @@ def test_once_stops_after_the_first_line(fake_git: FakeRepo, monkeypatch: pytest
     listing(e, row("s9"))
 
     def both() -> None:
-        backlog.update(e.p, a, blocked="x")
-        backlog.update(e.p, b, blocked="y")
+        registry.backlog(e.p).update(a, blocked="x")
+        registry.backlog(e.p).update(b, blocked="y")
 
     drive(e, monkeypatch, both, once=True)  # Done would be raised by a second pause
     assert len(printed(capsys)) == 1
@@ -266,7 +268,7 @@ def test_cli_watch_once_exits_after_its_first_line(fake_git: FakeRepo, monkeypat
     e = Env(repo=fake_git)
     tid = task(e)
     listing(e)  # no session at all: a readable listing
-    monkeypatch.setattr(watch, "pause", lambda: backlog.update(e.p, tid, blocked="x"))
+    monkeypatch.setattr(watch, "pause", lambda: registry.backlog(e.p).update(tid, blocked="x"))
     out = fm(e.home, "watch", "--once")
     assert len(out.splitlines()) == 1 and tid in out
 
@@ -282,15 +284,15 @@ def test_an_unreadable_listing_does_not_reprint_parents(fake_git: FakeRepo, monk
 def test_a_poll_that_cannot_read_the_backlog_does_not_end_watch(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     tid = task(e)
-    good = e.p.backlog_file.read_text()
+    good = (e.home / "backlog.json").read_text()
     listing(e)
 
     def corrupt() -> None:
-        e.p.backlog_file.write_text('{"schema_version": 1}')
+        (e.home / "backlog.json").write_text('{"schema_version": 1}')
 
     def restore() -> None:
-        e.p.backlog_file.write_text(good)
-        backlog.update(e.p, tid, blocked="x")
+        (e.home / "backlog.json").write_text(good)
+        registry.backlog(e.p).update(tid, blocked="x")
 
     drive(e, monkeypatch, corrupt, restore)
     assert [tid in line for line in printed(capsys)] == [True]
@@ -302,7 +304,7 @@ def test_events_text_does_not_change_what_is_printed(fake_git: FakeRepo):
     for text in ("asks the owner (question): x", "blocked: x", "launch failed: x", "ready for review", "checked: tests fail"):
         backlog.event(e.p, tid, text)
     assert watch.needs(e.p, NO_ROWS) == {}
-    backlog.update(e.p, tid, blocked="x")
+    registry.backlog(e.p).update(tid, blocked="x")
     before = watch.needs(e.p, NO_ROWS)
     events = e.p.state / "events.jsonl"
     events.write_text(events.read_text().replace("blocked: x", "reworded").replace("asks the owner", "pregunta"))

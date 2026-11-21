@@ -4,9 +4,8 @@ foreman command reach Claude Code through the plugin `foreman@foreman`: init pri
 
 from pathlib import Path
 
-from ... import util
 from ...core.project.config import Project
-from ...core.tasks import backlog
+from ...providers import registry
 
 INSTALL = ("claude plugin marketplace add jordisala1991/foreman#foreman-next", "claude plugin install foreman@foreman")
 
@@ -15,8 +14,7 @@ def init(home: Path, prefix: str, repo: str) -> list[str]:
     home.mkdir(parents=True, exist_ok=True)
     _foreman_toml(home, prefix, repo)
     p = Project.load(home)
-    if not p.backlog_file.exists():
-        util.write_json(p.backlog_file, backlog.empty())
+    registry.backlog(p).create()
     if not (home / "instructions.md").exists():
         (home / "instructions.md").touch()  # empty: the owner writes the project's rules in it
     return ["To get the define-task skill, fm's instructions and the foreman command in your Claude Code sessions, run:", *INSTALL]

@@ -3,8 +3,8 @@ import os
 import pytest
 from helpers import Env, fm, git
 
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 
 
 def head(e: Env, tid: str) -> str:
@@ -20,10 +20,10 @@ def commit(e: Env, tid: str) -> str:
 
 
 def start(e: Env) -> tuple[str, str]:
-    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
     tick.tick(e.p)
     commit(e, tid)
-    backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+    registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
     e.hunt_then_review(tid)
     return tid, head(e, tid)
 
@@ -148,7 +148,7 @@ class TestFreshReview:
         e = Env(test="true")
         tid, a = start(e)
         verdict(e, tid, a)
-        backlog.update(e.p, tid, blocked="its hunter ended without its findings file")  # fm review clears a block so the review starts
+        registry.backlog(e.p).update(tid, blocked="its hunter ended without its findings file")  # fm review clears a block so the review starts
         fm(e.home, "review", tid)
         i = e.task(tid)
         assert len(i["reviews"]) == 1  # history stays
@@ -164,7 +164,7 @@ class TestFreshReview:
 
     def test_fm_review_refuses_a_task_not_in_review(self):
         e = Env(test="true")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         with pytest.raises(SystemExit):
             fm(e.home, "review", tid)
 
@@ -173,12 +173,12 @@ class TestFreshReview:
         tid, a = start(e)  # its reviewer has launched, no verdict yet
         with pytest.raises(SystemExit):
             fm(e.home, "review", tid)
-        backlog.update(e.p, tid, blocked="something")  # a running review is refused even when the task is blocked
+        registry.backlog(e.p).update(tid, blocked="something")  # a running review is refused even when the task is blocked
         with pytest.raises(SystemExit):
             fm(e.home, "review", tid)
-        backlog.update(e.p, tid, blocked="")
+        registry.backlog(e.p).update(tid, blocked="")
         verdict(e, tid, a)
-        backlog.update(e.p, tid, accepted={"by": "owner", "head": a, "at": ""})
+        registry.backlog(e.p).update(tid, accepted={"by": "owner", "head": a, "at": ""})
         with pytest.raises(SystemExit):
             fm(e.home, "review", tid)
         assert "accepted" in e.task(tid)

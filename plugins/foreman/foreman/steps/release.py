@@ -3,11 +3,12 @@ closed without being done is blocked with a reason, for the owner to decide."""
 
 from ..core.project.config import Project
 from ..core.tasks import backlog, blockers
+from ..providers import registry
 
 
 def run(p: Project) -> None:
     said: list[tuple[str, str]] = []
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         tasks = backlog.tasks(d)
         for i in tasks:
             if i["status"] not in ("backlog", "ready") or not i.get("blocked_by") or i.get("blocked") or i.get("released"):

@@ -16,7 +16,7 @@ from helpers import Env, fm
 
 from foreman import launcher, util
 from foreman.core.oversight import diagnosis
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
@@ -29,25 +29,25 @@ CHAIN: backlog.Chain = {"lens": "rules", "max_steps": 5, "max_lines": 150}
 
 
 def planning(e: Env) -> tuple[str, str]:
-    tid = backlog.add(e.p, "x", status="backlog", criteria="y")
+    tid = registry.backlog(e.p).add("x", status="backlog", criteria="y")
     launch_free(e.p)
     return tid, "agent"
 
 
 def responsible(e: Env) -> tuple[str, str]:
-    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
     launch_free(e.p)
     return tid, "agent"
 
 
 def mechanic_(e: Env) -> tuple[str, str]:
-    tid = backlog.add(e.p, "t", detail="evidence", status="triage", source="health:k")
+    tid = registry.backlog(e.p).add("t", detail="evidence", status="triage", source="health:k")
     mechanic.launch(e.p, e.task(tid))
     return tid, "mechanic"
 
 
 def parent(e: Env) -> tuple[str, str]:
-    tid = backlog.add(e.p, "parent", status="triage", criteria="c")
+    tid = registry.backlog(e.p).add("parent", status="triage", criteria="c")
     fm(e.home, "add", "s", "--parent", tid, "--triage", "--criteria", "c")
     fm(e.home, "go", tid)
     tick.tick(e.p)
@@ -55,7 +55,7 @@ def parent(e: Env) -> tuple[str, str]:
 
 
 def chain_parent(e: Env) -> tuple[str, str]:
-    tid = backlog.add(e.p, "Lens rules", status="backlog", criteria="c", chain=CHAIN)
+    tid = registry.backlog(e.p).add("Lens rules", status="backlog", criteria="c", chain=CHAIN)
     tick.tick(e.p)
     return tid, "agent"
 
@@ -134,11 +134,12 @@ class TestRelaunch:
         assert f"session {old['short']} → {new['id']}" in events[-1]
         e.set_state(old["name"], "done")
         if role == "mechanic":
-            diagnosis.record(e.p, tid, "Diagnosis", "\n".join(f"## {s}\nx" for s in diagnosis.SECTIONS))
+            with registry.backlog(e.p).edit() as d:
+                diagnosis.record(d, tid, "Diagnosis", "\n".join(f"## {s}\nx" for s in diagnosis.SECTIONS))
             tick.tick(e.p)
             assert e.stops()[-1] == new["id"]
         else:
-            questions.answer(e.p, questions.ask(e.p, tid, old["name"], "A or B?"), "B")
+            registry.backlog(e.p).answer(registry.backlog(e.p).ask(tid, old["name"], "A or B?"), "B")
             talk.deliver_answers(e.p, registry.rows(e.p))
             assert e.calls()[-1]["argv"][:3] == ["--bg", "--resume", new["sessionId"]]
             assert len(e.calls()[-1]["argv"]) == 4
@@ -148,7 +149,7 @@ class TestRelaunch:
         assert "is working: relaunch it when it is idle" in refused(self.e, tid)
 
     def test_a_task_with_no_agent_is_refused(self) -> None:
-        tid = backlog.add(self.e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(self.e.p).add("x", status="ready", criteria="y")
         assert refused(self.e, tid) == f"foreman: {tid} has no live agent"
 
     def test_a_stopped_agent_is_refused(self) -> None:
@@ -189,7 +190,7 @@ class TestRelaunch:
 
         def cancel_meanwhile(*args: Any) -> SessionRef:
             out = real(*args)
-            backlog.set_status(e.p, tid, "canceled", "by the owner")
+            registry.backlog(e.p).set_status(tid, "canceled", "by the owner")
             return out
 
         with mock.patch.object(Claude, "relaunch", cancel_meanwhile), pytest.raises(SystemExit, match="changed while its agent restarted"):

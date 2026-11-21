@@ -11,8 +11,8 @@ from helpers import Env, fm, git
 from test_failing import fix
 from test_review_rules import commit, events
 
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.services.delivery import check, merge, mergecheck
 from foreman.services.delivery.git import DeliveryError
 
@@ -33,12 +33,12 @@ class TestMerged:
     def deliver(self, e: Env, files: dict[str, str]) -> list[str]:
         """One task per file, launched together (so each branch starts from the same main), committed, delivered and
         reviewed; a last tick checks them."""
-        tids = [backlog.add(e.p, f"x {name}", status="ready", criteria="y") for name in files]
+        tids = [registry.backlog(e.p).add(f"x {name}", status="ready", criteria="y") for name in files]
         tick.tick(e.p)
         for tid, (name, text) in zip(tids, files.items(), strict=True):
             commit(e.task(tid)["worktree"], name, text)
         for tid in tids:
-            backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+            registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
         for tid in tids:
             e.review(tid)
         tick.tick(e.p)
@@ -85,7 +85,7 @@ class TestMerged:
         e = self.env("true")
         a, b = self.deliver(e, {"app.py": "# from A\n", "other.py": "o\n"})
         commit(e.task(b)["worktree"], "app.py", "# from B\n")
-        backlog.set_status(e.p, b, "in review")
+        registry.backlog(e.p).set_status(b, "in review")
         e.review(b)
         tick.tick(e.p)
         merge.accept(e.p, a)

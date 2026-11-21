@@ -56,7 +56,7 @@ def tests_at(p: Project, commit: str, name: str, merge: str = "") -> tuple[str, 
 
 def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     """Checks a task's branch and stores the result in its `check`. `ci`: the PR's CI as just read, if the caller has it."""
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     i = backlog.get(d, tid)
     branch = i.get("branch", "")
     main = p.get("project", "main")
@@ -90,6 +90,6 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
         "conflict": conflict,
         "at": util.now(),
     }
-    backlog.update(p, tid, check=c)
+    registry.backlog(p).update(tid, check=c)
     backlog.event(p, tid, f"checked: tests {tests}, {c['files']} files, {c['lines']} lines, risk {risk}")
     return c

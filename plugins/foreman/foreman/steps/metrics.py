@@ -10,6 +10,7 @@ from .. import util
 from ..core.oversight import costs
 from ..core.project.config import Project
 from ..core.tasks import backlog
+from ..providers import registry
 from ..services import lock
 
 
@@ -65,7 +66,7 @@ def last_week(rows: list[dict[str, Any]]) -> tuple[dict[str, float | None], dict
 
 
 def per_task(p: Project) -> list[dict[str, Any]]:
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     events = util.read_jsonl(p.state / "events.jsonl")
     stops = util.read_jsonl(p.state / "guard.jsonl")
     lock_uses = lock.uses(list(lock.declared(p.cfg)))

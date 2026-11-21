@@ -8,8 +8,8 @@ from pathlib import Path
 from helpers import Env, fm, git
 
 from foreman import util
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.services.delivery import git as delivery_git
 
 
@@ -21,10 +21,10 @@ def commit(wt: str, name: str, text: str, msg: str = "change") -> None:
 
 
 def deliver(e: Env, open_findings: int = 0) -> str:
-    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
     tick.tick(e.p)
     commit(e.task(tid)["worktree"], "app.py", "# change\n")
-    backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+    registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
     e.review(tid, open_findings)
     return tid
 
@@ -119,7 +119,7 @@ class TestRules:
 
     def resolve(self, e: Env, tid: str) -> None:
         git(e.repo.parent / e.task(tid)["worktree"], "merge", "-q", "--no-edit", "-X", "ours", "main")
-        backlog.set_status(e.p, tid, "in review")
+        registry.backlog(e.p).set_status(tid, "in review")
 
     def test_accept_then_conflict_resolves_and_merges_without_a_new_accept(self):
         e = Env(test="true")
@@ -147,7 +147,7 @@ class TestRules:
         assert e.task(tid)["status"] == "in progress"  # round 1 of the resolution: back to its agent
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# fixed\n")
-        backlog.set_status(e.p, tid, "in review")
+        registry.backlog(e.p).set_status(tid, "in review")
         e.review(tid, 1)
         tick.tick(e.p)
         i = e.task(tid)
@@ -182,7 +182,7 @@ class TestRules:
         tick.tick(e.p)
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# fix\n")
-        backlog.set_status(e.p, tid, "in review")
+        registry.backlog(e.p).set_status(tid, "in review")
         e.review(tid, 1)
         tick.tick(e.p)
         assert (e.task(tid)["status"], e.task(tid)["review_for"]) == ("in review", "none")
@@ -219,7 +219,7 @@ class TestRules:
         fm(e.home, "reject", tid, "name it better")
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# better name\n")
-        backlog.set_status(e.p, tid, "in review")
+        registry.backlog(e.p).set_status(tid, "in review")
         e.review(tid, 1)
         brief = e.calls()[-1]["argv"][-1]
         assert f"git diff {old} {head(e, tid)}" in brief

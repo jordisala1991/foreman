@@ -53,7 +53,7 @@ def cmd_watch(a: argparse.Namespace) -> None:
 
 
 def cmd_guard(a: argparse.Namespace) -> None:
-    out = guard.hook(sys.stdin.read())
+    out = guard.hook(sys.stdin.read(), lambda p, tid: provider_registry.backlog(p).local(tid))
     if out:
         print(out)
 

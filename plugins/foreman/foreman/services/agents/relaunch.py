@@ -29,7 +29,7 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
     rows = runner.rows()
     if rows is None:
         raise RunnerError("claude agents is unreadable")
-    task = backlog.get(backlog.load(p), tid)
+    task = backlog.get(registry.backlog(p).load(), tid)
     live = next(((r, ref) for r in ("agent", "mechanic") if (ref := ref_of(task.get(r))) and rows.alive(ref)), None)
     if live is None:
         raise RunnerError(f"{tid} has no live agent")
@@ -43,7 +43,7 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
     except RunnerError as e:
         backlog.event(p, tid, f"relaunch of {a['name']} failed: {e}")
         raise
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         it = backlog.get(d, tid)
         now: dict[str, Any] = it.get(role) or {}
         still = it["status"] == task["status"] and now.get("session") == a["session"]

@@ -15,6 +15,7 @@ from foreman import util
 from foreman.core.project import registry
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
+from foreman.providers import registry as provider_registry
 from foreman.ui.cli import main
 from foreman.ui.panel import views
 
@@ -47,7 +48,7 @@ class TestFindProjectTest:
             lines += f'repo = "{self.dir(name + "-repo")}"\n'
         (h / "foreman.toml").write_text(f'[project]\n{lines}{project_lines}\n[agents]\nclaude = "/usr/bin/false"\n{tail}', encoding="utf-8")
         util.write_json(h / "backlog.json", backlog.empty())
-        backlog.add(Project.load(h), f"{name.capitalize()} work", criteria="x")
+        provider_registry.backlog(Project.load(h)).add(f"{name.capitalize()} work", criteria="x")
         registry.register(h)
         return h
 

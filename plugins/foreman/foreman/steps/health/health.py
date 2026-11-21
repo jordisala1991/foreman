@@ -1,6 +1,6 @@
 from ... import util
 from ...core.project.config import Project
-from ...core.tasks import backlog
+from ...providers import registry
 from ...providers.runner import Rows
 from . import orca, repos
 from .checks import Finding, agents, answers_undelivered, finding, login_check, loop_dead, loop_errors, orphan_worktrees
@@ -35,7 +35,7 @@ def run(p: Project, rows: Rows, outside: bool = False) -> list[str]:
     with util.locked_json(p.state / "seen.json", {}) as seen:
         for key, f in found.items():
             if key not in seen:
-                tid = backlog.add(p, f["title"], detail=f["detail"], status="triage", source=f"health:{key}", repo=f.get("repo", ""))
+                tid = registry.backlog(p).add(f["title"], detail=f["detail"], status="triage", source=f"health:{key}", repo=f.get("repo", ""))
                 if tid:
                     filed.append(tid)
             seen[key] = util.now()

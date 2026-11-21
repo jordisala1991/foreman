@@ -9,6 +9,7 @@ from fakerunner import FakeRunner
 from helpers import Env
 
 from foreman.core.tasks import backlog
+from foreman.providers import registry
 from foreman.providers.repo import FileDiff
 from foreman.services.agents import launch
 from foreman.services.delivery import merge
@@ -16,21 +17,21 @@ from foreman.steps import mechanic, parents
 
 
 def task(e: Env, tid: str) -> backlog.Task:
-    return backlog.get(backlog.load(e.p), tid)
+    return backlog.get(registry.backlog(e.p).load(), tid)
 
 
 def started(e: Env, runner: str, fake_runner: FakeRunner, fake_git: FakeRepo) -> dict[str, Path]:
     """Launches each kind of agent; the folder each was started in, by name."""
     e.p.cfg["agents"]["runner"] = runner
-    plan = backlog.add(e.p, status="backlog", criteria="y", title="plan me")
+    plan = registry.backlog(e.p).add(status="backlog", criteria="y", title="plan me")
     launch.launch(e.p, task(e, plan))
-    work = backlog.add(e.p, status="ready", criteria="y", title="do me")
+    work = registry.backlog(e.p).add(status="ready", criteria="y", title="do me")
     launch.launch(e.p, task(e, work))
     tip = fake_git.commit(task(e, work)["branch"], FileDiff("a.py", 1, 0))
     launch.launch_reviewer(e.p, task(e, work), tip, "hunter")
     launch.launch_reviewer(e.p, task(e, work), tip)
-    mechanic.launch(e.p, task(e, backlog.add(e.p, status="triage", criteria="y", title="diagnose me", source="health:x")))
-    parents.launch(e.p, task(e, backlog.add(e.p, status="backlog", criteria="y", title="parent")))
+    mechanic.launch(e.p, task(e, registry.backlog(e.p).add(status="triage", criteria="y", title="diagnose me", source="health:x")))
+    parents.launch(e.p, task(e, registry.backlog(e.p).add(status="backlog", criteria="y", title="parent")))
     return {agent.name: cwd for agent, _, cwd in fake_runner.started}
 
 

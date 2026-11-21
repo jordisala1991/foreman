@@ -12,7 +12,7 @@ from . import git, pulls
 
 def accept(p: Project, tid: str, by: str = "owner") -> str:
     """Records the owner's accept; it merges nothing. The loop's merge step does the merge (`merge_accepted`)."""
-    i = backlog.get(backlog.load(p), tid)
+    i = backlog.get(registry.backlog(p).load(), tid)
     p = p.for_task(i)
     registry.get(p)  # a bad [merge] provider/merge fails here, clearly
     if i["status"] != "in review":
@@ -21,7 +21,7 @@ def accept(p: Project, tid: str, by: str = "owner") -> str:
     checked: backlog.Check = i.get("check") or {}
     if checked.get("head") != head:
         raise git.DeliveryError(f"{i['branch']} moved since it was checked: wait for the next check")
-    backlog.update(p, tid, accepted={"by": by, "head": head, "at": util.now()})
+    registry.backlog(p).update(tid, accepted={"by": by, "head": head, "at": util.now()})
     backlog.event(p, tid, f"accepted by {by}: waiting for the merge")
     return head
 
@@ -32,14 +32,14 @@ def adopt_merge(p: Project, i: dict[str, Any]) -> str:
         return ""
     found = registry.repo(p).merges_of(i["id"], i["merging"], p.get("project", "main"))
     if found:
-        backlog.update(p, i["id"], merge=found[0])
+        registry.backlog(p).update(i["id"], merge=found[0])
     return found[0] if found else ""
 
 
 def request_merge(p: Project, i: dict[str, Any], provider: providers.Provider, change: Change) -> str:
     """Asks the provider to merge (marking `merging` first) and returns the merge ref. A refusal for a conflict that
     the local check confirms is a `MergeConflict`; any other platform error is a `DeliveryError`."""
-    backlog.update(p, i["id"], merging=registry.repo(p).head(p.get("project", "main")))
+    registry.backlog(p).update(i["id"], merging=registry.repo(p).head(p.get("project", "main")))
     try:
         return provider.merge(change, providers.merge_strategy(p))
     except (providers.ConfigError, providers.Transient):
@@ -56,13 +56,13 @@ def merge_accepted(p: Project, tid: str) -> str:
     """The one place that merges: asks the provider to merge an accepted task (once), then closes the task, removing
     its worktree and branch, only when the provider shows the merge done in main. Returns what happened."""
     provider = registry.get(p)
-    i = backlog.get(backlog.load(p), tid)
+    i = backlog.get(registry.backlog(p).load(), tid)
     acc = i.get("accepted")
     if i["status"] != "in review" or not acc:
         raise git.DeliveryError(f"{tid} is not accepted")
     head = registry.repo(p).head(i["branch"])
     if head != acc["head"]:
-        backlog.update(p, tid, accepted=None)
+        registry.backlog(p).update(tid, accepted=None)
         raise git.DeliveryError(f"{i['branch']} moved after it was accepted: accept again after the next check")
     change = pulls.change_of(i, head)
     if not change.merge:
@@ -72,7 +72,7 @@ def merge_accepted(p: Project, tid: str) -> str:
         if pr.get("draft"):  # a PR from the running phase is still a draft: only pulls.deliver readies it
             provider.ready(change)
         ref = request_merge(p, i, provider, change)
-        backlog.update(p, tid, merge=ref)
+        registry.backlog(p).update(tid, merge=ref)
         backlog.event(p, tid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
         change = replace(change, merge=ref)
     seen = provider.state(change)
@@ -87,8 +87,7 @@ def merge_accepted(p: Project, tid: str) -> str:
     by = acc["by"]
     report: backlog.Report = i.get("report") or {}
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
-    backlog.set_status(
-        p,
+    registry.backlog(p).set_status(
         tid,
         "done",
         f"merged, accepted by {by}, as {(seen.commit or change.merge)[:9]}",
@@ -129,33 +128,33 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
 def settle_parent(p: Project, tid: str) -> None:
     """A parent closes by itself once its subtasks have: done if any is done, else canceled. One with an agent closes
     only by that agent's `foreman done`."""
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     parent = backlog.get(d, tid).get("parent")
     if not parent or backlog.get(d, parent)["status"] in backlog.CLOSED or backlog.get(d, parent).get("agent"):
         return
     if status := subtasks.outcome(subtasks.of(backlog.tasks(d), parent)):
-        backlog.set_status(p, parent, status, "its subtasks are closed")
+        registry.backlog(p).set_status(parent, status, "its subtasks are closed")
 
 
 def close(p: Project, tid: str, status: str, why: str, *, settle: bool = True) -> None:
     """Closes an open task as canceled or done (merged outside fm): stops its sessions, answers its open questions,
     removes its worktree (the branch stays: the work is not lost); a canceled task's PR is closed with the reason.
     `foreman cancel` and the sources' signals use it. Canceling a parent first cancels its open subtasks."""
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     i = backlog.get(d, tid)
     p = p.for_task(i)
     if status == "canceled":
         for s in subtasks.of(backlog.tasks(d), tid):
-            if backlog.get(backlog.load(p), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it
+            if backlog.get(registry.backlog(p).load(), s["id"])["status"] not in backlog.CLOSED:  # re-read: the loop may have merged it
                 close(p, s["id"], "canceled", f"its parent {tid} was canceled: {why}", settle=False)
     if status == "canceled" and i.get("pr"):  # first: if the platform fails, nothing is half-done
         close_pull(p, i, why)
     stop_all(p, i)
-    for q in questions.open_questions(backlog.load(p), tid):
-        questions.answer(p, q["id"], f"(the task was {status})")
-        questions.mark_delivered(p, q["id"])
+    for q in questions.open_questions(registry.backlog(p).load(), tid):
+        registry.backlog(p).answer(q["id"], f"(the task was {status})")
+        registry.backlog(p).mark_delivered(q["id"])
     if i.get("worktree"):
         registry.repo(p).remove_worktree(i["worktree"])
-    backlog.set_status(p, tid, status, why)
+    registry.backlog(p).set_status(tid, status, why)
     if settle:
         settle_parent(p, tid)

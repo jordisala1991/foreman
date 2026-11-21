@@ -24,18 +24,18 @@ def check_key(p: Project) -> str:
 def run_queue(p: Project, rows: Rows) -> None:
     """Merges first (quick); then at most one branch check is started per tick, the rest on the next ticks. Each task is
     read again just before its turn (each in its own repo, `for_task`)."""
-    in_review = [i for i in backlog.tasks(backlog.load(p)) if i["status"] == "in review"]
+    in_review = [i for i in backlog.tasks(registry.backlog(p).load()) if i["status"] == "in review"]
     for i in in_review:
         stop_review_sessions(p, i, rows)
     waiting = [tid for tid, _ in decide.queue_order(in_review)]
     for tid in waiting:
-        i = backlog.get(backlog.load(p), tid)
+        i = backlog.get(registry.backlog(p).load(), tid)
         if decide.queue_turn(i) == "merge":
             guarded(p, tid, "merge it", lambda i=i: merge_one(p, i))
     key = check_key(p)
     started = util.STARTED.get(key, 0)  # after the merges: their merged checks are not the tick's branch check
     for tid in waiting:
-        i = backlog.get(backlog.load(p), tid)
+        i = backlog.get(registry.backlog(p).load(), tid)
         if decide.queue_turn(i) != "check":
             continue
         guarded(p, tid, "check it", lambda i=i: queue_one(p, i, rows))
@@ -76,7 +76,7 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
     now (run here, in the background, one at a time); a failure goes back to its agent, or past the row, to the owner."""
     tid = i["id"]
     for first in (True, False):
-        i = backlog.get(backlog.load(p), tid)
+        i = backlog.get(registry.backlog(p).load(), tid)
         c: dict[str, Any] = i.get("check") or {}
         head, main_head = (registry.repo(p).head(r) for r in (i["branch"], p.get("project", "main")))
         has_test = bool(p.get("merge", "test"))
@@ -94,7 +94,7 @@ def gate_merge(p: Project, i: dict[str, Any]) -> bool:
         pr: dict[str, Any] = i.get("pr") or {}
         return_to_agent(p, tid, "failing", decide.failing_note(c, pr.get("url", "")))
     elif step == "owner":
-        backlog.update(p, tid, accepted=None)
+        registry.backlog(p).update(tid, accepted=None)
         backlog.event(p, tid, f"its accept lapses: tests fail merged with main {main_head[:9]}: the owner decides")
     return step == "merge"
 
@@ -112,7 +112,7 @@ def queue_one(p: Project, i: dict[str, Any], rows: Rows) -> None:
         return
     closed = "none" if decide.closes_review(i.get("review") or {}, MAX_ROUNDS) else ""
     if i.get("review_for", "") != closed:  # acted on: what a later tip gets is the rounds again, or (closed) nothing
-        backlog.update(p, i["id"], review_for=closed)
+        registry.backlog(p).update(i["id"], review_for=closed)
     pull, why = pulls.prepare(p, i, head)  # on ok, `why` is the CI result read now
     if pull == "wait":
         return
@@ -123,7 +123,7 @@ def queue_one(p: Project, i: dict[str, Any], rows: Rows) -> None:
         if t is None:
             return
         t.join(util.BACKGROUND_WAIT_S)
-        c = backlog.get(backlog.load(p), i["id"]).get("check") or {}
+        c = backlog.get(registry.backlog(p).load(), i["id"]).get("check") or {}
         if t.is_alive() or c.get("head") != head:  # still running, or it failed (the task says why)
             return
     failed = int(i.get("failure_streak") or 0)
@@ -140,7 +140,7 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
         return_to_agent(p, i["id"], "failing", decide.failing_note(c, pr.get("url", "")))
         return
     if i.get("failure_streak") and not decide.failing(c) and not p.get("merge", "test"):  # with tests: only the merge
-        backlog.update(p, i["id"], failure_streak=0)
+        registry.backlog(p).update(i["id"], failure_streak=0)
     if action == "conflict":
         return_to_agent(p, i["id"], "conflict", decide.conflict_note(p.get("project", "main")), by=by)
         return
@@ -149,11 +149,11 @@ def act_on(p: Project, i: dict[str, Any], c: dict[str, Any], action: str) -> Non
     if action == "merge":
         try:
             merge.accept(p, i["id"], by=by)
-            backlog.update(p, i["id"], resolving="")
-            if gate_merge(p, backlog.get(backlog.load(p), i["id"])):
+            registry.backlog(p).update(i["id"], resolving="")
+            if gate_merge(p, backlog.get(registry.backlog(p).load(), i["id"])):
                 merge.merge_accepted(p, i["id"])
         except (DeliveryError, RepoError) as e:
             backlog.event(p, i["id"], f"automatic merge failed: {e}")
     elif i.get("resolving"):
-        backlog.update(p, i["id"], resolving="")
+        registry.backlog(p).update(i["id"], resolving="")
         backlog.event(p, i["id"], "its accept is not carried over: the owner decides")

@@ -17,6 +17,7 @@ from foreman.core.project import registry
 from foreman.core.project.config import Project
 from foreman.core.review import describe, evidence, inline
 from foreman.core.tasks import backlog
+from foreman.providers import registry as provider_registry
 from foreman.services import lock
 from foreman.ui.cli import common
 from foreman.ui.panel import server
@@ -47,7 +48,7 @@ class TestOldNames:
 
     @pytest.mark.parametrize("old", [OLD_ENV, "FM_TASK"])
     def test_old_env_is_not_read(self, old):
-        tid = backlog.add(self.e.p, "t", criteria="c")
+        tid = provider_registry.backlog(self.e.p).add("t", criteria="c")
         os.environ[old] = tid
         with pytest.raises(SystemExit) as r:
             fm(self.e.home, "block", "why")
@@ -64,8 +65,8 @@ class TestOldNames:
         assert Project.load(self.e.home).get("merge", "autonomy") == "low"
 
     def test_old_stored_key_is_not_read(self):
-        util.write_json(self.e.p.backlog_file, {"schema_version": 5, OLD_KEY: [{"id": "TY-1", "title": "t", "status": "backlog"}]})
-        assert backlog.tasks(backlog.load(self.e.p)) == []
+        util.write_json(self.e.home / "backlog.json", {"schema_version": 5, OLD_KEY: [{"id": "TY-1", "title": "t", "status": "backlog"}]})
+        assert backlog.tasks(provider_registry.backlog(self.e.p).load()) == []
 
 
 OLD_FILE = "fm" + ".toml"

@@ -11,6 +11,7 @@ from foreman.core.oversight import costs
 from foreman.core.project import config
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.services.agents import brief
 from foreman.steps import metrics
 
@@ -40,38 +41,38 @@ class TestChoice:
         assert (i["model"], i["effort"]) == ("haiku", "low")
 
     def test_unknown_value_fails_and_changes_nothing(self):
-        tid = backlog.add(self.e.p, "t", criteria="c")
+        tid = registry.backlog(self.e.p).add("t", criteria="c")
         before = self.e.task(tid)
         for args in (("add", "x", "--model", "gpt"), ("edit", tid, "--effort", "extreme"), ("ready", "--model", "gpt")):
             with pytest.raises(SystemExit):
                 fm(self.e.home, *args)
         assert self.e.task(tid) == before
-        assert len(backlog.tasks(backlog.load(self.e.p))) == 1
+        assert len(backlog.tasks(registry.backlog(self.e.p).load())) == 1
 
     def test_edit_follows_the_other_fields_rules(self):
-        tid = backlog.add(self.e.p, "t", criteria="c")
+        tid = registry.backlog(self.e.p).add("t", criteria="c")
         for st in ("refining", "in progress", "in review"):
-            backlog.update(self.e.p, tid, status=st)
+            registry.backlog(self.e.p).update(tid, status=st)
             before = self.e.task(tid)
             with pytest.raises(SystemExit):
                 fm(self.e.home, "edit", tid, "--model", "opus")
             assert self.e.task(tid) == before
         for st in ("triage", "backlog", "ready"):
-            backlog.update(self.e.p, tid, status=st, plan_file="/x/p.md")
+            registry.backlog(self.e.p).update(tid, status=st, plan_file="/x/p.md")
             fm(self.e.home, "edit", tid, "--model", "opus")
             i = self.e.task(tid)
             assert (i["status"], i["plan_file"], i["model"]) == (st, "/x/p.md", "opus")
 
     def test_ready_sets_model_and_effort(self):
-        tid = backlog.add(self.e.p, "t", criteria="c")
-        backlog.update(self.e.p, tid, status="refining")
+        tid = registry.backlog(self.e.p).add("t", criteria="c")
+        registry.backlog(self.e.p).update(tid, status="refining")
         with mock.patch.dict(os.environ, {"FOREMAN_TASK": tid}):
             fm(self.e.home, "ready", "--no-plan", "x", "--model", "opus", "--effort", "high")
         i = self.e.task(tid)
         assert (i["status"], i["model"], i["effort"]) == ("ready", "opus", "high")
 
     def plan_ready(self, tid: str, *flags: str) -> None:
-        backlog.update(self.e.p, tid, status="refining")
+        registry.backlog(self.e.p).update(tid, status="refining")
         with mock.patch.dict(os.environ, {"FOREMAN_TASK": tid}):
             fm(self.e.home, "ready", "--no-plan", "x", *flags)
 
@@ -81,7 +82,7 @@ class TestChoice:
         return got[("responsible", tid)]
 
     def test_planner_does_not_overwrite_the_owners_choice(self):
-        tid = backlog.add(self.e.p, "t", criteria="c", model="opus", effort="medium")
+        tid = registry.backlog(self.e.p).add("t", criteria="c", model="opus", effort="medium")
         self.plan_ready(tid, "--model", "sonnet", "--effort", "high")
         i = self.shown(tid)
         assert (i["model"], i["effort"]) == ("opus", "medium")
@@ -94,13 +95,13 @@ class TestChoice:
             ({"criteria": "c", "effort": "low"}, ("sonnet", "low")),
         ]
         for filed, want in table:
-            tid = backlog.add(self.e.p, "t", **filed)
+            tid = registry.backlog(self.e.p).add("t", **filed)
             self.plan_ready(tid, "--model", "sonnet", "--effort", "high")
             i = self.shown(tid)
             assert (i["model"], i["effort"]) == want
 
     def test_owner_edit_after_the_planner_wins(self):
-        tid = backlog.add(self.e.p, "t", criteria="c")
+        tid = registry.backlog(self.e.p).add("t", criteria="c")
         self.plan_ready(tid, "--model", "sonnet", "--effort", "high")
         fm(self.e.home, "edit", tid, "--model", "opus", "--effort", "medium")
         i = self.shown(tid)
@@ -108,9 +109,9 @@ class TestChoice:
         assert self.launched_with(tid) == ("opus", "medium")
 
     def test_responsible_agent_launches_with_the_tasks_choice(self):
-        a = backlog.add(self.e.p, "a", status="ready", criteria="c", model="fable", effort="xhigh")
-        b = backlog.add(self.e.p, "b", status="backlog", criteria="c", model="opus", effort="max")
-        c = backlog.add(self.e.p, "c", status="ready", criteria="c")
+        a = registry.backlog(self.e.p).add("a", status="ready", criteria="c", model="fable", effort="xhigh")
+        b = registry.backlog(self.e.p).add("b", status="backlog", criteria="c", model="opus", effort="max")
+        c = registry.backlog(self.e.p).add("c", status="ready", criteria="c")
         tick.tick(self.e.p)
         got = {tuple(x["argv"][-1].split("\n")[0].strip("[]").split(" ")[1:]): flags(x) for x in self.e.calls()}
         assert got[("responsible", a)] == ("fable", "xhigh")
@@ -133,10 +134,10 @@ class TestMeasured:
         self.e = env
 
     def test_metrics_row_and_line_show_model_and_effort(self):
-        a = backlog.add(self.e.p, "a", criteria="c")
-        backlog.update(self.e.p, a, agent={"kind": "responsible", "model": "opus", "effort": "high"})
-        b = backlog.add(self.e.p, "b", criteria="c", model="haiku")
-        c = backlog.add(self.e.p, "c", criteria="c")
+        a = registry.backlog(self.e.p).add("a", criteria="c")
+        registry.backlog(self.e.p).update(a, agent={"kind": "responsible", "model": "opus", "effort": "high"})
+        b = registry.backlog(self.e.p).add("b", criteria="c", model="haiku")
+        c = registry.backlog(self.e.p).add("c", criteria="c")
         with mock.patch("foreman.core.oversight.costs.of_sessions", lambda s, seen=None: {"usd": 3.0, "minutes": 0}):
             rows = {r["id"]: r for r in metrics.per_task(self.e.p)}
         assert (rows[a]["model"], rows[a]["effort"]) == ("opus", "high")

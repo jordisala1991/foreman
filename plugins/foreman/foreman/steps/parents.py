@@ -28,11 +28,11 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         backlog.event(p, tid, f"launch postponed: {e}")
         return
     except RunnerError as e:
-        backlog.update(p, tid, blocked=f"could not launch its agent: {e}")
+        registry.backlog(p).update(tid, blocked=f"could not launch its agent: {e}")
         backlog.event(p, tid, f"launch failed: {e}")
         return
     agent = {"name": name, **ref.fields(), "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         it = backlog.get(d, tid)
         still = it["status"] == "backlog" and not it.get("blocked")
         if still:
@@ -58,7 +58,7 @@ def _brief(p: Project, i: dict[str, Any]) -> str:
 def notify(p: Project) -> None:
     """Files a message for each parent agent per subtask merged or canceled since it was last told."""
     told: list[tuple[str, str]] = []
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         tasks = backlog.tasks(d)
         for i in tasks:
             agent: dict[str, str] = i.get("agent") or {}
@@ -76,7 +76,7 @@ def notify(p: Project) -> None:
 
 
 def run(p: Project, rows: Rows) -> None:
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     for i in backlog.tasks(d):
         a: dict[str, Any] = i.get("agent") or {}
         if i["status"] in backlog.CLOSED and a.get("kind") == "parent" and rows.state(ref_of(a)) not in (State.ENDED, State.GONE):
@@ -84,7 +84,7 @@ def run(p: Project, rows: Rows) -> None:
     notify(p)
     if p.paused:
         return
-    tasks = backlog.tasks(backlog.load(p))
+    tasks = backlog.tasks(registry.backlog(p).load())
     for i in tasks:
         if i["status"] == "backlog" and not i.get("blocked") and not i.get("agent") and chains.is_parent(tasks, i) and not blockers.pending(i, tasks):
             launch(p, i)
@@ -93,11 +93,11 @@ def run(p: Project, rows: Rows) -> None:
 def finish(p: Project, tid: str, summary: str) -> str:
     """Closes a parent from its agent's `foreman done`: done if any subtask is done, else canceled; refused while one is open.
     A chain parent with no step closes as done."""
-    tasks = backlog.tasks(backlog.load(p))
+    tasks = backlog.tasks(registry.backlog(p).load())
     subs = subtasks.of(tasks, tid)
     status = chains.outcome(next(i for i in tasks if i["id"] == tid), subs)
     if not status:
         open_ = ", ".join(s["id"] for s in subs if s["status"] not in backlog.CLOSED)
         raise backlog.BacklogError(f"{tid} still has open subtasks: {open_}; it closes once every one is done or canceled")
-    backlog.set_status(p, tid, status, summary)
+    registry.backlog(p).set_status(tid, status, summary)
     return status

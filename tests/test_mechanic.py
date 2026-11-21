@@ -5,8 +5,8 @@ import pytest
 from helpers import Env, fm
 
 from foreman.core.oversight import diagnosis
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 
 FULL = "\n".join(f"## {s}\nx" for s in diagnosis.SECTIONS)
 
@@ -26,7 +26,7 @@ class TestMechanic:
     @pytest.fixture(autouse=True)
     def set_up(self, request, env):
         self.e = env
-        self.tid = backlog.add(self.e.p, "t", detail="evidence", status="triage", source="health:k")
+        self.tid = registry.backlog(self.e.p).add("t", detail="evidence", status="triage", source="health:k")
         self.env = mock.patch.dict(os.environ, {"FOREMAN_TASK": self.tid})
         self.env.start()
         request.addfinalizer(self.env.stop)
@@ -56,14 +56,14 @@ class TestMechanic:
 
     def test_non_health_triage_gets_none(self):
         e = Env()
-        backlog.add(e.p, "t", status="triage")
+        registry.backlog(e.p).add("t", status="triage")
         tick.tick(e.p)
         assert e.calls() == []
 
     def test_within_slots(self):
         e = Env(slots=1)
-        a = backlog.add(e.p, "a", status="triage", source="health:a")
-        backlog.add(e.p, "b", status="triage", source="health:b")
+        a = registry.backlog(e.p).add("a", status="triage", source="health:a")
+        registry.backlog(e.p).add("b", status="triage", source="health:b")
         tick.tick(e.p)
         assert len(e.calls()) == 1
         os.environ["FOREMAN_TASK"] = a
@@ -104,7 +104,7 @@ class TestMechanic:
 
     def old(self):
         m = self.e.task(self.tid)["mechanic"]
-        backlog.update(self.e.p, self.tid, mechanic={**m, "started": "2000-01-01 00:00:00"})
+        registry.backlog(self.e.p).update(self.tid, mechanic={**m, "started": "2000-01-01 00:00:00"})
 
     def test_failures_leave_a_note(self):
         self.tick()

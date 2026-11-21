@@ -5,6 +5,7 @@ from test_review_rules import commit, deliver
 
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 
 
 def pause(e: Env) -> None:
@@ -13,10 +14,10 @@ def pause(e: Env) -> None:
 
 
 def in_review(e: Env) -> str:
-    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
     tick.tick(e.p)
     commit(e.task(tid)["worktree"], "app.py", "# change\n")
-    backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+    registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
     return tid
 
 
@@ -44,8 +45,8 @@ class TestPause:
     def test_paused_launches_no_task_agent(self):
         e = Env(slots=3, test="true")
         in_review(e)
-        r = backlog.add(e.p, "r", status="ready", criteria="y")
-        b = backlog.add(e.p, "b", status="backlog", criteria="y")
+        r = registry.backlog(e.p).add("r", status="ready", criteria="y")
+        b = registry.backlog(e.p).add("b", status="backlog", criteria="y")
         pause(e)
         tick.tick(e.p)
         for t, s in ((r, "ready"), (b, "backlog")):
@@ -54,7 +55,7 @@ class TestPause:
 
     def test_paused_launches_no_parent_agent(self, owner: None):
         e = Env(test="true")
-        parent = backlog.add(e.p, "parent", status="backlog", criteria="c")
+        parent = registry.backlog(e.p).add("parent", status="backlog", criteria="c")
         fm(e.home, "add", "s", "--parent", parent, "--triage", "--criteria", "c")
         n = len(e.calls())
         pause(e)
@@ -64,9 +65,9 @@ class TestPause:
     def test_in_flight_counts_work_still_running(self):
         e = Env(test="true")
         for s in ("in progress", "in review", "ready", "done"):
-            tid = backlog.add(e.p, s, status="ready", criteria="y")
-            backlog.set_status(e.p, tid, s, "test")
-        assert backlog.in_flight(backlog.load(e.p)) == 2
+            tid = registry.backlog(e.p).add(s, status="ready", criteria="y")
+            registry.backlog(e.p).set_status(tid, s, "test")
+        assert backlog.in_flight(registry.backlog(e.p).load()) == 2
         assert "2" in fm(e.home, "pause")
         assert "2" not in fm(e.home, "pause", "--off")
 

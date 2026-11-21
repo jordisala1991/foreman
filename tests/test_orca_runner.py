@@ -11,7 +11,7 @@ from fakerepo import FakeRepo
 from helpers import Env
 
 from foreman import util
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import backlog
 from foreman.providers import registry
 from foreman.providers.orca.sessions import Orca
 from foreman.providers.runner import Agent, RunnerError, SessionRef, State, ref_of, settings
@@ -92,8 +92,8 @@ def test_a_send_to_a_live_chat_keeps_the_dispatch(s: Setup):
 
 def on_a_task(s: Setup) -> tuple[str, SessionRef]:
     ref = s.start()
-    tid = backlog.add(s.p, status="ready", criteria="y", title="x")
-    with backlog.edit(s.p) as d:
+    tid = registry.backlog(s.p).add(status="ready", criteria="y", title="x")
+    with registry.backlog(s.p).edit() as d:
         it = backlog.get(d, tid)
         it["status"] = "in progress"
         it["agent"] = {"name": "ty-1", **ref.fields(), "kind": "responsible", "started": util.now(), "cwd": str(s.wt)}
@@ -104,13 +104,13 @@ def on_a_task(s: Setup) -> tuple[str, SessionRef]:
 def test_a_send_after_a_restart_keeps_the_new_dispatch(s: Setup):
     tid, ref = on_a_task(s)
     s.orca.restart()
-    assert running.send(s.p, backlog.get(backlog.load(s.p), tid), "again")
-    i = backlog.get(backlog.load(s.p), tid)
+    assert running.send(s.p, backlog.get(registry.backlog(s.p).load(), tid), "again")
+    i = backlog.get(registry.backlog(s.p).load(), tid)
     new = i["agent"]["dispatch"]
     assert new != ref.dispatch and s.orca.workers()[new]["live"]
     assert i["session_tabs"][ref.session][2] == new and i["agent"]["session"] == ref.session
     assert running.send(s.p, i, "and again")  # a live chat now: the dispatch stays
-    assert backlog.get(backlog.load(s.p), tid)["agent"]["dispatch"] == new
+    assert backlog.get(registry.backlog(s.p).load(), tid)["agent"]["dispatch"] == new
 
 
 @pytest.mark.parametrize(("word", "state"), [("working", State.WORKING), ("done", State.IDLE), ("blocked", State.WAITING), ("waiting", State.WAITING)])
@@ -133,10 +133,10 @@ def test_a_restart_ends_the_chat_and_its_next_message_resumes_it(s: Setup):
     s.orca.restart()
     rows = Orca(s.p).rows()
     assert rows is not None and rows.state(ref) is State.ENDED and not rows.busy(ref)
-    q = questions.ask(s.p, tid, "ty-1", "which?")
-    questions.answer(s.p, q, "this one")
+    q = registry.backlog(s.p).ask(tid, "ty-1", "which?")
+    registry.backlog(s.p).answer(q, "this one")
     talk.deliver_answers(s.p, rows)
-    agent = backlog.get(backlog.load(s.p), tid)["agent"]
+    agent = backlog.get(registry.backlog(s.p).load(), tid)["agent"]
     assert s.orca.workers()[agent["dispatch"]]["live"] and f"answer {q} delivered to ty-1" in s.events()
     after = Orca(s.p).rows()
     assert after is not None and after.state(ref_of(agent)) is State.WORKING
@@ -161,9 +161,9 @@ def test_orca_down_is_opened_before_a_launch(s: Setup):
 
 def test_orca_that_stays_down_postpones_the_launch(s: Setup):
     s.orca.down(opens=False)
-    tid = backlog.add(s.p, status="backlog", criteria="y", title="x")
-    launch.launch(s.p, backlog.get(backlog.load(s.p), tid))
-    i = backlog.get(backlog.load(s.p), tid)
+    tid = registry.backlog(s.p).add(status="backlog", criteria="y", title="x")
+    launch.launch(s.p, backlog.get(registry.backlog(s.p).load(), tid))
+    i = backlog.get(registry.backlog(s.p).load(), tid)
     assert i["status"] == "backlog" and not i.get("blocked") and not i.get("agent")
     assert [t for t in s.events() if t.startswith("launch postponed")] == ["launch postponed: Orca is not running and could not be opened"]
 
@@ -227,7 +227,7 @@ def test_a_waiting_agent_gets_one_event_until_it_stops_waiting(s: Setup):
     assert s.events().count(said) == 1
     s.orca.set_row(str(ref.dispatch), "done")
     watch(s)
-    assert backlog.get(backlog.load(s.p), tid)["agent"]["waiting_seen"] is None
+    assert backlog.get(registry.backlog(s.p).load(), tid)["agent"]["waiting_seen"] is None
     s.orca.set_row(str(ref.dispatch), "waiting")
     watch(s)
     assert s.events().count(said) == 2
@@ -244,21 +244,21 @@ def test_the_claude_runner_writes_no_waiting_event(s: Setup):
 
 def test_a_review_waits_for_orca_too(s: Setup):
     s.orca.down(opens=False)
-    tid = backlog.add(s.p, status="ready", criteria="y", title="x")
-    backlog.update(s.p, tid, worktree=str(s.wt), branch="foreman/ty-1")
-    launch.launch_reviewer(s.p, backlog.get(backlog.load(s.p), tid), s.e.fake_repo().head("main"), "hunter")
-    i = backlog.get(backlog.load(s.p), tid)
+    tid = registry.backlog(s.p).add(status="ready", criteria="y", title="x")
+    registry.backlog(s.p).update(tid, worktree=str(s.wt), branch="foreman/ty-1")
+    launch.launch_reviewer(s.p, backlog.get(registry.backlog(s.p).load(), tid), s.e.fake_repo().head("main"), "hunter")
+    i = backlog.get(registry.backlog(s.p).load(), tid)
     assert not i.get("hunter") and not i.get("blocked")
     assert [t for t in s.events() if t.startswith("launch postponed")] == ["launch postponed: Orca is not running and could not be opened"]
 
 
 def test_a_mechanic_and_a_parent_wait_for_orca_too(s: Setup):
     s.orca.down(opens=False)
-    triage = backlog.add(s.p, status="triage", criteria="y", title="x", source="health:x")
-    mechanic.launch(s.p, backlog.get(backlog.load(s.p), triage))
-    parent = backlog.add(s.p, status="backlog", criteria="y", title="p")
-    parents.launch(s.p, backlog.get(backlog.load(s.p), parent))
-    d = backlog.load(s.p)
+    triage = registry.backlog(s.p).add(status="triage", criteria="y", title="x", source="health:x")
+    mechanic.launch(s.p, backlog.get(registry.backlog(s.p).load(), triage))
+    parent = registry.backlog(s.p).add(status="backlog", criteria="y", title="p")
+    parents.launch(s.p, backlog.get(registry.backlog(s.p).load(), parent))
+    d = registry.backlog(s.p).load()
     assert not backlog.get(d, triage).get("diagnosis") and not backlog.get(d, triage).get("mechanic")
     assert not backlog.get(d, parent).get("blocked") and not backlog.get(d, parent).get("agent")
     assert len([t for t in s.events() if t.startswith("launch postponed")]) == 2

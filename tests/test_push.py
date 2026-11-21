@@ -8,9 +8,9 @@ from helpers import Env, git
 from test_github import GH
 
 from foreman import providers
-from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.loop.guarded import guarded
+from foreman.providers import registry
 
 
 def transient() -> None:
@@ -117,7 +117,7 @@ class TestPushes:
     def test_the_local_provider_pushes_nothing(self):
         e = Env(test="true")
         git(e.repo, "remote", "add", "origin", str(e.tmp / "never.git"))
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         wt = e.repo.parent / e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
@@ -130,7 +130,7 @@ class TestPushes:
 
     def test_any_provider_call_failing_transient_three_times_blocks_with_the_error(self):
         e = Env(test="true")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         for _ in range(2):
             guarded(e.p, tid, "x", transient)
         i = e.task(tid)
@@ -142,7 +142,7 @@ class TestPushes:
 
     def test_a_provider_call_failing_once_then_working_resets_the_count(self):
         e = Env(test="true")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         guarded(e.p, tid, "x", transient)
         assert e.task(tid)["retry_count"] == 1
         guarded(e.p, tid, "x", lambda: None)

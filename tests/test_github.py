@@ -12,7 +12,6 @@ from helpers import Env, fm, git
 
 from foreman import providers, util
 from foreman.core.rules import decide
-from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.providers.github import provider, types
@@ -190,7 +189,7 @@ class GH:
     def work(self, push: bool = True) -> str:
         """A running task with one commit, pushed or not."""
         e = self.e
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         wt = e.repo.parent / e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
@@ -201,7 +200,7 @@ class GH:
         return tid
 
     def deliver(self, tid: str) -> None:
-        backlog.set_status(self.e.p, tid, "in review", report={"summary": "s", "confused": ""})
+        registry.backlog(self.e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
         self.e.review(tid)
 
 
@@ -273,7 +272,7 @@ class TestPulls:
 
     def test_nothing_is_pushed_before_the_task_has_commits_and_main_never(self):
         g = self.make(test="true")
-        tid = backlog.add(g.e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(g.e.p).add("x", status="ready", criteria="y")
         tick.tick(g.e.p)
         tick.tick(g.e.p)
         assert self.origin_tip(g, tid) == ""
@@ -355,7 +354,7 @@ class TestPulls:
     def test_the_configured_merge_type_reaches_gh(self, strategy):
         g = self.make(f'strategy = "{strategy}"', test="true")
         c = g.seed()
-        tid = backlog.add(g.e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(g.e.p).add("x", status="ready", criteria="y")
         ref = merge.request_merge(g.e.p, {"id": tid, "branch": c.branch}, registry.get(g.e.p), replace(c, id=tid))
         assert ref == "c0ffee"
         assert g.state["prs"]["1"]["strategy"] == strategy
@@ -373,7 +372,7 @@ class TestPulls:
         i = g.e.task(tid)
         assert i["status"] == "in progress"
         assert i["conflicts"] == 1
-        assert backlog.load(g.e.p)["decisions_resolved"][-1]["kind"] == "conflict"
+        assert registry.backlog(g.e.p).load()["decisions_resolved"][-1]["kind"] == "conflict"
         assert not i.get("blocked")
         assert "accepted" not in i
         assert len(g.calls("pr", "merge")) == 1
@@ -406,7 +405,7 @@ class TestPulls:
         s = g.state
         s["prs"]["1"]["draft"] = True  # an accepted task whose PR is still a draft is readied, then merged
         g.set(prs=s["prs"], lag=True)
-        backlog.update(g.e.p, tid, pr={**g.e.task(tid)["pr"], "draft": True})
+        registry.backlog(g.e.p).update(tid, pr={**g.e.task(tid)["pr"], "draft": True})
         tick.tick(g.e.p)
         assert g.e.task(tid)["status"] == "in review"
         assert len(g.calls("pr", "ready")) == 1
@@ -574,7 +573,7 @@ class TestPulls:
             assert isinstance(types.failure("gh", text), kind), text
         g = self.make(test="true")
         tid = g.work()
-        backlog.update(g.e.p, tid, blocked="x", pr_error="a", retry_error="b")
+        registry.backlog(g.e.p).update(tid, blocked="x", pr_error="a", retry_error="b")
         fm(g.e.home, "unblock", tid)
         i = g.e.task(tid)
         assert (i["blocked"], i["pr_error"], i["retry_error"]) == ("", "", "")

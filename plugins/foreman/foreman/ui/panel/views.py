@@ -50,7 +50,7 @@ def needs(d: Obj) -> int:
 
 def summary(p: Project) -> Obj:
     try:
-        d = backlog.load(p)
+        d = provider_registry.backlog(p).load()
         return {
             "name": p.name,
             "paused": p.paused or None,
@@ -74,7 +74,7 @@ def with_session(p: Project, i: Obj, rows: Rows) -> Obj:
 
 
 def state(p: Project) -> Obj:
-    d = backlog.load(p)
+    d = provider_registry.backlog(p).load()
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     rows = provider_registry.rows(p)
     all_tasks = backlog.tasks(d)
@@ -86,7 +86,7 @@ def state(p: Project) -> Obj:
 
 
 def task(p: Project, tid: str) -> Obj:
-    d = backlog.load(p)
+    d = provider_registry.backlog(p).load()
     i = backlog.get(d, tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
@@ -112,7 +112,7 @@ def system(p: Project) -> Obj:
     return {
         "name": p.name,
         "paused": p.paused or None,
-        "in_flight": backlog.in_flight(backlog.load(p)),
+        "in_flight": backlog.in_flight(provider_registry.backlog(p).load()),
         "loop": loop_beat(p),
         "findings": found,
         "metrics": rows,

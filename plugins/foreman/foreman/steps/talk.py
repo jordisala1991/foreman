@@ -6,6 +6,7 @@ from typing import Any
 from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, questions
+from ..providers import registry
 from ..providers.runner import Rows, State, ref_of
 from ..services.agents.running import idle_s, send, update_agent
 
@@ -29,12 +30,12 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
 
 
 def deliver_answers(p: Project, rows: Rows) -> None:
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     sent: set[str] = set()  # one answer per task per tick: the session is working after the first
     for q in questions.undelivered(d):
         i = backlog.get(d, q["task"])
         if i["status"] in backlog.CLOSED:
-            questions.mark_delivered(p, q["id"])
+            registry.backlog(p).mark_delivered(q["id"])
             continue
         agent: dict[str, Any] = i.get("agent") or {}
         if i["id"] in sent:
@@ -43,17 +44,17 @@ def deliver_answers(p: Project, rows: Rows) -> None:
             continue  # it is busy (maybe talking with the owner): next tick
         msg = message_for(i, q)
         if send(p, i, msg):
-            questions.mark_delivered(p, q["id"])
+            registry.backlog(p).mark_delivered(q["id"])
             sent.add(i["id"])
             update_agent(p, i["id"], nudged=None, started=util.now())
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
         else:
             sent.add(i["id"])
-            backlog.update(p, i["id"], undelivered=i.get("undelivered", 0) + 1)
+            registry.backlog(p).update(i["id"], undelivered=i.get("undelivered", 0) + 1)
 
 
 def watch_agents(p: Project, rows: Rows) -> None:
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     waiting = {q["task"] for q in questions.open_questions(d)} | {q["task"] for q in questions.undelivered(d)}
     for i in backlog.tasks(d):
         a: dict[str, Any] = i.get("agent") or {}
@@ -74,12 +75,12 @@ def watch_agents(p: Project, rows: Rows) -> None:
                 "Otherwise carry on.",
             ):
                 update_agent(p, i["id"], nudged=util.now())
-                backlog.update(p, i["id"], nudges=i.get("nudges", 0) + 1)
+                registry.backlog(p).update(i["id"], nudges=i.get("nudges", 0) + 1)
                 backlog.event(p, i["id"], f"{a.get('name')} ended its turn without finishing: nudged")
                 continue
             update_agent(p, i["id"], nudged=util.now())  # a failed nudge counts too: the block below then fires
         if (util.age_s(a.get("nudged")) or 0) > NUDGE_IDLE_S and idle_s(a) > NUDGE_IDLE_S:
-            backlog.update(p, i["id"], blocked="its agent stopped without finishing, even after a nudge")
+            registry.backlog(p).update(i["id"], blocked="its agent stopped without finishing, even after a nudge")
             backlog.event(p, i["id"], "blocked: agent stopped without finishing")
 
 
@@ -88,13 +89,13 @@ def watch_waiting(p: Project, rows: Rows) -> None:
     `waiting_seen` as a nudge is, and cleared once it no longer waits."""
     if p.get("agents", "runner") != "orca":
         return
-    for i in backlog.tasks(backlog.load(p)):
+    for i in backlog.tasks(registry.backlog(p).load()):
         for role in ("agent", "mechanic", "hunter", "reviewer"):
             a: dict[str, Any] = i.get(role) or {}
             waits = bool(a) and rows.state(ref_of(a)) is State.WAITING
             if waits == bool(a.get("waiting_seen")):
                 continue
-            with backlog.edit(p) as d:
+            with registry.backlog(p).edit() as d:
                 it = backlog.get(d, i["id"])
                 it[role] = {**it[role], "waiting_seen": util.now() if waits else None}
             if waits:
@@ -106,7 +107,7 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
     conflict or failing tests or CI start a review of only that fix, from round 1 (`review_for`, `review_from`); a
     conflict keeps who accepted it (`resolving`, from `by`), so it merges once resolved without a new accept. Failing
     keeps its check (the panel shows why it is back) and counts the returns (`failures`) and the row (`failure_streak`)."""
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         i = backlog.get(d, tid)
         i["status"] = "in progress"
         if kind != "failing":

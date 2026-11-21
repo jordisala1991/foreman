@@ -11,7 +11,8 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
-from ...core.tasks import backlog, blockers, chains, editing, questions, subtasks, taskrepo
+from ...core.tasks import backlog, blockers, chains, editing, subtasks, taskrepo
+from ...providers import registry
 from ...providers.repo import RepoError
 from ...providers.runner import RunnerError
 from ...services.agents import relaunch
@@ -34,7 +35,7 @@ def cmd_init(a: argparse.Namespace) -> None:
 def cmd_add(a: argparse.Namespace) -> None:
     p = home(a)
     repo = repo_key(p, a.repo)
-    tasks = backlog.tasks(backlog.load(p))
+    tasks = backlog.tasks(registry.backlog(p).load())
     step = chains.step_fields(tasks, a.parent) if a.parent else None  # a chain's step: the parent's fields, its flags ignored
     triage = not step and (a.triage or (a.parent and os.environ.get("FOREMAN_TASK")))  # a parent agent's waits for a Go
     status = "triage" if triage else "backlog"
@@ -46,8 +47,7 @@ def cmd_add(a: argparse.Namespace) -> None:
     by_parent = a.parent and (subtasks.refusal(tasks, a.parent) or chains.refusal(tasks, a.parent))
     if why := by_agent or by_parent or blockers.refusal(tasks, "", ids) or by_repo:
         sys.exit(f"foreman: {why}")
-    tid = backlog.add(
-        p,
+    tid = registry.backlog(p).add(
         a.title,
         detail=a.detail or "",
         status=status,
@@ -68,7 +68,7 @@ def cmd_edit(a: argparse.Namespace) -> None:
     fields.pop("repo", None)
     if key := repo_key(p, a.repo):
         fields["repo"] = key
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         i = backlog.get(d, a.id)
         by_agent = subtasks.agent_refusal(backlog.tasks(d), os.environ.get("FOREMAN_TASK", ""), i.get("parent", ""), "tasks are edited")
         if why := by_agent or editing.refusal(i, fields or ({"repo": a.repo} if a.repo else {}), backlog.tasks(d)):
@@ -88,19 +88,19 @@ def cmd_edit(a: argparse.Namespace) -> None:
 
 def cmd_answer(a: argparse.Namespace) -> None:
     p = home(a)
-    q = questions.answer(p, a.qid, a.text)
+    q = registry.backlog(p).answer(a.qid, a.text)
     print(f"answered {q['id']}; the loop gives it to {q.get('agent')}")
 
 
 def cmd_allow(a: argparse.Namespace, allowed: bool = True) -> None:
     p = home(a)
-    q = next((q for q in backlog.load(p)["decisions"] if q["id"] == a.qid), None)
+    q = next((q for q in registry.backlog(p).load()["decisions"] if q["id"] == a.qid), None)
     if not q or q.get("kind") != "permission":
         sys.exit(f"foreman: {a.qid} is not an open permission request")
     if allowed:
         guard.grant(p, q["task"], q["action"])
-    questions.answer(p, a.qid, a.text or ("allowed once" if allowed else "not allowed"))
-    with backlog.edit(p) as d:
+    registry.backlog(p).answer(a.qid, a.text or ("allowed once" if allowed else "not allowed"))
+    with registry.backlog(p).edit() as d:
         next(x for x in d["decisions_resolved"] if x["id"] == a.qid)["allowed"] = allowed
 
 
@@ -115,14 +115,14 @@ def cmd_accept(a: argparse.Namespace) -> None:
 
 def cmd_reject(a: argparse.Namespace) -> None:
     p = home(a)
-    if backlog.get(backlog.load(p), a.id)["status"] != "in review":
+    if backlog.get(registry.backlog(p).load(), a.id)["status"] != "in review":
         sys.exit(f"foreman: {a.id} is not in review")
     talk.return_to_agent(p, a.id, "rejection", a.note)
 
 
 def cmd_review(a: argparse.Namespace) -> None:
     p = home(a)
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         i = backlog.get(d, a.id)
         if i["status"] != "in review":
             sys.exit(f"foreman: {a.id} is not in review")
@@ -140,13 +140,13 @@ def cmd_review(a: argparse.Namespace) -> None:
 
 def cmd_go(a: argparse.Namespace) -> None:
     p = home(a)
-    i = backlog.get(backlog.load(p), a.id)
+    i = backlog.get(registry.backlog(p).load(), a.id)
     acceptance: backlog.Acceptance = i.get("acceptance") or {}
     if not acceptance.get("criteria"):
         sys.exit(f"foreman: {a.id}: define its acceptance criteria with the owner first")
-    if why := taskrepo.go_refusal(i, backlog.tasks(backlog.load(p)), p.repo_keys):
+    if why := taskrepo.go_refusal(i, backlog.tasks(registry.backlog(p).load()), p.repo_keys):
         sys.exit(f"foreman: {why}")
-    backlog.set_status(p, a.id, "backlog", "let in by the owner", blocked="")
+    registry.backlog(p).set_status(a.id, "backlog", "let in by the owner", blocked="")
 
 
 def cmd_cancel(a: argparse.Namespace) -> None:
@@ -158,9 +158,9 @@ def cmd_cancel(a: argparse.Namespace) -> None:
 
 def cmd_unblock(a: argparse.Namespace) -> None:
     p = home(a)
-    i = backlog.update(p, a.id, blocked="", pr_error="", retry_error="", retry_count=0)
+    i = registry.backlog(p).update(a.id, blocked="", pr_error="", retry_error="", retry_count=0)
     if i["status"] in backlog.RUNNING and a.relaunch:
-        backlog.set_status(p, a.id, "backlog" if i["status"] == "refining" else "ready", "relaunch")
+        registry.backlog(p).set_status(a.id, "backlog" if i["status"] == "refining" else "ready", "relaunch")
 
 
 def cmd_relaunch(a: argparse.Namespace) -> None:
@@ -179,4 +179,4 @@ def cmd_pause(a: argparse.Namespace) -> None:
     if a.off:
         print("launching resumed")
     else:
-        print(f"launching paused; tasks still in flight: {backlog.in_flight(backlog.load(p))}")
+        print(f"launching paused; tasks still in flight: {backlog.in_flight(registry.backlog(p).load())}")

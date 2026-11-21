@@ -5,8 +5,8 @@ from helpers import Env, git
 from test_github import GH
 
 from foreman.core.review import describe
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.services.agents import brief
 from foreman.services.delivery import pulls
 
@@ -42,7 +42,7 @@ class TestText:
     def test_render_description_falls_back_to_the_goal(self):
         g = GH()
         try:
-            tid = backlog.add(g.e.p, "T", goal="The goal", criteria="c")
+            tid = registry.backlog(g.e.p).add("T", goal="The goal", criteria="c")
             for rep in ({}, {"file": ""}, {"file": str(g.e.tmp / "nope.md")}):
                 i = {**g.e.task(tid), "report": rep}
                 assert "The goal" in pulls.description(g.e.p, i, "abcdef0123", "now")
@@ -66,7 +66,7 @@ class TestOnGitHub:
         path = g.e.home / "reports" / f"{tid}.md"
         path.parent.mkdir(exist_ok=True)
         path.write_text(text)
-        backlog.set_status(g.e.p, tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
+        registry.backlog(g.e.p).set_status(tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
         return tid
 
     def pr(self):
@@ -91,7 +91,7 @@ class TestOnGitHub:
         prs["1"]["body"] = "my note\n" + describe.wrap("stale block") + "\nmy tail"
         self.g.set(prs=prs)
         i = self.g.e.task(tid)
-        backlog.update(self.g.e.p, tid, pr={**i["pr"], "described": ""})
+        registry.backlog(self.g.e.p).update(tid, pr={**i["pr"], "described": ""})
         self.run_ticks()
         body = self.pr()["body"]
         assert body.startswith("my note\n") and body.endswith("\nmy tail")
@@ -109,7 +109,7 @@ class TestOnGitHub:
 
     def test_github_title_follows_a_renamed_task(self):
         tid = self.deliver()
-        backlog.update(self.g.e.p, tid, title="New name")
+        registry.backlog(self.g.e.p).update(tid, title="New name")
         self.g.e.review(tid)
         self.run_ticks()
         assert self.pr()["title"] == f"{tid}: New name"
@@ -143,7 +143,7 @@ class TestOnGitHub:
 
 class TestTemplate:
     def launched(self, e: Env) -> tuple[str, str]:
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         return tid, brief.report_file(e.p, tid).read_text()
 

@@ -53,7 +53,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         try:
             wt, branch = worktree.worktree(p, i)
         except worktree.PostCreateError as e:
-            backlog.update(p, i["id"], blocked=str(e))
+            registry.backlog(p).update(i["id"], blocked=str(e))
             backlog.event(p, i["id"], f"launch failed: {e}")
             return
         i = {**i, "worktree": str(wt), "branch": branch}
@@ -63,7 +63,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     else:
         cwd = worktree.agent_folder(p, name, p.repo, p.get("project", "main"))
         brief.plan_file(p, i["id"]).parent.mkdir(parents=True, exist_ok=True)
-    backlog.update(p, i["id"], **keys)  # the guard reads the worktree from the backlog
+    registry.backlog(p).update(i["id"], **keys)  # the guard reads the worktree from the backlog
     runner = registry.runner(p)
     try:
         ref = runner.start(Agent(i["id"], name, model, effort, util.session_title(i["id"], kind, i["title"])), brief.brief(p, i, kind), cwd)
@@ -71,11 +71,11 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         backlog.event(p, i["id"], f"launch postponed: {e}")
         return
     except RunnerError as e:
-        backlog.update(p, i["id"], blocked=f"could not launch its agent: {e}")
+        registry.backlog(p).update(i["id"], blocked=f"could not launch its agent: {e}")
         backlog.event(p, i["id"], f"launch failed: {e}")
         return
     agent = {"name": name, **ref.fields(), "kind": kind, "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         it = backlog.get(d, i["id"])
         still = it["status"] == i["status"] and not it.get("blocked")
         if still:
@@ -103,13 +103,13 @@ def record_session(it: dict[str, Any], ref: SessionRef, kind: str) -> None:
 
 def fill_sessions(p: Project, rows: Rows) -> None:
     """A session not listed yet at launch: its full id from the short one, on a later tick."""
-    for i in backlog.tasks(backlog.load(p)):
+    for i in backlog.tasks(registry.backlog(p).load()):
         for role in ("agent", "hunter", "reviewer", "mechanic"):
             a: dict[str, Any] = i.get(role) or {}
             if a.get("short") and not a.get("session"):
                 sid = rows.find(a["short"])
                 if sid:
-                    with backlog.edit(p) as d:
+                    with registry.backlog(p).edit() as d:
                         it = backlog.get(d, i["id"])
                         it[role] = {**it[role], "session": sid}
                         ref = SessionRef(a["short"], sid, a.get("terminal"), a.get("pane"), dispatch=a.get("dispatch"), coordinator=a.get("coordinator"))
@@ -157,7 +157,7 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
     except RunnerUnavailable as e:  # Orca is down: the review is decided again next tick
         backlog.event(p, i["id"], f"launch postponed: {e}")
         return
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         it = backlog.get(d, i["id"])
         launch = {
             "name": name,

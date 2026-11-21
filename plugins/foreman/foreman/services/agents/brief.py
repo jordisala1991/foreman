@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Any
 
 from ...core.project.config import Project
-from ...core.tasks import backlog, tasktypes
+from ...core.tasks import tasktypes
+from ...providers import registry
 from .. import lock
 
 BRIEFS = Path(__file__).parents[2] / "briefs"
@@ -51,7 +52,7 @@ def plan_section(i: dict[str, Any]) -> str:
 
 def owner_notes_section(p: Project, tid: str) -> str:
     """The owner's corrections on this task (rejection notes), oldest first; empty when there are none."""
-    notes = [q for q in backlog.load(p)["decisions_resolved"] if q.get("task") == tid and q.get("kind") == "rejection"]
+    notes = [q for q in registry.backlog(p).load()["decisions_resolved"] if q.get("task") == tid and q.get("kind") == "rejection"]
     if not notes:
         return ""
     lines = "\n".join(f"- {q.get('at') or q.get('resolved', '')}: {q.get('answer', '')}" for q in notes)

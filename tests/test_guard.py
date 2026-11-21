@@ -8,7 +8,13 @@ from unittest import mock
 import pytest
 
 from foreman.core.oversight import guard
-from foreman.core.tasks import backlog
+from foreman.core.project.config import Project
+from foreman.core.tasks.backlog import Local
+from foreman.providers import registry
+
+
+def LOCAL(p: Project, tid: str) -> Local | None:  # the finder `foreman guard` passes
+    return registry.backlog(p).local(tid)
 
 
 class TestBash:
@@ -77,15 +83,15 @@ class TestHook:
     @pytest.fixture(autouse=True)
     def set_up(self, env):
         self.e = env
-        self.tid = backlog.add(self.e.p, "t", status="ready", criteria="c")
-        backlog.update(self.e.p, self.tid, worktree=str(self.e.tmp / "wt"), branch="foreman/ty-1")
+        self.tid = registry.backlog(self.e.p).add("t", status="ready", criteria="c")
+        registry.backlog(self.e.p).update(self.tid, worktree=str(self.e.tmp / "wt"), branch="foreman/ty-1")
         os.environ.update(FOREMAN_HOME=str(self.e.home), FOREMAN_TASK=self.tid)
         yield
         os.environ.pop("FOREMAN_HOME")
         os.environ.pop("FOREMAN_TASK")
 
     def call(self, tool: str, inp: dict) -> str:
-        return guard.hook(json.dumps({"tool_name": tool, "tool_input": inp, "cwd": str(self.e.tmp / "wt")}))
+        return guard.hook(json.dumps({"tool_name": tool, "tool_input": inp, "cwd": str(self.e.tmp / "wt")}), LOCAL)
 
     def test_denies_with_a_reason_and_logs(self):
         out = json.loads(self.call("Bash", {"command": "git push origin main"}))
@@ -109,7 +115,7 @@ class TestHook:
 
     def test_a_broken_input_lets_it_run(self):
         with contextlib.redirect_stderr(io.StringIO()):  # the hook reports the broken input on stderr
-            assert guard.hook("not json") == ""
+            assert guard.hook("not json", LOCAL) == ""
 
     def test_push_main_covers_every_repos_main(self):
         t = self.e.tmp
@@ -119,7 +125,7 @@ class TestHook:
             f'[project]\nname = "toy"\nprefix = "TY"\nworktrees = "{t / "wt"}"\n'
             f'[repos.app]\npath = "{t / "app"}"\n[repos.api]\npath = "{t / "api"}"\nmain = "develop"\n'
         )
-        backlog.update(self.e.p, self.tid, repo="app")
+        registry.backlog(self.e.p).update(self.tid, repo="app")
         for branch in ("main", "develop"):
             out = json.loads(self.call("Bash", {"command": f"git push origin {branch}"}))
             assert "foreman ask --action push-main" in out["hookSpecificOutput"]["permissionDecisionReason"], branch

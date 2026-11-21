@@ -10,7 +10,8 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from foreman.core.tasks import backlog, tasktypes
+from foreman.core.tasks import tasktypes
+from foreman.providers import registry
 from foreman.services.agents import brief
 from foreman.ui.cli import parser
 from foreman.ui.panel import views
@@ -25,7 +26,7 @@ class TestTaskType:
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
         self.e = env
-        self.tid = backlog.add(self.e.p, "t", criteria="a")
+        self.tid = registry.backlog(self.e.p).add("t", criteria="a")
 
     def shown(self, tid: str) -> dict:
         return json.loads(fm(self.e.home, "show", tid))
@@ -41,7 +42,7 @@ class TestTaskType:
             assert self.e.task(self.tid)["type"] == t
 
     def test_an_invalid_type_lists_the_four_and_changes_nothing(self):
-        before = backlog.load(self.e.p)
+        before = registry.backlog(self.e.p).load()
         for argv in (["edit", self.tid, "--type", "x"], ["add", "n", "--type", "x"]):
             err = io.StringIO()
             with contextlib.redirect_stderr(err), pytest.raises(SystemExit):
@@ -50,7 +51,7 @@ class TestTaskType:
                 assert t in err.getvalue()
             with pytest.raises(SystemExit):
                 fm(self.e.home, *argv)
-            assert backlog.load(self.e.p) == before
+            assert registry.backlog(self.e.p).load() == before
 
     def test_without_a_type_it_is_change(self):
         added = fm(self.e.home, "add", "n", "--criteria", "a").strip()
@@ -72,7 +73,7 @@ class TestTaskType:
         with pytest.raises(SystemExit):
             fm(self.e.home, "edit", self.tid, "--type", "bug")
         assert self.e.task(self.tid) == before
-        backlog.update(self.e.p, self.tid, type="bug")  # stored earlier: ignored on read
+        registry.backlog(self.e.p).update(self.tid, type="bug")  # stored earlier: ignored on read
         assert "type" not in self.shown(self.tid)
         assert "bug" not in self.line(self.tid)
         by_id = {i["id"]: i for i in views.state(self.e.p)["tasks"]}
@@ -85,7 +86,7 @@ class TestAgentsInstructions:
     @pytest.fixture(autouse=True)
     def set_up(self, env):
         self.e = env
-        self.tid = backlog.add(self.e.p, "t", criteria="a")
+        self.tid = registry.backlog(self.e.p).add("t", criteria="a")
 
     def brief(self, kind: str, **extra: str) -> str:
         return brief.brief(self.e.p, {**self.e.task(self.tid), **extra}, kind, {"round": 1})

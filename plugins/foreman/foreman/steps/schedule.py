@@ -7,10 +7,11 @@ from typing import Any
 from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, chains, recurring
+from ..providers import registry
 
 
 def _context(p: Project) -> tuple[list[backlog.Task], dict[str, str]]:
-    return backlog.tasks(backlog.load(p)), recurring.closed_at(util.read_jsonl(p.state / "events.jsonl"))
+    return backlog.tasks(registry.backlog(p).load()), recurring.closed_at(util.read_jsonl(p.state / "events.jsonl"))
 
 
 def run(p: Project, now: datetime | None = None) -> list[str]:
@@ -27,7 +28,7 @@ def run(p: Project, now: datetime | None = None) -> list[str]:
             seen.setdefault(name, now.strftime(recurring.STAMP))
         tasks, closed = _context(p)
         due = [(e, st) for e in entries.values() if (st := recurring.status(e, tasks, closed, seen[e["name"]], now)).due]
-    filed = [backlog.add(p, e["title"], status="triage" if e["triage"] else "backlog", **_fields(e, st, now)) for e, st in due]
+    filed = [registry.backlog(p).add(e["title"], status="triage" if e["triage"] else "backlog", **_fields(e, st, now)) for e, st in due]
     return [tid for tid in filed if tid]
 
 

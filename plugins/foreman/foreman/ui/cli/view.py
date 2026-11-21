@@ -5,12 +5,13 @@ import json
 
 from ...core.rules import decide
 from ...core.tasks import backlog, blockers, chains, questions, recurring, subtasks, taskrepo, tasktypes
+from ...providers import registry
 from .common import home
 
 
 def cmd_list(a: argparse.Namespace) -> None:
     p = home(a)
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     all_ = backlog.tasks(d)
     width = max(len(k) for k in [*p.repo_keys, "-"]) if p.several else 0
     status = {i["id"]: i["status"] for i in all_}
@@ -31,7 +32,7 @@ def cmd_list(a: argparse.Namespace) -> None:
 
 def cmd_show(a: argparse.Namespace) -> None:
     p = home(a)
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     i: backlog.Task = recurring.shown(taskrepo.shown(tasktypes.shown(backlog.get(d, a.id), backlog.tasks(d)), backlog.tasks(d), p.several))
     i = {**i, "checked_on": decide.ran_on(i["check"])} if i.get("check") else i
     if wait := blockers.pending(i, backlog.tasks(d)):

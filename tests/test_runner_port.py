@@ -23,13 +23,13 @@ from foreman.steps.health import health
 
 
 def launched(e: Env) -> str:
-    tid = backlog.add(e.p, status="backlog", criteria="y", title="x")
+    tid = registry.backlog(e.p).add(status="backlog", criteria="y", title="x")
     launch_free(e.p)
     return tid
 
 
 def task(e: Env, tid: str) -> backlog.Task:
-    return backlog.get(backlog.load(e.p), tid)
+    return backlog.get(registry.backlog(e.p).load(), tid)
 
 
 def test_claude_launch_writes_no_tab(fake_git: FakeRepo):
@@ -75,7 +75,7 @@ def test_stop_all_gives_each_old_session_its_tab(fake_git: FakeRepo, fake_runner
     e = Env(repo=fake_git)
     tid = launched(e)
     tabs = {"old1": ["T9", "P9"], "old2": ["T8", "P8", "D8", "H"], "fk1-sid": ["T1", "P1", None, None]}  # FN-213's two entries, and orca's four
-    backlog.update(e.p, tid, sessions=["old1", "old2", "fk1-sid"], session_tabs=tabs)
+    registry.backlog(e.p).update(tid, sessions=["old1", "old2", "fk1-sid"], session_tabs=tabs)
     merge.stop_all(e.p, task(e, tid))
     stopped = sorted((r.short, r.terminal, r.pane, r.dispatch, r.coordinator) for r in fake_runner.stopped)
     assert stopped == [("fk1", "T1", "P1", None, None), ("old1", "T9", "P9", None, None), ("old2", "T8", "P8", "D8", "H")]
@@ -104,7 +104,7 @@ def test_a_tick_with_an_unknown_runner_goes_on_recorded():
     tick.tick(p)
     rows = [r for r in util.read_jsonl(p.state / "errors.jsonl") if r["step"] == "runner"]
     assert len(rows) == 1 and "nope" in rows[0]["error"]
-    assert any("nope" in str(i) for i in backlog.tasks(backlog.load(p)))  # health filed it
+    assert any("nope" in str(i) for i in backlog.tasks(registry.backlog(p).load()))  # health filed it
 
 
 def test_a_failing_health_with_an_unknown_runner_is_recorded_not_raised():
@@ -117,8 +117,8 @@ def test_a_failing_health_with_an_unknown_runner_is_recorded_not_raised():
 
 def test_a_session_found_late_keeps_its_tab(fake_git: FakeRepo):
     e = Env(repo=fake_git)
-    tid = backlog.add(e.p, status="ready", criteria="y", title="x")
-    backlog.update(e.p, tid, agent={"short": "aa", "terminal": "T1", "pane": "P1", "dispatch": "D1", "coordinator": "H", "kind": "responsible"})
+    tid = registry.backlog(e.p).add(status="ready", criteria="y", title="x")
+    registry.backlog(e.p).update(tid, agent={"short": "aa", "terminal": "T1", "pane": "P1", "dispatch": "D1", "coordinator": "H", "kind": "responsible"})
     launch.fill_sessions(e.p, ClaudeRows({"aa-sid": {"id": "aa"}}))
     assert task(e, tid)["session_tabs"] == {"aa-sid": ["T1", "P1", "D1", "H"]}
 

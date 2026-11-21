@@ -10,7 +10,7 @@ from helpers import Env, fm, git
 
 from foreman import providers, util
 from foreman.core.rules import decide, risk
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import questions
 from foreman.loop import queue, tick
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
@@ -26,10 +26,10 @@ class TestLaunch:
     def test_plans_backlog_and_launches_ready_within_the_slots(self):
         self.e = Env(slots=2)
         self.p = self.e.p
-        a = backlog.add(self.p, "vague idea", criteria="c")
-        b = backlog.add(self.p, "clear one", status="ready", criteria="tests pass")
-        c = backlog.add(self.p, "another", status="ready", criteria="x")
-        t = backlog.add(self.p, "a finding", status="triage")
+        a = registry.backlog(self.p).add("vague idea", criteria="c")
+        b = registry.backlog(self.p).add("clear one", status="ready", criteria="tests pass")
+        c = registry.backlog(self.p).add("another", status="ready", criteria="x")
+        t = registry.backlog(self.p).add("a finding", status="triage")
         tick.tick(self.p)
         assert self.e.task(b)["status"] == "in progress"
         assert self.e.task(c)["status"] == "in progress"  # ready before backlog, both slots used
@@ -49,7 +49,7 @@ class TestLaunch:
 
     def test_a_title_edited_before_launch_shows_in_the_new_agent(self, fake_git):
         e = Env(repo=fake_git)
-        tid = backlog.add(e.p, "old title", status="ready", criteria="c")
+        tid = registry.backlog(e.p).add("old title", status="ready", criteria="c")
         fm(e.home, "edit", tid, "--title", "new title")
         launch_free(e.p)
         argv = e.calls()[0]["argv"]
@@ -64,10 +64,10 @@ class TestLaunch:
         return out
 
     def run_all_kinds(self, e: Env) -> dict[str, tuple[str, str]]:
-        backlog.add(e.p, "vague idea", criteria="c")
-        w = backlog.add(e.p, "clear one", status="ready", criteria="x")
+        registry.backlog(e.p).add("vague idea", criteria="c")
+        w = registry.backlog(e.p).add("clear one", status="ready", criteria="x")
         tick.tick(e.p)
-        backlog.set_status(e.p, w, "in review", report={"summary": "s"})
+        registry.backlog(e.p).set_status(w, "in review", report={"summary": "s"})
         e.hunt_then_review(w)
         return self.flags(e)
 
@@ -96,7 +96,7 @@ class TestLaunch:
 
     def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self, fake_git):
         self.e = Env(slots=2, repo=fake_git)
-        a = backlog.add(self.e.p, "vague idea", criteria="c")
+        a = registry.backlog(self.e.p).add("vague idea", criteria="c")
         launch_free(self.e.p)
         assert self.e.task(a)["status"] == "refining"
         assert os.path.realpath(self.e.calls()[0]["cwd"]) == str(self.e.repo)
@@ -106,7 +106,7 @@ class TestLaunch:
     def test_paused_launches_nothing(self, fake_git):
         self.e = Env(slots=2, repo=fake_git)
         self.p = self.e.p
-        backlog.add(self.p, "x", status="ready", criteria="y")
+        registry.backlog(self.p).add("x", status="ready", criteria="y")
         (self.p.state).mkdir(parents=True, exist_ok=True)
         (self.p.state / "paused").write_text("now")
         launch_free(self.p)
@@ -116,10 +116,10 @@ class TestLaunch:
 class TestAnswers:
     def test_the_answer_goes_back_to_the_agent_that_asked(self, fake_git):
         e = Env(repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         launch_free(e.p)
-        qid = questions.ask(e.p, tid, tid.lower(), "A or B?")
-        questions.answer(e.p, qid, "B")
+        qid = registry.backlog(e.p).ask(tid, tid.lower(), "A or B?")
+        registry.backlog(e.p).answer(qid, "B")
         talk.deliver_answers(e.p, registry.rows(e.p))  # its session is still working: wait
         assert len(e.calls()) == 1
         e.set_state(tid.lower(), "blocked")
@@ -132,7 +132,7 @@ class TestAnswers:
         assert "--resume" in resume
         assert resume[resume.index("--resume") + 1] == e.task(tid)["agent"]["session"]
         assert "«B»" in resume[-1]
-        assert questions.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(registry.backlog(e.p).load()) == []
 
     @pytest.mark.parametrize(("state", "status"), (("blocked", "idle"), ("working", "idle"), ("blocked", None)))
     def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self, state, status, fake_git):
@@ -140,28 +140,28 @@ class TestAnswers:
 
     def delivered_to_idle(self, state, status, fake: FakeRepo):
         e = Env(repo=fake)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         launch_free(e.p)
-        qid = questions.ask(e.p, tid, tid.lower(), "A or B?")
-        questions.answer(e.p, qid, "B")
+        qid = registry.backlog(e.p).ask(tid, tid.lower(), "A or B?")
+        registry.backlog(e.p).answer(qid, "B")
         e.set_state(tid.lower(), state)
         e.set_status(tid.lower(), status) if status else e.drop_pid(tid.lower())  # no status: its process is gone too
         talk.deliver_answers(e.p, registry.rows(e.p))
         assert "--resume" in e.calls()[-1]["argv"]
-        assert questions.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(registry.backlog(e.p).load()) == []
 
 
 class TestStopped:
     def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self, fake_git):
         e = Env(repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         launch_free(e.p)
-        backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
+        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")
         talk.watch_agents(e.p, registry.rows(e.p))
         assert "not finished" in e.calls()[-1]["argv"][-1]
         assert e.task(tid)["nudges"] == 1
-        backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
+        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")  # the nudge woke it; it ended its turn again
         talk.watch_agents(e.p, registry.rows(e.p))
         assert "stopped without finishing" in e.task(tid)["blocked"]
@@ -170,10 +170,10 @@ class TestStopped:
 
 class TestQueue:
     def deliver(self, e: Env, lines: int = 1, open_findings: int = 0) -> str:
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         e.change(tid, lines)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
         e.review(tid, open_findings)
         return tid
 
@@ -183,7 +183,7 @@ class TestQueue:
         tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"], i["check"]["tests"]) == ("in review", "low", "pass")
-        assert not [x for x in backlog.load(e.p)["decisions_resolved"] if x.get("kind") == "review"]  # a clean review sends nothing
+        assert not [x for x in registry.backlog(e.p).load()["decisions_resolved"] if x.get("kind") == "review"]  # a clean review sends nothing
         merge.accept(e.p, tid)
         assert e.task(tid)["status"] == "in review"  # accepting merges nothing
         tick.tick(e.p)
@@ -251,7 +251,7 @@ class TestQueue:
         e = Env(test=f"case $PWD in */trees/*) if [ -e {armed} ]; then read line < {gate}; fi;; esac", repo=fake_git)
         a = self.deliver(e)
         e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
-        ready = backlog.add(e.p, "later", status="ready", criteria="z")
+        ready = registry.backlog(e.p).add("later", status="ready", criteria="z")
         monkeypatch.setattr(util, "BACKGROUND_WAIT_S", 0)
         armed.touch()
         tick.tick(e.p)
@@ -350,9 +350,9 @@ class TestQueue:
 
     def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y", detail="DETAIL-OF-THE-TASK")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y", detail="DETAIL-OF-THE-TASK")
         tick.tick(e.p)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s"})
         tick.tick(e.p)
         call = e.calls()[-1]
         assert call["argv"][call["argv"].index("-n") + 1] == "TY-1 hunter · x"
@@ -386,9 +386,9 @@ class TestQueue:
 
     def test_cancelling_a_task_in_review_stops_every_session_of_it(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s"})
         e.hunt_then_review(tid)
         i = e.task(tid)
         merge.close(e.p, tid, "canceled", "no")
@@ -409,18 +409,18 @@ class TestQueue:
 
     def test_a_blocked_task_still_has_its_finished_hunter_stopped(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s"})
         tick.tick(e.p)
         e.hunter_done(tid)
-        backlog.update(e.p, tid, blocked="why")
+        registry.backlog(e.p).update(tid, blocked="why")
         tick.tick(e.p)
         assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
 
     def test_a_failing_stop_does_not_stop_the_cancel(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         with mock.patch.object(Claude, "stop", side_effect=RunnerError("timed out")):
             merge.close(e.p, tid, "canceled", "no")
@@ -428,7 +428,7 @@ class TestQueue:
 
     def test_cancel_stops_a_session_the_listing_does_not_show(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         (e.bin / "agents.json").write_text("[]")  # unreadable or not yet listed: its agent still runs
         merge.close(e.p, tid, "canceled", "no")
@@ -436,9 +436,9 @@ class TestQueue:
 
     def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s"})
         tick.tick(e.p)
         e.hunter_done(tid)
         (e.bin / "agents.json").write_text("[]")  # gone, or an unreadable listing
@@ -448,7 +448,7 @@ class TestQueue:
 
     def test_a_cancel_stops_each_session_once(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         name = e.task(tid)["agent"]["name"]
         merge.close(e.p, tid, "canceled", "no")
@@ -457,12 +457,12 @@ class TestQueue:
 
     def test_a_hunter_that_ends_without_its_file_blocks_the_task(self, fake_git):
         e = Env(test="true", repo=fake_git)
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s"})
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s"})
         tick.tick(e.p)
         e.set_state(e.task(tid)["hunter"]["name"], "done")
-        backlog.update(e.p, tid, hunter={**e.task(tid)["hunter"], "started": "2000-01-01 00:00:00"})
+        registry.backlog(e.p).update(tid, hunter={**e.task(tid)["hunter"], "started": "2000-01-01 00:00:00"})
         tick.tick(e.p)
         assert "hunter ended without its findings file" in e.task(tid)["blocked"]
         assert len(e.calls()) == 2
@@ -477,7 +477,7 @@ class TestQueue:
         assert "leaves 1 open" in e.calls()[-1]["argv"][-1]
         assert f"reviews/{tid}.md" in e.calls()[-1]["argv"][-1]
         e.change(tid)  # the fix
-        backlog.set_status(e.p, tid, "in review")
+        registry.backlog(e.p).set_status(tid, "in review")
         e.review(tid, 1)  # round 2 still open: to the owner, whatever the autonomy
         assert "Round: 2" in e.calls()[-1]["argv"][-1]
         tick.tick(e.p)
@@ -500,7 +500,7 @@ class TestQueue:
         tick.tick(e.p)
         e.set_state(tid.lower(), "done")
         tick.tick(e.p)
-        backlog.set_status(e.p, tid, "in review")
+        registry.backlog(e.p).set_status(tid, "in review")
         tick.tick(e.p)
         i = e.task(tid)
         assert (i["status"], i["check"]["risk"]) == ("in review", "low")

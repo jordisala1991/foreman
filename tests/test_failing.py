@@ -6,15 +6,15 @@ from helpers import Env
 from test_github import GH
 from test_review_rules import commit, head, launched, take_note
 
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 
 
 def deliver(e: Env, name: str = "app.py") -> str:
-    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
     tick.tick(e.p)
     commit(e.task(tid)["worktree"], name, "# change\n")
-    backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+    registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
     e.review(tid)
     return tid
 
@@ -23,7 +23,7 @@ def fix(e: Env, tid: str, open_findings: int = 0) -> None:
     """The agent takes the note, commits a fix and delivers it; its review gives the verdict."""
     take_note(e, tid)
     commit(e.task(tid)["worktree"], "app.py", "# fix\n")
-    backlog.set_status(e.p, tid, "in review")
+    registry.backlog(e.p).set_status(tid, "in review")
     e.review(tid, open_findings)
 
 
@@ -54,7 +54,7 @@ class TestFailing:
         old = head(e, tid)
         take_note(e, tid)
         commit(e.task(tid)["worktree"], "app.py", "# fix\n")
-        backlog.set_status(e.p, tid, "in review")
+        registry.backlog(e.p).set_status(tid, "in review")
         e.hunt_then_review(tid)
         assert launched(e, tid)[-1].endswith("rule: failing tests or CI"), launched(e, tid)
         assert f"git diff {old} {head(e, tid)}" in e.calls()[-1]["argv"][-1]
@@ -90,7 +90,7 @@ class TestFailing:
         take_note(g.e, tid)
         commit(g.e.task(tid)["worktree"], "app.py", "# fix\n")
         g.set(ci="pass")
-        backlog.set_status(g.e.p, tid, "in review")
+        registry.backlog(g.e.p).set_status(tid, "in review")
         g.e.review(tid)
         tick.tick(g.e.p)
         i = g.e.task(tid)

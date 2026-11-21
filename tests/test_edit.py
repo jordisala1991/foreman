@@ -7,17 +7,17 @@ from unittest import mock
 import pytest
 from helpers import fm
 
-from foreman.core.tasks import backlog
+from foreman.providers import registry
 
 
 class TestEdit:
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
         self.e = env
-        self.tid = backlog.add(self.e.p, "t", detail="d", goal="c", criteria="a\nb")
+        self.tid = registry.backlog(self.e.p).add("t", detail="d", goal="c", criteria="a\nb")
 
     def status(self, status: str) -> None:
-        backlog.update(self.e.p, self.tid, status=status, plan_file="/x/p.md")
+        registry.backlog(self.e.p).update(self.tid, status=status, plan_file="/x/p.md")
 
     def events(self) -> str:
         f = self.e.p.state / "events.jsonl"
@@ -34,7 +34,7 @@ class TestEdit:
         assert (i["title"], i["detail"], i["acceptance"]) == ("new", "y", {"goal": "x", "criteria": "p\nq"})
 
     def test_criteria_on_a_triage_task_lets_it_go(self):
-        tid = backlog.add(self.e.p, "u", status="triage")
+        tid = registry.backlog(self.e.p).add("u", status="triage")
         with pytest.raises(SystemExit):
             fm(self.e.home, "go", tid)
         fm(self.e.home, "edit", tid, "--criteria", "a\nb")
@@ -52,7 +52,7 @@ class TestEdit:
                 assert "plan_file" not in i
 
     def test_a_blocked_task_is_not_said_to_be_planned_again(self):
-        backlog.update(self.e.p, self.tid, status="ready", plan_file="/x/p.md", blocked="x")
+        registry.backlog(self.e.p).update(self.tid, status="ready", plan_file="/x/p.md", blocked="x")
         out = fm(self.e.home, "edit", self.tid, "--criteria", "z")
         assert "unblock" in out
         assert "planned again" not in out
@@ -82,11 +82,11 @@ class TestEdit:
             assert (self.e.task(self.tid), self.events()) == (before, events)
 
     def test_no_field_or_unknown_id_fails(self):
-        before = backlog.load(self.e.p)
+        before = registry.backlog(self.e.p).load()
         for args in ((self.tid,), (self.tid, "--title", ""), ("FN-99", "--title", "x")):
             with pytest.raises(SystemExit):
                 fm(self.e.home, "edit", *args)
-        assert backlog.load(self.e.p) == before
+        assert registry.backlog(self.e.p).load() == before
 
     def test_refused_from_an_agent_session(self):
         with mock.patch.dict(os.environ, {"FOREMAN_TASK": "TY-9"}), pytest.raises(SystemExit):

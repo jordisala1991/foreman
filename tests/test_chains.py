@@ -13,6 +13,7 @@ from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog, chains
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.services.delivery import merge
 from foreman.steps import schedule
 from foreman.ui.panel import views
@@ -35,8 +36,8 @@ class TestChainParent:
         f.write_text(f.read_text().split("[[recurring]]")[0] + RULES)
         self.p = Project.load(env.home)
         util.write_json(self.p.state / "recurring.json", {"rules": SEEN})
-        tid = backlog.add(self.p, "one", criteria="c")
-        backlog.set_status(self.p, tid, "done")
+        tid = registry.backlog(self.p).add("one", criteria="c")
+        registry.backlog(self.p).set_status(tid, "done")
 
     def filed(self) -> str:
         (P,) = schedule.run(self.p, datetime.now())
@@ -101,16 +102,16 @@ class TestChainParent:
 
     def test_done_is_refused_while_a_step_is_open(self):
         P = self.launched()
-        backlog.add(self.p, "step", criteria="c", parent=P)
+        registry.backlog(self.p).add("step", criteria="c", parent=P)
         with pytest.raises(SystemExit):
             run_as(self.e, P, "ty-2", "done", "--summary", "s")
         assert self.e.task(P)["status"] == "backlog"
 
     def step(self, P: str) -> str:
         """Files a step from the chain's agent and returns its id."""
-        before = {i["id"] for i in backlog.tasks(backlog.load(self.p))}
+        before = {i["id"] for i in backlog.tasks(registry.backlog(self.p).load())}
         run_as(self.e, P, "ty-2", "add", "t", "--parent", P, "--detail", "d")
-        (sid,) = {i["id"] for i in backlog.tasks(backlog.load(self.p))} - before
+        (sid,) = {i["id"] for i in backlog.tasks(registry.backlog(self.p).load())} - before
         return sid
 
     def refused(self, P: str) -> str:
@@ -119,7 +120,7 @@ class TestChainParent:
         return str(x.value)
 
     def steps(self, P: str) -> list[backlog.Task]:
-        return [i for i in backlog.tasks(backlog.load(self.p)) if i.get("parent") == P]
+        return [i for i in backlog.tasks(registry.backlog(self.p).load()) if i.get("parent") == P]
 
     @pytest.mark.parametrize("flags", [(), ("--goal", "x", "--criteria", "y", "--model", "opus", "--effort", "high", "--type", "change", "--triage")])
     def test_a_step_is_filed_in_backlog_with_the_parents_fields(self, flags):
@@ -181,7 +182,7 @@ class TestChainParent:
         assert self.e.task(P)["chain"]["max_steps"] == 5
 
     def test_edit_max_steps_is_refused_on_a_task_that_is_not_a_chain_parent(self):
-        t = backlog.add(self.p, "plain", criteria="c")
+        t = registry.backlog(self.p).add("plain", criteria="c")
         assert "not a chain parent" in self.edit_refused(t, "--max-steps", "3")
         assert "chain" not in self.e.task(t)
 

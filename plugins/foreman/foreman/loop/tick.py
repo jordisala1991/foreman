@@ -73,12 +73,13 @@ def tick(p: Project) -> None:
             ("launch", lambda: launch_free(p)),
             ("mechanic", lambda: mechanic.run(p, rows)),
         ]
-    for name, step in steps:
-        beat(p, name)
-        try:
-            step()
-        except Exception as e:  # one broken step must not stop the others, health files it
-            util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": name, "error": repr(e), "trace": traceback.format_exc()[-2000:]})
+    with registry.tick_scope(p):  # the tick loads the backlog once
+        for name, step in steps:
+            beat(p, name)
+            try:
+                step()
+            except Exception as e:  # one broken step must not stop the others, health files it
+                util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": name, "error": repr(e), "trace": traceback.format_exc()[-2000:]})
 
 
 def run_pulls(p: Project) -> None:

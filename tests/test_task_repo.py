@@ -7,7 +7,7 @@ import pytest
 from helpers import Env, fm
 
 from foreman.core.project.config import Project
-from foreman.core.tasks import backlog
+from foreman.providers import registry
 from foreman.ui.panel import actions, views
 
 
@@ -22,10 +22,10 @@ def use(env: Env, *keys: str) -> None:
 
 
 def refused(env: Env, *argv: str) -> str:
-    before = backlog.load(env.p)
+    before = registry.backlog(env.p).load()
     with pytest.raises(SystemExit) as e:
         fm(env.home, *argv)
-    assert backlog.load(env.p) == before
+    assert registry.backlog(env.p).load() == before
     return str(e.value.code)
 
 
@@ -68,7 +68,7 @@ class TestTaskRepo:
 
     def test_several_repos_a_chain_step_needs_its_repo_and_is_not_told_to_triage(self):
         use(self.e, "app", "api")
-        P = backlog.add(self.e.p, "chain", criteria="a", chain={"lens": "rules", "max_steps": 5, "max_lines": 150})
+        P = registry.backlog(self.e.p).add("chain", criteria="a", chain={"lens": "rules", "max_steps": 5, "max_lines": 150})
         msg = refused(self.e, "add", "s", "--parent", P)
         assert "app|api" in msg and "--triage" not in msg
         tid = self.add("--parent", P, "--repo", "api")
@@ -85,15 +85,15 @@ class TestTaskRepo:
         use(self.e, "app", "api")
         tid = self.add("--criteria", "a", "--repo", "app")
         for status in ("ready", "backlog"):
-            backlog.update(self.e.p, tid, status=status, plan_file="/x/p.md")
+            registry.backlog(self.e.p).update(tid, status=status, plan_file="/x/p.md")
             fm(self.e.home, "edit", tid, "--repo", "api")
             t = self.e.task(tid)
             assert (t["status"], t["repo"], "plan_file" in t) == ("backlog", "api", False)
             fm(self.e.home, "edit", tid, "--repo", "app")
-        backlog.update(self.e.p, tid, status="triage")
+        registry.backlog(self.e.p).update(tid, status="triage")
         fm(self.e.home, "edit", tid, "--repo", "api")
         assert self.e.task(tid)["status"] == "triage"
-        backlog.update(self.e.p, tid, status="in progress")
+        registry.backlog(self.e.p).update(tid, status="in progress")
         refused(self.e, "edit", tid, "--repo", "app")
 
     def test_show_list_and_the_panel_data_show_each_tasks_repo(self):
@@ -133,12 +133,12 @@ class TestTaskRepo:
         assert "repo" not in self.e.task(tid) and self.e.task(tid)["status"] == "backlog"
         assert "app" in refused(self.e, "add", "n", "--repo", "web")
         assert "app" in refused(self.e, "edit", tid, "--repo", "web")
-        backlog.update(self.e.p, tid, status="ready", plan_file="/x/p.md")
+        registry.backlog(self.e.p).update(tid, status="ready", plan_file="/x/p.md")
         assert "nothing to change" in fm(self.e.home, "edit", tid, "--repo", "app")
         assert (self.e.task(tid)["status"], self.e.task(tid)["plan_file"]) == ("ready", "/x/p.md")
         assert "no task" in refused(self.e, "edit", "TY-99", "--repo", "app")
-        backlog.update(self.e.p, tid, status="in progress")
+        registry.backlog(self.e.p).update(tid, status="in progress")
         assert "in progress" in refused(self.e, "edit", tid, "--repo", "app")
-        backlog.update(self.e.p, tid, status="ready")
+        registry.backlog(self.e.p).update(tid, status="ready")
         assert "repo" not in self.shown(tid) and "repo" not in self.line(tid).split()
         assert "repos" not in views.state(self.e.p)
