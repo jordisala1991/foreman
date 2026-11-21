@@ -7,8 +7,8 @@ import pytest
 
 from foreman.core.tasks import backlog, board
 from foreman.core.tasks.backlog import BacklogError
-from foreman.core.tasks.ids import legacy_ids, task_id
-from foreman.core.tasks.issues import Issue, Linked, body_parts, stub, to_task
+from foreman.core.tasks.ids import legacy_ids, number, task_id
+from foreman.core.tasks.issues import Issue, Linked, body_of, body_parts, fields_of, joined, split, stub, stuck, to_task
 
 
 @pytest.fixture(autouse=True)
@@ -81,3 +81,41 @@ def test_ids():
     assert legacy_ids(None) == {}
     with pytest.raises(BacklogError, match="legacy-ids.json"):
         legacy_ids({"FN-140": "272"})
+    assert (number("FN", "FN-140", {"FN-140": 272}), number("FN", "FN-301", {}), number("FN", "XY-1", {})) == (272, 301, None)
+
+
+TASK: dict[str, Any] = {
+    "id": "FN-5", "title": "t", "status": "in progress", "blocked": "why", "detail": "d\n## sub\nmore", "priority": "high",
+    "acceptance": {"goal": "g", "criteria": "c1\n\n- c2", "verdict": "accepted"}, "model": "opus", "effort": "xhigh", "type": "bug",
+    "repo": "app", "source": "s:1", "parent": "FN-1", "blocked_by": ["FN-2"], "chain": {"lens": "l", "max_steps": 3, "max_lines": 40},
+    "agent": {"name": "a"}, "plan_file": "/p.md",
+}  # fmt: skip
+
+
+def test_body_of_reads_back():
+    assert body_parts(body_of(TASK, "")) == ("g", "c1\n\n- c2", "d\n## sub\nmore")
+    assert body_of({"detail": "d"}, "<!-- foreman:legacy-id=FN-140 -->\n## Detail\nold") == "<!-- foreman:legacy-id=FN-140 -->\n\n## Detail\nd"
+    assert body_of({"detail": ""}, "") == ""
+
+
+def test_fields_of_reads_back():
+    assert fields_of(TASK) == {
+        "Status": "In progress", "Priority": "high", "Blocked": "why", "Model": "opus", "Effort": "xhigh", "Task type": "bug", "Repo key": "app",
+        "Source": "s:1", "Lens": "l", "Max steps": 3, "Max lines": 40,
+    }  # fmt: skip
+    i = Issue(5, "t", "", "OPEN", "", "2026-11-21T08:08:03Z", "", None, (), fields_of(TASK), True)
+    assert fields_of(to_task(i, "FN", {})) == fields_of(TASK)
+    assert fields_of({"status": "triage", "priority": "none", "blocked": ""}) == {"Status": "Triage"}
+
+
+def test_split_and_joined():
+    on, local = split(TASK)
+    assert local == {"agent": {"name": "a"}, "plan_file": "/p.md", "acceptance": {"verdict": "accepted"}}
+    assert on["acceptance"] == {"goal": "g", "criteria": "c1\n\n- c2"} and "agent" not in on
+    assert joined(on, local) == TASK
+
+
+def test_stuck():
+    assert stuck(TASK, dict(TASK)) == []
+    assert stuck(TASK, {**TASK, "priority": "none", "blocked_by": ["FN-3"], "detail": "x"}) == ["body", "Priority", "blocked_by"]
+    assert stuck(TASK, {**TASK, "blocked_by": ["FN-2"], "detail": "d\n## sub\nmore\n"}) == []  # read back the same

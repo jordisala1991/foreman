@@ -1,12 +1,13 @@
-"""A stand-in for `proc.run` that answers `gh` as GitHub does for the backlog on GitHub (providers/github/api, board, issues):
-a Board (fields, Status options, workflows), the repo's labels, its issues and pull requests, counters of reads and
-mutations, and a switchable rate limit. Other programs pass through to the real `proc.run`. Install it with
-`monkeypatch.setattr(proc, "run", fake)`; `board_env()` is a project whose foreman.toml has `[backlog]`."""
+"""A stand-in for `proc.run` that answers `gh` as GitHub does for the backlog on GitHub (providers/github/api, board, issues,
+writes): a Board (fields, Status options, workflows), the repo's labels, its issues and pull requests, each write changing
+them, counters of requests, reads and mutations, field writes it drops, the closes it saw, and a switchable rate limit.
+Other programs pass through to the real `proc.run`. Install it with `monkeypatch.setattr(proc, "run", fake)`; `board_env()`
+is a project whose foreman.toml has `[backlog]`."""
 
 import json
 import re
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -45,7 +46,8 @@ class Spec:
     blockers: list[int] = field(default_factory=list[int])
     fields: dict[str, str | int] = field(default_factory=dict[str, str | int])
     carded: bool = True
-    labels: int = 0
+    labels: list[str] = field(default_factory=list[str])
+    labels_total: int | None = None  # labels.totalCount, when it is not len(labels)
     subs: int = 0
     blocked_total: int | None = None  # blockedBy.totalCount, when it is not len(blockers)
 
@@ -68,7 +70,12 @@ class FakeGh:
         self.reset = int(time.time()) + 3600
         self.reads = 0  # Open and Issue requests
         self.mutations = 0
+        self.graphql = 0  # every GraphQL request
+        self.drop: set[str] = set()  # field names whose writes are silently ignored
+        self.closes: list[tuple[int, str, str]] = []  # (number, reason, the Status written in the same request)
+        self.hook: Callable[[str], None] = lambda op: None  # called with each request's name before it runs
         self.calls: list[list[str]] = []  # every gh argv
+        self.query = ""  # the request being answered
 
     @staticmethod
     def _opts(names: Sequence[str]) -> list[dict[str, str]]:
@@ -86,6 +93,8 @@ class FakeGh:
             return REAL_RUN(args, cwd=cwd, timeout=timeout, env=env, input=input)
         a = list(args[1:])
         self.calls.append(a)
+        if a[:2] == ["api", "graphql"]:
+            self.graphql += 1
         if a[:2] == ["api", "rate_limit"]:
             return proc.Result(0, f"{self.reset}\n", "")
         if self.limited:
@@ -98,6 +107,8 @@ class FakeGh:
         req = json.loads(input or "{}")
         m = re.match(r"\s*(?:query|mutation) (\w+)", req["query"])
         assert m, req["query"]
+        self.hook(m[1])
+        self.query = req["query"]
         out: dict[str, Any] = getattr(self, f"_{m[1]}")(req["variables"])
         return proc.Result(1 if "errors" in out else 0, json.dumps(out), "gh: errors\n" if "errors" in out else "")
 
@@ -137,7 +148,9 @@ class FakeGh:
             "pageInfo": {"hasNextPage": self.next_page},
             "nodes": [self.node(s) for s in found],
         }
-        return {"data": {"repository": {"issues": issues}, "rateLimit": {"cost": 2}}}
+        repo = {"id": "R", "label": {"id": "L"} if board.LABEL in self.labels else None, "issues": issues}
+        project = {"id": "P", "fields": {"nodes": list(self.fields.values())}}
+        return {"data": {"repository": repo, "repositoryOwner": {"projectV2": project}, "rateLimit": {"cost": 2}}}
 
     def _Issue(self, v: dict[str, Any]) -> dict[str, Any]:
         self.reads += 1
@@ -155,12 +168,12 @@ class FakeGh:
         return {"number": n, "title": s.title, "state": s.state, "stateReason": s.reason, "createdAt": s.created, "closedAt": s.closed}
 
     def node(self, s: Spec) -> dict[str, Any]:
-        card: dict[str, Any] = {"project": {"number": 1, "owner": {"login": "o"}}}
+        card: dict[str, Any] = {"id": f"IT{s.number}", "project": {"number": 1, "owner": {"login": "o"}}}
         for i, f in enumerate(board.FIELDS):
             val = s.fields.get(f.name)
             kind = FIELD_KIND[f.name]
             card[f"f{i}"] = None if val is None else {"name": val} if kind == "SINGLE_SELECT" else {"text": val} if kind == "TEXT" else {"number": float(val)}
-        other = {"project": {"number": 7, "owner": {"login": "o"}}, **{f"f{i}": None for i in range(len(board.FIELDS))}}
+        other = {"id": "IT-other", "project": {"number": 7, "owner": {"login": "o"}}, **{f"f{i}": None for i in range(len(board.FIELDS))}}
         return {
             "number": s.number,
             "title": s.title,
@@ -169,9 +182,79 @@ class FakeGh:
             "stateReason": s.reason,
             "createdAt": s.created,
             "closedAt": s.closed,
-            "labels": {"totalCount": s.labels},
+            "id": f"I{s.number}",
+            "labels": {"totalCount": len(s.labels) if s.labels_total is None else s.labels_total, "nodes": [{"name": n} for n in s.labels]},
             "parent": None if s.parent is None else {"number": s.parent},
             "subIssues": {"totalCount": s.subs},
             "blockedBy": {"totalCount": len(s.blockers) if s.blocked_total is None else s.blocked_total, "nodes": [self.linked(n) for n in s.blockers]},
             "projectItems": {"nodes": [other, card] if s.carded else [other]},
         }
+
+    # --- the writes (providers/github/writes.py), each changing a Spec ---
+
+    def _spec(self, node: str) -> Spec:
+        return self.issues[int(node.removeprefix("IT").removeprefix("I"))]
+
+    def _File(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.mutations += 1
+        n = max([*self.issues, *self.prs], default=0) + 1
+        self.add(n, title=v["title"], body=v["body"], carded=False, created=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        return {"data": {"createIssue": {"issue": {"id": f"I{n}", "number": n}}}}
+
+    def _Card(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.mutations += 1
+        self._spec(v["issue"]).carded = True
+        return {"data": {"addProjectV2ItemById": {"item": {"id": v["issue"].replace("I", "IT", 1)}}}}
+
+    def _Body(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.mutations += 1
+        s = self._spec(v["id"])
+        s.title, s.body = v["title"], v["body"]
+        return {"data": {"updateIssue": {"clientMutationId": None}}}
+
+    def _Fields(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.mutations += 1
+        s = self._spec(v["item"])
+        by_id = {f["id"]: f for f in self.fields.values()}
+        for _, fid, key, val in re.findall(
+            r"(\w+):updateProjectV2ItemFieldValue\(input:\{projectId:\$project,itemId:\$item,fieldId:\$(\w+),value:\{(\w+):\$(\w+)\}", self.query
+        ):
+            f, value = by_id[v[fid]], v[val]
+            if f["name"] not in self.drop:
+                s.fields[f["name"]] = (
+                    next(o["name"] for o in f["options"] if o["id"] == value) if key == "singleSelectOptionId" else int(value) if key == "number" else value
+                )
+        for _, fid in re.findall(r"(\w+):clearProjectV2ItemFieldValue\(input:\{projectId:\$project,itemId:\$item,fieldId:\$(\w+)\}", self.query):
+            if (name := by_id[v[fid]]["name"]) not in self.drop:
+                s.fields.pop(name, None)
+        if "closeIssue" in self.query:
+            s.state, s.reason, s.closed = "CLOSED", v["reason"], time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            self.closes.append((s.number, v["reason"], str(s.fields.get("Status", ""))))
+        return {"data": {}}
+
+    def _Links(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.mutations += 1
+        s = self._spec(v["issue"])
+        if "addSubIssue" in self.query:
+            s.parent = self._spec(v["parent"]).number
+        for op, name in re.findall(r"\w+:(addBlockedBy|removeBlockedBy)\(input:\{issueId:\$issue,blockingIssueId:\$(\w+)\}", self.query):
+            n = self._spec(v[name]).number
+            s.blockers = [*s.blockers, n] if op == "addBlockedBy" else [b for b in s.blockers if b != n]
+        return {"data": {}}
+
+    def _Label(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.mutations += 1
+        s = self._spec(v["id"])
+        s.labels = [*s.labels, board.LABEL]
+        return {"data": {}}
+
+    def _Unlabel(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.mutations += 1
+        s = self._spec(v["id"])
+        s.labels = [x for x in s.labels if x != board.LABEL]
+        return {"data": {}}
+
+    def _Nodes(self, v: dict[str, Any]) -> dict[str, Any]:
+        self.reads += 1
+        found = {f"n{n}": {"id": f"I{n}"} if int(n) in self.issues else None for n in re.findall(r"n(\d+):issue", self.query)}
+        return {"data": {"repository": found}}

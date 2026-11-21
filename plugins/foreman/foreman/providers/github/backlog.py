@@ -1,26 +1,27 @@
-"""The backlog port's GitHub adapter, reads only (DESIGN.md «The backlog on GitHub», D3): the open tasks are the open issues
-with a card on the project's Board, read in one request; the closed ones come from the old file and `<home>/state/closed.json`;
-a blocker closed on GitHub that neither holds is a stub. Shared (a tick, `registry.tick_scope`): read once, then each `load()`
-is a copy. Every write refuses until D4 builds them."""
+"""The backlog port's GitHub adapter (DESIGN.md «The backlog on GitHub»): the open tasks are the open issues with a card on
+the project's Board, read in one request; the closed ones come from the old file and `<home>/state/closed.json`; a blocker
+closed on GitHub that neither holds is a stub; each task's local keys and the questions are local files (`files.Files`).
+Every write goes through `edit()`, which writes only what changed and reads it back (`apply`); `add` files. The pass's read
+(a shared instance's first, `registry.tick_scope`), every write and its snapshot update run under the backlog lock
+`<home>/state/backlog.lock`; a shared instance keeps its read, so a tick reads the Board once."""
 
+import contextlib
 import copy
-import re
-import threading
-from collections.abc import Callable
-from contextlib import AbstractContextManager
+import dataclasses
+from collections.abc import Callable, Generator
 from typing import Any, Unpack
 
 from ... import util
 from ...core.project.backlog_table import Board
 from ...core.project.config import Project
-from ...core.tasks import ids
-from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, Task, empty, get
-from ...core.tasks.issues import Issue, stub, to_task
+from ...core.tasks import changes, drags, ids
+from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, Task, empty, event, get, tasks
+from ...core.tasks.issues import Issue, joined, stub
 from ...core.tasks.questions import Question
 from .api import Api
-from .issues import read_one, read_open
-
-READ_ONLY = "the backlog on GitHub is read-only until its writes are built (FN-140)"
+from .apply import Where, apply, file
+from .files import Files
+from .issues import Read, read_one, read_open
 
 
 class GitHubBacklog:
@@ -31,64 +32,93 @@ class GitHubBacklog:
         self.shared = shared
         self.api = Api(p.state / "github-rate-limit.json")
         self.prefix = str(p.get("project", "prefix"))
-        self.kept: Data | None = None
-        self.guard = threading.Lock()
+        self.files = Files(p.state)
+        self.lock = p.state / "backlog"  # util.file_lock adds .lock
+        self.kept: tuple[Read, Data] | None = None  # a shared instance's Board read and its data
 
-    def _legacy(self) -> dict[str, int]:
-        return ids.legacy_ids(util.read_json(self.p.home / "legacy-ids.json", None))
+    def _where(self) -> Where:
+        return Where(self.api, self.b, self.prefix, ids.legacy_ids(util.read_json(self.p.home / "legacy-ids.json", None)), self.files)
 
-    def _task(self, i: Issue, legacy: dict[str, int]) -> Task:
-        return to_task(i, self.prefix, legacy)
-
-    def _read(self) -> Data:
-        legacy = self._legacy()
-        found = read_open(self.api, self.b)
+    def _data(self, read: Read) -> Data:
+        """The backlog from the Board's read, the closed tasks and the local files, read now."""
+        w, runs = self._where(), self.files.runs()
         closed = [t for t in self.old()["tasks"] if t["status"] in CLOSED]
         held = {t["id"] for t in closed}  # an id is looked up in the old file before the number, as `find` does
-        closed += self._closed_json()
-        stubs = [stub(x, self.prefix, legacy) for i in found for x in i.blockers if x.state == "CLOSED"]
+        mine = [t for t in map(w.task, read.issues) if t["id"] not in held]
+        stubs = [stub(x, self.prefix, w.legacy) for i in read.issues for x in i.blockers if x.state == "CLOSED"]
         out: dict[str, Task] = {}
-        for t in [*(t for t in (self._task(i, legacy) for i in found) if t["id"] not in held), *closed, *stubs]:
+        for t in [*(joined(t, runs.get(t["id"], {})) for t in mine), *closed, *(joined(t, runs.get(t["id"], {})) for t in self.files.closed()), *stubs]:
             out.setdefault(t["id"], t)
-        return {**empty(), "tasks": list(out.values())}
+        decisions, resolved = self.files.questions()
+        return {**empty(), "tasks": list(out.values()), "decisions": decisions, "decisions_resolved": resolved}
 
-    def _closed_json(self) -> list[Task]:
-        """The tasks fm closed on GitHub, as it kept them (D4 writes the file): a list of tasks, each with its id and status."""
-        f = self.p.state / "closed.json"
-        raw: object = util.read_json(f, [])
-        rows = util.json_list(raw)
-        tasks = [o for t in rows if (o := util.json_object(t)) is not None]
-        if rows is not raw or len(tasks) != len(rows) or not all(isinstance(t.get("id"), str) and t.get("status") in CLOSED for t in tasks):
-            raise BacklogError(f"{f}: expected a list of closed tasks, each with its id and status")
-        return tasks
+    def _fresh(self) -> tuple[Read, Data]:
+        r = read_open(self.api, self.b)
+        return r, self._data(r)
+
+    def _keep(self, r: Read) -> tuple[Read, Data]:
+        self.kept = (r, self._data(r))
+        return self.kept
+
+    def _board(self, fresh: bool = False) -> tuple[Read, Data]:
+        """Under the lock: the Board's read and the data. A shared instance's first read is the pass's; it keeps the
+        read, and reads again only when `fresh`."""
+        if not self.shared:
+            return self._fresh()
+        if self.kept is None:
+            return self._keep(self._pass(read_open(self.api, self.b)))
+        return self._keep(read_open(self.api, self.b)) if fresh else self.kept
+
+    def _pass(self, read: Read) -> Read:
+        """The cards the owner dragged since the snapshot: a Go is let in, any other drag is an error line and the card
+        goes back. No snapshot yet: nothing is a drag. Then the snapshot is the open tasks' statuses."""
+        w = self._where()
+        snap = self.files.snapshot()
+        if snap is not None:
+            before = self._data(read)
+            after = copy.deepcopy(before)
+            lets: list[str] = []
+            refused: list[str] = []
+            for d in drags.found(snap, {t["id"]: t["status"] for t in map(w.task, read.issues)}):
+                i = get(after, d.id)
+                if why := drags.verdict(d, i, tasks(after), self.p.repo_keys):
+                    i["status"] = d.was
+                    refused.append(why)
+                else:
+                    i["blocked"] = ""
+                    lets.append(d.id)
+            read = apply(w, read, before, after)
+            for tid in lets:
+                event(self.p, tid, "→ backlog: let in by the owner (dragged on the Board)")
+            for why in refused:
+                util.append_jsonl(self.p.state / "errors.jsonl", {"time": util.now(), "step": "board", "error": why, "trace": ""})
+        self.files.save_snapshot({t["id"]: t["status"] for t in map(w.task, read.issues)})
+        return read
 
     def load(self) -> Data:
         if not self.shared:
-            return self._read()
-        with self.guard:
-            if self.kept is None:
-                self.kept = self._read()
-            return copy.deepcopy(self.kept)
+            return self._fresh()[1]
+        kept = self.kept
+        if kept is None:
+            with util.file_lock(self.lock):
+                kept = self._board()
+        return copy.deepcopy(kept[1])
 
     def reload(self) -> Data:
-        d = self._read()
-        if self.shared:
-            with self.guard:
-                self.kept = copy.deepcopy(d)
-        return d
+        with util.file_lock(self.lock):
+            return copy.deepcopy(self._board(fresh=True)[1])
 
     def find(self, tid: str) -> Task:
-        legacy = self._legacy()
+        legacy = self._where().legacy
         if tid in legacy:
             return self._live(tid, legacy[tid], legacy)
         try:
             return get(self.old(), tid)
         except BacklogError:
             pass
-        m = re.fullmatch(rf"{re.escape(self.prefix)}-(\d+)", tid)
-        if m is None:
+        n = ids.number(self.prefix, tid, {})
+        if n is None:
             raise BacklogError(f"no task {tid}")
-        n = int(m[1])
         if held := next((k for k, v in legacy.items() if v == n), ""):
             raise BacklogError(f"no task {tid}: #{n} is {held}")
         return self._live(tid, n, legacy)
@@ -101,37 +131,84 @@ class GitHubBacklog:
             raise BacklogError(f"no task {tid}: there is no #{n}")
         if not i.carded:
             raise BacklogError(f"no task {tid}: #{n} is not on the Board")
-        return self._task(i, legacy)
+        return joined(self._where().task(i), self.files.runs().get(tid, {}))
 
     def create(self) -> None:
         """Nothing to create: the repo and the Board exist (`foreman backlog setup` makes the Board fm's)."""
 
     def local(self, tid: str) -> Local | None:
-        return None  # local state on a Board project is D4's
+        try:
+            run = self.files.runs().get(tid)
+        except BacklogError:
+            return None
+        return None if run is None else Local(run.get("worktree", ""), run.get("branch", ""))
 
-    def edit(self) -> AbstractContextManager[Data]:
-        raise BacklogError(READ_ONLY)
+    @contextlib.contextmanager
+    def edit(self) -> Generator[Data, None, None]:
+        """The backlog to change: a tick's from its kept read, else read now; the local files always read now. When the
+        block ends, what changed is written and read back."""
+        with util.file_lock(self.lock):
+            read = self._board()[0]
+            before = self._data(read)
+            after = copy.deepcopy(before)
+            yield after
+            read = apply(self._where(), read, before, after)
+            if self.shared:
+                self._keep(read)
 
     def add(self, title: str, *, status: str = "backlog", **f: Unpack[NewTask]) -> str:
-        raise BacklogError(READ_ONLY)
+        task = changes.filed(title, status, f)
+        with util.file_lock(self.lock):
+            read, d = self._board(fresh=True)
+            if changes.known(d, task.get("source")):
+                return ""
+            w = self._where()
+            back = file(w, read, task)
+            tid = w.task(back)["id"]
+            if (snap := self.files.snapshot()) is not None:
+                self.files.save_snapshot({**snap, tid: task["status"]})
+            if self.shared:
+                self._keep(dataclasses.replace(read, issues=(*read.issues, back)))
+        event(self.p, tid, f"filed ({task['status']}): {title}")
+        return tid
 
     def set_status(self, tid: str, status: str, why: str = "", **keys: Any) -> Task:
-        raise BacklogError(READ_ONLY)
+        with self.edit() as d:
+            moved = changes.moved(d, tid, status, keys)
+            i = get(d, tid)
+        if moved:
+            event(self.p, tid, f"→ {status}" + (f": {why}" if why else ""))
+        return i
 
     def update(self, tid: str, **keys: Any) -> Task:
-        raise BacklogError(READ_ONLY)
+        with self.edit() as d:
+            i = get(d, tid)
+            i.update(keys)
+        return i
 
     def record_misled(self, tid: str, role: str, text: str) -> None:
-        raise BacklogError(READ_ONLY)
+        if not changes.misled_text(text):
+            return
+        with self.edit() as d:
+            changes.misled(d, tid, role, text)
 
     def ask(self, tid: str, agent: str, text: str, **f: Unpack[Question]) -> str:
-        raise BacklogError(READ_ONLY)
+        with self.edit() as d:
+            qid = changes.asked(d, tid, agent, text, f)
+        event(self.p, tid, f"asks the owner ({f.get('kind', 'question')}): {text}")
+        return qid
 
     def answer(self, qid: str, text: str, by: str = "owner (panel)") -> dict[str, Any]:
-        raise BacklogError(READ_ONLY)
+        with self.edit() as d:
+            q = changes.answered(d, qid, text, by)
+        event(self.p, q["task"], f"owner answered {qid}: {text}")
+        return q
 
     def note(self, tid: str, text: str, source: str) -> None:
-        raise BacklogError(READ_ONLY)
+        with self.edit() as d:
+            changes.noted(d, tid, text, source)
+        event(self.p, tid, f"note from {source}: {text}")
 
     def mark_delivered(self, qid: str) -> None:
-        raise BacklogError(READ_ONLY)
+        with self.edit() as d:
+            changes.delivered(d, qid)
