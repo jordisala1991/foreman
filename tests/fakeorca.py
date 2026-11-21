@@ -6,7 +6,8 @@ exit 1; a worker's pane in `worker-show` and its `ps` row share only the part be
 SessionStart hook of the worktree's `.claude/settings.local.json`, as claude does in the chat.
 
 The test copies it with `FakeOrca(folder)` and drives it: `down()`, `restart()` (every chat ends; the next send answers a new dispatch id),
-`terminal_mode()`, `set_row(dispatch, word)`, `settle(dispatch)`, `chat_path(dispatch)`, `age(dispatch, path)`.
+`terminal_mode()`, `set(resumes=False)` (a send to an ended chat only queues), `set_row(dispatch, word)`, `settle(dispatch)`,
+`chat_path(dispatch)`, `age(dispatch, path)`.
 A chat keeps the `PATH` of the worktree's settings file from when its process started (`worker-start`, or `send` to a chat
 that ended); a rewritten file reaches a running chat's hooks and env vars, not its `PATH`."""
 
@@ -23,7 +24,7 @@ HERE = Path(__file__).resolve()
 
 
 def fresh() -> dict[str, Any]:
-    return {"running": True, "opens": True, "mode": "structured", "repos": [], "terminals": [], "runs": [], "workers": {}, "n": 0, "fail": []}
+    return {"running": True, "opens": True, "mode": "structured", "repos": [], "terminals": [], "runs": [], "workers": {}, "n": 0, "fail": [], "resumes": True}
 
 
 class FakeOrca:
@@ -204,7 +205,7 @@ def send(s: State, a: list[str], n: int) -> dict[str, Any]:
     if flag(a, "--from") not in s["terminals"]:
         raise KeyError("consumer_fenced")
     w["state"] = "working"
-    if w["live"]:
+    if w["live"] or not s["resumes"]:
         return {"messageId": f"msg_{n}"}
     new: dict[str, Any] = {**w, "live": True, "chat": f"structured-agent-session-{n}"}  # Orca starts it again: claude --resume, same session
     new["path"] = settings_path(new["worktree"])

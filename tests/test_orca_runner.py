@@ -287,6 +287,14 @@ def test_a_relaunch_of_a_settled_chat_restarts_it_too(s: Setup):
     assert new.dispatch != ref.dispatch and new.session == ref.session
 
 
+def test_a_relaunch_that_orca_does_not_resume_is_an_error(s: Setup):
+    ref = s.start()
+    s.orca.set(resumes=False)
+    with pytest.raises(RunnerError) as refused:
+        Orca(s.p).relaunch(ref, Agent("TY-1", "ty-1", "sonnet", "low", "t"), "carry on", s.wt)
+    assert "did not resume" in str(refused.value)
+
+
 def test_relaunch_names_orca_when_its_listing_is_unreadable(s: Setup):
     tid, _ = on_a_task(s)
     s.orca.down(opens=False)

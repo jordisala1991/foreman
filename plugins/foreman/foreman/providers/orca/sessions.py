@@ -72,7 +72,10 @@ class Orca:
         session under a new dispatch."""
         settings.carry(self.p, agent, cwd)
         self.stop(ref)
-        return self.send(ref, message, cwd)
+        new = self.send(ref, message, cwd)
+        if new.dispatch == ref.dispatch:
+            raise RunnerError(f"Orca took the message but did not resume session {ref.short}: its chat is stopped")
+        return new
 
     def rows(self) -> OrcaRows | None:
         """None when Orca is not running or `ps` fails: the panel reads this, so it never opens Orca."""
