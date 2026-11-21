@@ -2,10 +2,11 @@
 backlogfile, and the runners claude and orca) and how to tell which provider applies."""
 
 import re
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ..core.project.backlog_table import Board
 from ..core.project.config import Project
 from ..core.rules import decide
 from . import MERGES, PRS, ConfigError, Provider
@@ -13,6 +14,7 @@ from .backlog import Backlog
 from .backlogfile import BacklogFile
 from .claude.sessions import Claude
 from .github import board
+from .github import cutover as moving
 from .github.api import Api
 from .github.backlog import GitHubBacklog
 from .github.provider import GitHub
@@ -48,6 +50,13 @@ def setup_board(p: Project) -> list[str]:
     if p.board is None:
         raise ConfigError("no [backlog] table in foreman.toml")
     return board.setup(p.board, Api(p.state / "github-rate-limit.json"))
+
+
+def cutover(p: Project, b: Board, dry_run: bool) -> Iterator[str]:
+    """`foreman backlog cutover`: the old file's open tasks onto the Board `b`, then foreman.toml points at it."""
+    if p.board is not None:
+        raise ConfigError("[backlog] is already in foreman.toml: the backlog is on GitHub")
+    return moving.run(p, b, BacklogFile(p).load(), dry_run)
 
 
 @contextmanager

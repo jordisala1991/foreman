@@ -123,8 +123,16 @@ def _operations(c: Command) -> None:
     s = c("watch", "print one line each time something starts needing the owner (--once: exit after the first)")
     s.add_argument("--once", action="store_true")
     s = c("health", "the health checks, from outside the loop")
-    s = c("backlog", "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows")
-    s.add_argument("action", choices=("setup",))
+    s = c(
+        "backlog",
+        "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows;"
+        " `cutover --repo OWNER/NAME --project N` moves the open tasks of the local file there",
+    )
+    s.add_argument("action", choices=("setup", "cutover"))
+    s.add_argument("--repo", help="cutover: the repo whose issues become the tasks (owner/name)")
+    s.add_argument("--project", type=int, dest="board", metavar="N", help="cutover: the Board's number (not the global --project NAME)")
+    s.add_argument("--owner", help="cutover: the Board owner's login (default: the repo's owner)")
+    s.add_argument("--dry-run", action="store_true", help="cutover: print what would be filed and write nothing")
     s = c("metrics", "cost, time, rework, questions, what misled agents")
     s = c("lock", 'use a shared resource: foreman lock NAME run "what" command…, or foreman lock NAME status')
     s.add_argument("name")

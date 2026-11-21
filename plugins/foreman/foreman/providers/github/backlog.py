@@ -16,7 +16,7 @@ from ...core.project.backlog_table import Board
 from ...core.project.config import Project
 from ...core.tasks import changes, drags, ids
 from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, Task, empty, event, get, tasks
-from ...core.tasks.issues import Issue, joined, stub
+from ...core.tasks.issues import Issue, joined, stub, with_old_blockers
 from ...core.tasks.questions import Question
 from .api import Api
 from .apply import Where, apply, file
@@ -41,10 +41,10 @@ class GitHubBacklog:
 
     def _data(self, read: Read) -> Data:
         """The backlog from the Board's read, the closed tasks and the local files, read now."""
-        w, runs = self._where(), self.files.runs()
-        closed = [t for t in self.old()["tasks"] if t["status"] in CLOSED]
+        w, runs, old = self._where(), self.files.runs(), {t["id"]: t for t in self.old()["tasks"]}
+        closed = [t for t in old.values() if t["status"] in CLOSED]
         held = {t["id"] for t in closed}  # an id is looked up in the old file before the number, as `find` does
-        mine = [t for t in map(w.task, read.issues) if t["id"] not in held]
+        mine = [with_old_blockers(t, old) for t in map(w.task, read.issues) if t["id"] not in held]
         stubs = [stub(x, self.prefix, w.legacy) for i in read.issues for x in i.blockers if x.state == "CLOSED"]
         out: dict[str, Task] = {}
         for t in [*(joined(t, runs.get(t["id"], {})) for t in mine), *closed, *(joined(t, runs.get(t["id"], {})) for t in self.files.closed()), *stubs]:
@@ -131,7 +131,8 @@ class GitHubBacklog:
             raise BacklogError(f"no task {tid}: there is no #{n}")
         if not i.carded:
             raise BacklogError(f"no task {tid}: #{n} is not on the Board")
-        return joined(self._where().task(i), self.files.runs().get(tid, {}))
+        old = {t["id"]: t for t in self.old()["tasks"]}
+        return joined(with_old_blockers(self._where().task(i), old), self.files.runs().get(tid, {}))
 
     def create(self) -> None:
         """Nothing to create: the repo and the Board exist (`foreman backlog setup` makes the Board fm's)."""

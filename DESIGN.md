@@ -520,14 +520,15 @@ Drafted in `<home>/reports/FN-204.md`, to be filed under FN-203 in triage:
 2. The Orca adapter (after 1; gated by Q1-Q5).
 3. Seen acting in a real project (after 2).
 
-## The backlog on GitHub (FN-234: defined; D2, D3 and D4 built)
+## The backlog on GitHub (FN-234: defined; D2, D3, D4 and D6 built)
 
 FN-140 moves a project's backlog from `<home>/backlog.json` to the issues of its repo and one **Board** (a GitHub Project v2).
 This section is the definition: where every key of a task goes, the statuses, the ids, the calls a pass makes, where the
 questions live, and the subtasks that build it. D2 (the port), D3 (`[backlog]`, `foreman backlog setup` and the reads, in
 `providers/github/`: api, board, issues, backlog) and D4 (the writes: one diff-based `edit()` read back, in apply, writes and files;
-the pure parts in `core/tasks/`: changes, drags) are built; the rest is not yet; until D6 the lines about `backlog.json` elsewhere in
-this document stay true. The evidence log is `<home>/plans/FN-234-evidence.md` («E1»-«E8»); the reference design (how the
+the pure parts in `core/tasks/`: changes, drags) and D6 (`foreman backlog cutover --repo OWNER/NAME --project N [--owner LOGIN]
+[--dry-run]`: the rules in `core/tasks/cutover.py`, the filing in `providers/github/cutover.py`) are built; for a project still on
+its local file (the sandbox, the tests, fm until its cutover) the lines about `backlog.json` elsewhere in this document stay true. The evidence log is `<home>/plans/FN-234-evidence.md` («E1»-«E8»); the reference design (how the
 reference workspace keeps its backlog on GitHub) is `<home>/plans/FN-140-reference.md`.
 
 ### Decisions
@@ -1105,10 +1106,10 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 | steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
 | services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo, the runner and the backlog (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`, `registry.backlog(p)`; `registry.tick_scope(p)` makes a tick load the backlog once) (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review, api, board, issues, backlog, apply, writes, files · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
+| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review, api, board, issues, backlog, apply, writes, files, cutover · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo · runner · backlog | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`); `Backlog`, every read and write of the backlog (tasks cross it as dicts) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
-| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring, board, ids, issues, changes, drags · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring, board, ids, issues, changes, drags, cutover · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
 Core areas, in their `depends_on` order: `project` (foreman.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
 `tasks` (the backlog's vocabulary and pure functions, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
