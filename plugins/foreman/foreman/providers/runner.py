@@ -161,6 +161,11 @@ def settings(p: Project, tid: str, agent: str) -> dict[str, Any]:
     return s
 
 
+def unreadable(p: Project) -> str:
+    """What fm says when the runner's session listing cannot be read: it names the runner `[agents] runner` chose."""
+    return f"{p.get('agents', 'runner')} agents is unreadable"
+
+
 def stop_live(p: Project, tid: str, ref: SessionRef | None, runner: Runner, rows: Rows) -> None:
     """Best-effort: stops a recorded agent's session unless the runner shows it ended. A failure is noted on the task,
     never raised: cleanup must not block a merge, a cancel or a review."""
