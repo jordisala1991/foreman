@@ -17,6 +17,7 @@ from helpers import Env
 from foreman import proc
 from foreman.core.project.config import Project
 from foreman.core.tasks import board
+from foreman.providers import registry
 
 REAL_RUN = proc.run
 FIELD_KIND = {f.name: f.kind for f in board.FIELDS}
@@ -29,6 +30,12 @@ def board_env() -> Env:
         f.write('[backlog]\nkind = "github"\nrepo = "o/r"\nproject = 1\n')
     e.p = Project.load(e.home)
     return e
+
+
+def passed(e: Env) -> None:
+    """The loop's pass: one read of the Board, which saves the snapshot the panel and `watch` show."""
+    with registry.tick_scope(e.p):
+        registry.backlog(e.p).load()
 
 
 @dataclass

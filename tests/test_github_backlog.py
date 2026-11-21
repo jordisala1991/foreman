@@ -7,7 +7,7 @@ import time
 from datetime import date, timedelta
 
 import pytest
-from fakegh import FakeGh, board_env
+from fakegh import FakeGh, board_env, passed
 from helpers import Env, fm
 
 from foreman import proc, util
@@ -59,6 +59,7 @@ def test_ids(fake: FakeGh):
     old.update("TY-1", id="TY-100", status="done", closed="2026-01-01")
     assert [ln.split()[0] for ln in fm(e.home, "list").splitlines()] == ["TY-140", "TY-301"]
     assert json.loads(fm(e.home, "show", "TY-140"))["title"] == "migrated"
+    passed(e)
     assert views.task(e.p, "TY-140")["task"]["title"] == "migrated"
     assert json.loads(fm(e.home, "show", "TY-100"))["title"] == "an old closed one"
     assert json.loads(fm(e.home, "show", "TY-305"))["status"] == "done"
@@ -90,6 +91,7 @@ def test_closed_tasks_from_the_old_file_and_closed_json(fake: FakeGh):
         "closed": date.today().isoformat(),
     }
     util.write_json(e.p.state / "closed.json", [task])
+    passed(e)
     assert [t["id"] for t in views.state(e.p)["tasks"]] == ["TY-301", "TY-1", "TY-290"]
     assert {r["id"] for r in metrics.per_task(e.p) if r["status"] == "done"} == {"TY-1", "TY-2", "TY-290"}
 
@@ -157,6 +159,7 @@ def test_no_closed_at_no_closed_date(fake: FakeGh):
     fake.add(5, title="dragged to Done", fields={"Status": "Done"})
     fake.add(6, title="closed, no date", state="CLOSED", reason="COMPLETED", fields={"Status": "Done"})
     util.write_json(e.home / "legacy-ids.json", {})
+    passed(e)
     assert [t["id"] for t in views.state(e.p)["tasks"]] == []  # an open issue at a closed Status is not a recent closed task
     assert "closed" not in json.loads(fm(e.home, "show", "TY-6"))
 

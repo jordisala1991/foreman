@@ -34,7 +34,8 @@ export function Needs({ project }: { project: Project }) {
       <ScreenHead title={t("tab_needs")} project={project} sub={d && total ? t("n_waiting", { n: total }) : ""} />
       {!d && !s.failed ? <div className="card quiet">{t("loading")}</div> : null}
       {s.failed && !d ? <LoadFailed retry={s.reload} /> : null}
-      {d && !total ? (
+      {d?.notice ? <div className="card quiet">{t("no_snapshot")}</div> : null}
+      {d && !d.notice && !total ? (
         <div className="card empty big">
           <span className="round">
             <Small name="check" size={24} />

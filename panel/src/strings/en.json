@@ -59,6 +59,7 @@
   "gh_closed": "The last seven days.",
   "n_open": "{n} open",
   "no_tasks": "No tasks yet: add the first one.",
+  "no_snapshot": "The loop has not read the Board yet: the tasks show after its first pass.",
   "has_question": "Its agent asks you something",
   "blocked_why": "Blocked: {why}",
   "latest": "Latest",

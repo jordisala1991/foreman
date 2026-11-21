@@ -3,7 +3,8 @@ the project's Board, read in one request; the closed ones come from the old file
 closed on GitHub that neither holds is a stub; each task's local keys and the questions are local files (`files.Files`).
 Every write goes through `edit()`, which writes only what changed and reads it back (`apply`); `add` files. The pass's read
 (a shared instance's first, `registry.tick_scope`), every write and its snapshot update run under the backlog lock
-`<home>/state/backlog.lock`; a shared instance keeps its read, so a tick reads the Board once."""
+`<home>/state/backlog.lock`; a shared instance keeps its read, so a tick reads the Board once. After the pass's read and each write's read-back the Board's
+side of the open tasks is saved (`backlog-cards.json`); a `seen` instance (`registry.view_scope`: the panel, `watch`) serves it."""
 
 import contextlib
 import copy
@@ -15,21 +16,22 @@ from ... import util
 from ...core.project.backlog_table import Board
 from ...core.project.config import Project
 from ...core.tasks import changes, drags, ids
-from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, Task, empty, event, get, tasks
+from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks
 from ...core.tasks.issues import Issue, joined, stub, with_old_blockers
 from ...core.tasks.questions import Question
 from .api import Api
 from .apply import Where, apply, file
-from .files import Files
+from .files import Cards, Files
 from .issues import Read, read_one, read_open
 
 
 class GitHubBacklog:
-    def __init__(self, p: Project, b: Board, old: Callable[[], Data], shared: bool = False) -> None:
+    def __init__(self, p: Project, b: Board, old: Callable[[], Data], shared: bool = False, seen: bool = False) -> None:
         self.p = p
         self.b = b
         self.old = old  # the old file's backlog: its closed tasks stay there
         self.shared = shared
+        self.seen = seen  # serves the saved cards, never the Board
         self.api = Api(p.state / "github-rate-limit.json")
         self.prefix = str(p.get("project", "prefix"))
         self.files = Files(p.state)
@@ -39,18 +41,30 @@ class GitHubBacklog:
     def _where(self) -> Where:
         return Where(self.api, self.b, self.prefix, ids.legacy_ids(util.read_json(self.p.home / "legacy-ids.json", None)), self.files)
 
-    def _data(self, read: Read) -> Data:
-        """The backlog from the Board's read, the closed tasks and the local files, read now."""
-        w, runs, old = self._where(), self.files.runs(), {t["id"]: t for t in self.old()["tasks"]}
+    def _cards(self, read: Read) -> Cards:
+        w = self._where()
+        return Cards([w.task(i) for i in read.issues], [stub(x, self.prefix, w.legacy) for i in read.issues for x in i.blockers if x.state == "CLOSED"])
+
+    def _join(self, cards: Cards) -> Data:
+        """The backlog from the Board's cards, the closed tasks and the local files, read now."""
+        runs, old = self.files.runs(), {t["id"]: t for t in self.old()["tasks"]}
         closed = [t for t in old.values() if t["status"] in CLOSED]
         held = {t["id"] for t in closed}  # an id is looked up in the old file before the number, as `find` does
-        mine = [with_old_blockers(t, old) for t in map(w.task, read.issues) if t["id"] not in held]
-        stubs = [stub(x, self.prefix, w.legacy) for i in read.issues for x in i.blockers if x.state == "CLOSED"]
+        mine = [with_old_blockers(t, old) for t in cards.tasks if t["id"] not in held]
         out: dict[str, Task] = {}
-        for t in [*(joined(t, runs.get(t["id"], {})) for t in mine), *closed, *(joined(t, runs.get(t["id"], {})) for t in self.files.closed()), *stubs]:
+        for t in [*(joined(t, runs.get(t["id"], {})) for t in mine), *closed, *(joined(t, runs.get(t["id"], {})) for t in self.files.closed()), *cards.stubs]:
             out.setdefault(t["id"], t)
         decisions, resolved = self.files.questions()
         return {**empty(), "tasks": list(out.values()), "decisions": decisions, "decisions_resolved": resolved}
+
+    def _data(self, read: Read) -> Data:
+        return self._join(self._cards(read))
+
+    def _view(self) -> Data:
+        """The data as the last pass or write saw the Board; the local files read now. No call to GitHub."""
+        if (cards := self.files.cards()) is None:
+            raise NoSnapshot("the loop has not read the Board yet")
+        return self._join(cards)
 
     def _fresh(self) -> tuple[Read, Data]:
         r = read_open(self.api, self.b)
@@ -93,9 +107,12 @@ class GitHubBacklog:
             for why in refused:
                 util.append_jsonl(self.p.state / "errors.jsonl", {"time": util.now(), "step": "board", "error": why, "trace": ""})
         self.files.save_snapshot({t["id"]: t["status"] for t in map(w.task, read.issues)})
+        self.files.save_cards(self._cards(read))
         return read
 
     def load(self) -> Data:
+        if self.seen:
+            return self._view()
         if not self.shared:
             return self._fresh()[1]
         kept = self.kept
@@ -105,10 +122,14 @@ class GitHubBacklog:
         return copy.deepcopy(kept[1])
 
     def reload(self) -> Data:
+        if self.seen:
+            return self._view()
         with util.file_lock(self.lock):
             return copy.deepcopy(self._board(fresh=True)[1])
 
     def find(self, tid: str) -> Task:
+        if self.seen:
+            return get(self._view(), tid)
         legacy = self._where().legacy
         if tid in legacy:
             return self._live(tid, legacy[tid], legacy)
@@ -153,7 +174,10 @@ class GitHubBacklog:
             before = self._data(read)
             after = copy.deepcopy(before)
             yield after
-            read = apply(self._where(), read, before, after)
+            new = apply(self._where(), read, before, after)
+            if new != read:
+                self.files.save_cards(self._cards(new))
+            read = new
             if self.shared:
                 self._keep(read)
 
@@ -168,8 +192,10 @@ class GitHubBacklog:
             tid = w.task(back)["id"]
             if (snap := self.files.snapshot()) is not None:
                 self.files.save_snapshot({**snap, tid: task["status"]})
+            read = dataclasses.replace(read, issues=(*read.issues, back))
+            self.files.save_cards(self._cards(read))
             if self.shared:
-                self._keep(dataclasses.replace(read, issues=(*read.issues, back)))
+                self._keep(read)
         event(self.p, tid, f"filed ({task['status']}): {title}")
         return tid
 

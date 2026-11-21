@@ -4,6 +4,7 @@ backlogfile, and the runners claude and orca) and how to tell which provider app
 import re
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from ..core.project.backlog_table import Board
@@ -33,16 +34,20 @@ def repo(p: Project) -> Repo:
 TICKS: dict[Path, Backlog] = {}  # the shared backlog of each home whose tick is running
 
 
-def _make(p: Project, shared: bool) -> Backlog:
+SEEN: ContextVar[frozenset[Path]] = ContextVar("SEEN", default=frozenset())  # the homes whose backlog this request reads from the snapshot
+
+
+def _make(p: Project, shared: bool, seen: bool = False) -> Backlog:
     """The local file, or with `[backlog]` the repo's issues on the Board (the old file still holds the closed tasks)."""
     if p.board is None:
         return BacklogFile(p, shared)
-    return GitHubBacklog(p, p.board, BacklogFile(p).load, shared)
+    return GitHubBacklog(p, p.board, BacklogFile(p).load, shared, seen)
 
 
 def backlog(p: Project) -> Backlog:
-    """The project's backlog, behind the `Backlog` port: within a tick, the tick's shared one (loaded once)."""
-    return TICKS.get(p.home) or _make(p, False)
+    """The project's backlog, behind the `Backlog` port: within a tick, the tick's shared one (loaded once); within
+    `view_scope`, one that serves the pass's snapshot."""
+    return TICKS.get(p.home) or _make(p, False, p.home in SEEN.get())
 
 
 def setup_board(p: Project) -> list[str]:
@@ -67,6 +72,16 @@ def tick_scope(p: Project) -> Generator[None]:
         yield
     finally:
         del TICKS[p.home]
+
+
+@contextmanager
+def view_scope(p: Project) -> Generator[None]:
+    """While open in this thread, `backlog(p)` serves the snapshot the loop wrote, not GitHub (the panel's views, `watch`)."""
+    token = SEEN.set(SEEN.get() | {p.home})
+    try:
+        yield
+    finally:
+        SEEN.reset(token)
 
 
 def runner(p: Project) -> Runner:
