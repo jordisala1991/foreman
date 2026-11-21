@@ -264,15 +264,27 @@ def test_a_mechanic_and_a_parent_wait_for_orca_too(s: Setup):
     assert len([t for t in s.events() if t.startswith("launch postponed")]) == 2
 
 
-def test_a_relaunch_carries_todays_settings_into_the_same_chat(s: Setup):
+def relaunched(s: Setup, settled: bool) -> tuple[SessionRef, SessionRef]:
     ref = s.start()
-    carried = s.wt / ".claude" / "settings.local.json"
-    carried.write_text("{}")  # an older foreman's file
-    agent = Agent("TY-1", "ty-1", "sonnet", "low", "t")
-    assert Orca(s.p).relaunch(ref, agent, "carry on", s.wt) == ref
-    assert json.loads(carried.read_text())["env"] == settings(s.p, "TY-1", "ty-1")["env"]
+    s.orca.age(str(ref.dispatch), "/old/bin")
+    if settled:
+        s.orca.settle(str(ref.dispatch))
+    return ref, Orca(s.p).relaunch(ref, Agent("TY-1", "ty-1", "sonnet", "low", "t"), "carry on", s.wt)
+
+
+def test_a_relaunch_runs_the_chat_on_todays_path(s: Setup):
+    ref, new = relaunched(s, settled=False)
+    assert s.orca.chat_path(str(new.dispatch)) == settings(s.p, "TY-1", "ty-1")["env"]["PATH"]
+    assert new.dispatch != ref.dispatch and new.session == ref.session
+    assert s.orca.workers()[str(ref.dispatch)]["live"] is False
     a = s.orca.call("orchestration send")
     assert (a[a.index("--to") + 1], a[a.index("--body") + 1]) == (f"dispatch:{ref.dispatch}", "carry on")
+
+
+def test_a_relaunch_of_a_settled_chat_restarts_it_too(s: Setup):
+    ref, new = relaunched(s, settled=True)
+    assert s.orca.chat_path(str(new.dispatch)) == settings(s.p, "TY-1", "ty-1")["env"]["PATH"]
+    assert new.dispatch != ref.dispatch and new.session == ref.session
 
 
 def test_relaunch_names_orca_when_its_listing_is_unreadable(s: Setup):
