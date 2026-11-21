@@ -122,6 +122,10 @@ def _publishes(prog: str, sub: str, args: list[str]) -> bool:
     return prog != "gh" or bool(args[1:2] and args[1] in ("create", "upload", "merge", "edit", "delete"))
 
 
+def _gh_deletes(prog: str, sub: str, args: list[str]) -> bool:
+    return prog == "gh" and sub in ("repo", "project") and args[1:2] == ["delete"]
+
+
 def _push(args: list[str], sc: Scope) -> str | None:
     rest = args[args.index("push") + 1 :]
     refs = [a for a in rest if not a.startswith("-")]
@@ -159,6 +163,8 @@ def _segment(w: list[str], sc: Scope) -> str | None:
     if prog == "git":
         args = _git_args(args)
     sub = next((a for a in args if not a.startswith("-")), "")
+    if _gh_deletes(prog, sub, args):
+        return "delete"
     if _publishes(prog, sub, args):
         return "publish"
     found = _git(sub, args, sc) if prog == "git" else None

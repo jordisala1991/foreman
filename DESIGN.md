@@ -740,10 +740,10 @@ owner allows it once from the panel (`foreman allow QID`); the loop tells its ag
 
 | Action | Recognised by |
 |---|---|
-| `publish` | `npm/pnpm/yarn/cargo/uv/poetry publish`, `twine upload`, `docker push`, `gh release/pr/repo create|merge|edit|delete|upload` |
+| `publish` | `npm/pnpm/yarn/cargo/uv/poetry publish`, `twine upload`, `docker push`, `gh release/pr create|merge|edit|delete|upload`, `gh repo create|merge|edit|upload` |
 | `push-main` | `git push` to the main branch (named, `HEAD` while on it, or bare while on it), or with `--force`/`--mirror`/`--all` or a ref written with a leading `+` |
 | `push-evidence` | `git push` to the `foreman-evidence` branch (only the loop writes it) |
-| `delete` | `rm`/`rmdir`/`unlink`/`find -delete` of a path outside its worktree and temp dirs; `git branch -d/-D` of another branch; `git worktree remove`; `git push --delete` |
+| `delete` | `rm`/`rmdir`/`unlink`/`find -delete` of a path outside its worktree and temp dirs; `git branch -d/-D` of another branch; `git worktree remove`; `git push --delete`; `gh repo delete`, `gh project delete` |
 | `config` | Edit/Write of the project's `foreman.toml`; a shell command that writes it (`>`, `tee`, `sed -i`, `mv`, `cp`, `rm`) |
 | owner's own | `[guard] ask = [{name, pattern}]` in foreman.toml: a regex on a shell segment |
 
