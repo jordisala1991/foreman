@@ -56,11 +56,11 @@ class TestText:
 
 class TestOnGitHub:
     @pytest.fixture(autouse=True)
-    def set_up(self, request):
+    def set_up(self, request: pytest.FixtureRequest) -> None:
         self.g = GH(test="true")
         request.addfinalizer(self.g.close)
 
-    def deliver(self, text="Did X"):
+    def deliver(self, text: str = "Did X") -> str:
         g = self.g
         tid = g.work()
         path = g.e.home / "reports" / f"{tid}.md"
@@ -72,7 +72,7 @@ class TestOnGitHub:
     def pr(self):
         return self.g.state["prs"]["1"]
 
-    def run_ticks(self, n=2):
+    def run_ticks(self, n: int = 2) -> None:
         for _ in range(n):
             tick.tick(self.g.e.p)
 

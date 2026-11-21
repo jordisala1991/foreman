@@ -2,6 +2,7 @@
 and a bare origin come from test_github."""
 
 import subprocess
+from typing import Any
 
 import pytest
 from helpers import Env, git
@@ -19,10 +20,10 @@ def transient() -> None:
 
 class TestPushes:
     @pytest.fixture(autouse=True)
-    def keep_request(self, request):
+    def keep_request(self, request: pytest.FixtureRequest) -> None:
         self.request = request  # for the cleanups of helpers
 
-    def make(self, extra: str = "", **kw) -> GH:
+    def make(self, extra: str = "", **kw: Any) -> GH:
         g = GH(extra, **kw)
         self.request.addfinalizer(g.close)
         return g
@@ -67,15 +68,17 @@ class TestPushes:
         assert "no pushing today" in g.e.task(tid)["blocked"]
         assert g.e.task(tid)["status"] == "in review"
 
-    def flaky_push(self, g: GH, failures: int, error: str = "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com"):
+    def flaky_push(
+        self, g: GH, failures: int, error: str = "fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com"
+    ) -> list[list[str]]:
         """Patches the push so its first `failures` calls fail with `error`; returns the list of push calls."""
         from unittest import mock
 
         from foreman import proc
 
-        real, calls = proc.run, []
+        real, calls = proc.run, list[list[str]]()
 
-        def run(args, **kw):
+        def run(args: list[str], **kw: Any) -> proc.Result:
             if "push" in args:
                 calls.append(args)
                 if len(calls) <= failures:

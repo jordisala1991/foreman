@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from helpers import PLUGIN, fm
+from helpers import PLUGIN, Env, fm
 
 from foreman.loop import tick
 from foreman.providers import registry
@@ -10,7 +10,7 @@ from foreman.services.agents import brief
 BRIEFS = PLUGIN / "foreman" / "briefs"
 
 
-def run_as(e, tid, agent, *args):
+def run_as(e: Env, tid: str, agent: str, *args: str) -> None:
     os.environ.update(FOREMAN_TASK=tid, FOREMAN_AGENT=agent)
     try:
         fm(e.home, *args)

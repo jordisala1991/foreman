@@ -1,27 +1,17 @@
 # Test files still checked in standard mode only. A file leaves this list when it passes strict; a test file not listed is strict.
-tests/test_chains.py
-tests/test_cycle.py
 tests/test_delivery_repos.py
-tests/test_describe.py
 tests/test_edit.py
-tests/test_evidence.py
-tests/test_github.py
 tests/test_guard.py
 tests/test_health.py
-tests/test_launcher.py
 tests/test_lock.py
 tests/test_loop.py
 tests/test_mechanic.py
-tests/test_metrics_plan.py
 tests/test_misled.py
 tests/test_model.py
 tests/test_no_old_names.py
 tests/test_parents.py
 tests/test_plan.py
-tests/test_push.py
-tests/test_python_version.py
 tests/test_recurring.py
-tests/test_resume.py
 tests/test_review.py
 tests/test_sources.py
 tests/test_subtasks.py
