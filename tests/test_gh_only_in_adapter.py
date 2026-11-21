@@ -2,15 +2,13 @@
 port. The guard (core/oversight/guard.py) names it to parse command lines and runs nothing. A module that names the program
 "gh" is one that runs it."""
 
-import ast
-
-from helpers import PLUGIN
+from helpers import PLUGIN, names_program
 
 ALLOWED = {"providers/github/provider.py", "providers/github/review.py", "providers/github/api.py", "core/oversight/guard.py"}
 
 
 def names_gh(source: str) -> bool:
-    return any(isinstance(n, ast.Constant) and n.value == "gh" for n in ast.walk(ast.parse(source)))
+    return names_program(source, "gh")
 
 
 def test_only_the_github_adapter_names_gh():
@@ -29,3 +27,11 @@ def test_a_module_without_gh_is_not_found():
 
 def test_a_longer_name_is_not_found():
     assert not names_gh('x = "ghost"\n')
+
+
+def test_a_program_given_by_its_path_is_found():
+    assert names_gh('proc.run(["/opt/homebrew/bin/gh", "pr", "list"])\n')
+
+
+def test_a_path_to_another_name_is_not_found():
+    assert not names_gh('x = "/usr/bin/ghost"\ny = "/usr/bin/gh/"\n')

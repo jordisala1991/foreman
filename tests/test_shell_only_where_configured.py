@@ -1,17 +1,15 @@
 """Only services/agents/worktree.py and services/delivery/check.py run a shell (sh -c on a command the project configures).
 Any other module that names a shell can hide git, gh or claude in a string the adapter-only tests cannot see."""
 
-import ast
-
 import pytest
-from helpers import PLUGIN
+from helpers import PLUGIN, names_program
 
 ALLOWED = {"services/agents/worktree.py", "services/delivery/check.py"}
 SHELLS = {"sh", "bash", "zsh"}
 
 
 def names_shell(source: str) -> bool:
-    return any(isinstance(n, ast.Constant) and n.value in SHELLS for n in ast.walk(ast.parse(source)))
+    return names_program(source, *SHELLS)
 
 
 def test_only_the_two_configured_command_modules_name_a_shell():
@@ -31,3 +29,12 @@ def test_a_module_without_a_shell_is_not_found():
 
 def test_a_longer_name_is_not_found():
     assert not names_shell('x = "shell"\ny = "bashful"\n')
+
+
+@pytest.mark.parametrize("shell", sorted(SHELLS))
+def test_a_program_given_by_its_path_is_found(shell: str):
+    assert names_shell(f'proc.run(["/bin/{shell}", "-c", "ls"])\n')
+
+
+def test_a_path_to_another_name_is_not_found():
+    assert not names_shell('x = "/bin/shell"\ny = "/bin/bashful"\n')
