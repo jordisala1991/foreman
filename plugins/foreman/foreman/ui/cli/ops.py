@@ -10,6 +10,7 @@ from ...core.oversight import guard
 from ...core.project import registry
 from ...loop import tick
 from ...providers import registry as provider_registry
+from ...providers.runner import unreadable
 from ...services import lock
 from ...steps import metrics, schedule, watch
 from ...steps.health import health, notes, orca
@@ -48,7 +49,7 @@ def cmd_watch(a: argparse.Namespace) -> None:
     except providers.ConfigError as e:
         sys.exit(f"foreman: {e}")
     if rows is None:
-        sys.exit("foreman: claude agents is unreadable: foreman watch needs the session listing")
+        sys.exit(f"foreman: {unreadable(p)}: foreman watch needs the session listing")
     watch.run(p, a.once, rows)
 
 

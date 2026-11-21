@@ -8,14 +8,14 @@ from pathlib import Path
 import pytest
 from fakeorca import FakeOrca
 from fakerepo import FakeRepo
-from helpers import Env
+from helpers import Env, fm
 
 from foreman import util
 from foreman.core.tasks import backlog
 from foreman.providers import registry
 from foreman.providers.orca.sessions import Orca
 from foreman.providers.runner import Agent, RunnerError, SessionRef, State, ref_of, settings
-from foreman.services.agents import launch, running
+from foreman.services.agents import launch, relaunch, running
 from foreman.steps import mechanic, parents, talk
 
 
@@ -273,3 +273,20 @@ def test_a_relaunch_carries_todays_settings_into_the_same_chat(s: Setup):
     assert json.loads(carried.read_text())["env"] == settings(s.p, "TY-1", "ty-1")["env"]
     a = s.orca.call("orchestration send")
     assert (a[a.index("--to") + 1], a[a.index("--body") + 1]) == (f"dispatch:{ref.dispatch}", "carry on")
+
+
+def test_relaunch_names_orca_when_its_listing_is_unreadable(s: Setup):
+    tid, _ = on_a_task(s)
+    s.orca.down(opens=False)
+    with pytest.raises(RunnerError) as refused:
+        relaunch.relaunch(s.p, tid)
+    assert "orca" in str(refused.value) and "claude" not in str(refused.value)
+
+
+def test_watch_names_orca_when_its_listing_is_unreadable(s: Setup):
+    toml = s.e.home / "foreman.toml"
+    toml.write_text(toml.read_text().replace("[agents]\n", '[agents]\nrunner = "orca"\n'))  # the CLI reloads the toml
+    s.orca.down(opens=False)
+    with pytest.raises(SystemExit) as refused:
+        fm(s.e.home, "watch")
+    assert "orca" in str(refused.value) and "claude" not in str(refused.value)

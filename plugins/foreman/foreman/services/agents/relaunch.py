@@ -8,7 +8,7 @@ from ... import util
 from ...core.project.config import Project
 from ...core.tasks import backlog
 from ...providers import registry
-from ...providers.runner import Agent, RunnerError, ref_of
+from ...providers.runner import Agent, RunnerError, ref_of, unreadable
 from .launch import record_session
 from .running import session_lock
 
@@ -28,7 +28,7 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
     runner = registry.runner(p)
     rows = runner.rows()
     if rows is None:
-        raise RunnerError("claude agents is unreadable")
+        raise RunnerError(unreadable(p))
     task = backlog.get(registry.backlog(p).load(), tid)
     live = next(((r, ref) for r in ("agent", "mechanic") if (ref := ref_of(task.get(r))) and rows.alive(ref)), None)
     if live is None:
