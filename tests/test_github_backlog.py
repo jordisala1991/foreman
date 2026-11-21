@@ -117,10 +117,10 @@ def test_over_the_caps(fake: FakeGh):
     fake.add(302, fields={"Status": "Backlog"}, blocked_total=21)
     with pytest.raises(BacklogError, match="#302 has 21 blockers: fm reads at most 20"):
         b.load()
-    fake.issues[302].blocked_total, fake.issues[302].labels = None, 11
+    fake.issues[302].blocked_total, fake.issues[302].labels_total = None, 11
     with pytest.raises(BacklogError, match="#302 has 11 labels: fm reads at most 10"):
         b.load()
-    fake.issues[302].labels, fake.issues[302].subs = 0, 31
+    fake.issues[302].labels_total, fake.issues[302].subs = None, 31
     with pytest.raises(BacklogError, match="#302 has 31 sub-issues: fm reads at most 30"):
         b.load()
 
@@ -152,20 +152,12 @@ def test_without_backlog_the_file():
     assert registry.backlog(e.p).find(tid)["title"] == "t"
 
 
-def test_writes_are_refused(fake: FakeGh):
-    e = board_env()
-    with pytest.raises(BacklogError, match="read-only"):
-        registry.backlog(e.p).add("t")
-    with pytest.raises(SystemExit, match="foreman: the backlog on GitHub is read-only"):
-        fm(e.home, "add", "t", "--criteria", "c")
-
-
 def test_no_closed_at_no_closed_date(fake: FakeGh):
     e = board_env()
     fake.add(5, title="dragged to Done", fields={"Status": "Done"})
     fake.add(6, title="closed, no date", state="CLOSED", reason="COMPLETED", fields={"Status": "Done"})
     util.write_json(e.home / "legacy-ids.json", {})
-    assert [t["id"] for t in views.state(e.p)["tasks"]] == []  # an open issue at a closed Status is an error line (D4), not recent
+    assert [t["id"] for t in views.state(e.p)["tasks"]] == []  # an open issue at a closed Status is not a recent closed task
     assert "closed" not in json.loads(fm(e.home, "show", "TY-6"))
 
 

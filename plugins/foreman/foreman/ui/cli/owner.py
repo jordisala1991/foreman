@@ -11,7 +11,7 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
-from ...core.tasks import backlog, blockers, chains, editing, subtasks, taskrepo
+from ...core.tasks import backlog, blockers, chains, drags, editing, subtasks, taskrepo
 from ...providers import registry
 from ...providers.repo import RepoError
 from ...providers.runner import RunnerError
@@ -140,11 +140,8 @@ def cmd_review(a: argparse.Namespace) -> None:
 
 def cmd_go(a: argparse.Namespace) -> None:
     p = home(a)
-    i = backlog.get(registry.backlog(p).load(), a.id)
-    acceptance: backlog.Acceptance = i.get("acceptance") or {}
-    if not acceptance.get("criteria"):
-        sys.exit(f"foreman: {a.id}: define its acceptance criteria with the owner first")
-    if why := taskrepo.go_refusal(i, backlog.tasks(registry.backlog(p).load()), p.repo_keys):
+    d = registry.backlog(p).load()
+    if why := drags.go_checks(backlog.get(d, a.id), backlog.tasks(d), p.repo_keys):
         sys.exit(f"foreman: {why}")
     registry.backlog(p).set_status(a.id, "backlog", "let in by the owner", blocked="")
 
