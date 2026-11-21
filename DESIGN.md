@@ -589,7 +589,7 @@ One label: `needs-owner`.
 | `blocked` | Board field `Blocked` | the reason; empty = not blocked |
 | `priority` | Board field `Priority` | unset = none |
 | `created` | issue `createdAt` | a migrated task's old `created` is kept local (the issue's is the cutover's); shown in today's format (`util.now`) |
-| `closed` | issue `closedAt` | when fm closes a task it keeps the read-back task in `<home>/state/closed.json`: with the old file, the source of closed tasks for the panel's recent list and the metrics (`ui/panel/views.py:81`, `steps/metrics.py:98`), as the pass reads only open issues |
+| `closed` | issue `closedAt` | when fm closes a task it keeps the read-back task in `<home>/state/closed.json`, its `created` and `closed` in fm's own format (`util.now`, `%Y-%m-%d %H:%M:%S`) so the metrics keep working: with the old file, the source of closed tasks for the panel's recent list and the metrics (`ui/panel/views.py:81`, `steps/metrics.py:98`), as the pass reads only open issues |
 | `model`, `effort`, `type` | Board fields `Model`, `Effort`, `Task type` | unset = the project's default / `change` |
 | `repo` | Board field `Repo key` | the `[repos.K]` key |
 | `chain` {lens, max_steps, max_lines} | Board fields `Lens`, `Max steps`, `Max lines` | a task is a chain parent iff `Lens` is set |
@@ -629,8 +629,10 @@ Local state sits in `<home>/state/runs.json`, one object per task id holding the
 | duplicate | Duplicate | closed, duplicate | nothing sets it today (no code path; none of the 234 tasks has it); the column and the mapping exist so a command can later |
 
 No GitHub workflow moves anything: the setup deletes them all. `blocked` is not a status but the `Blocked` field. A close sets the issue's state
-reason and the Status in one request. `Status` is the truth for open tasks, and fm moves every card: the pass compares each card with the last pass's snapshot, and a change
-fm did not make is a drag. A drag Triage → Backlog is a Go, with `foreman go`'s checks (`ui/cli/owner.py:141-148`: criteria, repo); a refused Go,
+reason and the Status in one request. An open task's status is the `Status` fm last wrote, and fm moves every card. The pass's read and every command's write with its snapshot update
+run under the one backlog lock that exists today (`util.file_lock` in `core/tasks/backlog.py:89`), so the pass compares each card with a snapshot
+no command changed meanwhile, and a command's move is never seen as a drag; with no snapshot yet (the first pass) no drag is detected and the snapshot is just written.
+A drag is accepted only as a Go Triage → Backlog, with `foreman go`'s checks (`ui/cli/owner.py:141-148`: criteria, repo); a refused Go,
 or any other drag between open columns, is an error line and fm moves the card back to the snapshot's Status. A card dragged to a closed column while its issue is open, or an issue closed by hand while its card is open, is an error line in
 `state/errors.jsonl` (health files it) and changes nothing.
 
@@ -655,14 +657,14 @@ Each run 8 times, median (min–max):
 |---|---|---|---|
 | cheap read: `number updatedAt projectItems.updatedAt` of the 19 open | 0.67 s (0.59–0.72) | 1 | 2.4 KB |
 | full read, first:25 (19 open) | 0.87 s (0.80–1.07) | 1 | 60 KB |
-| full read, first:50 | not run | 2 (inferred) | |
+| full read, first:50 | not timed | 2 | |
 | full read, first:100 | 0.82 s (0.77–1.14) | 4 | 60 KB |
 | full read without body, first:100 | 0.81 s | 4 | 10 KB |
 | one task by number (`issue(number:)`, full fields) | 0.65 s | 1 | |
 | cold read of every issue (247, 100 per page, 3 pages) | 4.96 s | 12 (3×4) | |
 
-Cost grows with `first`, not with what is returned (first:25 → 1, 100 → 4). The chosen `first:50` was not run: its 2 points are inferred from
-GitHub's documented rule (connections requested ÷ 100, rounded: 1 + 4 per issue, for labels, sub-issues, blockers and the Board item), which gives the measured 1 and 4. The cheap read would save 0.15 s and 0–3 points, so a pass
+Cost grows with `first`, not with what is returned (first:25 → 1, 50 → 2, 100 → 4). The `first:50` cost was measured after the scratch Board was
+deleted: the same query text (`reads.py`'s `FULL`) once on a public repo with 1081 open issues (cli/cli) gave 1, 2 and 4 points for first:25, 50 and 100. The cheap read would save 0.15 s and 0–3 points, so a pass
 makes one full read with `first:50`; more than 50 open tasks, or `hasNextPage` true, is an error naming the count, and so is a nested list over its cap: a `totalCount` above
 `labels(first:10)`, `subIssues(first:30)` or `blockedBy(first:20)`.
 
@@ -699,10 +701,10 @@ the delivery steps' calls fm makes today (`gh pr view` and `gh api graphql`, `pr
 These replace FN-140's planned subtasks 2-5: 2 (the port) and 5 (migration) kept, 3 (the GitHub adapter) split in two, reads and writes, and 4
 (commands and panel) reshaped into a full task seen on the sandbox. Drafted with their criteria in `<home>/reports/FN-234.md`; not filed yet.
 - **D2 The backlog port, with the local file behind it** (type change). Every read and write of the backlog goes through one port with the local file as its adapter, and the owner sees no difference: `foreman list, show, add, go, edit, accept, reject, answer` and the panel print the same on the sandbox, no module outside the adapter opens `backlog.json`, the panel reads through the port, the guard hook reads its task's local keys, and a tick loads the backlog once; `core/oversight/guard.py:226` stops importing the file module and `diagnosis.py:20`'s write moves behind the port (core cannot import a port).
-- **D3 A project on GitHub: Board setup and reads** (after D2). With `[backlog]` pointing at a repo and Board, `foreman list`, `show` and the panel read the tasks from it: `foreman backlog setup` creates the 9 Status options, the 10 other fields and the label and deletes the workflows, idempotently; every field shown from a scratch Board of 20 open tasks; `FN-<number>` ids, a PR's number refused with its text, legacy ids through `legacy-ids.json`; one request per pass, over 50 open an error naming the count, a rate limit stops calls until the reset; a project without `[backlog]` still runs on its file.
-- **D4 A project on GitHub: writes** (after D3). Every write of the backlog lands on the Board and is read back: `add`, `go`, `edit` (dropping the plan), `ready`, `done`, `cancel`, `block`/`unblock`, `ask`/`answer` (the label), sub-issue and blocker writes; a write that did not stick is an error naming the field; a close sets its reason and the Status in one request; a rate limit waits for the reset with no retry loop in the adapter (retrying stays in `loop.guarded`); calls per operation equal the table above (±1).
+- **D3 A project on GitHub: Board setup and reads** (after D2). With `[backlog]` pointing at a repo and Board, `foreman list`, `show` and the panel read the tasks from it: `foreman backlog setup` creates the 9 Status options, the 10 other fields and the label and deletes the workflows, idempotently; every field shown from a scratch Board of 20 open tasks; `FN-<number>` ids, a PR's number refused with its text, legacy ids through `legacy-ids.json`, an id looked up in the map, then the old file, then as a number, and `FN-272` refused as `#272 is FN-140`; the panel's recent list and the metrics read closed tasks from the old file and `state/closed.json`; one request per pass, over 50 open or a nested `totalCount` over its cap an error naming the count, a rate limit stops calls until the reset; a project without `[backlog]` still runs on its file.
+- **D4 A project on GitHub: writes** (after D3). Every write of the backlog lands on the Board and is read back: `add`, `go`, `edit` (dropping the plan), `ready`, `done`, `cancel`, `block`/`unblock`, `ask`/`answer` (the label), sub-issue and blocker writes; a write that did not stick is an error naming the field; a close sets its reason and the Status in one request; a rate limit waits for the reset with no retry loop in the adapter (retrying stays in `loop.guarded`); calls per operation equal the table above (±1); the pass's read and every write with its snapshot update run under the backlog lock, a drag Triage → Backlog is a Go with `go`'s checks, any other drag is an error line and the card is moved back, and the first pass (no snapshot) detects no drag.
 - **D5 A full task on GitHub, seen on the sandbox** (after D4). The loop runs a task end to end on a scratch Board: filed, let in, planned, worked, reviewed, accepted and merged, with a screenshot of the Board after each move; the panel and `foreman watch` match `foreman list`/`show` and the file's output; a project without `[backlog]` is unchanged.
-- **D6 Migration and cutover of fm** (after D5, the owner present). fm's open tasks live on the real Board and `backlog.json` is no longer used: a dry run prints each open task's future issue, fields and id and writes nothing; the cutover files every open task with its legacy id, keeps the closed ones read-only in the old file and refuses on a collision («Ids»); afterwards `foreman list` shows the same open tasks; pointing `foreman.toml` back restores the file; the real Board has the setup's fields and no workflows.
+- **D6 Migration and cutover of fm** (after D5, the owner present). fm's open tasks live on the real Board and `backlog.json` is no longer used: a dry run prints each open task's future issue, fields and id and writes nothing; the cutover files every open task with its legacy id, keeps the closed ones read-only in the old file and refuses on a collision («Ids»); an open migrated task's closed subtasks and blockers are read from the old file; filing runs in the order of «Reads and writes per pass», and one cut short leaves an issue with no card, skipped by the read and named in an error line; afterwards `foreman list` shows the same open tasks; pointing `foreman.toml` back restores the file; the real Board has the setup's fields and no workflows.
 
 ### Left out
 
