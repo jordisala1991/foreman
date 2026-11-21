@@ -6,7 +6,6 @@ from helpers import Env, fm, git
 
 from foreman import providers
 from foreman.core.project.config import Project
-from foreman.core.tasks import backlog
 from foreman.loop import queue, tick
 from foreman.providers import Change, ChangeState, registry
 from foreman.providers.runner import NO_ROWS
@@ -65,7 +64,7 @@ class TestProvider:
         e = Env(test="true")
         tid = self.delivered(e)
         tick.tick(e.p)
-        backlog.update(e.p, tid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
+        registry.backlog(e.p).update(tid, accepted={"by": "o", "head": "x", "at": ""}, merge="abc", merging="def")
         talk.return_to_agent(e.p, tid, "rejection", "again")
         i = e.task(tid)
         assert not {"accepted", "merge", "merging"} & set(i)
@@ -107,7 +106,7 @@ class TestProvider:
         base = git(e.repo, "rev-parse", "main").strip()  # a crash after the merge adopts it instead of merging twice
         git(e.repo, "merge", "--squash", "foreman/ty-1")
         git(e.repo, "commit", "-qm", f"Merge {tid}: x")  # the merge happened; its ref was never stored
-        backlog.update(e.p, tid, merging=base)
+        registry.backlog(e.p).update(tid, merging=base)
         merged = git(e.repo, "rev-parse", "main").strip()
         tick.tick(e.p)
         assert e.task(tid)["status"] == "done"
@@ -132,7 +131,7 @@ class TestProvider:
             i = e.task(tid)
             assert i["status"] == "in progress"
             assert i["conflicts"] == 1
-            assert backlog.load(e.p)["decisions_resolved"][-1]["kind"] == "conflict"
+            assert registry.backlog(e.p).load()["decisions_resolved"][-1]["kind"] == "conflict"
             assert not i.get("blocked")
             assert "accepted" not in i
             assert git(e.repo, "rev-parse", "main").strip() == main
@@ -140,7 +139,7 @@ class TestProvider:
             if strategy == "squash":  # after the fix the task merges without a new accept
                 wt = e.repo.parent / i["worktree"]
                 git(wt, "merge", "-X", "ours", "main", "-m", "fix")
-                backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+                registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
                 e.review(tid)
                 tick.tick(e.p)
                 assert e.task(tid)["status"] == "done"
@@ -169,7 +168,7 @@ class TestRequestMerge:
         from foreman.services.delivery.git import DeliveryError
 
         e = Env(test="true")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
 
         class Refuses(providers.Provider):
             def __init__(self, p: Project, error: Exception) -> None:

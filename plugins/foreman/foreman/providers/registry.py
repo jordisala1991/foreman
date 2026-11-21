@@ -1,12 +1,16 @@
-"""Picks the project's provider and hands out its repo: the one place that knows the adapters (github, local, gitrepo, and the runners claude and orca) and
-how to tell which provider applies."""
+"""Picks the project's provider and hands out its repo and backlog: the one place that knows the adapters (github, local, gitrepo,
+backlogfile, and the runners claude and orca) and how to tell which provider applies."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from pathlib import Path
 
 from ..core.project.config import Project
 from ..core.rules import decide
 from . import MERGES, PRS, ConfigError, Provider
+from .backlog import Backlog
+from .backlogfile import BacklogFile
 from .claude.sessions import Claude
 from .github.provider import GitHub
 from .gitrepo import GitRepo
@@ -19,6 +23,24 @@ from .runner import NO_ROWS, Rows, Runner
 def repo(p: Project) -> Repo:
     """The project's repo, behind the `Repo` port."""
     return GitRepo(p.repo)
+
+
+TICKS: dict[Path, BacklogFile] = {}  # the shared backlog of each home whose tick is running
+
+
+def backlog(p: Project) -> Backlog:
+    """The project's backlog, behind the `Backlog` port: within a tick, the tick's shared one (loaded once)."""
+    return TICKS.get(p.home) or BacklogFile(p)
+
+
+@contextmanager
+def tick_scope(p: Project) -> Generator[None]:
+    """While open, `backlog(p)` hands out one shared backlog for `p`'s home: the tick loads it once."""
+    TICKS[p.home] = BacklogFile(p, shared=True)
+    try:
+        yield
+    finally:
+        del TICKS[p.home]
 
 
 def runner(p: Project) -> Runner:

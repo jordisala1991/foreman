@@ -13,6 +13,7 @@ from typing import Any
 from ... import providers
 from ...core.project.config import Project
 from ...core.tasks import backlog
+from ...providers import registry
 from ...providers.repo import RepoError
 from ...services.delivery import merge
 from ...services.delivery.git import DeliveryError
@@ -44,8 +45,7 @@ def add(p: Project, body: str) -> Obj:
     if not str(f.get("title", "")).strip():
         raise Refused("a task needs a title")
     crit = str(f.get("criteria", "")).strip()
-    new = backlog.add(
-        p,
+    new = registry.backlog(p).add(
         f["title"].strip(),
         detail=str(f.get("detail", "")).strip(),
         status="triage" if p.several else "backlog",  # the panel has no repo field: a task with criteria needs its repo before Go
@@ -58,7 +58,7 @@ def add(p: Project, body: str) -> Obj:
 def answer(p: Project, tid: str, text: str, q: Query) -> Obj:
     if not text:
         raise Refused("the answer is empty")
-    open_q = next((x for x in backlog.load(p)["decisions"] if x["id"] == tid), None)
+    open_q = next((x for x in registry.backlog(p).load()["decisions"] if x["id"] == tid), None)
     if open_q and open_q.get("kind") == "permission":
         raise Refused(f"{tid} is a permission request: allow or deny it")
     run_cli(owner.cmd_answer, p, qid=tid, text=text)
@@ -88,7 +88,7 @@ def reject(p: Project, tid: str, text: str, q: Query) -> Obj:
 
 
 def go(p: Project, tid: str, text: str, q: Query) -> Obj:
-    if backlog.get(backlog.load(p), tid)["status"] != "triage":
+    if backlog.get(registry.backlog(p).load(), tid)["status"] != "triage":
         raise Refused(f"{tid} is not in triage")
     run_cli(owner.cmd_go, p, id=tid)
     return OK

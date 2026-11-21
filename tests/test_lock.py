@@ -10,6 +10,7 @@ import pytest
 from helpers import PLUGIN
 
 from foreman import util
+from foreman.providers import registry
 from foreman.services import lock
 from foreman.services.agents import brief
 
@@ -124,7 +125,7 @@ class TestLock:
         from foreman.core.tasks import backlog
 
         p = Project.load(self.e.home)
-        tid = backlog.add(p, "x", status="ready", criteria="y")
-        text = brief.brief(p, backlog.get(backlog.load(p), tid), "responsible")
+        tid = registry.backlog(p).add("x", status="ready", criteria="y")
+        text = brief.brief(p, backlog.get(registry.backlog(p).load(), tid), "responsible")
         assert "`gpu`, `sim` (2 slots)" in text
         assert "foreman lock NAME run" in text

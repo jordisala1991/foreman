@@ -15,8 +15,9 @@ from helpers import Env, fm, git, install_fm, version_folder
 from foreman import launcher, util
 from foreman.core.project import registry
 from foreman.core.project.config import Project
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry as provider_registry
 from foreman.providers.claude import login
 from foreman.providers.claude.rows import ClaudeRows
 from foreman.providers.orca import hooks
@@ -33,7 +34,7 @@ class TestHealth:
         self.p = self.e.p
 
     def triage(self):
-        return [i for i in backlog.tasks(backlog.load(self.p)) if i["status"] == "triage"]
+        return [i for i in backlog.tasks(provider_registry.backlog(self.p).load()) if i["status"] == "triage"]
 
     def test_the_python_note_is_shown_by_health(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"FOREMAN_REGISTRY": f"{d}/projects.json"}):
@@ -59,7 +60,7 @@ class TestHealth:
         git(self.e.repo, "worktree", "add", "-q", "-b", "x", str(self.e.home / "worktrees/ghost"), "main")
         health.run(self.p, NO_ROWS)
         first = self.triage()[0]["id"]
-        backlog.set_status(self.p, first, "done")
+        provider_registry.backlog(self.p).set_status(first, "done")
         health.run(self.p, NO_ROWS)  # still there, seen continuously: not again
         assert self.triage() == []
         git(self.e.repo, "worktree", "remove", str(self.e.home / "worktrees/ghost"))
@@ -69,22 +70,22 @@ class TestHealth:
         assert len(self.triage()) == 1
 
     def test_an_answer_not_delivered_after_ten_minutes_is_a_finding(self):
-        tid = backlog.add(self.p, "x", status="ready", criteria="y")
-        qid = questions.ask(self.p, tid, "a", "A or B?")
-        questions.answer(self.p, qid, "B")
+        tid = provider_registry.backlog(self.p).add("x", status="ready", criteria="y")
+        qid = provider_registry.backlog(self.p).ask(tid, "a", "A or B?")
+        provider_registry.backlog(self.p).answer(qid, "B")
         assert checks.answers_undelivered(self.p) == []
-        with backlog.edit(self.p) as d:
+        with provider_registry.backlog(self.p).edit() as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
         (f,) = checks.answers_undelivered(self.p)
         assert tid in f["title"]
         assert "«B»" in f["detail"]
-        with backlog.edit(self.p) as d:  # an answer made before the stamp existed: its `by` still has the time
+        with provider_registry.backlog(self.p).edit() as d:  # an answer made before the stamp existed: its `by` still has the time
             del d["decisions_resolved"][0]["answered_at"]
             d["decisions_resolved"][0]["by"] = "owner (panel), 2020-01-01 00:00:00"
         assert len(checks.answers_undelivered(self.p)) == 1
 
     def test_live_worktree_is_not_an_orphan(self):
-        backlog.add(self.p, "x", status="ready", criteria="y")
+        provider_registry.backlog(self.p).add("x", status="ready", criteria="y")
         tick.tick(self.p)
         assert checks.orphan_worktrees(self.p) == []
 
@@ -95,7 +96,7 @@ class TestHealth:
         assert json.loads((e.home / "state/ci.json").read_text())["result"] == "fail"
 
     def test_stuck_agent(self):
-        tid = backlog.add(self.p, "x", status="ready", criteria="y")
+        tid = provider_registry.backlog(self.p).add("x", status="ready", criteria="y")
         tick.tick(self.p)
         sid = self.e.task(tid)["agent"]["session"]
         t = self.e.tmp / "transcripts/proj"
@@ -103,7 +104,7 @@ class TestHealth:
         (t / f"{sid}.jsonl").write_text("{}\n")
         old = time.time() - 3 * 3600
         os.utime(t / f"{sid}.jsonl", (old, old))
-        backlog.update(self.p, tid, agent={**self.e.task(tid)["agent"], "started": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old))})
+        provider_registry.backlog(self.p).update(tid, agent={**self.e.task(tid)["agent"], "started": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old))})
         rows = ClaudeRows({sid: {"state": "working"}})
         assert checks.agents(self.p, rows)[0]["title"] == f"{tid}'s agent looks stuck"
 
@@ -118,8 +119,8 @@ class TestMetrics:
         from foreman.steps import metrics
 
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.update(e.p, tid, sessions=["s1"])
+        tid = provider_registry.backlog(e.p).add("x", status="ready", criteria="y")
+        provider_registry.backlog(e.p).update(tid, sessions=["s1"])
         d = e.tmp / "transcripts/proj"
         d.mkdir(parents=True)
         rec = {
@@ -148,7 +149,7 @@ class TestEvidence:
         git(e.repo, "commit", "-qm", name)
 
     def triage(self, e):
-        return [i for i in backlog.tasks(backlog.load(e.p)) if i["status"] == "triage"]
+        return [i for i in backlog.tasks(provider_registry.backlog(e.p).load()) if i["status"] == "triage"]
 
     def test_failing_main_is_one_task_until_it_passes(self):
         e = Env(test="test ! -e broken")
@@ -191,8 +192,8 @@ class TestEvidence:
         git(e.repo, "worktree", "add", "-q", "-b", "x", str(e.home / "worktrees/ghost"), "main")
         (e.p.state).mkdir(parents=True, exist_ok=True)
         (e.p.state / "errors.jsonl").write_text(json.dumps({"step": "s", "error": "bad", "time": util.now()}) + "\n")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.update(e.p, tid, blocked="its agent stopped: x")
+        tid = provider_registry.backlog(e.p).add("x", status="ready", criteria="y")
+        provider_registry.backlog(e.p).update(tid, blocked="its agent stopped: x")
         found = [
             *checks.loop_dead(Env().p),
             *checks.orphan_worktrees(e.p),

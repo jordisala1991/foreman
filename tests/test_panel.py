@@ -20,7 +20,8 @@ from helpers import Env, install_fm, version_folder
 from foreman import launcher, util
 from foreman.core.project.config import Project
 from foreman.core.project.registry import register
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import backlog
+from foreman.providers import registry
 from foreman.providers.runner import State
 from foreman.ui.panel import server, views
 
@@ -38,11 +39,11 @@ def start_panel(t: Any) -> None:
     util.write_json(home / "backlog.json", backlog.empty())
     register(home)
     t.p = Project.load(home)
-    t.triage = backlog.add(t.p, "A health finding", status="triage", criteria="it is gone")
-    t.work = backlog.add(t.p, "Some work", status="ready", criteria="it works")
-    backlog.set_status(t.p, t.work, "in progress", agent={"name": "de-2", "short": "abc123"})
-    t.qid = questions.ask(t.p, t.work, "de-2", "Which colour?")
-    t.perm = questions.ask(t.p, t.work, "de-2", "push the tag", kind="permission", action="publish")
+    t.triage = registry.backlog(t.p).add("A health finding", status="triage", criteria="it is gone")
+    t.work = registry.backlog(t.p).add("Some work", status="ready", criteria="it works")
+    registry.backlog(t.p).set_status(t.work, "in progress", agent={"name": "de-2", "short": "abc123"})
+    t.qid = registry.backlog(t.p).ask(t.work, "de-2", "Which colour?")
+    t.perm = registry.backlog(t.p).ask(t.work, "de-2", "push the tag", kind="permission", action="publish")
     t.srv, t.key = server.make_server(0, token="test-key")
     t.base = f"http://127.0.0.1:{t.srv.server_address[1]}"
     threading.Thread(target=t.srv.serve_forever, daemon=True).start()
@@ -92,7 +93,7 @@ class TestPanel:
         report = Path(self.tmp.name) / "r.md"
         report.write_text("Did X")
         done = {"summary": "s", "confused": "", "file": str(report)}
-        backlog.set_status(self.p, self.work, "in review", report=done, check={"head": "0123456789abcdef", "at": "then"})
+        registry.backlog(self.p).set_status(self.work, "in review", report=done, check={"head": "0123456789abcdef", "at": "then"})
         _, data = self.call(f"/api/task?p=demo&id={self.work}")
         assert "Did X" in data["task"]["description"]
         assert "012345678" in data["task"]["description"]
@@ -136,13 +137,13 @@ class TestPanel:
     def test_answer_and_go(self) -> None:
         code, _ = self.call(f"/api/answer?p=demo&id={quote(self.qid)}", "Blue")
         assert code == 200
-        d = backlog.load(self.p)
+        d = registry.backlog(self.p).load()
         q = next(x for x in d["decisions_resolved"] if x["id"] == self.qid)
         assert (q["answer"], q["delivered"]) == ("Blue", False)  # the loop gives it back to de-2
         assert self.call(f"/api/answer?p=demo&id={quote(self.perm)}", "yes")[0] == 409  # a permission: allow/deny
         code, _ = self.call(f"/api/go?p=demo&id={self.triage}", "")
         assert code == 200
-        assert backlog.get(backlog.load(self.p), self.triage)["status"] == "backlog"  # it had criteria: planned first
+        assert backlog.get(registry.backlog(self.p).load(), self.triage)["status"] == "backlog"  # it had criteria: planned first
         assert self.call(f"/api/go?p=demo&id={self.triage}", "")[0] == 409  # no longer in triage
 
     def test_allow_add_pause(self) -> None:
@@ -151,10 +152,10 @@ class TestPanel:
         assert [(g["task"], g["action"]) for g in grants] == [(self.work, "publish")]
         code, d = self.call("/api/add?p=demo", json.dumps({"title": "New", "criteria": "done"}))
         assert code == 200
-        assert backlog.get(backlog.load(self.p), d["id"])["status"] == "backlog"
+        assert backlog.get(registry.backlog(self.p).load(), d["id"])["status"] == "backlog"
         assert self.call("/api/pause?p=demo&on=1", "")[0] == 200
         assert (self.p.state / "paused").exists()
-        flying = sum(1 for i in backlog.tasks(backlog.load(self.p)) if i["status"] in ("in progress", "refining", "in review"))
+        flying = sum(1 for i in backlog.tasks(registry.backlog(self.p).load()) if i["status"] in ("in progress", "refining", "in review"))
         _, system = self.call("/api/system?p=demo")
         assert isinstance(system, dict)
         assert system["in_flight"] == flying

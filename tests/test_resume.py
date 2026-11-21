@@ -7,7 +7,7 @@ import pytest
 from helpers import Env
 
 from foreman import proc, util
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import questions
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
 from foreman.providers.claude import sessions
@@ -18,13 +18,13 @@ from foreman.steps.health import checks
 
 
 def launched(e: Env) -> str:
-    tid = backlog.add(e.p, "x", status="ready", criteria="y")
+    tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
     launch_free(e.p)
     return tid
 
 
 def answer(e: Env, tid: str, text: str = "B") -> None:
-    questions.answer(e.p, questions.ask(e.p, tid, tid.lower(), "A or B?"), text)
+    registry.backlog(e.p).answer(registry.backlog(e.p).ask(tid, tid.lower(), "A or B?"), text)
 
 
 def rows(e: Env) -> list[dict]:
@@ -45,7 +45,7 @@ class TestResume:
         talk.deliver_answers(e.p, registry.rows(e.p))
         assert e.task(tid)["agent"]["session"] == sid
         assert len(rows(e)) == 1
-        assert questions.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(registry.backlog(e.p).load()) == []
         assert e.calls()[-1]["argv"][:3] == ["--bg", "--resume", sid]
         assert len(e.calls()[-1]["argv"]) == 4
 
@@ -115,12 +115,12 @@ class TestResume:
     def test_a_failed_nudge_still_counts_so_the_block_fires(self):
         e = Env(repo=self.fake)
         tid = launched(e)
-        backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
+        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         (e.bin / "copy_next").write_text("")
         e.set_state(tid.lower(), "done")
         talk.watch_agents(e.p, registry.rows(e.p))
         assert e.task(tid)["agent"]["nudged"]
-        backlog.update(e.p, tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
+        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
         talk.watch_agents(e.p, registry.rows(e.p))
         assert "even after a nudge" in e.task(tid)["blocked"]
         assert len([r for r in rows(e) if "-mechanic" not in r["name"]]) == 2  # health files the block: a mechanic follows
@@ -133,13 +133,13 @@ class TestResume:
         answer(e, tid, "C")
         talk.deliver_answers(e.p, registry.rows(e.p))
         assert len(e.calls()) == 2
-        assert len(questions.undelivered(backlog.load(e.p))) == 1
+        assert len(questions.undelivered(registry.backlog(e.p).load())) == 1
         talk.deliver_answers(e.p, registry.rows(e.p))  # the session is working now
         assert len(e.calls()) == 2
         e.set_state(tid.lower(), "done")
         talk.deliver_answers(e.p, registry.rows(e.p))
         assert len(e.calls()) == 3
-        assert questions.undelivered(backlog.load(e.p)) == []
+        assert questions.undelivered(registry.backlog(e.p).load()) == []
         assert len(rows(e)) == 1
 
     def test_a_session_that_became_busy_since_the_listing_is_not_resumed(self):
@@ -172,8 +172,8 @@ class TestResume:
         answer(e, tid)
         for _ in range(4):
             talk.deliver_answers(e.p, registry.rows(e.p))
-        assert len(questions.undelivered(backlog.load(e.p))) == 1
+        assert len(questions.undelivered(registry.backlog(e.p).load())) == 1
         assert e.task(tid)["blocked"] == ""
-        with backlog.edit(e.p) as d:
+        with registry.backlog(e.p).edit() as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
         assert len(checks.answers_undelivered(e.p)) == 1

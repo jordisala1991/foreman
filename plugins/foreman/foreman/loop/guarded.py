@@ -4,6 +4,7 @@ from .. import providers
 from ..core.project.config import Project
 from ..core.rules import decide
 from ..core.tasks import backlog
+from ..providers import registry
 from ..services.delivery import check, mergecheck
 
 
@@ -14,21 +15,21 @@ def guarded(p: Project, tid: str, what: str, fn: Callable[[], object], field: st
     err, cnt = f"{field}_error", f"{field}_count"
     try:
         fn()
-        i = backlog.get(backlog.load(p), tid)
+        i = backlog.get(registry.backlog(p).load(), tid)
         if i.get(err) or i.get(cnt):
-            backlog.update(p, tid, **{err: "", cnt: 0})
+            registry.backlog(p).update(tid, **{err: "", cnt: 0})
     except providers.Transient as e:
-        i = backlog.get(backlog.load(p), tid)
+        i = backlog.get(registry.backlog(p).load(), tid)
         r = decide.retry_step(int(i.get(cnt) or 0), i.get(err), str(e))
         if r.block:
-            backlog.update(p, tid, blocked=f"the loop could not {what}: {e}"[:300], **{err: "", cnt: r.count})
+            registry.backlog(p).update(tid, blocked=f"the loop could not {what}: {e}"[:300], **{err: "", cnt: r.count})
             backlog.event(p, tid, f"blocked: could not {what} {decide.TRANSIENT_ATTEMPTS} times in a row: {e}"[:300])
             return
-        backlog.update(p, tid, **{cnt: r.count, err: str(e)})
+        registry.backlog(p).update(tid, **{cnt: r.count, err: str(e)})
         if r.say:  # the platform hiccuped: stay as is, try again next tick, say it once
             backlog.event(p, tid, f"could not {what}, will retry: {e}"[:300])
     except Exception as e:
-        backlog.update(p, tid, blocked=f"the loop could not {what}: {e}"[:300])
+        registry.backlog(p).update(tid, blocked=f"the loop could not {what}: {e}"[:300])
         backlog.event(p, tid, f"blocked: could not {what}: {e}"[:300])
 
 

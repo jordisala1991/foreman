@@ -58,7 +58,8 @@ layer = "services"
 path = "foreman.providers.registry"
 layer = "registry"
 
-# ports: the provider interface, the repo interface (every git operation on a repo) and the runner interface (every agent session).
+# ports: the provider interface, the repo interface (every git operation on a repo), the runner interface (every agent session)
+# and the backlog interface (every read and write of the backlog).
 [[modules]]
 path = "foreman.providers"
 layer = "ports"
@@ -67,6 +68,9 @@ path = "foreman.providers.repo"
 layer = "ports"
 [[modules]]
 path = "foreman.providers.runner"
+layer = "ports"
+[[modules]]
+path = "foreman.providers.backlog"
 layer = "ports"
 
 # adapters: one per platform. Layer "adapters" keeps the core from importing them; a layer rule keeps them from the loop, and their `depends_on` from each other.
@@ -83,6 +87,11 @@ depends_on = ["foreman.providers"]
 path = "foreman.providers.gitrepo"
 layer = "adapters"
 depends_on = ["foreman.providers.repo"]
+# backlogfile: the backlog port's local adapter; the one module that names backlog.json.
+[[modules]]
+path = "foreman.providers.backlogfile"
+layer = "adapters"
+depends_on = ["foreman.providers.backlog"]
 
 # claude: the runner port's adapter; the one place that builds a claude command line.
 [[modules]]
@@ -101,7 +110,7 @@ depends_on = ["foreman.providers.runner"]
 path = "foreman.proc"
 layer = "proc"
 
-# core: vocabulary and pure rules (risk, autonomy, guard), plus the plain files that do not vary (backlog.json, config).
+# core: vocabulary and pure rules (risk, autonomy, guard), plus the plain files that do not vary (config).
 # Packages under foreman/core/ (a package path gives all its files); no subprocess here (ruff, TID251 in pyproject.toml).
 [[modules]]
 path = "foreman.core.project"

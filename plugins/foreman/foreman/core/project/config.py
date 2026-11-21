@@ -197,10 +197,6 @@ class Project:
     def config_file(self) -> Path:
         return self.home / "foreman.toml"
 
-    @property
-    def backlog_file(self) -> Path:
-        return self.home / "backlog.json"
-
 
 @dataclass
 class Unreadable:

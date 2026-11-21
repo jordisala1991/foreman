@@ -8,7 +8,6 @@ from fakerepo import FakeRepo
 from helpers import Env
 
 from foreman.core.project.config import Project
-from foreman.core.tasks import backlog
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
 from foreman.providers.repo import FileDiff
@@ -33,9 +32,9 @@ class Setup:  # tables: foreman.toml [repos.*] tables, $T standing for the temp 
         monkeypatch.setattr(registry, "repo", lambda p: self.fakes[p.repo.name])
 
     def task(self, repo: str, status: str = "ready") -> str:
-        tid = backlog.add(self.p, "t", status=status, criteria="c")
+        tid = registry.backlog(self.p).add("t", status=status, criteria="c")
         if repo:
-            backlog.update(self.p, tid, repo=repo)
+            registry.backlog(self.p).update(tid, repo=repo)
         return tid
 
     def blocked(self, tid: str) -> str:

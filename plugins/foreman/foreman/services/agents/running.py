@@ -47,7 +47,7 @@ def running(d: dict[str, Any]) -> int:
 
 def update_agent(p: Project, tid: str, **fields: Any) -> None:
     """Merges fields into the task's agent, from the current backlog (not from a read made earlier)."""
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         it = backlog.get(d, tid)
         it["agent"] = {**(it.get("agent") or {}), **fields}
 
@@ -62,7 +62,7 @@ def send(p: Project, i: dict[str, Any], message: str) -> bool:
     now, under the lock: a relaunch may have replaced the one in `i`. A ref the runner gives back changed (Orca started the
     chat again under a new dispatch id, after a restart) is kept."""
     with session_lock(p, i["id"]):
-        a: dict[str, Any] = backlog.get(backlog.load(p), i["id"]).get("agent") or {}
+        a: dict[str, Any] = backlog.get(registry.backlog(p).load(), i["id"]).get("agent") or {}
         ref = ref_of(a)
         if not a.get("session") or ref is None:
             return False
@@ -72,7 +72,7 @@ def send(p: Project, i: dict[str, Any], message: str) -> bool:
             backlog.event(p, i["id"], f"could not reach {a['name']}: {e}")
             return False
         if new != ref:
-            with backlog.edit(p) as d:
+            with registry.backlog(p).edit() as d:
                 it = backlog.get(d, i["id"])
                 it["agent"] = {**(it.get("agent") or {}), **new.fields()}
                 it["session_tabs"] = {**it.get("session_tabs", {}), a["session"]: new.tab()}

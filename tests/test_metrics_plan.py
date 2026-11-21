@@ -3,8 +3,8 @@ from unittest import mock
 import pytest
 from helpers import Env
 
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.providers.claude.rows import ClaudeRows
 from foreman.services.agents import launch
 from foreman.steps import metrics
@@ -26,8 +26,8 @@ class TestPlanVsWork:
             return next(r for r in metrics.per_task(self.e.p) if r["id"] == tid)
 
     def make(self, **keys):
-        tid = backlog.add(self.e.p, "x", status="ready", criteria="y")
-        backlog.update(self.e.p, tid, **keys)
+        tid = registry.backlog(self.e.p).add("x", status="ready", criteria="y")
+        registry.backlog(self.e.p).update(tid, **keys)
         return tid
 
     def test_returns_for_failures_are_counted_next_to_conflicts(self):
@@ -72,8 +72,8 @@ class TestCost:
         import json
 
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.update(e.p, tid, sessions=["s1", "s2"], session_kinds={"s1": "planning", "s2": "responsible"})
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
+        registry.backlog(e.p).update(tid, sessions=["s1", "s2"], session_kinds={"s1": "planning", "s2": "responsible"})
         d = e.tmp / "transcripts/proj"
         d.mkdir(parents=True)
         rec = {
@@ -96,8 +96,8 @@ class TestCost:
 class TestRecording:
     def test_launch_and_reviewer_record_kinds(self):
         e = Env()
-        d = backlog.add(e.p, "vague", criteria="c")
-        w = backlog.add(e.p, "clear", status="ready", criteria="y")
+        d = registry.backlog(e.p).add("vague", criteria="c")
+        w = registry.backlog(e.p).add("clear", status="ready", criteria="y")
         tick.tick(e.p)
         assert list(e.task(d)["session_kinds"].values()) == ["planning"]
         assert list(e.task(w)["session_kinds"].values()) == ["responsible"]
@@ -109,8 +109,8 @@ class TestRecording:
 
     def test_fill_sessions_stores_agent_kind_and_review(self):
         e = Env()
-        tid = backlog.add(e.p, "clear", status="ready", criteria="y")
-        backlog.update(e.p, tid, agent={"short": "aa", "kind": "responsible"}, reviewer={"short": "rr"})
+        tid = registry.backlog(e.p).add("clear", status="ready", criteria="y")
+        registry.backlog(e.p).update(tid, agent={"short": "aa", "kind": "responsible"}, reviewer={"short": "rr"})
         launch.fill_sessions(e.p, ClaudeRows({"aa-full": {"id": "aa"}, "rr-full": {"id": "rr"}}))
         i = e.task(tid)
         assert i["session_kinds"] == {"aa-full": "responsible", "rr-full": "review"}

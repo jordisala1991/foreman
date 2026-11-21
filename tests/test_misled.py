@@ -3,8 +3,8 @@ import os
 import pytest
 from helpers import PLUGIN, fm
 
-from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.services.agents import brief
 
 BRIEFS = PLUGIN / "foreman" / "briefs"
@@ -23,7 +23,7 @@ class TestMisled:
     @pytest.fixture(autouse=True)
     def set_up(self, env):
         self.e = env
-        self.tid = backlog.add(self.e.p, "x", status="ready", criteria="y")
+        self.tid = registry.backlog(self.e.p).add("x", status="ready", criteria="y")
         tick.tick(self.e.p)
 
     def misled(self):

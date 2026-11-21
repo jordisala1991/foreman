@@ -4,7 +4,7 @@ from unittest import mock
 from helpers import Env
 
 from foreman import util
-from foreman.core.tasks import backlog
+from foreman.providers import registry
 from foreman.steps import metrics
 
 
@@ -94,8 +94,8 @@ class TestLastWeek:
 class TestText:
     def rows(self):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.update(e.p, tid, status="done")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
+        registry.backlog(e.p).update(tid, status="done")
         (e.p.state / "events.jsonl").unlink(missing_ok=True)  # the add wrote its own events, stamped now
         for x in ev(*SKIPPED):
             util.append_jsonl(e.p.state / "events.jsonl", {**x, "task": tid})

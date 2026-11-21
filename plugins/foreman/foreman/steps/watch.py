@@ -33,7 +33,7 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
 
 def needs(p: Project, rows: Rows) -> dict[str, str]:
     """What needs the owner now: key → one line, in the order questions, accepts, blocked, main, parents."""
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     found: dict[str, str] = {}
     asked = {q["task"] for q in questions.open_questions(d)}
     for q in questions.open_questions(d):

@@ -11,6 +11,7 @@ from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.providers.runner import NO_ROWS
 from foreman.steps.health import checks, health, repos
 
@@ -35,7 +36,7 @@ def commit(repo: Path, name: str) -> None:
 
 
 def triage(e: Env) -> list[backlog.Task]:
-    return [i for i in backlog.tasks(backlog.load(e.p)) if i["status"] == "triage"]
+    return [i for i in backlog.tasks(registry.backlog(e.p).load()) if i["status"] == "triage"]
 
 
 def test_main_tests_file_one_finding_per_failing_repo():
@@ -65,8 +66,8 @@ def test_a_failing_episode_is_per_repo():
 
 def test_an_orphan_worktree_of_any_repo_is_found():
     e = several({"api": "", "web": ""})
-    tid = backlog.add(e.p, "x", status="ready", criteria="y")
-    backlog.update(e.p, tid, repo="api")
+    tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
+    registry.backlog(e.p).update(tid, repo="api")
     tick.tick(e.p)
     assert checks.orphan_worktrees(e.p) == []  # the task's own worktree is live
     git(e.tmp / "web", "worktree", "add", "-q", "-b", "g", str(e.home / "worktrees/ghost"), "main")

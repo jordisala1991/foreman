@@ -5,7 +5,6 @@ from helpers import Env, fm, git
 from test_github import GH
 
 from foreman.core.review.inline import Review
-from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.providers import Change, registry
 from foreman.services.delivery import pulls
@@ -15,10 +14,10 @@ DIFF = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,2 +1,4 @
 
 def tip(g: GH, iid: str, text: str, open: int = 0) -> None:
     """Delivers the task's current tip with a verdict (already sent back, so it is delivered) and ticks."""
-    backlog.set_status(g.e.p, iid, "in review", report={"summary": "does x", "confused": ""})
+    registry.backlog(g.e.p).set_status(iid, "in review", report={"summary": "does x", "confused": ""})
     g.e.review(iid, open)
     (g.e.home / "reviews" / f"{iid}.md").write_text(text)
-    backlog.update(g.e.p, iid, review={**g.e.task(iid)["review"], "returned": True})
+    registry.backlog(g.e.p).update(iid, review={**g.e.task(iid)["review"], "returned": True})
     tick.tick(g.e.p)
     tick.tick(g.e.p)
 
@@ -60,7 +59,7 @@ class TestReview_:
         assert "the why" in c["body"]
         assert "the why" not in r["body"]
         assert r["body"].index("<details") < r["body"].index("the what")
-        backlog.update(g.e.p, iid, pr={**g.e.task(iid)["pr"], "commented": ""})  # a lost record does not post the review twice
+        registry.backlog(g.e.p).update(iid, pr={**g.e.task(iid)["pr"], "commented": ""})  # a lost record does not post the review twice
         tick.tick(g.e.p)
         tick.tick(g.e.p)
         assert len(self.pr(g)["reviews"]) == 1

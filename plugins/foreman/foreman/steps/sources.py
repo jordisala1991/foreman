@@ -20,7 +20,8 @@ from typing import Any
 
 from .. import util
 from ..core.project.config import Project
-from ..core.tasks import backlog, questions
+from ..core.tasks import backlog
+from ..providers import registry
 from ..services import runsource
 from ..services.delivery import merge
 from . import schedule
@@ -80,7 +81,7 @@ def _handle(p: Project, name: str, s: dict[str, Any], cursor_file: Path) -> str 
     elif s.get("task"):
         _on_task(p, name, s)
     elif s.get("key") and s.get("title"):
-        return backlog.add(p, s["title"], detail=s.get("detail", ""), status="triage", source=f"{name}:{s['key']}") or None
+        return registry.backlog(p).add(s["title"], detail=s.get("detail", ""), status="triage", source=f"{name}:{s['key']}") or None
     return None
 
 
@@ -113,7 +114,7 @@ ACTIONS = ("note", "reject", "accept", "done", "cancel")
 def apply(p: Project, source: str, s: dict[str, Any]) -> None:
     """One signal on a task, through the owner's command path. Raises when it is not valid: nothing changed."""
     tid, action, text = str(s["task"]), s.get("action"), str(s.get("text") or "")
-    i = backlog.get(backlog.load(p), tid)
+    i = backlog.get(registry.backlog(p).load(), tid)
     status = i["status"]
     if action not in ACTIONS:
         raise ValueError(f"{tid}: unknown action {action!r}")
@@ -124,7 +125,7 @@ def apply(p: Project, source: str, s: dict[str, Any]) -> None:
     if action == "note":
         if status not in (*backlog.RUNNING, "in review"):
             raise ValueError(f"{tid} is {status}: no agent to tell")
-        questions.note(p, tid, text, source)
+        registry.backlog(p).note(tid, text, source)
     elif action in ("reject", "accept"):
         if status != "in review":
             raise ValueError(f"{tid} is {status}, not in review")

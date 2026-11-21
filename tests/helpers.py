@@ -22,6 +22,7 @@ from fakerepo import FakeRepo
 from foreman import util
 from foreman.core.project.config import Project
 from foreman.core.tasks import backlog
+from foreman.providers import registry
 from foreman.providers.claude import sessions
 from foreman.providers.repo import FileDiff
 
@@ -264,7 +265,7 @@ class Env:
         git(Path(self.task(tid)["worktree"]), "commit", "-qam", "change")
 
     def task(self, tid: str) -> dict[str, Any]:
-        return backlog.get(backlog.load(self.p), tid)
+        return backlog.get(registry.backlog(self.p).load(), tid)
 
 
 def install_fm(request: pytest.FixtureRequest, *entries: dict[str, Any], version: int = 2) -> Path:

@@ -13,6 +13,7 @@ import re
 import shlex
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,7 @@ from typing import Any
 from ... import util
 from ..project.config import Project
 from ..review import evidence
-from ..tasks import backlog
+from ..tasks.backlog import Local
 
 PUBLISH = {
     ("npm", "publish"),
@@ -185,9 +186,9 @@ def main_branches(p: Project) -> set[str]:
     return MAIN | {p.get("project", "main")} | {str(r["main"]) for r in p.cfg["repos"].values()}
 
 
-def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, task: dict[str, Any] | None) -> str | None:
-    own = [Path(task["worktree"]).resolve()] if task and task.get("worktree") else []
-    branch = (task or {}).get("branch", "")
+def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, local: Local | None) -> str | None:
+    own = [Path(local.worktree).resolve()] if local and local.worktree else []
+    branch = local.branch if local else ""
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         f = inp.get("file_path") or inp.get("notebook_path") or ""
         if f and Path(cwd, f).resolve() == p.config_file.resolve():
@@ -214,20 +215,17 @@ def grant(p: Project, tid: str, action: str) -> None:
         grants.append({"task": tid, "action": action, "at": util.now()})
 
 
-def hook(stdin: str) -> str:
-    """The PreToolUse hook: the JSON to print (empty: let it run). Never raises: a guard error lets the call run."""
+def hook(stdin: str, local: Callable[[Project, str], Local | None]) -> str:
+    """The PreToolUse hook: the JSON to print (empty: let it run). `local` finds the task's worktree and branch. Never raises:
+    a guard error lets the call run."""
     try:
         home, tid = os.environ.get("FOREMAN_HOME"), os.environ.get("FOREMAN_TASK", "")
         if not home:
             return ""
         d = json.loads(stdin or "{}")
         p = Project.load(home)
-        try:
-            task = backlog.get(backlog.load(p), tid)
-        except backlog.BacklogError:
-            task = None
         tool_input: dict[str, Any] = d.get("tool_input") or {}
-        action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), task)
+        action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), local(p, tid))
         if not action or granted(p, tid, action):
             return ""
         util.append_jsonl(

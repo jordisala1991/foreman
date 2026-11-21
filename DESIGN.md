@@ -700,7 +700,7 @@ the delivery steps' calls fm makes today (`gh pr view` and `gh api graphql`, `pr
 
 These replace FN-140's planned subtasks 2-5: 2 (the port) and 5 (migration) kept, 3 (the GitHub adapter) split in two, reads and writes, and 4
 (commands and panel) reshaped into a full task seen on the sandbox. Drafted with their criteria in `<home>/reports/FN-234.md`; not filed yet.
-- **D2 The backlog port, with the local file behind it** (type change). Every read and write of the backlog goes through one port with the local file as its adapter, and the owner sees no difference: `foreman list, show, add, go, edit, accept, reject, answer` and the panel print the same on the sandbox, no module outside the adapter opens `backlog.json`, the panel reads through the port, the guard hook reads its task's local keys, and a tick loads the backlog once; `core/oversight/guard.py:226` stops importing the file module and `diagnosis.py:20`'s write moves behind the port (core cannot import a port).
+- **D2 The backlog port, with the local file behind it** (type change; built in FN-235). Every read and write of the backlog goes through one port with the local file as its adapter, and the owner sees no difference: `foreman list, show, add, go, edit, accept, reject, answer` and the panel print the same on the sandbox, no module outside the adapter opens `backlog.json`, the panel reads through the port, the guard hook reads its task's local keys, and a tick loads the backlog once; `core/oversight/guard.py:226` stops importing the file module and `diagnosis.py:20`'s write moves behind the port (core cannot import a port).
 - **D3 A project on GitHub: Board setup and reads** (after D2). With `[backlog]` pointing at a repo and Board, `foreman list`, `show` and the panel read the tasks from it: `foreman backlog setup` creates the 9 Status options, the 10 other fields and the label and deletes the workflows, idempotently; every field shown from a scratch Board of 20 open tasks; `FN-<number>` ids, a PR's number refused with its text, legacy ids through `legacy-ids.json`, an id looked up in the map, then the old file, then as a number, and `FN-272` refused as `#272 is FN-140`; the panel's recent list and the metrics read closed tasks from the old file and `state/closed.json`; one request per pass, over 50 open or a nested `totalCount` over its cap an error naming the count, a rate limit stops calls until the reset; a project without `[backlog]` still runs on its file.
 - **D4 A project on GitHub: writes** (after D3). Every write of the backlog lands on the Board and is read back: `add`, `go`, `edit` (dropping the plan), `ready`, `done`, `cancel`, `block`/`unblock`, `ask`/`answer` (the label), sub-issue and blocker writes; a write that did not stick is an error naming the field; a close sets its reason and the Status in one request and keeps the read-back task in `state/closed.json` in the format of the `closed` row; a rate limit waits for the reset with no retry loop in the adapter (retrying stays in `loop.guarded`); calls per operation equal the table above (±1); the pass's read and every write with its snapshot update run under the backlog lock, a drag Triage → Backlog is a Go with `go`'s checks, any other drag is an error line and the card is moved back, and the first pass (no snapshot) detects no drag.
 - **D5 A full task on GitHub, seen on the sandbox** (after D4). The loop runs a task end to end on a scratch Board: filed, let in, planned, worked, reviewed, accepted and merged, with a screenshot of the Board after each move; the panel and `foreman watch` match `foreman list`/`show` and the file's output; a project without `[backlog]` is unchanged.
@@ -1102,14 +1102,14 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 | loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
 | steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
 | services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
-| registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo and the runner (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`) (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
-| ports | `foreman/providers/` | `__init__.py` · repo · runner | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`) |
+| registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo, the runner and the backlog (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`, `registry.backlog(p)`; `registry.tick_scope(p)` makes a tick load the backlog once) (by convention the only caller of the adapters; not enforced by tach) |
+| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
+| ports | `foreman/providers/` | `__init__.py` · repo · runner · backlog | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`); `Backlog`, every read and write of the backlog (tasks cross it as dicts) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
 | core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
 Core areas, in their `depends_on` order: `project` (foreman.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
-`tasks` (the backlog file, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
+`tasks` (the backlog's vocabulary and pure functions, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
 inline comments, the description, evidence) → `rules` (`risk` on `project`; `decide` on `risk` only) → `oversight`
 (the guard, diagnosis, costs). `schedule` (FN-162) moves with the steps.
 
@@ -1139,11 +1139,13 @@ modules = [
   { path = "foreman.providers.github", layer = "adapters", depends_on = ["foreman.providers"] },
   { path = "foreman.providers.local", layer = "adapters", depends_on = ["foreman.providers"] },
   { path = "foreman.providers.gitrepo", layer = "adapters", depends_on = ["foreman.providers.repo"] },
+  { path = "foreman.providers.backlogfile", layer = "adapters", depends_on = ["foreman.providers.backlog"] },
   { path = "foreman.providers.claude", layer = "adapters", depends_on = ["foreman.providers.runner"] },
   { path = "foreman.providers.orca", layer = "adapters", depends_on = ["foreman.providers.runner"] },
   { path = "foreman.providers", layer = "ports" },
   { path = "foreman.providers.repo", layer = "ports" },
   { path = "foreman.providers.runner", layer = "ports" },
+  { path = "foreman.providers.backlog", layer = "ports" },
   { path = "foreman.proc", layer = "proc" },
   { path = "foreman.util", layer = "core" },
   { path = "foreman.launcher", layer = "core" },
@@ -1184,10 +1186,12 @@ A module that grows past its size is split along its area's seams, inside its ar
 ### Ports
 
 Only where there is an external system or two real implementations: `providers/` (local, github), and the
-launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary: `backlog.json` (until FN-140 gives it the `Backlog` port, two implementations: see «The backlog on GitHub»),
+launcher and source plug-ins (`sources`) when they exist. Not behind a port, because they do not vary:
 the config, the clock. A new port needs a second real implementation or a system outside the process; say which in the
 task.
 `Runner` (FN-213, built): the agents' sessions, `providers/runner.py`; adapters `claude` (`providers/claude/`) and `orca` (`providers/orca/`, FN-216); two real implementations.
+`Backlog` (FN-235, built): every read and write of the backlog, `providers/backlog.py`, through `registry.backlog(p)`; adapter
+`backlogfile` (`<home>/backlog.json`); the GitHub adapter is the second implementation (FN-140, «The backlog on GitHub»).
 
 ### Rules
 

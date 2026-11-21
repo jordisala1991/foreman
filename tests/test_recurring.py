@@ -12,6 +12,7 @@ from foreman import util
 from foreman.core.project.config import Project, ProjectError
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.steps import schedule, sources
 from foreman.ui.panel import views
 
@@ -39,16 +40,16 @@ class TestRecurring:
 
     def merged(self, title: str, at: str, **kw: Unpack[backlog.NewTask]) -> str:
         kw.setdefault("criteria", "c")
-        tid = backlog.add(self.p, title, **kw)
+        tid = registry.backlog(self.p).add(title, **kw)
         self.close(tid, "done", at)
         return tid
 
     def close(self, tid: str, status: str, at: str) -> None:
         with mock.patch("foreman.util.now", return_value=at):
-            backlog.set_status(self.p, tid, status)
+            registry.backlog(self.p).set_status(tid, status)
 
     def mine(self) -> list[dict]:
-        return [i for i in backlog.tasks(backlog.load(self.p)) if i.get("source") == "recurring:cleanup"]
+        return [i for i in backlog.tasks(registry.backlog(self.p).load()) if i.get("source") == "recurring:cleanup"]
 
     def refused(self, text: str, *needles: str) -> None:
         with pytest.raises(ProjectError) as cm:
@@ -163,8 +164,8 @@ class TestRecurring:
         self.seen()
         mine = self.merged("filed by an entry", "2026-11-15 00:30:00", source="recurring:cleanup")
         self.merged("one", "2026-11-15 01:00:00")
-        parent = backlog.add(self.p, "parent", criteria="c")
-        backlog.add(self.p, "sub", criteria="c", parent=parent)
+        parent = registry.backlog(self.p).add("parent", criteria="c")
+        registry.backlog(self.p).add("sub", criteria="c", parent=parent)
         self.close(parent, "done", "2026-11-15 03:00:00")
         assert schedule.run(self.p, T0) == []
         two = self.merged("two", "2026-11-15 04:00:00")
@@ -177,7 +178,7 @@ class TestRecurring:
     def test_steps_of_a_recurring_parent_do_not_count(self) -> None:
         self.entries(CLEANUP)
         self.seen()
-        parent = backlog.add(self.p, "chain", criteria="c", source="recurring:other")
+        parent = registry.backlog(self.p).add("chain", criteria="c", source="recurring:other")
         self.merged("step", "2026-11-15 01:00:00", parent=parent)
         self.merged("one", "2026-11-15 02:00:00")
         assert schedule.run(self.p, T0) == []
@@ -199,7 +200,7 @@ class TestRecurring:
         self.seen()
         self.merged("one", "2026-11-15 01:00:00")
         (tid,) = schedule.run(self.p, T0)
-        plain = backlog.add(self.p, "plain", criteria="c")
+        plain = registry.backlog(self.p).add("plain", criteria="c")
 
         def check() -> None:
             line = next(ln for ln in fm(self.e.home, "list").splitlines() if ln.startswith(tid))
@@ -227,7 +228,7 @@ class TestRecurring:
         assert rows["cleanup"]["left"] == 7
         assert rows["weekly"]["next"].startswith("2026-11-08")
         schedule.run(self.p, datetime(2026, 11, 20))
-        weekly = next(i["id"] for i in backlog.tasks(backlog.load(self.p)) if i.get("source") == "recurring:weekly")
+        weekly = next(i["id"] for i in backlog.tasks(registry.backlog(self.p).load()) if i.get("source") == "recurring:weekly")
         row = next(r for r in schedule.rows(self.p) if r["name"] == "weekly")
         assert (row["open"], row["next"]) == (weekly, None)
         assert f"waits for {weekly} to close" in fm(self.e.home, "health")
@@ -275,7 +276,7 @@ class TestRecurring:
         src.chmod(0o755)
         with mock.patch("foreman.steps.schedule.run", side_effect=OverflowError("boom")):
             sources.run(self.p)
-        assert [i["title"] for i in backlog.tasks(backlog.load(self.p))] == ["from a source"]
+        assert [i["title"] for i in backlog.tasks(registry.backlog(self.p).load())] == ["from a source"]
         assert [e["step"] for e in util.read_jsonl(self.p.state / "errors.jsonl")] == ["recurring"]
 
     def test_no_recurring_sees_nothing(self) -> None:

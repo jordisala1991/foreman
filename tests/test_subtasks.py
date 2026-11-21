@@ -10,22 +10,23 @@ from test_github import GH
 
 from foreman.core.tasks import backlog, subtasks
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.services.delivery import merge
 
 
 def count(e: Env) -> int:
-    return len(backlog.tasks(backlog.load(e.p)))
+    return len(backlog.tasks(registry.backlog(e.p).load()))
 
 
 class TestFiling:
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
         self.e = env
-        self.P = backlog.add(self.e.p, "parent", status="triage")
+        self.P = registry.backlog(self.e.p).add("parent", status="triage")
 
     def test_add_parent_files_a_subtask(self):
         for status in ("triage", "backlog"):
-            backlog.set_status(self.e.p, self.P, status)
+            registry.backlog(self.e.p).set_status(self.P, status)
             s = fm(self.e.home, "add", "s", "--parent", self.P, "--criteria", "c").strip()
             assert (self.e.task(s)["parent"], self.e.task(s)["status"]) == (self.P, "backlog")
         s = fm(self.e.home, "add", "s", "--parent", self.P).strip()
@@ -38,7 +39,7 @@ class TestFiling:
 
     def test_subtask_refused_once_the_parent_started(self):
         for status in ("ready", "refining", "in progress", "done"):
-            backlog.set_status(self.e.p, self.P, status)
+            registry.backlog(self.e.p).set_status(self.P, status)
             with pytest.raises(SystemExit):
                 fm(self.e.home, "add", "s", "--parent", self.P, "--criteria", "c")
         with pytest.raises(SystemExit):
@@ -56,7 +57,7 @@ class TestFiling:
 class TestShowing:
     def test_show_lists_subtasks_and_names_the_parent(self):
         e = Env()
-        P = backlog.add(e.p, "parent", status="triage")
+        P = registry.backlog(e.p).add("parent", status="triage")
         s1 = fm(e.home, "add", "one", "--parent", P, "--criteria", "c").strip()
         s2 = fm(e.home, "add", "two", "--parent", P).strip()
         shown = json.loads(fm(e.home, "show", P))
@@ -66,14 +67,14 @@ class TestShowing:
 
     def test_list_shows_subtasks_under_their_parent(self):
         e = Env()
-        a = backlog.add(e.p, "a", status="triage")
-        b = backlog.add(e.p, "b", status="triage")
+        a = registry.backlog(e.p).add("a", status="triage")
+        b = registry.backlog(e.p).add("b", status="triage")
         s = fm(e.home, "add", "s", "--parent", a).strip()
         assert [ln.split()[0] for ln in fm(e.home, "list").splitlines()] == [a, s, b]
 
     def test_a_subtask_of_a_closed_parent_is_not_indented(self):
         e = Env()
-        a = backlog.add(e.p, "a", status="triage")
+        a = registry.backlog(e.p).add("a", status="triage")
         s = fm(e.home, "add", "s", "--parent", a).strip()
         merge.close(e.p, a, "done", "x")
         line = fm(e.home, "list").rstrip("\n")
@@ -100,7 +101,7 @@ class TestOutcome:
 class TestLoop:
     def test_a_parent_gets_only_a_parent_agent(self):
         e = Env()
-        P = backlog.add(e.p, "parent", status="backlog", criteria="c")
+        P = registry.backlog(e.p).add("parent", status="backlog", criteria="c")
         s1 = fm(e.home, "add", "s1", "--parent", P, "--triage", "--criteria", "c").strip()
         tick.tick(e.p)
         assert [c["argv"][c["argv"].index("-n") + 1] for c in e.calls()] == ["TY-1 parent · parent"]
@@ -115,7 +116,7 @@ class TestClosing:
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
         self.e = env
-        self.P = backlog.add(self.e.p, "parent", status="triage")
+        self.P = registry.backlog(self.e.p).add("parent", status="triage")
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--criteria", "c").strip()
         self.S2 = fm(self.e.home, "add", "two", "--parent", self.P).strip()
 
@@ -130,15 +131,15 @@ class TestClosing:
 
     def test_parent_done_when_its_only_subtask_is_merged(self):
         e = Env(test="true")
-        P = backlog.add(e.p, "parent", status="triage")
+        P = registry.backlog(e.p).add("parent", status="triage")
         s = fm(e.home, "add", "one", "--parent", P, "--criteria", "c").strip()
-        backlog.set_status(e.p, s, "ready")
+        registry.backlog(e.p).set_status(s, "ready")
         tick.tick(e.p)
         wt = e.task(s)["worktree"]
         with open(os.path.join(wt, "app.py"), "a") as f:
             f.write("# 0\n")
         git(e.repo.parent / wt, "commit", "-qam", "change")
-        backlog.set_status(e.p, s, "in review", report={"summary": "s", "confused": ""})
+        registry.backlog(e.p).set_status(s, "in review", report={"summary": "s", "confused": ""})
         e.review(s, 0)
         tick.tick(e.p)
         merge.accept(e.p, s)
@@ -160,9 +161,9 @@ class TestClosing:
     def test_cancel_of_a_parent_closes_its_subtasks_pull_requests(self, request):
         g = GH()
         request.addfinalizer(g.close)
-        P = backlog.add(g.e.p, "parent", status="triage")
+        P = registry.backlog(g.e.p).add("parent", status="triage")
         tid = g.work()
-        backlog.update(g.e.p, tid, parent=P)
+        registry.backlog(g.e.p).update(tid, parent=P)
         tick.tick(g.e.p)
         fm(g.e.home, "cancel", P)
         assert g.state["prs"]["1"]["state"] == "CLOSED"
@@ -172,11 +173,11 @@ class TestClosing:
 class TestRace:
     def test_cancel_of_a_parent_does_not_overwrite_a_subtask_that_closed_meanwhile(self, owner):
         e = Env()
-        P = backlog.add(e.p, "parent", status="triage")
+        P = registry.backlog(e.p).add("parent", status="triage")
         S = fm(e.home, "add", "s", "--parent", P, "--criteria", "c").strip()
 
         def merged(p, i):  # the loop merges the subtask while the cascade closes it
-            backlog.set_status(p, S, "done")
+            registry.backlog(p).set_status(S, "done")
 
         with mock.patch.object(merge, "stop_all", side_effect=merged):
             merge.close(e.p, P, "canceled", "x")

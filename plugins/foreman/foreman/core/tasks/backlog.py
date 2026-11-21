@@ -1,5 +1,6 @@
 """The backlog: one `backlog.json` in today's foreman format (schema 5: tasks with id XX-n, title, status, detail,
-acceptance {goal, criteria, verdict}, result, priority; decisions), plus new keys. Its only writer, under the file lock.
+acceptance {goal, criteria, verdict}, result, priority; decisions), plus new keys. Read and written through the backlog port
+(`providers/backlog.py`); here, its vocabulary and the pure functions on its data.
 
 Statuses, and who moves a task between them (DESIGN.md has the picture):
   triage       filed by a health check or a source; waits for the owner's «go» (→ backlog or ready)
@@ -19,11 +20,8 @@ responsible|hunter|reviewer: [what misled that agent]}, `repo` (the `[repos.K]` 
 A question to the owner is a decision tied to its task and agent: {id: "XX-1 Q1", task, agent, title, text, kind, action?}.
 """
 
-import contextlib
 import re
-from collections.abc import Generator
-from datetime import date
-from typing import Any, TypedDict, Unpack
+from typing import Any, NamedTuple, TypedDict
 
 from ... import util
 from ..project.config import Project
@@ -38,6 +36,13 @@ Data = dict[str, Any]
 
 class BacklogError(Exception):
     pass
+
+
+class Local(NamedTuple):
+    """A task's keys that only the machine running it knows."""
+
+    worktree: str = ""
+    branch: str = ""
 
 
 class Agent(TypedDict, total=False):
@@ -73,35 +78,6 @@ class Check(TypedDict, total=False):
 
 def empty() -> Data:
     return {"schema_version": 5, "updated": "", "tasks": [], "decisions": [], "decisions_resolved": []}
-
-
-def load(p: Project) -> Data:
-    d: Data = util.read_json(p.backlog_file, None) or empty()
-    if d.get("schema_version") != 5:
-        raise BacklogError(f"{p.backlog_file}: schema {d.get('schema_version')!r}, expected 5")
-    for k, v in empty().items():
-        d.setdefault(k, v)
-    return d
-
-
-@contextlib.contextmanager
-def edit(p: Project) -> Generator[Data, None, None]:
-    with util.file_lock(p.backlog_file):
-        d = load(p)
-        yield d
-        d["updated"] = date.today().isoformat()
-        util.write_json(p.backlog_file, d)
-
-
-def record_misled(p: Project, tid: str, role: str, text: str) -> None:
-    """What misled an agent (its `--misled` text) is kept on the task under its role, once; «none» is not kept."""
-    t = " ".join(text.split())
-    if t.lower().rstrip(".") in ("", "none", "nothing", "n/a", "-"):
-        return
-    with edit(p) as d:
-        texts = get(d, tid).setdefault("misled", {}).setdefault(role, [])
-        if t not in texts:
-            texts.append(t)
 
 
 def tasks(d: Data) -> list[Task]:
@@ -155,60 +131,3 @@ class NewTask(TypedDict, total=False):
     type: str
     repo: str
     chain: Chain
-
-
-def add(p: Project, title: str, *, status: str = "backlog", **f: Unpack[NewTask]) -> str:
-    detail, criteria, goal = f.get("detail", ""), f.get("criteria", ""), f.get("goal", "")
-    source, priority = f.get("source"), f.get("priority", "none")
-    if status not in ("triage", "backlog", "ready"):
-        raise BacklogError("a new task starts in triage, backlog or ready")
-    if not criteria:
-        status = "triage"  # only a task with acceptance criteria can be let in
-    with edit(p) as d:
-        if source and any(i.get("source") == source and i["status"] not in CLOSED for i in tasks(d)):
-            return ""
-        tid = new_id(p, d)
-        task: Task = {
-            "id": tid,
-            "title": title,
-            "status": status,
-            "blocked": "",
-            "detail": detail,
-            "priority": priority,
-            "created": util.now(),
-        }
-        if criteria or goal:
-            task["acceptance"] = {"goal": goal, "criteria": criteria}
-        if source:
-            task["source"] = source
-        if parent := f.get("parent"):
-            task["parent"] = parent
-        if ids := f.get("blocked_by"):
-            task["blocked_by"] = ids
-        for k in ("model", "effort", "type", "repo", "chain"):
-            if v := f.get(k):
-                task[k] = v
-        d["tasks"].append(task)
-    event(p, tid, f"filed ({status}): {title}")
-    return tid
-
-
-def set_status(p: Project, tid: str, status: str, why: str = "", **keys: Any) -> Task:
-    if status not in STATUSES:
-        raise BacklogError(f"bad status {status!r}")
-    with edit(p) as d:
-        i = get(d, tid)
-        if status == "canceled" and i["status"] in CLOSED:  # closed meanwhile (merged): keep it
-            return i
-        i.update(keys, status=status)
-        if status in CLOSED:
-            i["closed"] = date.today().isoformat()
-    event(p, tid, f"→ {status}" + (f": {why}" if why else ""))
-    return i
-
-
-def update(p: Project, tid: str, **keys: Any) -> Task:
-    with edit(p) as d:
-        i = get(d, tid)
-        i.update(keys)
-    return i

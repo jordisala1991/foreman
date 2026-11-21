@@ -8,8 +8,9 @@ from unittest import mock
 from helpers import PLUGIN, Env, fm, git
 
 from foreman.core.oversight import guard
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import questions
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.providers.claude.sessions import Claude
 from foreman.services.agents import brief, launch
 from foreman.steps import talk
@@ -41,13 +42,13 @@ class TestGuardFalsePositives:
 class TestsRunOnTheCommit:
     def test_an_uncommitted_file_cannot_make_the_tests_pass(self):
         e = Env(test="python3 -c 'import helper'", autonomy="low")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         wt = Path(e.task(tid)["worktree"])
         (wt / "app.py").write_text("import helper\n")
         (wt / "helper.py").write_text("")  # never committed
         git(wt, "commit", "-qam", "uses helper")
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
         e.review(tid)
         tick.tick(e.p)
         assert (e.task(tid)["status"], e.task(tid)["check"]["tests"]) == ("in progress", "fail")  # returned to its agent (FN-67)
@@ -56,10 +57,10 @@ class TestsRunOnTheCommit:
 class TestSessions:
     def test_a_session_not_listed_at_launch_gets_its_id_later_and_is_not_blocked(self):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         a = e.task(tid)["agent"]
-        backlog.update(e.p, tid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"}, sessions=[])
+        registry.backlog(e.p).update(tid, agent={**a, "session": None, "started": "2000-01-01 00:00:00"}, sessions=[])
         tick.tick(e.p)
         i = e.task(tid)
         assert (i["agent"]["session"], i.get("blocked")) == (a["session"], "")
@@ -68,14 +69,14 @@ class TestSessions:
 class TestIsolation:
     def test_one_broken_queued_task_does_not_stop_the_others(self):
         e = Env(test="true", autonomy="low")
-        ids = [backlog.add(e.p, f"x{n}", status="ready", criteria="y") for n in range(2)]
+        ids = [registry.backlog(e.p).add(f"x{n}", status="ready", criteria="y") for n in range(2)]
         tick.tick(e.p)
         for tid in ids:
             wt = Path(e.task(tid)["worktree"])
             (wt / f"{tid}.txt").write_text("x\n")
             git(wt, "add", "-A")
             git(wt, "commit", "-qm", "c")
-            backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": ""})
+            registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
         tick.tick(e.p)  # both hunters start (two slots)
         for tid in ids:
             e.hunter_done(tid)
@@ -84,7 +85,7 @@ class TestIsolation:
             os.environ["FOREMAN_TASK"] = tid
             fm(e.home, "verdict", "--open", "0", "--file", "r.md")
         os.environ.pop("FOREMAN_TASK")
-        backlog.update(e.p, ids[0], branch="no/such-branch")
+        registry.backlog(e.p).update(ids[0], branch="no/such-branch")
         tick.tick(e.p)
         assert "could not check" in e.task(ids[0])["blocked"]
         assert e.task(ids[1])["status"] == "done"
@@ -93,11 +94,11 @@ class TestIsolation:
 class TestClosed:
     def test_cancel_closes_the_questions_and_no_answer_reaches_the_cancelled_agent(self):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
-        questions.ask(e.p, tid, tid.lower(), "A or B?")
+        registry.backlog(e.p).ask(tid, tid.lower(), "A or B?")
         fm(e.home, "cancel", tid)
-        d = backlog.load(e.p)
+        d = registry.backlog(e.p).load()
         assert questions.open_questions(d) == []
         assert not Path(e.task(tid)["worktree"]).exists()
         e.set_state(tid.lower(), "done")
@@ -108,22 +109,22 @@ class TestClosed:
 class TestOrphans:
     def test_a_ready_task_with_its_worktree_is_not_an_orphan(self):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         fm(e.home, "pause")
-        backlog.set_status(e.p, tid, "ready", "relaunch")
+        registry.backlog(e.p).set_status(tid, "ready", "relaunch")
         assert checks.orphan_worktrees(e.p) == []
 
 
 class TestLaunchRace:
     def test_a_task_cancelled_while_its_session_starts_stays_cancelled(self):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         real = Claude.start
 
         def start_and_cancel(self: Claude, *a: Any, **k: Any):
             r = real(self, *a, **k)
-            backlog.set_status(e.p, tid, "canceled", "owner")
+            registry.backlog(e.p).set_status(tid, "canceled", "owner")
             return r
 
         with mock.patch.object(Claude, "start", start_and_cancel):
@@ -157,8 +158,8 @@ class TestReviewerSeesOwnerNotes:
 
     def test_every_owner_note_of_the_task_reaches_the_reviewer_oldest_first_with_its_time(self):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        other = backlog.add(e.p, "z", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
+        other = registry.backlog(e.p).add("z", status="ready", criteria="y")
         tick.tick(e.p)
         talk.return_to_agent(e.p, tid, "rejection", "FIRSTNOTE use B")
         talk.return_to_agent(e.p, tid, "review", "REVIEWFIX")
@@ -169,12 +170,12 @@ class TestReviewerSeesOwnerNotes:
         assert text.index("FIRSTNOTE") < text.index("SECONDNOTE")
         for gone in ("REVIEWFIX", "CONFLICTFIX", "OTHERTASK"):
             assert gone not in text
-        stamp = [q for q in backlog.load(e.p)["decisions_resolved"] if "FIRSTNOTE" in q["answer"]][0]["at"]
+        stamp = [q for q in registry.backlog(e.p).load()["decisions_resolved"] if "FIRSTNOTE" in q["answer"]][0]["at"]
         assert stamp in text
 
     def test_no_owner_notes_no_section(self):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         talk.return_to_agent(e.p, tid, "review", "REVIEWFIX")
         assert brief.owner_notes_section(e.p, tid) == ""

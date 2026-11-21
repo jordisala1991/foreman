@@ -8,6 +8,7 @@ from helpers import git
 from foreman import util
 from foreman.core.tasks import backlog
 from foreman.loop import tick
+from foreman.providers import registry
 from foreman.providers.claude.sessions import Claude
 from foreman.services import runsource
 from foreman.services.delivery import check
@@ -32,7 +33,7 @@ class TestSignals:
 
     def running(self):
         """A task with a launched agent."""
-        tid = backlog.add(self.p, "work", status="ready", criteria="x")
+        tid = registry.backlog(self.p).add("work", status="ready", criteria="x")
         tick.tick(self.p)
         assert self.e.task(tid)["status"] == "in progress"
         return tid
@@ -44,14 +45,14 @@ class TestSignals:
         Path(f"{wt}/new.txt").write_text("x")
         git(self.e.repo.__class__(wt), "add", "-A")
         git(self.e.repo.__class__(wt), "commit", "-qm", "work")
-        backlog.set_status(self.p, tid, "in review", "t", report={"summary": "s"})
+        registry.backlog(self.p).set_status(tid, "in review", "t", report={"summary": "s"})
         return tid, branch
 
     def test_no_task_files_triage_once(self):
         sig = {"key": "k1", "title": "ci red", "detail": "d"}
         self.emit(sig, sig)
         self.emit(sig)
-        tasks = backlog.tasks(backlog.load(self.p))
+        tasks = backlog.tasks(registry.backlog(self.p).load())
         assert [(i["status"], i["source"]) for i in tasks] == [("triage", "src:k1")]
 
     def test_note_reaches_the_agent_like_an_answer(self):
@@ -70,7 +71,7 @@ class TestSignals:
         self.emit({"key": "r1", "task": tid, "action": "reject", "text": "change X"})
         i = self.e.task(tid)
         assert (i["status"], i["rework"]) == ("in progress", 1)
-        assert backlog.load(self.p)["decisions_resolved"][-1]["answer"] == "change X"
+        assert registry.backlog(self.p).load()["decisions_resolved"][-1]["answer"] == "change X"
 
     def test_accept_is_fm_accept(self):
         tid, branch = self.queued()
@@ -95,9 +96,9 @@ class TestSignals:
 
     def test_invalid_signals_change_nothing_and_are_logged(self):
         run = self.running()
-        closed = backlog.add(self.p, "old", status="triage")
-        backlog.set_status(self.p, closed, "canceled")
-        before = json.dumps(backlog.load(self.p), sort_keys=True)
+        closed = registry.backlog(self.p).add("old", status="triage")
+        registry.backlog(self.p).set_status(closed, "canceled")
+        before = json.dumps(registry.backlog(self.p).load(), sort_keys=True)
         bad = [
             {"key": "b1", "task": "TY-99", "action": "note", "text": "x"},  # unknown task
             {"key": "b2", "task": closed, "action": "note", "text": "x"},  # closed task
@@ -107,7 +108,7 @@ class TestSignals:
             {"key": "b6", "task": run, "action": "note"},  # no text
         ]
         self.emit(*bad)
-        assert json.dumps(backlog.load(self.p), sort_keys=True) == before
+        assert json.dumps(registry.backlog(self.p).load(), sort_keys=True) == before
         assert len(self.errors()) == len(bad)
 
     # the findings of review 1 (F1-F7)
@@ -139,8 +140,8 @@ class TestSignals:
     def test_unexpected_failure_is_logged_and_does_not_stop_the_next_signal(self):  # F2
         from unittest import mock
 
-        a, b = self.running(), backlog.add(self.p, "second", status="triage")
-        backlog.set_status(self.p, b, "in progress")
+        a, b = self.running(), registry.backlog(self.p).add("second", status="triage")
+        registry.backlog(self.p).set_status(b, "in progress")
         with mock.patch.object(Claude, "stop", side_effect=OSError("hung")):
             self.emit({"key": "x1", "task": a, "action": "cancel"}, {"key": "x2", "task": b, "action": "done"})
         assert self.e.task(b)["status"] == "done"

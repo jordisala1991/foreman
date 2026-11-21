@@ -26,7 +26,8 @@ def missing_why(m: dict[str, Any], rows: Rows) -> str:
 
 
 def note_missing(p: Project, tid: str, why: str) -> None:
-    diagnosis.record(p, tid, "Diagnosis missing", f"The mechanic {why}: the diagnosis is missing.", missing=why)
+    with registry.backlog(p).edit() as d:
+        diagnosis.record(d, tid, "Diagnosis missing", f"The mechanic {why}: the diagnosis is missing.", missing=why)
     backlog.event(p, tid, f"mechanic: diagnosis missing ({why})")
 
 
@@ -48,7 +49,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         note_missing(p, tid, f"could not launch: {e}")
         return
     m = {"name": name, **ref.fields(), "kind": "mechanic", "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
-    with backlog.edit(p) as d:
+    with registry.backlog(p).edit() as d:
         it = backlog.get(d, tid)
         still = it["status"] == "triage"
         if still:
@@ -64,10 +65,10 @@ def launch(p: Project, i: dict[str, Any]) -> None:
 
 
 def run(p: Project, rows: Rows) -> None:
-    for i in backlog.tasks(backlog.load(p)):
+    for i in backlog.tasks(registry.backlog(p).load()):
         if diagnosing(i) and (why := missing_why(i["mechanic"], rows)):
             note_missing(p, i["id"], why)
-    d = backlog.load(p)
+    d = registry.backlog(p).load()
     for i in backlog.tasks(d):
         if i.get("diagnosis") and i.get("mechanic") and rows.state(ref_of(i["mechanic"])) not in (State.ENDED, State.GONE):
             stop_live(p, i["id"], ref_of(i["mechanic"]), registry.runner(p), rows)

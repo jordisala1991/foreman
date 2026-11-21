@@ -44,13 +44,13 @@ def _open(p: Project, provider: Provider, i: dict[str, Any], head: str, draft: b
     ref = provider.publish(replace(change, body=describe.wrap(change.goal or change.title)), draft)
     if ref is None:  # a provider with no pull requests
         return
-    backlog.update(p, i["id"], pr=asdict(ref))
+    registry.backlog(p).update(i["id"], pr=asdict(ref))
     backlog.event(p, i["id"], f"opened {'draft ' if draft else ''}PR #{ref.number}: {ref.url}")
 
 
 def running(p: Project) -> list[dict[str, Any]]:
     """The tasks whose branch the loop keeps on the platform: in progress, with a branch, not blocked."""
-    return [i for i in backlog.tasks(backlog.load(p)) if i["status"] == "in progress" and i.get("branch") and not i.get("blocked")]
+    return [i for i in backlog.tasks(registry.backlog(p).load()) if i["status"] == "in progress" and i.get("branch") and not i.get("blocked")]
 
 
 def sync(p: Project, i: dict[str, Any]) -> None:
@@ -75,7 +75,7 @@ def prepare(p: Project, i: dict[str, Any], head: str) -> tuple[str, str]:
         provider.push(change_of(i, head))
     if not i.get("pr"):
         _open(p, provider, i, head, False)
-    ci = provider.ci(change_of(backlog.get(backlog.load(p), i["id"]), head))
+    ci = provider.ci(change_of(backlog.get(registry.backlog(p).load(), i["id"]), head))
     return ("wait", "CI is still running") if decide.waits_for_ci(ci) else ("ok", ci)
 
 
@@ -168,12 +168,12 @@ def _describe(p: Project, provider: Provider, i: dict[str, Any], head: str, pr: 
     provider.describe(change, describe.merge_body(provider.body(change), evidence.relink(text, urls)))
     if failed:
         raise failed
-    backlog.update(p, i["id"], pr={**pr, "described": head})
+    registry.backlog(p).update(i["id"], pr={**pr, "described": head})
 
 
 def describe_pr(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     """Sets the PR description once per checked tip; a failure is raised (see `_describe`)."""
-    i = backlog.get(backlog.load(p), i["id"])
+    i = backlog.get(registry.backlog(p).load(), i["id"])
     pr: dict[str, Any] = i.get("pr") or {}
     if pr and pr.get("described") != c["head"]:
         _describe(p, registry.get(p), i, c["head"], pr)
@@ -182,7 +182,7 @@ def describe_pr(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
 def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     """Marks the PR ready for review and posts the risk and verdict (once per checked tip)."""
     provider = registry.get(p)
-    i = backlog.get(backlog.load(p), i["id"])
+    i = backlog.get(registry.backlog(p).load(), i["id"])
     pr: dict[str, Any] = i.get("pr") or {}
     if not pr:
         return
@@ -190,8 +190,8 @@ def deliver(p: Project, i: dict[str, Any], c: dict[str, Any]) -> None:
     if pr.get("draft"):
         provider.ready(change)
         pr = {**pr, "draft": False}
-        backlog.update(p, i["id"], pr=pr)
+        registry.backlog(p).update(i["id"], pr=pr)
         backlog.event(p, i["id"], f"PR #{pr['number']} ready for review")
     if pr.get("commented") != c["head"]:
         _post_review(p, provider, i, c)
-        backlog.update(p, i["id"], pr={**pr, "commented": c["head"], "at": util.now()})
+        registry.backlog(p).update(i["id"], pr={**pr, "commented": c["head"], "at": util.now()})

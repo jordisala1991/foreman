@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 from helpers import Env, fm
 
-from foreman.core.tasks import backlog
+from foreman.providers import registry
 from foreman.services.agents import brief, launch
 from foreman.ui.panel import actions
 
@@ -16,8 +16,8 @@ class TestPlan:
     def set_up(self, request, env):
         self.e = env
         self.p = self.e.p
-        self.tid = backlog.add(self.p, "vague idea")
-        backlog.update(self.p, self.tid, status="refining")
+        self.tid = registry.backlog(self.p).add("vague idea")
+        registry.backlog(self.p).update(self.tid, status="refining")
         self.env = mock.patch.dict(os.environ, {"FOREMAN_TASK": self.tid})
         self.env.start()
         request.addfinalizer(self.env.stop)
@@ -74,7 +74,7 @@ class TestPlan:
         self.plan.parent.mkdir(parents=True)
         self.plan.write_text("x")
         self.ready("--plan", str(self.plan))
-        backlog.update(self.p, self.tid, status="refining")
+        registry.backlog(self.p).update(self.tid, status="refining")
         self.ready("--no-plan", "trivial after all")
         i = self.e.task(self.tid)
         assert "plan_file" not in i
@@ -82,12 +82,12 @@ class TestPlan:
 
     def test_fm_add_with_criteria_goes_to_planning(self):
         fm(self.e.home, "add", "t", "--criteria", "c", "--ready")
-        i = next(x for x in backlog.load(self.p)["tasks"] if x["title"] == "t")
+        i = next(x for x in registry.backlog(self.p).load()["tasks"] if x["title"] == "t")
         assert i["status"] == "backlog"
 
     def test_fm_add_without_criteria_stays_in_triage_even_ready(self):
         fm(self.e.home, "add", "t", "--ready")
-        i = next(x for x in backlog.load(self.p)["tasks"] if x["title"] == "t")
+        i = next(x for x in registry.backlog(self.p).load()["tasks"] if x["title"] == "t")
         assert i["status"] == "triage"
 
     def test_panel_filed_without_criteria_stays_in_triage(self):
@@ -95,14 +95,14 @@ class TestPlan:
         assert self.e.task(new)["status"] == "triage"
 
     def test_go_refuses_without_criteria(self):
-        tid = backlog.add(self.p, "no criteria")
+        tid = registry.backlog(self.p).add("no criteria")
         with pytest.raises(SystemExit) as r:
             fm(self.e.home, "go", tid)
         assert "define its acceptance criteria with the owner first" in str(r.value.code)
         assert self.e.task(tid)["status"] == "triage"
 
     def test_go_with_criteria_sends_it_to_planning(self):
-        tid = backlog.add(self.p, "t", status="triage", criteria="c")
+        tid = registry.backlog(self.p).add("t", status="triage", criteria="c")
         fm(self.e.home, "go", tid)
         assert self.e.task(tid)["status"] == "backlog"
 
@@ -110,8 +110,8 @@ class TestPlan:
 class TestReviewerPlan:
     def brief_of_reviewer(self, **keys):
         e = Env()
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
-        backlog.update(e.p, tid, status="in review", worktree=str(e.repo), **keys)
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
+        registry.backlog(e.p).update(tid, status="in review", worktree=str(e.repo), **keys)
         launch.launch_reviewer(e.p, e.task(tid), "abc123", "hunter")
         launch.launch_reviewer(e.p, e.task(tid), "abc123")
         return e, e.calls()[-1]["argv"][-1]

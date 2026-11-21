@@ -83,7 +83,7 @@ def login_check(p: Project, check: Callable[[str], login.Login] = login.login_st
 def agents(p: Project, rows: Rows) -> list[Finding]:
     out: list[Finding] = []
     stuck_s = 60 * int(p.get("health", "stuck_minutes"))
-    for i in backlog.tasks(backlog.load(p)):
+    for i in backlog.tasks(registry.backlog(p).load()):
         a: backlog.Agent = i.get("agent") or {}
         if i["status"] in backlog.RUNNING and rows.state(ref_of(a)) is State.WORKING:
             quiet = idle_s(a)
@@ -103,7 +103,7 @@ UNDELIVERED_MINUTES = 10
 
 def answers_undelivered(p: Project) -> list[Finding]:
     out: list[Finding] = []
-    for q in questions.undelivered(backlog.load(p)):
+    for q in questions.undelivered(registry.backlog(p).load()):
         since = q.get("answered_at") or q.get("at") or str(q.get("by", "")).rpartition(", ")[2]
         if (util.age_s(since) or 0) > 60 * UNDELIVERED_MINUTES:
             title = f"{q['task']}'s agent has not received a {q.get('kind') or 'question'} message"
@@ -113,7 +113,7 @@ def answers_undelivered(p: Project) -> list[Finding]:
 
 
 def orphan_worktrees(p: Project) -> list[Finding]:
-    live = {str(Path(i["worktree"]).resolve()) for i in backlog.tasks(backlog.load(p)) if i.get("worktree") and i["status"] not in backlog.CLOSED}
+    live = {str(Path(i["worktree"]).resolve()) for i in backlog.tasks(registry.backlog(p).load()) if i.get("worktree") and i["status"] not in backlog.CLOSED}
     out: list[Finding] = []
     for key, v in usable(p):
         root = v.path("worktrees").resolve()

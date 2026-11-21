@@ -50,7 +50,7 @@ def deliver(s: Setup, key: str) -> str:
     tid = s.task(key)
     tick.tick(s.p)
     s.fakes[key].commit(s.e.task(tid)["branch"], FileDiff("x.py", 1, 0))
-    backlog.set_status(s.p, tid, "in review", report={"summary": "s", "confused": ""})
+    registry.backlog(s.p).set_status(tid, "in review", report={"summary": "s", "confused": ""})
     s.e.review(tid)
     tick.tick(s.p)
     return tid
@@ -216,7 +216,7 @@ def test_publishing_repo_waits_for_the_owner(monkeypatch, fake_git):
 def test_the_reason_reaches_show_panel_and_pr(monkeypatch, fake_git):
     s = setup(monkeypatch, fake_git, PUBLISHING)
     site = deliver(s, "site")
-    i = backlog.get(backlog.load(s.p), site)  # what `fm show` prints whole
+    i = backlog.get(registry.backlog(s.p).load(), site)  # what `fm show` prints whole
     assert WHY in i["check"]["reasons"]
     shown = next(t for t in views.state(s.p)["tasks"] if t["id"] == site)
     assert WHY in shown["check"]["reasons"]

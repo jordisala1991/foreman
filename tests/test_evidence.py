@@ -14,7 +14,6 @@ from test_github import GH
 
 from foreman.core.oversight import guard
 from foreman.core.review import evidence
-from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.providers import Change, registry
 from foreman.providers.github import types
@@ -53,7 +52,7 @@ class TestOnGitHub:
         if image is not None:
             (path.parent / tid).mkdir(exist_ok=True)
             (path.parent / tid / name).write_bytes(image)
-        backlog.set_status(g.e.p, tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
+        registry.backlog(g.e.p).set_status(tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
         g.e.review(tid)
         return tid
 
@@ -83,13 +82,13 @@ class TestOnGitHub:
         assert b"app.py" in files
         assert b".png" not in files
         # the same evidence twice pushes once
-        backlog.update(g.e.p, tid, pr={**g.e.task(tid)["pr"], "described": ""})
+        registry.backlog(g.e.p).update(tid, pr={**g.e.task(tid)["pr"], "described": ""})
         self.ticks()
         assert self.remote("rev-list", "--count", "foreman-evidence").strip() == b"1"
         assert "foreman-evidence" in self.body()
         # a changed image is pushed again
         (g.e.home / "reports" / tid / "x.png").write_bytes(PNG + b"2")
-        backlog.update(g.e.p, tid, pr={**g.e.task(tid)["pr"], "described": ""})
+        registry.backlog(g.e.p).update(tid, pr={**g.e.task(tid)["pr"], "described": ""})
         self.ticks()
         assert self.remote("show", f"foreman-evidence:{tid}/x.png") == PNG + b"2"
         assert self.remote("rev-list", "--count", "foreman-evidence").strip() == b"2"
@@ -173,7 +172,7 @@ class TestPanel:
         (self.folder / "x.png").write_bytes(PNG)
         report = t.p.home / "reports" / f"{t.work}.md"
         report.write_text(BODY)
-        backlog.update(t.p, t.work, report={"summary": "s", "confused": "", "file": str(report)})
+        registry.backlog(t.p).update(t.work, report={"summary": "s", "confused": "", "file": str(report)})
         (t.p.home / "reports" / "secret.png").write_bytes(b"s")
 
     def get(self, path, key=True):
@@ -225,7 +224,7 @@ class TestPanel:
 class TestLocal:
     def test_local_tick_pushes_nothing(self):
         e = Env(test="true")
-        tid = backlog.add(e.p, "x", status="ready", criteria="y")
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         wt = e.repo.parent / e.task(tid)["worktree"]
         with open(wt / "app.py", "a") as f:
@@ -236,8 +235,8 @@ class TestLocal:
         path.write_text(BODY)
         (path.parent / tid).mkdir()
         (path.parent / tid / "x.png").write_bytes(PNG)
-        backlog.set_status(e.p, tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
-        backlog.update(e.p, tid, pr={"number": 1})  # so the tick reaches the description and its images
+        registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s", "confused": "", "file": str(path)})
+        registry.backlog(e.p).update(tid, pr={"number": 1})  # so the tick reaches the description and its images
         e.review(tid)
         tick.tick(e.p)
         tick.tick(e.p)
