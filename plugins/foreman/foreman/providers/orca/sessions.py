@@ -67,10 +67,15 @@ class Orca:
         return dataclasses.replace(ref, dispatch=new, pane=pane(new)) if new and new != ref.dispatch else ref
 
     def relaunch(self, ref: SessionRef, agent: Agent, message: str, cwd: Path) -> SessionRef:
-        """Today's settings reach a chat with no copy of it: claude reads its folder's file again while it runs (FN-218
-        F3), so the file is carried again and the chat told; the session stays."""
+        """Today's settings, `PATH` included, reach the agent through a new claude process: a running chat keeps the `PATH` it
+        started with, so the file is carried again, the chat stopped and the message sent, which makes Orca resume the same
+        session under a new dispatch."""
         settings.carry(self.p, agent, cwd)
-        return self.send(ref, message, cwd)
+        self.stop(ref)
+        new = self.send(ref, message, cwd)
+        if new.dispatch == ref.dispatch:
+            raise RunnerError(f"Orca took the message but did not resume session {ref.short}: its chat is stopped")
+        return new
 
     def rows(self) -> OrcaRows | None:
         """None when Orca is not running or `ps` fails: the panel reads this, so it never opens Orca."""

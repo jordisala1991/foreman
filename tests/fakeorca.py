@@ -6,7 +6,10 @@ exit 1; a worker's pane in `worker-show` and its `ps` row share only the part be
 SessionStart hook of the worktree's `.claude/settings.local.json`, as claude does in the chat.
 
 The test copies it with `FakeOrca(folder)` and drives it: `down()`, `restart()` (every chat ends; the next send answers a new dispatch id),
-`terminal_mode()`, `set_row(dispatch, word)`, `settle(dispatch)`."""
+`terminal_mode()`, `set(resumes=False)` (a send to an ended chat only queues), `set_row(dispatch, word)`, `settle(dispatch)`,
+`chat_path(dispatch)`, `age(dispatch, path)`.
+A chat keeps the `PATH` of the worktree's settings file from when its process started (`worker-start`, or `send` to a chat
+that ended); a rewritten file reaches a running chat's hooks and env vars, not its `PATH`."""
 
 import json
 import shutil
@@ -21,7 +24,7 @@ HERE = Path(__file__).resolve()
 
 
 def fresh() -> dict[str, Any]:
-    return {"running": True, "opens": True, "mode": "structured", "repos": [], "terminals": [], "runs": [], "workers": {}, "n": 0, "fail": []}
+    return {"running": True, "opens": True, "mode": "structured", "repos": [], "terminals": [], "runs": [], "workers": {}, "n": 0, "fail": [], "resumes": True}
 
 
 class FakeOrca:
@@ -91,9 +94,23 @@ class FakeOrca:
     def workers(self) -> dict[str, dict[str, Any]]:
         return self.load()["workers"]
 
+    def chat_path(self, dispatch: str) -> str:
+        """The `PATH` the chat's process started with."""
+        return str(self.workers()[dispatch]["path"])
+
+    def age(self, dispatch: str, path: str) -> None:
+        """The chat started on an older build: its `PATH` is `path`."""
+        s = self.load()
+        s["workers"][dispatch]["path"] = path
+        self.save(s)
+
 
 def flag(a: list[str], name: str) -> str:
     return a[a.index(name) + 1]
+
+
+def settings_path(worktree: str) -> str:
+    return str(json.loads((Path(worktree) / ".claude" / "settings.local.json").read_text())["env"]["PATH"])
 
 
 def run_session_hook(worktree: str, session: str) -> None:
@@ -166,7 +183,7 @@ def worker_start(s: State, a: list[str], n: int) -> dict[str, Any]:
         raise KeyError("consumer_fenced")
     dispatch, worktree = f"ctx_{n}", flag(a, "--worktree").removeprefix("path:")
     w = {"worktree": worktree, "chat": f"structured-agent-session-{n}", "state": "working", "live": True, "settled": False}
-    s["workers"][dispatch] = {**w, "session": str(uuid.uuid4())}
+    s["workers"][dispatch] = {**w, "session": str(uuid.uuid4()), "path": settings_path(worktree)}
     if s["mode"] == "structured":
         run_session_hook(worktree, s["workers"][dispatch]["session"])
     return {"dispatchId": dispatch, "mode": s["mode"], "terminal": f"structworker_{n}", "state": "ready"}
@@ -188,9 +205,10 @@ def send(s: State, a: list[str], n: int) -> dict[str, Any]:
     if flag(a, "--from") not in s["terminals"]:
         raise KeyError("consumer_fenced")
     w["state"] = "working"
-    if w["live"]:
+    if w["live"] or not s["resumes"]:
         return {"messageId": f"msg_{n}"}
     new: dict[str, Any] = {**w, "live": True, "chat": f"structured-agent-session-{n}"}  # Orca starts it again: claude --resume, same session
+    new["path"] = settings_path(new["worktree"])
     s["workers"][f"ctx_{n}"] = new
     run_session_hook(new["worktree"], new["session"])
     return {"delivery": "follow_up", "dispatchId": f"ctx_{n}", "messageId": f"msg_{n}"}
