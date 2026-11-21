@@ -28,6 +28,17 @@ class TestBash:
         assert self.check("gh pr merge 3") == "publish"
         assert self.check("gh pr view 3") is None
 
+    def test_gh_repo_and_project_delete_are_a_delete(self):
+        assert self.check("gh repo delete X --yes") == "delete"
+        assert self.check("gh project delete 7 --owner O") == "delete"
+        assert self.check("cd x && gh repo delete X --yes") == "delete"
+
+    def test_other_gh_writes_are_unchanged(self):
+        for cmd in ("gh pr create", "gh release create v1", "gh pr merge 3", "gh repo create X", "gh release delete v1"):
+            assert self.check(cmd) == "publish"
+        for cmd in ("gh issue edit 3", "gh pr view 3", "gh repo view X"):
+            assert self.check(cmd) is None
+
     def test_a_name_inside_a_string_is_not_an_action(self):
         assert self.check("echo 'never run git push origin main'") is None
         assert self.check('git commit -m "npm publish later; git push"') is None
@@ -107,6 +118,13 @@ class TestHook:
         guard.grant(self.e.p, self.tid, "push-main")
         assert self.call("Bash", {"command": "git push origin main"}) == ""
         assert self.call("Bash", {"command": "git push origin main"})
+
+    def test_one_grant_of_delete_lets_gh_delete_run(self):
+        guard.grant(self.e.p, self.tid, "delete")
+        assert self.call("Bash", {"command": "gh repo delete X --yes"}) == ""
+        assert self.call("Bash", {"command": "gh repo delete X --yes"})
+        guard.grant(self.e.p, self.tid, "delete")
+        assert self.call("Bash", {"command": "gh project delete 7 --owner O"}) == ""
 
     def test_outside_an_agent_it_lets_everything_run(self):
         os.environ.pop("FOREMAN_HOME")
