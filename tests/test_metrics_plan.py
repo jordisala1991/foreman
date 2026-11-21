@@ -1,3 +1,4 @@
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -12,20 +13,20 @@ from foreman.steps import metrics
 USD = {"A": 1.0, "B": 2.0, "B1": 2.0, "B2": 3.0, "C": 0.5, "L": 4.0}
 
 
-def stub(sids, seen=None):
+def stub(sids: list[str], seen: set[str] | None = None) -> dict[str, Any]:
     return {"usd": sum(USD[s] for s in sids), "minutes": 0}
 
 
 class TestPlanVsWork:
     @pytest.fixture(autouse=True)
-    def set_up(self, env):
+    def set_up(self, env: Env) -> None:
         self.e = env
 
-    def row(self, tid):
+    def row(self, tid: str) -> dict[str, Any]:
         with mock.patch("foreman.core.oversight.costs.of_sessions", stub):
             return next(r for r in metrics.per_task(self.e.p) if r["id"] == tid)
 
-    def make(self, **keys):
+    def make(self, **keys: Any) -> str:
         tid = registry.backlog(self.e.p).add("x", status="ready", criteria="y")
         registry.backlog(self.e.p).update(tid, **keys)
         return tid
@@ -83,9 +84,14 @@ class TestCost:
         }
         for s in ("s1", "s2"):  # s2 replays s1's message id
             (d / f"{s}.jsonl").write_text(json.dumps(rec) + "\n")
-        calls = []
+        calls: list[list[str]] = []
         real = metrics.costs.of_sessions
-        with mock.patch("foreman.core.oversight.costs.of_sessions", lambda s, seen=None: calls.append(s) or real(s, seen)):
+
+        def counting(s: list[str], seen: set[str] | None = None) -> dict[str, Any]:
+            calls.append(s)
+            return real(s, seen)
+
+        with mock.patch("foreman.core.oversight.costs.of_sessions", counting):
             r = metrics.per_task(e.p)[0]
         assert sorted(calls) == [["s1"], ["s2"]]
         assert r["usd"] == 2.0  # m1 once, as the old single pass counted it

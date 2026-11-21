@@ -2,6 +2,7 @@
 report is; its `foreman done` closes the chain with no step, and is refused while a step is open."""
 
 import json
+from collections.abc import Callable
 from datetime import datetime
 
 import pytest
@@ -123,7 +124,7 @@ class TestChainParent:
         return [i for i in backlog.tasks(registry.backlog(self.p).load()) if i.get("parent") == P]
 
     @pytest.mark.parametrize("flags", [(), ("--goal", "x", "--criteria", "y", "--model", "opus", "--effort", "high", "--type", "change", "--triage")])
-    def test_a_step_is_filed_in_backlog_with_the_parents_fields(self, flags):
+    def test_a_step_is_filed_in_backlog_with_the_parents_fields(self, flags: tuple[str, ...]) -> None:
         P = self.launched()
         run_as(self.e, P, "ty-2", "add", "t", "--parent", P, "--detail", "d", *flags)
         (s,) = self.steps(P)
@@ -207,7 +208,7 @@ class TestChainParent:
         fm(self.e.home, "edit", P, "--max-steps", "8")
         assert self.e.task(P) == {**before, "chain": {**CHAIN, "max_steps": 8}}
 
-    def told(self, P: str, close) -> tuple[str, str]:
+    def told(self, P: str, close: Callable[[str], object]) -> tuple[str, str]:
         """Files a step, closes it with `close`, idles the loop and returns the step id and the one message its agent got."""
         sid = self.e.task(P)["agent"]["session"]
         S = self.step(P)
@@ -246,7 +247,7 @@ class TestChainParent:
         (["duplicate"], 5, False),
     ],
 )
-def test_refusal_table(statuses, max_steps, refused):
+def test_refusal_table(statuses: list[str], max_steps: int, refused: bool) -> None:
     parent = {"id": "P", "status": "backlog", "chain": {**CHAIN, "max_steps": max_steps}}
     steps = [{"id": f"S{n}", "status": st, "parent": "P"} for n, st in enumerate(statuses)]
     assert bool(chains.refusal([parent, *steps], "P")) == refused
@@ -256,7 +257,7 @@ def test_refusal_table(statuses, max_steps, refused):
     ("status", "how", "next_step"),
     [("done", "merged", True), ("canceled", "canceled", False), ("duplicate", "closed as duplicate", True)],
 )
-def test_notice_table(status, how, next_step):
+def test_notice_table(status: str, how: str, next_step: bool) -> None:
     parent = {"id": "P", "status": "backlog", "chain": CHAIN}
     step = {"id": "S", "title": "t", "status": status, "parent": "P"}
     text = chains.notice(step, [step], parent)
@@ -278,7 +279,7 @@ def test_no_refusal_under_a_parent_that_is_not_a_chain():
         ({"chain": CHAIN}, [{"id": "S", "status": "done"}], "done"),
     ],
 )
-def test_outcome_table(task, subs, status):
+def test_outcome_table(task: backlog.Task, subs: list[backlog.Task], status: str) -> None:
     assert chains.outcome(task, subs) == status
 
 

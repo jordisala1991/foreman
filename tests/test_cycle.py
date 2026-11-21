@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Any
 from unittest import mock
 
 from helpers import Env
@@ -8,7 +9,7 @@ from foreman.providers import registry
 from foreman.steps import metrics
 
 
-def ev(*pairs):
+def ev(*pairs: tuple[str, str]) -> list[dict[str, Any]]:
     return [{"time": f"2026-11-10 {t}", "text": text, "task": "FN-1"} for t, text in pairs]
 
 
@@ -65,8 +66,8 @@ class TestCycle:
         assert metrics.cycle(ev(*extra)) == metrics.cycle(ev(*FULL))
 
 
-def row(tid, status, merged_days=None, **parts):
-    c = dict(NONE)
+def row(tid: str, status: str, merged_days: int | None = None, **parts: float) -> dict[str, Any]:
+    c: dict[str, Any] = dict(NONE)
     if merged_days is not None:
         c["merged_at"] = (datetime.now() - timedelta(days=merged_days)).strftime("%Y-%m-%d %H:%M:%S")
     c.update(parts)
@@ -91,6 +92,10 @@ class TestLastWeek:
         assert metrics.last_week([row("E", "canceled"), row("F", "in review")]) == ({k: None for k in (*metrics.PARTS, "total")}, None)
 
 
+def no_costs(s: object, seen: object = None) -> dict[str, int]:
+    return {"usd": 0, "minutes": 0}
+
+
 class TestText:
     def rows(self):
         e = Env()
@@ -99,7 +104,7 @@ class TestText:
         (e.p.state / "events.jsonl").unlink(missing_ok=True)  # the add wrote its own events, stamped now
         for x in ev(*SKIPPED):
             util.append_jsonl(e.p.state / "events.jsonl", {**x, "task": tid})
-        with mock.patch("foreman.core.oversight.costs.of_sessions", lambda s, seen=None: {"usd": 0, "minutes": 0}):
+        with mock.patch("foreman.core.oversight.costs.of_sessions", no_costs):
             return metrics.per_task(e.p)
 
     def test_cycle_section(self):

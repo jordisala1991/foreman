@@ -1,9 +1,11 @@
 """A resume continues an agent's own session: the session is stopped first, no flag is given, a copy fails the send."""
 
 import json
+from typing import Any
 from unittest import mock
 
 import pytest
+from fakerepo import FakeRepo
 from helpers import Env
 
 from foreman import proc, util
@@ -27,13 +29,13 @@ def answer(e: Env, tid: str, text: str = "B") -> None:
     registry.backlog(e.p).answer(registry.backlog(e.p).ask(tid, tid.lower(), "A or B?"), text)
 
 
-def rows(e: Env) -> list[dict]:
+def rows(e: Env) -> list[dict[str, Any]]:
     return json.loads((e.bin / "agents.json").read_text())
 
 
 class TestResume:
     @pytest.fixture(autouse=True)
-    def set_up(self, fake_git):
+    def set_up(self, fake_git: FakeRepo) -> None:
         self.fake = fake_git
 
     def test_resume_keeps_the_session_and_stops_it_first(self):
@@ -87,7 +89,7 @@ class TestResume:
         assert any("could not reach" in ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl"))
 
     def test_a_failed_stop_fails_the_send(self):
-        def boom(self, ref):
+        def boom(self: Claude, ref: SessionRef) -> None:
             raise RunnerError("claude stop: timed out after 30s")
 
         with mock.patch.object(Claude, "stop", boom):
@@ -96,7 +98,7 @@ class TestResume:
     def test_stop_raises_the_sessions_error(self):
         e = Env(repo=self.fake)
 
-        def boom(*a, **k):
+        def boom(*a: object, **k: object) -> None:
             raise proc.ProcError("claude stop: timed out after 30s")
 
         old, proc.run = proc.run, boom
