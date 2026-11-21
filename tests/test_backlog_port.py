@@ -1,6 +1,7 @@
 """The backlog port (providers/backlog.py) and its local adapter: the panel reads through it, the guard finds a task's
 local keys, and a tick loads the backlog once."""
 
+import threading
 from collections.abc import Callable
 from typing import Any
 from unittest import mock
@@ -96,3 +97,25 @@ def test_a_reload_in_a_tick_sees_another_process():
         assert backlog.get(registry.backlog(e.p).load(), tid)["status"] == "backlog"
         assert backlog.get(registry.backlog(e.p).reload(), tid)["status"] == "canceled"
         assert backlog.get(registry.backlog(e.p).load(), tid)["status"] == "canceled"
+
+
+def test_an_edit_cannot_land_between_a_reloads_read_and_its_copy():
+    e = Env()
+    tid = registry.backlog(e.p).add("t", criteria="c")
+    read, writer = util.read_json, threading.Thread()
+
+    def read_then_an_edit_starts(path: Any, default: Any) -> Any:
+        nonlocal writer
+        d = read(path, default)
+        if not writer.is_alive() and writer.ident is None:  # the reload's read: another thread edits meanwhile
+            writer = threading.Thread(target=lambda: registry.backlog(e.p).set_status(tid, "ready"))
+            writer.start()
+            writer.join(0.3)  # the edit waits for the reload's file lock
+        return d
+
+    with registry.tick_scope(e.p):
+        registry.backlog(e.p).load()
+        with mock.patch.object(util, "read_json", side_effect=read_then_an_edit_starts):
+            registry.backlog(e.p).reload()
+            writer.join()
+        assert backlog.get(registry.backlog(e.p).load(), tid)["status"] == "ready"

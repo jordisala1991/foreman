@@ -40,10 +40,11 @@ class BacklogFile:
             return copy.deepcopy(self.kept)
 
     def reload(self) -> Data:
-        d = self._read()
-        if self.shared:
-            with self.guard:
-                self.kept = copy.deepcopy(d)
+        with util.file_lock(self.file):  # as edit(): no write lands between the read and the kept copy
+            d = self._read()
+            if self.shared:
+                with self.guard:
+                    self.kept = copy.deepcopy(d)
         return d
 
     @contextlib.contextmanager
