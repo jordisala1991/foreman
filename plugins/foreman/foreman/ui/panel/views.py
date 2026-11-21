@@ -50,7 +50,11 @@ def needs(d: Obj) -> int:
 
 def summary(p: Project) -> Obj:
     try:
-        d = provider_registry.backlog(p).load()
+        try:
+            with provider_registry.view_scope(p):
+                d = provider_registry.backlog(p).load()
+        except backlog.NoSnapshot:  # the project stays listed; its tasks show after the loop's first pass
+            d = backlog.empty()
         return {
             "name": p.name,
             "paused": p.paused or None,
@@ -74,7 +78,11 @@ def with_session(p: Project, i: Obj, rows: Rows) -> Obj:
 
 
 def state(p: Project) -> Obj:
-    d = provider_registry.backlog(p).load()
+    try:
+        with provider_registry.view_scope(p):
+            d = provider_registry.backlog(p).load()
+    except backlog.NoSnapshot:  # the web page shows `notice`, not a failed read
+        return {"name": p.name, "paused": p.paused or None, "loop": loop_beat(p), "tasks": [], "questions": [], "events": [], "notice": "no_snapshot"}
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     rows = provider_registry.rows(p)
     all_tasks = backlog.tasks(d)
@@ -86,9 +94,10 @@ def state(p: Project) -> Obj:
 
 
 def task(p: Project, tid: str) -> Obj:
-    b = provider_registry.backlog(p)
-    d = b.load()
-    i = b.find(tid)
+    with provider_registry.view_scope(p):
+        b = provider_registry.backlog(p)
+        d = b.load()
+        i = b.find(tid)
     sids = [s for s in i.get("sessions", []) if s]
     c = costs.of_sessions(sids)
     shown = recurring.shown(taskrepo.shown(tasktypes.shown(with_session(p, i, provider_registry.rows(p)), backlog.tasks(d)), backlog.tasks(d), p.several))
@@ -106,14 +115,16 @@ def task(p: Project, tid: str) -> Obj:
 
 
 def system(p: Project) -> Obj:
-    found = health.findings(p, provider_registry.rows(p), outside=True)
-    rows = metrics.per_task(p)
+    with provider_registry.view_scope(p):
+        found = health.findings(p, provider_registry.rows(p), outside=True)
+        rows = metrics.per_task(p)
+        in_flight = backlog.in_flight(provider_registry.backlog(p).load())
+        entries = schedule.rows(p)
     locks = [r.status() for r in lock.declared(p.cfg).values()]
-    entries = schedule.rows(p)
     return {
         "name": p.name,
         "paused": p.paused or None,
-        "in_flight": backlog.in_flight(provider_registry.backlog(p).load()),
+        "in_flight": in_flight,
         "loop": loop_beat(p),
         "findings": found,
         "metrics": rows,

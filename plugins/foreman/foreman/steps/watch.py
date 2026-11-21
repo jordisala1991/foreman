@@ -33,7 +33,8 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
 
 def needs(p: Project, rows: Rows) -> dict[str, str]:
     """What needs the owner now: key → one line, in the order questions, accepts, blocked, main, parents."""
-    d = registry.backlog(p).load()
+    with registry.view_scope(p):
+        d = registry.backlog(p).load()
     found: dict[str, str] = {}
     asked = {q["task"] for q in questions.open_questions(d)}
     for q in questions.open_questions(d):
@@ -59,7 +60,8 @@ def needs(p: Project, rows: Rows) -> dict[str, str]:
 def run(p: Project, once: bool, rows: Rows) -> None:
     """Prints the accepts already waiting at start, then each need that appears after it; `rows` is the listing the caller
     read (the other needs at start are `foreman list`'s). A poll that cannot read the listing keeps the parents' entries as they were; one that cannot
-    read foreman's own state is skipped. It makes no platform call: an accept waits only on what the loop stored. Under `once`,
+    read foreman's own state is skipped. It makes no platform call, nor reads the Board: it shows the snapshot the loop wrote
+    (`registry.view_scope`), and without one it stops with `the loop has not read the Board yet`. Under `once`,
     returns after the first line printed after the start."""
     seen = needs(p, rows)
     for key, line in seen.items():

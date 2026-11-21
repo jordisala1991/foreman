@@ -38,6 +38,10 @@ class BacklogError(Exception):
     pass
 
 
+class NoSnapshot(BacklogError):
+    """A view of the Board before the loop has read it."""
+
+
 class Local(NamedTuple):
     """A task's keys that only the machine running it knows."""
 
