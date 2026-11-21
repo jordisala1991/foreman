@@ -357,3 +357,13 @@ def test_an_ask_on_a_closed_task_is_refused(fake: FakeGh, e: Env):
     with pytest.raises(BacklogError, match="^TY-5 is canceled: fm changes no closed task on the Board$"):
         b.ask("TY-5", "a", "q")
     assert state(e, "questions.json") is None
+
+
+def test_a_second_ask_on_a_closed_task_is_refused(fake: FakeGh, e: Env):
+    fake.add(5, fields={"Status": "In progress"})
+    b = registry.backlog(e.p)
+    b.ask("TY-5", "a", "q1")
+    b.set_status("TY-5", "canceled")
+    with pytest.raises(BacklogError, match="^TY-5 is canceled: fm changes no closed task on the Board$"):
+        b.ask("TY-5", "a", "q2")
+    assert [q["id"] for q in state(e, "questions.json")["decisions"]] == ["TY-5 Q1"]

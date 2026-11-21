@@ -131,8 +131,12 @@ def apply(w: Where, read: Read, before: Data, after: Data) -> Read:
         if x["id"] not in olds:
             raise BacklogError(f"{x['id']}: a new task is filed with add, not in an edit")
         now, label = split(x)[0], _label(before, after, x["id"])
-        if label is False and _issue(w, read, x["id"]) is None:
-            label = None  # an answer on a closed task: its questions only
+        if _issue(w, read, x["id"]) is None:
+            asked = {q["id"] for q in open_questions(after, x["id"])} - {q["id"] for q in open_questions(before, x["id"])}
+            if asked:
+                raise BacklogError(f"{x['id']} is {x['status']}: fm changes no closed task on the Board")
+            if label is False:
+                label = None  # an answer on a closed task: its questions only
         if stuck(split(olds[x["id"]])[0], now) or label is not None:
             backs[x["id"]] = _write(w, read, olds[x["id"]], x, label)
     _save(w, before, after, backs)
