@@ -520,12 +520,13 @@ Drafted in `<home>/reports/FN-204.md`, to be filed under FN-203 in triage:
 2. The Orca adapter (after 1; gated by Q1-Q5).
 3. Seen acting in a real project (after 2).
 
-## The backlog on GitHub (FN-234: defined; D2 and D3 built)
+## The backlog on GitHub (FN-234: defined; D2, D3 and D4 built)
 
 FN-140 moves a project's backlog from `<home>/backlog.json` to the issues of its repo and one **Board** (a GitHub Project v2).
 This section is the definition: where every key of a task goes, the statuses, the ids, the calls a pass makes, where the
-questions live, and the subtasks that build it. D2 (the port) and D3 (`[backlog]`, `foreman backlog setup` and the reads, in
-`providers/github/`: api, board, issues, backlog; every write refuses as read-only) are built; the rest is not yet; until D6 the lines about `backlog.json` elsewhere in
+questions live, and the subtasks that build it. D2 (the port), D3 (`[backlog]`, `foreman backlog setup` and the reads, in
+`providers/github/`: api, board, issues, backlog) and D4 (the writes: one diff-based `edit()` read back, in apply, writes and files;
+the pure parts in `core/tasks/`: changes, drags) are built; the rest is not yet; until D6 the lines about `backlog.json` elsewhere in
 this document stay true. The evidence log is `<home>/plans/FN-234-evidence.md` («E1»-«E8»); the reference design (how the
 reference workspace keeps its backlog on GitHub) is `<home>/plans/FN-140-reference.md`.
 
@@ -631,11 +632,11 @@ Local state sits in `<home>/state/runs.json`, one object per task id holding the
 
 No GitHub workflow moves anything: the setup deletes them all. `blocked` is not a status but the `Blocked` field. A close sets the issue's state
 reason and the Status in one request. An open task's status is the `Status` fm last wrote, and fm moves every card. The pass's read and every command's write with its snapshot update
-run under the one backlog lock that exists today (`util.file_lock` in `core/tasks/backlog.py:89`), so the pass compares each card with a snapshot
+run under the backlog lock (`util.file_lock` on `<home>/state/backlog.lock` for a project on a Board), so the pass compares each card with a snapshot
 no command changed meanwhile, and a command's move is never seen as a drag; with no snapshot yet (the first pass) no drag is detected and the snapshot is just written.
 A drag is accepted only as a Go Triage → Backlog, with `foreman go`'s checks (`ui/cli/owner.py:141-148`: criteria, repo); a refused Go,
-or any other drag between open columns, is an error line and fm moves the card back to the snapshot's Status. A card dragged to a closed column while its issue is open, or an issue closed by hand while its card is open, is an error line in
-`state/errors.jsonl` (health files it) and changes nothing.
+or any other drag (to a closed column too, while its issue is open), is an error line in `state/errors.jsonl` (health files it)
+and fm moves the card back to the snapshot's Status. An issue closed by hand while its card is open is left alone (not built: no error line yet).
 
 ### Ids
 
@@ -711,7 +712,7 @@ These replace FN-140's planned subtasks 2-5: 2 (the port) and 5 (migration) kept
 
 - A cheap peek before the full read, assignees and multi-person claiming, a chat thread per task, comments as machine records (trace, risk): the owner's decisions and E4.
 - More than 50 open tasks (paging): an error, not built.
-- Repairing a card/issue mismatch (a card dragged to a closed column, an issue closed by hand): an error line only.
+- An issue closed by hand while its card is open: left alone. Reopening a closed task, taking a task out of its parent, a closed task's Board fields: an error naming it (D4).
 - A Board `Id` field or a title prefix: the id is the number.
 - The PR's link to its task beyond the text `Task: #n` (no `Closes`, no linked-branch API): not tried.
 - Migrating closed tasks: they stay in the old file (an open task's closed subtasks and blockers are read from there).
@@ -1104,10 +1105,10 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 | steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
 | services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo, the runner and the backlog (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`, `registry.backlog(p)`; `registry.tick_scope(p)` makes a tick load the backlog once) (by convention the only caller of the adapters; not enforced by tach) |
-| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review, api, board, issues, backlog · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
+| adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review, api, board, issues, backlog, apply, writes, files · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo · runner · backlog | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`); `Backlog`, every read and write of the backlog (tasks cross it as dicts) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
-| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring, board, ids, issues · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring, board, ids, issues, changes, drags · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
 Core areas, in their `depends_on` order: `project` (foreman.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
 `tasks` (the backlog's vocabulary and pure functions, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
@@ -1193,7 +1194,7 @@ task.
 `Runner` (FN-213, built): the agents' sessions, `providers/runner.py`; adapters `claude` (`providers/claude/`) and `orca` (`providers/orca/`, FN-216); two real implementations.
 `Backlog` (FN-235, built): every read and write of the backlog, `providers/backlog.py`, through `registry.backlog(p)`
 (`find(id)` reads one task now, also one the open read does not hold); adapters `backlogfile` (`<home>/backlog.json`) and,
-with `[backlog]`, `github/backlog` (FN-236: reads; FN-140, «The backlog on GitHub»).
+with `[backlog]`, `github/backlog` (FN-236: reads; FN-237: writes; FN-140, «The backlog on GitHub»).
 
 ### Rules
 

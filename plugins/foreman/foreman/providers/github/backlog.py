@@ -148,7 +148,7 @@ class GitHubBacklog:
         """The backlog to change: a tick's from its kept read, else read now; the local files always read now. When the
         block ends, what changed is written and read back."""
         with util.file_lock(self.lock):
-            read = self._board()[0]
+            read = self._board()[0] if self.shared else read_open(self.api, self.b)
             before = self._data(read)
             after = copy.deepcopy(before)
             yield after

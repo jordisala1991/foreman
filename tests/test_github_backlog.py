@@ -157,7 +157,7 @@ def test_no_closed_at_no_closed_date(fake: FakeGh):
     fake.add(5, title="dragged to Done", fields={"Status": "Done"})
     fake.add(6, title="closed, no date", state="CLOSED", reason="COMPLETED", fields={"Status": "Done"})
     util.write_json(e.home / "legacy-ids.json", {})
-    assert [t["id"] for t in views.state(e.p)["tasks"]] == []  # an open issue at a closed Status is an error line (D4), not recent
+    assert [t["id"] for t in views.state(e.p)["tasks"]] == []  # an open issue at a closed Status is not a recent closed task
     assert "closed" not in json.loads(fm(e.home, "show", "TY-6"))
 
 
