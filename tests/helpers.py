@@ -1,6 +1,7 @@
 """A temporary project: a git repo with one commit, a home with foreman.toml and an empty backlog, and a fake `claude`
 that records each launch and answers `claude agents --json` from a file the test controls."""
 
+import ast
 import atexit
 import contextlib
 import functools
@@ -284,3 +285,9 @@ def version_folder(parent: Path, name: str) -> dict[str, str]:
     (parent / name / "bin").mkdir(parents=True)
     (parent / name / "bin/foreman").write_text("#!/usr/bin/env python3\n")
     return {"scope": "user", "installPath": str(parent / name), "version": name, "gitCommitSha": "stale"}
+
+
+def names_program(source: str, *names: str) -> bool:
+    """A string constant of `source` names one of the programs: by its bare name or by its path (`/usr/bin/git`)."""
+    strings = (n.value for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Constant) and isinstance(n.value, str))
+    return any(s.rsplit("/", 1)[-1] in names for s in strings)
