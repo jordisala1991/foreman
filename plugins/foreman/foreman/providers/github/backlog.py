@@ -17,7 +17,7 @@ from ...core.project.backlog_table import Board
 from ...core.project.config import Project
 from ...core.tasks import changes, drags, ids
 from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks
-from ...core.tasks.issues import Issue, joined, stub, with_old_blockers
+from ...core.tasks.issues import Issue, joined, stub, with_old_blockers, without_old_blockers
 from ...core.tasks.questions import Question
 from .api import Api
 from .apply import Where, apply, file
@@ -174,7 +174,8 @@ class GitHubBacklog:
             before = self._data(read)
             after = copy.deepcopy(before)
             yield after
-            new = apply(self._where(), read, before, after)
+            old = {t["id"]: t for t in self.old()["tasks"]}  # its closed blockers are no issues: a write leaves them
+            new = apply(self._where(), read, *({**x, "tasks": [without_old_blockers(t, old) for t in x["tasks"]]} for x in (before, after)))
             if new != read:
                 self.files.save_cards(self._cards(new))
             read = new

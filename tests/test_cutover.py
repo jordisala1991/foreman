@@ -19,8 +19,10 @@ from foreman.core.tasks import blockers, board, cutover, subtasks
 from foreman.core.tasks.backlog import empty, get
 from foreman.core.tasks.issues import with_old_blockers
 from foreman.providers import registry
+from foreman.providers.github import writes
 from foreman.providers.github.api import Api
 from foreman.providers.github.issues import read_open
+from foreman.providers.github.types import RateLimited
 
 CUT = ("backlog", "cutover", "--repo", "o/r", "--project", "1")
 QUESTION = {"id": "TY-3 Q1", "task": "TY-3", "agent": "a", "title": "t", "text": "q?", "asked": "2026-11-20 10:00:00", "kind": "question"}
@@ -86,9 +88,9 @@ def test_dry_run_prints_each_open_task_and_writes_nothing(fake: FakeGh, e: Env):
     lines = out.splitlines()
     assert lines[0] == "dry run: nothing is written; 3 open tasks would be filed as issues numbered after #271, in this order:"
     assert lines[1:4] == [
-        "TY-3  «task 3»  Status=Triage, Priority=high, Model=opus",
-        "TY-4  «task 4»  Status=Backlog  blockers=TY-3  blockers in the old file=TY-1",
-        "TY-5  «task 5»  Status=Ready, Blocked=waits  parent=TY-4",
+        "TY-3 → #272  «task 3»  Status=Triage, Priority=high, Model=opus",
+        "TY-4 → #273  «task 4»  Status=Backlog  blockers=TY-3  blockers in the old file=TY-1",
+        "TY-5 → #274  «task 5»  Status=Ready, Blocked=waits  parent=TY-4",
     ]
     assert "task 1" not in out and "task 2" not in out
     assert fake.mutations == 0 and fake.issues == {}
@@ -256,3 +258,69 @@ def test_table_parses_back():
         text = table(b)
         assert ("owner = " in text) == (b.owner != "o")
         assert parse(tomllib.loads(text)) == b
+
+
+def test_blockers_change_on_a_task_with_an_old_file_blocker(fake: FakeGh, e: Env):
+    fm(e.home, *CUT)
+    b = registry.backlog(Project.load(e.home))
+    with b.edit() as d:
+        get(d, "TY-4")["blocked_by"] = ["TY-3", "TY-1", "TY-5"]
+    assert fake.issues[273].blockers == [272, 274]
+    with b.edit() as d:
+        get(d, "TY-4")["blocked_by"] = ["TY-3", "TY-5"]  # TY-1 is no issue: nothing to remove on GitHub, and #1 is never looked up
+    assert fake.issues[273].blockers == [272, 274]
+    assert b.find("TY-4")["blocked_by"] == ["TY-3", "TY-5", "TY-1"]
+
+
+def test_a_rerun_after_the_rollback_keeps_what_github_mode_wrote(fake: FakeGh, e: Env):
+    toml = (e.home / "foreman.toml").read_text()
+    fm(e.home, *CUT)
+    b = registry.backlog(Project.load(e.home))
+    b.update("TY-4", nudges=1)
+    b.answer("TY-3 Q1", "yes")
+    (e.home / "foreman.toml").write_text(toml)
+    fm(e.home, *CUT)
+    assert util.read_json(e.p.state / "runs.json", {})["TY-4"]["nudges"] == 1
+    q = util.read_json(e.p.state / "questions.json", {})
+    assert q["decisions"] == [] and [x["id"] for x in q["decisions_resolved"]] == ["TY-1 Q1", "TY-3 Q1"]
+    assert fake.issues[272].labels == []
+
+
+def test_a_change_to_the_old_file_during_the_filing_is_refused(fake: FakeGh, e: Env):
+    toml = (e.home / "foreman.toml").read_text()
+    files: list[str] = []
+
+    def agent_files(op: str) -> None:  # an agent's foreman add lands in the old file while the cutover files
+        files.extend([op] if op == "File" else [])
+        if op == "File" and len(files) == 2:
+            d = util.read_json(e.home / "backlog.json", {})
+            util.write_json(e.home / "backlog.json", {**d, "tasks": [*d["tasks"], task(6, "triage")]})
+
+    fake.hook = agent_files
+    with pytest.raises(SystemExit, match=r"foreman: the old file changed during the filing \(TY-6\)"):
+        fm(e.home, *CUT)
+    assert (e.home / "foreman.toml").read_text() == toml and not (e.p.state / "runs.json").exists()
+    out = fm(e.home, *CUT)
+    assert "TY-6 → #275" in out and Project.load(e.home).board is not None
+
+
+def test_a_cycle_is_refused_before_any_write(fake: FakeGh, e: Env):
+    d = util.read_json(e.home / "backlog.json", {})
+    d["tasks"][2]["blocked_by"] = ["TY-4"]  # TY-3 waits for TY-4, which waits for TY-3
+    util.write_json(e.home / "backlog.json", d)
+    with pytest.raises(SystemExit, match="wait for each other"):
+        fm(e.home, *CUT)
+    assert fake.mutations == 0 and fake.workflows != []
+
+
+def test_a_label_cut_short_is_put_on_by_the_rerun(fake: FakeGh, e: Env, monkeypatch: pytest.MonkeyPatch):
+    def limited(*a: object) -> None:
+        raise RateLimited("spent")
+
+    with monkeypatch.context() as m:
+        m.setattr(writes, "label", limited)
+        with pytest.raises(SystemExit, match="spent"):
+            fm(e.home, *CUT)
+    assert legacy(e) == {"TY-3": 272, "TY-4": 273, "TY-5": 274} and fake.issues[272].labels == []
+    fm(e.home, *CUT)
+    assert fake.issues[272].labels == [board.LABEL]

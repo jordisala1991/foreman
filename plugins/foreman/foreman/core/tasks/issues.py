@@ -138,6 +138,13 @@ def with_old_blockers(t: Task, old: Mapping[str, Task]) -> Task:
     return t
 
 
+def without_old_blockers(t: Task, old: Mapping[str, Task]) -> Task:
+    """The task with only the blockers that can be issues: those closed in the old file are none, so a write leaves them."""
+    kept = [x for x in t.get("blocked_by", []) if (old.get(x) or {}).get("status") not in CLOSED]
+    out = {k: v for k, v in t.items() if k != "blocked_by"}
+    return {**out, "blocked_by": kept} if kept else out
+
+
 def stub(b: Linked, prefix: str, legacy: Mapping[str, int]) -> Task:
     """A closed blocker as a task, so a task's blockers read as done or closed undone."""
     return {

@@ -4,6 +4,7 @@ GitHub adapter (`providers/github/cutover.py`) files them."""
 
 import re
 from collections.abc import Mapping
+from typing import Any
 
 from .backlog import CLOSED, Acceptance, BacklogError, Data, Task
 from .issues import body_of, body_parts, fields_of, split
@@ -68,10 +69,10 @@ def local(t: Task) -> Task:
     return {k: v for k, v in split(t)[1].items() if k not in NOT_CARRIED}
 
 
-def line(t: Task, d: Data) -> str:
-    """The dry run's line of a task as it would be filed: id, title, its Board fields, parent and blockers."""
+def line(t: Task, d: Data, number: int) -> str:
+    """The dry run's line of a task as it would be filed: id, issue number, title, its Board fields, parent and blockers."""
     fields = ", ".join(f"{k}={v}" for k, v in fields_of(t).items())
-    out = f"{t['id']}  «{t['title']}»  {fields}"
+    out = f"{t['id']} → #{number}  «{t['title']}»  {fields}"
     if pid := t.get("parent"):
         out += f"  parent={pid}"
     if blockers := t.get("blocked_by"):
@@ -80,3 +81,17 @@ def line(t: Task, d: Data) -> str:
     if lost := [x for x in old.get("blocked_by", []) if x not in (blockers or [])]:
         out += f"  blockers in the old file={', '.join(lost)}"
     return out
+
+
+def changed(was: Data, now: Data) -> list[str]:
+    """What differs between two reads of the old file: the ids of the tasks added, removed or changed, and «questions»."""
+    a, b = ({t["id"]: t for t in x["tasks"]} for x in (was, now))
+    out = [tid for tid in dict.fromkeys([*a, *b]) if a.get(tid) != b.get(tid)]
+    return out + (["questions"] if (was["decisions"], was["decisions_resolved"]) != (now["decisions"], now["decisions_resolved"]) else [])
+
+
+def questions(have: tuple[list[dict[str, Any]], list[dict[str, Any]]], old: Data) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The questions to keep: those the local file already has (written on GitHub, a rerun after a rollback), then the old
+    file's that it has not, by id."""
+    known = {q["id"] for q in [*have[0], *have[1]]}
+    return [*have[0], *(q for q in old["decisions"] if q["id"] not in known)], [*have[1], *(q for q in old["decisions_resolved"] if q["id"] not in known)]

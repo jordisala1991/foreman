@@ -61,7 +61,7 @@ def cutover(p: Project, b: Board, dry_run: bool) -> Iterator[str]:
     """`foreman backlog cutover`: the old file's open tasks onto the Board `b`, then foreman.toml points at it."""
     if p.board is not None:
         raise ConfigError("[backlog] is already in foreman.toml: the backlog is on GitHub")
-    return moving.run(p, b, BacklogFile(p).load(), dry_run)
+    return moving.run(p, b, BacklogFile(p).load, dry_run)
 
 
 @contextmanager
