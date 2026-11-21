@@ -2,6 +2,7 @@
 closes the parent alone; files and edits only its own subtasks; `fm show` gives it real data per subtask."""
 
 import json
+from typing import Any
 
 import pytest
 from helpers import Env, fm
@@ -12,7 +13,7 @@ from foreman.loop import tick
 from foreman.providers import registry
 
 
-def resumes(e: Env, sid: str) -> list[dict]:
+def resumes(e: Env, sid: str) -> list[dict[str, Any]]:
     return [c for c in e.calls() if c["argv"][:3] == ["--bg", "--resume", sid]]
 
 

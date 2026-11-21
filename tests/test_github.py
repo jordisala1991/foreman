@@ -6,6 +6,7 @@ import os
 import subprocess
 import textwrap
 from dataclasses import replace
+from typing import Any
 
 import pytest
 from helpers import Env, fm, git
@@ -147,7 +148,7 @@ FAKE_GH = textwrap.dedent("""\
 class GH:
     """A GitHub project: origin is a bare repo, `gh` is the fake."""
 
-    def __init__(self, extra: str = "", **kw) -> None:
+    def __init__(self, extra: str = "", **kw: Any) -> None:
         self.e = Env(**kw)
         e = self.e
         self.bare = e.tmp / "origin.git"
@@ -168,11 +169,11 @@ class GH:
         provider.POLL = self.poll
 
     @property
-    def state(self) -> dict:
+    def state(self) -> dict[str, Any]:
         return json.loads((self.e.bin / "gh.json").read_text()) if (self.e.bin / "gh.json").exists() else {"prs": {}}
 
     def set(self, **kw: object) -> None:
-        s = {"prs": {}, "ci": "pass", "lag": False, **self.state, **kw}
+        s: dict[str, Any] = {"prs": {}, "ci": "pass", "lag": False, **self.state, **kw}
         (self.e.bin / "gh.json").write_text(json.dumps(s))
 
     def calls(self, *prefix: str) -> list[list[str]]:
@@ -180,9 +181,9 @@ class GH:
         rows = [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
         return [r for r in rows if r[: len(prefix)] == list(prefix)]
 
-    def seed(self, n: int = 1, branch: str = "foreman/ty-1", **pr) -> providers.Change:  # the branch pushed and PR `n` open: no task, no tick
+    def seed(self, n: int = 1, branch: str = "foreman/ty-1", **pr: Any) -> providers.Change:  # the branch pushed and PR `n` open: no task, no tick
         git(self.e.repo, "push", "-q", "origin", f"main:refs/heads/{branch}")
-        fields = {"draft": False, "state": "OPEN", "comments": [], "head": branch, "title": "x", "body": "", **pr}
+        fields: dict[str, Any] = {"draft": False, "state": "OPEN", "comments": [], "head": branch, "title": "x", "body": "", **pr}
         self.set(prs={**self.state["prs"], str(n): fields})
         return providers.Change(id=f"TY-{n}", title="x", branch=branch, head=git(self.e.repo, "rev-parse", "main").strip(), pr=n)
 
@@ -227,10 +228,10 @@ class TestProvider:
 
 class TestPulls:
     @pytest.fixture(autouse=True)
-    def keep_request(self, request):
+    def keep_request(self, request: pytest.FixtureRequest) -> None:
         self.request = request  # for the cleanups of helpers
 
-    def make(self, extra: str = "", **kw) -> GH:
+    def make(self, extra: str = "", **kw: Any) -> GH:
         g = GH(extra, **kw)
         self.request.addfinalizer(g.close)
         return g
@@ -351,7 +352,7 @@ class TestPulls:
         assert g.calls("pr", "merge")[0][:3] == ["pr", "merge", "1"]
 
     @pytest.mark.parametrize("strategy", ["merge", "rebase"])
-    def test_the_configured_merge_type_reaches_gh(self, strategy):
+    def test_the_configured_merge_type_reaches_gh(self, strategy: str) -> None:
         g = self.make(f'strategy = "{strategy}"', test="true")
         c = g.seed()
         tid = registry.backlog(g.e.p).add("x", status="ready", criteria="y")
@@ -543,7 +544,7 @@ class TestPulls:
 
     # "Head sha can't be blank" (once, then fine) and a 502 are both retried; neither blocks the task
     @pytest.mark.parametrize(("flag", "text"), [({"reject": "foreman/ty-1"}, "Head sha"), ({"flaky": "foreman/ty-1"}, "HTTP 502")], ids=["reject", "flaky"])
-    def test_one_tasks_failure_never_blocks_it_nor_stops_the_next_task_getting_its_pr(self, flag, text):
+    def test_one_tasks_failure_never_blocks_it_nor_stops_the_next_task_getting_its_pr(self, flag: dict[str, str], text: str) -> None:
         g = self.make(test="true")
         g.set(**flag)
         first, second = g.work(), g.work()  # each work() ticks: the first one fails there, once

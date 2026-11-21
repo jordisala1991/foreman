@@ -24,7 +24,7 @@ def fake(d: Path, version: str, body: str) -> None:
 
 class TestPythonVersion:
     @pytest.fixture(autouse=True)
-    def set_up(self, request) -> None:
+    def set_up(self, request: pytest.FixtureRequest) -> None:
         tmp = tempfile.TemporaryDirectory()
         request.addfinalizer(tmp.cleanup)
         self.t = Path(tmp.name).resolve()
@@ -60,7 +60,7 @@ class TestPythonVersion:
         loader.exec_module(mod)
         return mod
 
-    def ensure_with_hanging_pythons(self, monkeypatch, names: list[str], *argv: str) -> tuple[list[float], object]:
+    def ensure_with_hanging_pythons(self, monkeypatch: pytest.MonkeyPatch, names: list[str], *argv: str) -> tuple[list[float], object]:
         """_ensure_python with a probe that always times out, taking the whole timeout it is given on a fake clock:
         the timeouts it was handed, and what it exits with."""
         for n in names:
@@ -68,7 +68,7 @@ class TestPythonVersion:
         monkeypatch.setattr(sys, "argv", ["foreman", *argv])
         monkeypatch.setenv("PATH", os.pathsep.join(str(self.t / n) for n in names))
         monkeypatch.setenv("FOREMAN_REGISTRY", str(self.reg))
-        now, given = [0.0], []
+        now, given = [0.0], list[float]()
 
         def probe(cand: str, timeout: float) -> str:
             given.append(timeout)
@@ -79,7 +79,7 @@ class TestPythonVersion:
             self.load_bin()._ensure_python((3, 99), probe=probe, clock=lambda: now[0])
         return given, e.value.code
 
-    def test_a_python3_that_times_out_is_named_in_the_line(self, monkeypatch):
+    def test_a_python3_that_times_out_is_named_in_the_line(self, monkeypatch: pytest.MonkeyPatch) -> None:
         given, line = self.ensure_with_hanging_pythons(monkeypatch, ["hang"], "list")
         assert given == [10]
         assert isinstance(line, str)
@@ -87,14 +87,14 @@ class TestPythonVersion:
         assert "timed out" in line
         assert f"{self.t}/hang" in line
 
-    def test_the_hook_writes_its_note_before_its_own_timeout_when_pythons_hang(self, monkeypatch):
+    def test_the_hook_writes_its_note_before_its_own_timeout_when_pythons_hang(self, monkeypatch: pytest.MonkeyPatch) -> None:
         given, code = self.ensure_with_hanging_pythons(monkeypatch, ["a", "b"], "session-context")
         assert code == 0  # the hook exits 0
         assert given == [6]  # the first probe takes the 6 s budget: the second python is not tried, it is «timed out» already
         assert "timed out" in Path(f"{self.reg}.python").read_text()
 
     def test_a_probe_that_times_out_says_so(self):
-        def hang(*_a, **_k):
+        def hang(*_a: object, **_k: object):
             raise subprocess.TimeoutExpired("python3", 10)
 
         assert self.load_bin()._probe("python3", 10, run=hang) == "timed out"

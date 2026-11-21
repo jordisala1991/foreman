@@ -39,7 +39,7 @@ class TestRules:
 
 class TestOnGitHub:
     @pytest.fixture(autouse=True)
-    def set_up(self, request):
+    def set_up(self, request: pytest.FixtureRequest) -> None:
         self.g = GH(test="true")
         request.addfinalizer(self.g.close)
 
@@ -56,14 +56,14 @@ class TestOnGitHub:
         g.e.review(tid)
         return tid
 
-    def ticks(self, n=3):
+    def ticks(self, n: int = 3) -> None:
         for _ in range(n):
             tick.tick(self.g.e.p)
 
     def body(self):
         return self.g.state["prs"]["1"]["body"]
 
-    def remote(self, *args):
+    def remote(self, *args: str) -> bytes:
         return subprocess.run(["git", "-C", str(self.g.bare), *args], capture_output=True, check=False).stdout
 
     def test_github_pushes_evidence_and_links(self):
@@ -160,7 +160,7 @@ class TestOnGitHub:
 
 class TestPanel:
     @pytest.fixture(autouse=True)
-    def set_up(self, request):
+    def set_up(self, request: pytest.FixtureRequest) -> None:
         from test_panel import start_panel, stop_panel
 
         self.t = SimpleNamespace()
@@ -175,7 +175,7 @@ class TestPanel:
         registry.backlog(t.p).update(t.work, report={"summary": "s", "confused": "", "file": str(report)})
         (t.p.home / "reports" / "secret.png").write_bytes(b"s")
 
-    def get(self, path, key=True):
+    def get(self, path: str, key: bool = True) -> tuple[int, str | None, bytes]:
         t = self.t
         url = f"{t.base}{path}" + (f"&key={t.key}" if key else "")
         try:
@@ -185,7 +185,7 @@ class TestPanel:
             with e:
                 return e.code, None, e.read()
 
-    def q(self, name):
+    def q(self, name: str) -> str:
         from urllib.parse import quote
 
         return f"/evidence?p=demo&id={self.t.work}&name={quote(name)}"
@@ -216,7 +216,7 @@ class TestPanel:
 
     def test_panel_description_links_existing_images(self):
         t = self.t
-        status, _, body = self.get(f"/api/task?p=demo&id={t.work}")
+        _, _, body = self.get(f"/api/task?p=demo&id={t.work}")
         desc = json.loads(body)["task"]["description"]
         assert f"![the home](/evidence?p=demo&id={t.work}&name=x.png)" in desc
 
