@@ -97,6 +97,9 @@ def _write(w: Where, read: Read, old: Task, x: Task, label: bool | None) -> Issu
         if close:  # it is closed: kept now with its local keys, as the open read no longer has it, should the read-back fail
             w.files.keep(now)
             w.files.save_runs({k: v for k, v in (w.files.runs() | {tid: local}).items() if v})
+        if "Status" in names and (snap := w.files.snapshot()) is not None:  # fm's move, landed: never a drag for the pass
+            snap.pop(tid, None)
+            w.files.save_snapshot(snap if close else {**snap, tid: now["status"]})
     if "parent" in changed or "blocked_by" in changed:
         writes.links(t, i.node, _links(w, read, was, now))
     if label is not None:
@@ -108,7 +111,7 @@ def _write(w: Where, read: Read, old: Task, x: Task, label: bool | None) -> Issu
 
 
 def _save(w: Where, before: Data, after: Data, backs: dict[str, Issue]) -> None:
-    """The local files after GitHub's writes: a task closed, the local keys and the questions that changed, the snapshot."""
+    """The local files after GitHub's writes: a task closed, the local keys and the questions that changed."""
     for back in backs.values():
         if back.state == "CLOSED":
             w.files.keep(w.task(back))
@@ -117,14 +120,6 @@ def _save(w: Where, before: Data, after: Data, backs: dict[str, Issue]) -> None:
         w.files.save_runs({k: v for k, v in (runs | changed).items() if v})
     if (before["decisions"], before["decisions_resolved"]) != (after["decisions"], after["decisions_resolved"]):
         w.files.save_questions(after["decisions"], after["decisions_resolved"])
-    if (snap := w.files.snapshot()) is not None and backs:
-        news = {x["id"]: x["status"] for x in after["tasks"]}
-        for tid, back in backs.items():  # a status fm did not write here stays as the snapshot has it: a drag is the pass's
-            if back.state == "CLOSED":
-                snap.pop(tid, None)
-            elif news[tid] != olds[tid]["status"]:
-                snap[tid] = news[tid]
-        w.files.save_snapshot(snap)
 
 
 def apply(w: Where, read: Read, before: Data, after: Data) -> Read:
@@ -136,7 +131,7 @@ def apply(w: Where, read: Read, before: Data, after: Data) -> Read:
         if x["id"] not in olds:
             raise BacklogError(f"{x['id']}: a new task is filed with add, not in an edit")
         now, label = split(x)[0], _label(before, after, x["id"])
-        if _issue(w, read, x["id"]) is None:
+        if label is False and _issue(w, read, x["id"]) is None:
             label = None  # an answer on a closed task: its questions only
         if stuck(split(olds[x["id"]])[0], now) or label is not None:
             backs[x["id"]] = _write(w, read, olds[x["id"]], x, label)

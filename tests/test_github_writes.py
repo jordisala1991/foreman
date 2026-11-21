@@ -335,3 +335,25 @@ def test_an_answer_on_a_closed_task(fake: FakeGh, e: Env):
     n = fake.mutations
     b.answer(qid, "late")
     assert fake.mutations == n and [q["id"] for q in state(e, "questions.json")["decisions_resolved"]] == [qid]
+
+
+def test_a_status_whose_read_back_fails_is_no_drag(fake: FakeGh, e: Env):
+    fake.add(3, body=CRITERIA, fields={"Status": "Backlog"})
+    tick(e)
+    fake.hook = lambda op: setattr(fake, "limited", fake.limited or op == "Fields")
+    with pytest.raises(RateLimited):
+        registry.backlog(e.p).set_status("TY-3", "ready")
+    assert state(e, "backlog-snapshot.json") == {"statuses": {"TY-3": "ready"}}
+    util.write_json(e.p.state / "github-rate-limit.json", {"reset": int(time.time()) - 1})
+    fake.limited = False
+    tick(e)
+    assert not (e.p.state / "errors.jsonl").exists() and fake.issues[3].fields == {"Status": "Ready"}
+
+
+def test_an_ask_on_a_closed_task_is_refused(fake: FakeGh, e: Env):
+    fake.add(5, fields={"Status": "In progress"})
+    b = registry.backlog(e.p)
+    b.set_status("TY-5", "canceled")
+    with pytest.raises(BacklogError, match="^TY-5 is canceled: fm changes no closed task on the Board$"):
+        b.ask("TY-5", "a", "q")
+    assert state(e, "questions.json") is None
