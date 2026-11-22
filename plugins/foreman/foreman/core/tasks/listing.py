@@ -6,7 +6,9 @@ from . import backlog, blockers, chains, recurring, subtasks, taskrepo, tasktype
 
 
 class TaskRow(TypedDict):
-    """One task as `list` shows it; a fact the task lacks is "" (`priority` "none"; `chain` None for a task that is no chain parent)."""
+    """One task as `list` shows it; a fact the task lacks is "" (`priority` "none"; `chain` None for a task that is no chain parent).
+
+    `closed` is the stored date, None while the task has none."""
 
     id: str
     status: str
@@ -22,6 +24,7 @@ class TaskRow(TypedDict):
     waiting: str
     recurring: str
     chain: chains.Progress | None
+    closed: str | None
 
 
 def rows(tasks: list[backlog.Task], closed: bool, several: bool) -> list[TaskRow]:
@@ -46,4 +49,5 @@ def _row(i: backlog.Task, tasks: list[backlog.Task], several: bool) -> TaskRow:
         waiting=blockers.label(i, tasks),
         recurring=recurring.name_of(i),
         chain=chains.progress(tasks, i),
+        closed=i.get("closed") or None,
     )
