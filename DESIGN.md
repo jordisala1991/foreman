@@ -251,13 +251,23 @@ and the owner's notes. The **hunter** lists everything it suspects (with a confi
 inventory of what the diff adds) in `<home>/reviews/ID-rN-<tip>-hunter.md`. When that file exists and the hunter has ended,
 the **reviewer** starts; it sees only the file, never the hunter's reasoning. It checks each Wrong or Missing finding
 (confirmed, refuted, or neither) and each Too much item; a finding leaves only with a cited line or output that refutes it,
-so what it could not refute stays in To fix. What was dropped goes under Noted and is not sent to the responsible agent. It writes
+so what it could not refute stays in To fix (except a case nobody asked for, below). What was dropped goes under Noted and is not sent to the responsible agent. It writes
 `<home>/reviews/ID-rN-<tip>.md` (header `Branch/Tip/Round/Open`, N = items under To fix) and runs
 `foreman verdict --tip --open N --file`; a verdict for a tip other than the newest launch is stored in the review history but
 decides nothing. There are no severities. Open findings in round 1 → back to the responsible agent (`decide.review_step`);
 round 2 checks the fixes only and opens nothing new unless a fix is itself Wrong or Too much; what is still open after
 round 2 goes to the owner as high risk. A hunter that ends without its file, or a reviewer without a verdict, blocks the task.
 Each review session gets its own `<home>/scratch/ID-rN-<tip>-ROLE/`, told in its brief as `$scratch`; the loop removes it on the first tick where no live session owns it.
+
+**Cases nobody asked for**: one shared rule, `brief.UNASKED` in `foreman/services/agents/brief.py`, rendered through the
+`${unasked}` slot in the planning, responsible, hunter and reviewer briefs: before adding handling for a race, an edge case, a
+bad input or a security case that no acceptance criterion asks for, or sending one to be fixed, state its concrete failure path
+(the input or event, how likely, what it costs); a path reproduced with ordinary input through the project's own commands is
+real, and a real case is handled where the bad value enters, not at the crash site; no compatibility shims, dual paths,
+fallbacks or legacy adapters unless a criterion asks. Each brief follows the rule with its own role line: planning and
+responsible leave a case without a path out; the hunter still reports every suspicion, with its path or «path: none»; the
+reviewer sends an unasked case to Noted only when no path was reproduced, and a reproduced one stays in To fix naming where the
+bad value enters (outside the diff: a separate task, not a guard here).
 
 The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health finding and changes nothing else: read-only by its
 brief (as the hunter's), its only write is `foreman diagnose --file`, which checks the required `##` headings (`foreman/core/oversight/diagnosis.py`)
