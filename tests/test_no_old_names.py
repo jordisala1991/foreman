@@ -5,11 +5,12 @@ import argparse
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
 import pytest
-from helpers import fm
+from helpers import Env, fm
 
 from foreman import launcher, util
 from foreman.core.oversight import costs, guard
@@ -31,7 +32,7 @@ OLD_KEY = "is" + "sues"
 
 class TestOldNames:
     @pytest.fixture(autouse=True)
-    def set_up(self, request, env) -> None:
+    def set_up(self, request: pytest.FixtureRequest, env: Env) -> None:
         self.e = env
         patch = mock.patch.dict(os.environ)
         patch.start()
@@ -47,7 +48,7 @@ class TestOldNames:
         assert self.e.task(tid)["acceptance"]["goal"] == "x"
 
     @pytest.mark.parametrize("old", [OLD_ENV, "FM_TASK"])
-    def test_old_env_is_not_read(self, old):
+    def test_old_env_is_not_read(self, old: str):
         tid = provider_registry.backlog(self.e.p).add("t", criteria="c")
         os.environ[old] = tid
         with pytest.raises(SystemExit) as r:
@@ -77,7 +78,7 @@ class TestOldInstallNames:
     """What foreman installs and writes says foreman: the old variables, files, folders, jobs, plugin and cookie are not read."""
 
     @pytest.fixture(autouse=True)
-    def set_up(self, request, env) -> None:
+    def set_up(self, request: pytest.FixtureRequest, env: Env) -> None:
         self.e = env
         patch = mock.patch.dict(os.environ)
         patch.start()
@@ -101,12 +102,12 @@ class TestOldInstallNames:
             ("FM_PINNED", "/x/v1", launcher.stale, lambda: ""),
         ],
     )
-    def test_old_variables_are_not_read(self, name, value, read, default):
+    def test_old_variables_are_not_read(self, name: str, value: str, read: Callable[[], str], default: Callable[[], str]):
         os.environ[name] = value
         assert read() == default()
 
     @pytest.mark.parametrize("name", ["FM_HOME", "FM_PROJECT"])
-    def test_old_home_and_project_variables_are_not_read(self, name):
+    def test_old_home_and_project_variables_are_not_read(self, name: str):
         os.environ[name] = str(self.e.home) if name == "FM_HOME" else self.e.p.name
         self.outside()
         with pytest.raises(SystemExit) as r:
@@ -141,7 +142,7 @@ class TestOldInstallNames:
         assert server.load_token() != "old"
         assert (Path.home() / ".config/foreman/panel.token").exists()
 
-    def test_old_plugin_name_is_not_read(self, request):
+    def test_old_plugin_name_is_not_read(self, request: pytest.FixtureRequest):
         f = launcher.record()
         f.parent.mkdir(parents=True, exist_ok=True)
         folder = self.e.tmp / "v1"
@@ -161,7 +162,7 @@ class TestOldInstallNames:
             r"\bFM_|fm\.toml|\.config/fm\b|\.local/state/fm\b|dev\.fm\.|\bfm@fm|fm_key|fm-(loop|panel|\{job\})\.log"
             r"|<!-- /?fm:|fm-link|fm-evidence|fm-project|^name = \x22fm\x22$"
         )
-        found = []
+        found: list[str] = []
         for name in files:
             if name and not name.startswith(skip) and (root / name).is_file():
                 text = (root / name).read_text(encoding="utf-8", errors="ignore")

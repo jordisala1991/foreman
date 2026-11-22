@@ -13,7 +13,7 @@ READY = ("ready",)
 
 class TestPlan:
     @pytest.fixture(autouse=True)
-    def set_up(self, request, env):
+    def set_up(self, request: pytest.FixtureRequest, env: Env):
         self.e = env
         self.p = self.e.p
         self.tid = registry.backlog(self.p).add("vague idea")
@@ -23,7 +23,7 @@ class TestPlan:
         request.addfinalizer(self.env.stop)
         self.plan = self.p.home / "plans" / f"{self.tid}.md"
 
-    def ready(self, *extra):
+    def ready(self, *extra: str) -> str:
         return fm(self.e.home, *READY, *extra)
 
     def test_neither_flag_fails_and_leaves_it_refining(self):
@@ -108,7 +108,7 @@ class TestPlan:
 
 
 class TestReviewerPlan:
-    def brief_of_reviewer(self, **keys):
+    def brief_of_reviewer(self, **keys: str) -> tuple[Env, str]:
         e = Env()
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         registry.backlog(e.p).update(tid, status="in review", worktree=str(e.repo), **keys)

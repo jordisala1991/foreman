@@ -5,10 +5,11 @@ import io
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
-from helpers import fm
+from helpers import Env, fm
 
 from foreman.core.tasks import tasktypes
 from foreman.providers import registry
@@ -24,11 +25,11 @@ DEFINITION = ("changes only documents", "the definition goes in DESIGN.md", "wit
 
 class TestTaskType:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.tid = registry.backlog(self.e.p).add("t", criteria="a")
 
-    def shown(self, tid: str) -> dict:
+    def shown(self, tid: str) -> dict[str, Any]:
         return json.loads(fm(self.e.home, "show", tid))
 
     def line(self, tid: str) -> str:
@@ -84,7 +85,7 @@ class TestTaskType:
 
 class TestAgentsInstructions:
     @pytest.fixture(autouse=True)
-    def set_up(self, env):
+    def set_up(self, env: Env):
         self.e = env
         self.tid = registry.backlog(self.e.p).add("t", criteria="a")
 
@@ -92,7 +93,7 @@ class TestAgentsInstructions:
         return brief.brief(self.e.p, {**self.e.task(self.tid), **extra}, kind, {"round": 1})
 
     @pytest.mark.parametrize(("t", "words"), (("bug", BUG), ("mechanical", MECHANICAL), ("definition", DEFINITION)))
-    def test_each_type_has_its_paragraph_for_every_agent_of_the_task(self, t, words):
+    def test_each_type_has_its_paragraph_for_every_agent_of_the_task(self, t: str, words: tuple[str, ...]):
         for kind in KINDS:
             text = self.brief(kind, type=t)
             for w in words:

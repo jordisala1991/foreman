@@ -2,6 +2,9 @@ import functools
 import json
 import os
 import threading
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, NoReturn
 from unittest import mock
 
 import pytest
@@ -9,6 +12,7 @@ from fakerepo import FakeRepo
 from helpers import Env, fm, git
 
 from foreman import providers, util
+from foreman.core.project.config import Project
 from foreman.core.rules import decide, risk
 from foreman.core.tasks import questions
 from foreman.loop import queue, tick
@@ -16,7 +20,7 @@ from foreman.loop.launch import launch_free
 from foreman.providers import registry
 from foreman.providers.claude.sessions import Claude
 from foreman.providers.repo import FileDiff
-from foreman.providers.runner import RunnerError
+from foreman.providers.runner import Rows, RunnerError
 from foreman.services.delivery import check, merge, pulls
 from foreman.services.delivery.git import DeliveryError
 from foreman.steps import talk
@@ -47,7 +51,7 @@ class TestLaunch:
         assert "foreman/ty-2" in git(self.e.repo, "branch")
         assert self.e.task(b)["agent"]["session"]
 
-    def test_a_title_edited_before_launch_shows_in_the_new_agent(self, fake_git):
+    def test_a_title_edited_before_launch_shows_in_the_new_agent(self, fake_git: FakeRepo):
         e = Env(repo=fake_git)
         tid = registry.backlog(e.p).add("old title", status="ready", criteria="c")
         fm(e.home, "edit", tid, "--title", "new title")
@@ -57,7 +61,7 @@ class TestLaunch:
 
     def flags(self, e: Env) -> dict[str, tuple[str, str]]:
         """(model, effort) of every launched command, by the kind in its prompt."""
-        out = {}
+        out: dict[str, tuple[str, str]] = {}
         for c in e.calls():
             a = c["argv"]
             out[a[-1].split(" ")[1]] = (a[a.index("--model") + 1], a[a.index("--effort") + 1])
@@ -71,7 +75,7 @@ class TestLaunch:
         e.hunt_then_review(w)
         return self.flags(e)
 
-    def test_every_kind_launches_with_an_explicit_model_and_effort(self, fake_git):
+    def test_every_kind_launches_with_an_explicit_model_and_effort(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         assert self.run_all_kinds(e) == {
             "planning": ("sonnet", "high"),
@@ -83,7 +87,7 @@ class TestLaunch:
         assert i["reviewer"]["effort"] == "high"
         assert i["agent"]["effort"] == "medium"
 
-    def test_a_configured_model_and_effort_reach_each_command(self, fake_git):
+    def test_a_configured_model_and_effort_reach_each_command(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         cfg = e.p.cfg["agents"]
         cfg.update(planning_model="opus", planning_effort="max", model="haiku", effort="low", review_model="opus", review_effort="xhigh")
@@ -94,7 +98,7 @@ class TestLaunch:
             "reviewer": ("opus", "xhigh"),
         }
 
-    def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self, fake_git):
+    def test_defining_agent_runs_in_the_repo_and_never_gets_a_worktree(self, fake_git: FakeRepo):
         self.e = Env(slots=2, repo=fake_git)
         a = registry.backlog(self.e.p).add("vague idea", criteria="c")
         launch_free(self.e.p)
@@ -103,7 +107,7 @@ class TestLaunch:
         assert "[fm planning TY-1]" in self.e.calls()[0]["argv"][-1]
         assert "worktree" not in self.e.task(a)
 
-    def test_paused_launches_nothing(self, fake_git):
+    def test_paused_launches_nothing(self, fake_git: FakeRepo):
         self.e = Env(slots=2, repo=fake_git)
         self.p = self.e.p
         registry.backlog(self.p).add("x", status="ready", criteria="y")
@@ -114,7 +118,7 @@ class TestLaunch:
 
 
 class TestAnswers:
-    def test_the_answer_goes_back_to_the_agent_that_asked(self, fake_git):
+    def test_the_answer_goes_back_to_the_agent_that_asked(self, fake_git: FakeRepo):
         e = Env(repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         launch_free(e.p)
@@ -135,10 +139,10 @@ class TestAnswers:
         assert questions.undelivered(registry.backlog(e.p).load()) == []
 
     @pytest.mark.parametrize(("state", "status"), (("blocked", "idle"), ("working", "idle"), ("blocked", None)))
-    def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self, state, status, fake_git):
+    def test_an_idle_session_gets_the_answer_whatever_state_it_reports(self, state: str, status: str | None, fake_git: FakeRepo):
         self.delivered_to_idle(state, status, fake_git)
 
-    def delivered_to_idle(self, state, status, fake: FakeRepo):
+    def delivered_to_idle(self, state: str, status: str | None, fake: FakeRepo):
         e = Env(repo=fake)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         launch_free(e.p)
@@ -152,7 +156,7 @@ class TestAnswers:
 
 
 class TestStopped:
-    def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self, fake_git):
+    def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self, fake_git: FakeRepo):
         e = Env(repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         launch_free(e.p)
@@ -169,6 +173,13 @@ class TestStopped:
 
 
 class TestQueue:
+    def counting(self, checks: list[str], real: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
+        def counted(p: Project, tid: str, *a: Any) -> dict[str, Any]:
+            checks.append(tid)
+            return real(p, tid, *a)
+
+        return counted
+
     def deliver(self, e: Env, lines: int = 1, open_findings: int = 0) -> str:
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -191,7 +202,7 @@ class TestQueue:
         assert "Merge TY-1" in git(e.repo, "log", "--oneline", "-1")
         assert "foreman/ty-1" not in git(e.repo, "branch")
 
-    def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self, request, fake_git):
+    def test_one_tick_checks_one_branch_and_merges_the_accepted_one_first(self, request: pytest.FixtureRequest, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         ids = [self.deliver(e) for _ in range(3)]
         tick.tick(e.p)
@@ -199,7 +210,7 @@ class TestQueue:
         e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves: every branch is now stale
         checks: list[str] = []
         real = check.check
-        check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
+        check.check = self.counting(checks, real)
         request.addfinalizer(functools.partial(setattr, check, "check", real))
         try:
             tick.tick(e.p)
@@ -209,7 +220,7 @@ class TestQueue:
         finally:
             check.check = real
 
-    def test_the_merged_check_of_a_merge_does_not_count_as_the_ticks_branch_check(self, request, fake_git):
+    def test_the_merged_check_of_a_merge_does_not_count_as_the_ticks_branch_check(self, request: pytest.FixtureRequest, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         ids = [self.deliver(e) for _ in range(3)]
         tick.tick(e.p)
@@ -217,22 +228,27 @@ class TestQueue:
         e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
         checks: list[str] = []
         real, step = check.check, queue.queue_one
-        check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
-        queue.queue_one = lambda p, i, *a: None if i["id"] == ids[1] else step(p, i, *a)  # its turn starts nothing
+        check.check = self.counting(checks, real)
+
+        def skip_second(p: Project, i: dict[str, Any], rows: Rows) -> None:
+            if i["id"] != ids[1]:  # its turn starts nothing
+                step(p, i, rows)
+
+        queue.queue_one = skip_second
         request.addfinalizer(functools.partial(setattr, check, "check", real))
         request.addfinalizer(functools.partial(setattr, queue, "queue_one", step))
         tick.tick(e.p)
         assert (e.task(ids[0])["status"], checks) == ("done", [ids[2]])
 
-    def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self, request, fake_git):
+    def test_a_failure_after_the_check_does_not_start_a_second_check_in_the_tick(self, request: pytest.FixtureRequest, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         ids = [self.deliver(e) for _ in range(3)]
         e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
         checks: list[str] = []
         real, deliver = check.check, pulls.deliver
-        check.check = lambda p, tid, *a: checks.append(tid) or real(p, tid, *a)
+        check.check = self.counting(checks, real)
 
-        def boom(*a):
+        def boom(*a: Any) -> NoReturn:
             raise RuntimeError("boom")
 
         pulls.deliver = boom
@@ -242,7 +258,7 @@ class TestQueue:
         assert len(checks) == 1
         assert len(ids) == 3
 
-    def test_a_slow_check_does_not_hold_up_a_launch(self, request, monkeypatch, tmp_path, fake_git):
+    def test_a_slow_check_does_not_hold_up_a_launch(self, request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fake_git: FakeRepo):
         gate, armed = tmp_path / "gate", tmp_path / "armed"  # once armed, a check blocks reading the gate until the test writes a line
         os.mkfifo(gate)
         fd = os.open(gate, os.O_RDWR)  # held open for reading and writing: a write never blocks, the check's open never waits
@@ -256,20 +272,23 @@ class TestQueue:
         armed.touch()
         tick.tick(e.p)
         assert e.task(ready)["status"] == "in progress"  # launched while the check still runs
-        assert (e.task(a).get("check") or {}).get("main") != e.fake_repo().head("main")
+        before: dict[str, Any] = e.task(a).get("check") or {}
+        assert before.get("main") != e.fake_repo().head("main")
         os.write(fd, b"release\n" * 2)  # one line for each check blocked: main's tests and the branch's
         for t in list(util.BACKGROUND.values()):
             t.join()
         assert e.task(a)["check"]["main"] == e.fake_repo().head("main")
 
-    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(self, request, monkeypatch, fake_git):
+    def test_a_check_that_keeps_failing_with_a_transient_error_blocks_the_task_on_the_third_tick(
+        self, request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo
+    ):
         e = Env(test="true", repo=fake_git)
         a = self.deliver(e)
         e.fake_repo().commit("main", FileDiff("other.py", 1, 0))  # main moves
 
         tick_over = threading.Event()
 
-        def down(*args):
+        def down(*args: Any) -> NoReturn:
             tick_over.wait(5)  # fails only once the tick has gone on without it (a guard of 5 s, the test sets it)
             raise providers.Transient("net down")
 
@@ -285,14 +304,14 @@ class TestQueue:
                 t.join()
         assert "net down" in e.task(a)["blocked"]
 
-    def test_transient_failures_of_the_queue_step_that_are_not_in_a_row_do_not_block(self, request, fake_git):
+    def test_transient_failures_of_the_queue_step_that_are_not_in_a_row_do_not_block(self, request: pytest.FixtureRequest, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         a = self.deliver(e)
         tick.tick(e.p)  # checked: up to date, no check runs from now on
         real = pulls.prepare
         calls: list[int] = []
 
-        def flaky(*args):
+        def flaky(*args: Any) -> tuple[str, str]:
             calls.append(1)
             if len(calls) != 3:
                 raise providers.Transient("gh 502")
@@ -304,10 +323,10 @@ class TestQueue:
             tick.tick(e.p)
         assert (len(calls), e.task(a).get("blocked", "")) == (4, "")
 
-    def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self, request, fake_git):
+    def test_an_exception_in_a_background_thread_is_written_to_errors_jsonl(self, request: pytest.FixtureRequest, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
 
-        def boom(*args):
+        def boom(*args: Any) -> NoReturn:
             raise DeliveryError("git timed out")
 
         real = check.tests_at
@@ -318,12 +337,12 @@ class TestQueue:
             t.join()
         assert "git timed out" in util.read_jsonl(e.p.state / "errors.jsonl")[-1]["error"]
 
-    def test_a_task_canceled_while_the_queue_runs_is_not_checked(self, fake_git):
+    def test_a_task_canceled_while_the_queue_runs_is_not_checked(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         a, b = self.deliver(e), self.deliver(e)
         real = queue.queue_one
 
-        def cancel_b_first(p, i, rows):
+        def cancel_b_first(p: Project, i: dict[str, Any], rows: Rows) -> None:
             if i["id"] == a:
                 merge.close(p, b, "canceled", "x")
             real(p, i, rows)
@@ -335,7 +354,7 @@ class TestQueue:
             queue.queue_one = real
         assert not e.task(b).get("check")
 
-    def test_a_big_diff_alone_does_not_raise_risk(self, fake_git):
+    def test_a_big_diff_alone_does_not_raise_risk(self, fake_git: FakeRepo):
         e = Env(test="true", autonomy="low", repo=fake_git)
         big = self.deliver(e, lines=400)
         tick.tick(e.p)
@@ -348,7 +367,7 @@ class TestQueue:
         c = {"risk": "high", "review": "clean", "tests": "fail", "ci": "", "conflict": False}
         assert decide.after_check(c, "medium", False) == "failing"  # returned to its agent (FN-67)
 
-    def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self, fake_git):
+    def test_the_loop_hunts_first_and_launches_the_reviewer_when_the_hunter_has_written_its_file(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y", detail="DETAIL-OF-THE-TASK")
         tick.tick(e.p)
@@ -384,7 +403,7 @@ class TestQueue:
         tick.tick(e.p)
         assert e.state_of(e.task(tid)["reviewer"]["name"]) == "stopped"
 
-    def test_cancelling_a_task_in_review_stops_every_session_of_it(self, fake_git):
+    def test_cancelling_a_task_in_review_stops_every_session_of_it(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -395,7 +414,7 @@ class TestQueue:
         for role in ("agent", "hunter", "reviewer"):
             assert e.state_of(i[role]["name"]) == "stopped", role
 
-    def test_merging_stops_every_session_of_the_task(self, fake_git):
+    def test_merging_stops_every_session_of_the_task(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = self.deliver(e)
         e.review(tid)
@@ -407,7 +426,7 @@ class TestQueue:
         for role in ("agent", "hunter", "reviewer"):
             assert e.state_of(i[role]["name"]) == "stopped", role
 
-    def test_a_blocked_task_still_has_its_finished_hunter_stopped(self, fake_git):
+    def test_a_blocked_task_still_has_its_finished_hunter_stopped(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -418,7 +437,7 @@ class TestQueue:
         tick.tick(e.p)
         assert e.state_of(e.task(tid)["hunter"]["name"]) == "stopped"
 
-    def test_a_failing_stop_does_not_stop_the_cancel(self, fake_git):
+    def test_a_failing_stop_does_not_stop_the_cancel(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -426,7 +445,7 @@ class TestQueue:
             merge.close(e.p, tid, "canceled", "no")
         assert e.task(tid)["status"] == "canceled"
 
-    def test_cancel_stops_a_session_the_listing_does_not_show(self, fake_git):
+    def test_cancel_stops_a_session_the_listing_does_not_show(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -434,7 +453,7 @@ class TestQueue:
         merge.close(e.p, tid, "canceled", "no")
         assert e.stops() == [e.task(tid)["agent"]["short"]]
 
-    def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self, fake_git):
+    def test_the_review_tick_does_not_stop_again_a_session_the_listing_does_not_show(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -446,7 +465,7 @@ class TestQueue:
             tick.tick(e.p)
         assert e.stops() == []
 
-    def test_a_cancel_stops_each_session_once(self, fake_git):
+    def test_a_cancel_stops_each_session_once(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -455,7 +474,7 @@ class TestQueue:
         assert e.stops() == [e.task(tid)["agent"]["short"]]  # once, though its id is also in `sessions`
         assert e.state_of(name) == "stopped"
 
-    def test_a_hunter_that_ends_without_its_file_blocks_the_task(self, fake_git):
+    def test_a_hunter_that_ends_without_its_file_blocks_the_task(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -467,7 +486,7 @@ class TestQueue:
         assert "hunter ended without its findings file" in e.task(tid)["blocked"]
         assert len(e.calls()) == 2
 
-    def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self, fake_git):
+    def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self, fake_git: FakeRepo):
         e = Env(test="true", autonomy="medium", repo=fake_git)
         tid = self.deliver(e, open_findings=1)
         tick.tick(e.p)
@@ -485,7 +504,7 @@ class TestQueue:
         assert (i["status"], i["check"]["risk"]) == ("in review", "low")
         assert any("open after round 2" in r for r in i["check"]["reasons"])
 
-    def test_reject_sends_the_note_back_to_the_agent(self, fake_git):
+    def test_reject_sends_the_note_back_to_the_agent(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = self.deliver(e)
         fm(e.home, "reject", tid, "name it better")
@@ -494,7 +513,7 @@ class TestQueue:
         tick.tick(e.p)
         assert "name it better" in e.calls()[-1]["argv"][-1]
 
-    def test_refuted_without_commit_is_not_returned_twice(self, fake_git):
+    def test_refuted_without_commit_is_not_returned_twice(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = self.deliver(e, open_findings=1)
         tick.tick(e.p)

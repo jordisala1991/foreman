@@ -2,6 +2,7 @@
 
 import json
 import textwrap
+from typing import Any
 
 import pytest
 from helpers import Env, fm
@@ -31,10 +32,10 @@ def refused(env: Env, *argv: str) -> str:
 
 class TestTaskRepo:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
 
-    def shown(self, tid: str) -> dict:
+    def shown(self, tid: str) -> dict[str, Any]:
         return json.loads(fm(self.e.home, "show", tid))
 
     def line(self, tid: str) -> str:

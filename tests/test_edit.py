@@ -5,14 +5,14 @@ import os
 from unittest import mock
 
 import pytest
-from helpers import fm
+from helpers import Env, fm
 
 from foreman.providers import registry
 
 
 class TestEdit:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.tid = registry.backlog(self.e.p).add("t", detail="d", goal="c", criteria="a\nb")
 

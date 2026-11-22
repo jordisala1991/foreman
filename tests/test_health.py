@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import time
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
@@ -29,7 +30,7 @@ from foreman.ui.panel import views
 
 class TestHealth:
     @pytest.fixture(autouse=True)
-    def set_up(self, env):
+    def set_up(self, env: Env):
         self.e = env
         self.p = self.e.p
 
@@ -143,12 +144,12 @@ class TestMetrics:
 
 
 class TestEvidence:
-    def commit(self, e, name, text="x"):
+    def commit(self, e: Env, name: str, text: str = "x") -> None:
         (e.repo / name).write_text(text)
         git(e.repo, "add", "-A")
         git(e.repo, "commit", "-qm", name)
 
-    def triage(self, e):
+    def triage(self, e: Env) -> list[backlog.Task]:
         return [i for i in backlog.tasks(provider_registry.backlog(e.p).load()) if i["status"] == "triage"]
 
     def test_failing_main_is_one_task_until_it_passes(self):
@@ -231,17 +232,18 @@ class TestEvidence:
 
 class TestVersions:
     @pytest.fixture(autouse=True)
-    def set_up(self, env):
+    def set_up(self, env: Env):
         self.e = env
         self.p = self.e.p
 
-    def test_health_shows_the_versions(self, request):
+    def test_health_shows_the_versions(self, request: pytest.FixtureRequest):
         util.write_json(self.p.state / "loop.json", {"version": "aaa"})
         install_fm(request, version_folder(self.e.tmp / "cache", "ccc"))
         assert f"versions: this command {launcher.ROOT.name} · the loop aaa · installed ccc\n" in fm(self.p.home, "health")
 
     def test_a_loop_json_that_is_not_an_object_gives_no_beat(self):
-        for hb in (None, [], 3):
+        beats: tuple[object, ...] = (None, [], 3)
+        for hb in beats:
             (self.p.state / "loop.json").unlink(missing_ok=True)
             if hb is not None:
                 util.write_json(self.p.state / "loop.json", hb)
@@ -250,9 +252,10 @@ class TestVersions:
             assert checks.loop_dead(self.p)[0]["key"] == "loop-dead"
             assert "the loop unknown" in notes.versions(self.p)[0]
 
-    def test_without_an_install_health_says_the_jobs_cannot_start(self, request):
+    def test_without_an_install_health_says_the_jobs_cannot_start(self, request: pytest.FixtureRequest):
         """Whether or not a loop ever ran from the plugin: a job that exits at once writes no heartbeat."""
-        for hb in (None, [], {"version": "aaa"}):
+        beats: tuple[object, ...] = (None, [], {"version": "aaa"})
+        for hb in beats:
             (self.p.state / "loop.json").unlink(missing_ok=True)
             if hb is not None:
                 util.write_json(self.p.state / "loop.json", hb)
@@ -267,27 +270,27 @@ class TestOrcaHealth:
     """`foreman health` on a runner = "orca" project (DESIGN D8): the binary, Orca answering, Orca's hooks."""
 
     @pytest.fixture(autouse=True)
-    def set_up(self, env, monkeypatch):
+    def set_up(self, env: Env, monkeypatch: pytest.MonkeyPatch):
         self.e = env
         self.runner("orca")
         self.fake = FakeOrca(env.tmp)
         monkeypatch.setenv("ORCA_BIN", str(self.fake.bin))
         self.settings = env.tmp / "settings.json"
 
-    def runner(self, name):
+    def runner(self, name: str) -> None:
         toml = self.e.home / "foreman.toml"
         text = re.sub(r"(?m)^runner = .*\n", "", toml.read_text())
         toml.write_text(text.replace("[agents]\n", f'[agents]\nrunner = "{name}"\n', 1))
         self.p = Project.load(self.e.home)
 
-    def hooked(self, events=hooks.STATE_EVENTS):
+    def hooked(self, events: Iterable[str] = hooks.STATE_EVENTS) -> None:
         cmd = {"hooks": [{"type": "command", "command": "/x/Orca/hooks/claude-hook.sh"}]}
         self.settings.write_text(json.dumps({"hooks": {ev: [cmd] for ev in events}}))
 
-    def keys(self):
+    def keys(self) -> list[str]:
         return [f["key"] for f in orca.findings(self.p, self.settings)]
 
-    def test_a_missing_binary_is_a_finding(self, monkeypatch):
+    def test_a_missing_binary_is_a_finding(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("ORCA_BIN", str(self.e.tmp / "nope"))
         self.hooked()
         assert self.keys() == ["orca-missing"]
@@ -313,7 +316,7 @@ class TestOrcaHealth:
         self.fake.down()
         assert "! Orca is not running" in fm(self.p.home, "health")
 
-    def test_a_claude_project_has_no_orca_line(self, monkeypatch):
+    def test_a_claude_project_has_no_orca_line(self, monkeypatch: pytest.MonkeyPatch):
         self.runner("claude")
         monkeypatch.setenv("ORCA_BIN", str(self.e.tmp / "nope"))
         assert orca.findings(self.p, self.settings) == [] and orca.warnings(self.p) == []
