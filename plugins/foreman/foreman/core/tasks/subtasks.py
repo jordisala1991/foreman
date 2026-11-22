@@ -1,10 +1,19 @@
 """Tasks and subtasks (pure): a subtask names its parent in `parent`; the parent stores no list."""
 
+from typing import Any
+
 from . import backlog, blockers
 
 
 def of(tasks: list[backlog.Task], pid: str) -> list[backlog.Task]:
     return [i for i in tasks if i.get("parent") == pid]
+
+
+def unwoken(tasks: list[backlog.Task], pid: str, messages: list[dict[str, Any]]) -> list[backlog.Task]:
+    """The closed subtasks of `pid` that no message of `pid` of kind `subtask` names in its `subtask` field: each still owes
+    its parent a wakeup."""
+    named = {q.get("subtask") for q in messages if q.get("task") == pid and q.get("kind") == "subtask"}
+    return [s for s in of(tasks, pid) if s["status"] in backlog.CLOSED and s["id"] not in named]
 
 
 def ordered(tasks: list[backlog.Task]) -> list[backlog.Task]:

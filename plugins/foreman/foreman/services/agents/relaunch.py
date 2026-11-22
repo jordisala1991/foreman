@@ -1,16 +1,15 @@
 """Relaunching a task's agent on the foreman installed now: its idle session is stopped and a copy of it (same
-conversation, new id) starts with today's `--settings` (PATH, guard, environment); the copy becomes the task's session.
-A parent agent whose session ended is launched anew, told where it stands."""
+conversation, new id) starts with today's `--settings` (PATH, guard, environment); the copy becomes the task's session."""
 
 from pathlib import Path
 from typing import Any
 
 from ... import util
 from ...core.project.config import Project
-from ...core.tasks import backlog, blockers
+from ...core.tasks import backlog
 from ...providers import registry
-from ...providers.runner import Agent, Rows, RunnerError, ref_of, unreadable
-from .launch import ended, launch_parent, record_run, record_session, run_kind
+from ...providers.runner import Agent, RunnerError, ref_of, unreadable
+from .launch import record_run, record_session, run_kind
 from .running import session_lock
 
 MESSAGE = (
@@ -33,7 +32,7 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
     task = backlog.get(registry.backlog(p).load(), tid)
     live = next(((r, ref) for r in ("agent", "mechanic") if (ref := ref_of(task.get(r))) and rows.alive(ref)), None)
     if live is None:
-        return _launch_anew(p, tid, task, rows)
+        raise RunnerError(f"{tid} has no live agent")
     role, ref = live
     a: dict[str, Any] = task[role]
     if rows.busy(ref):
@@ -59,19 +58,3 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
         record_run(p, tid, run_kind(task, a), new, a)
     backlog.event(p, tid, f"relaunched {a['name']} on the current foreman: session {a['short']} → {new.short}")
     return a["short"], new.short
-
-
-def _launch_anew(p: Project, tid: str, task: dict[str, Any], rows: Rows) -> tuple[str, str]:
-    """A parent whose session ended has no copy to restart: a new session replaces it. Any other task has no agent to relaunch."""
-    old: dict[str, Any] = task.get("agent") or {}
-    if not ended(old, rows):
-        raise RunnerError(f"{tid} has no live agent")
-    if task["status"] != "backlog":
-        raise RunnerError(f"{tid} is {task['status']}: only a parent in backlog is launched anew")
-    if task.get("blocked"):
-        raise RunnerError(f"{tid} is blocked: {task['blocked']}; unblock it first")
-    if waits := blockers.pending(task, backlog.tasks(registry.backlog(p).load())):
-        raise RunnerError(f"{tid} waits for {', '.join(waits)} to be done")
-    if launch_parent(p, task) is None:
-        raise RunnerError(f"{tid}'s parent agent could not be launched: see its events")
-    return old["short"], backlog.get(registry.backlog(p).load(), tid)["agent"]["short"]

@@ -1,10 +1,9 @@
-"""`foreman watch`: one line each time something starts needing the owner, decided from the backlog, ci.json and the
-session listing (never the text of events.jsonl). Assertions are on keys and on ids and text being in the line."""
+"""`foreman watch`: one line each time something starts needing the owner, decided from the backlog and ci.json (never
+the text of events.jsonl). Assertions are on keys and on ids and text being in the line."""
 
 import contextlib
 import json
 from collections.abc import Callable
-from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -14,9 +13,7 @@ from helpers import Env, fm
 from foreman import util
 from foreman.core.tasks import backlog
 from foreman.providers import registry
-from foreman.providers.claude.rows import ClaudeRows
-from foreman.providers.runner import NO_ROWS
-from foreman.steps import parents, talk, watch
+from foreman.steps import watch
 
 CHECK = {"risk": "high", "tests": "pass", "review": "clean", "ci": "", "conflict": False}
 
@@ -75,7 +72,7 @@ def drive(e: Env, monkeypatch: pytest.MonkeyPatch, *changes: Callable[[], object
 
     monkeypatch.setattr(watch, "pause", pause)
     with contextlib.suppress(Done):
-        watch.run(e.p, once, registry.runner(e.p).rows() or NO_ROWS)
+        watch.run(e.p, once)
 
 
 def printed(capsys: pytest.CaptureFixture[str]) -> list[str]:
@@ -86,7 +83,7 @@ def test_an_open_question_is_a_need(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     tid = task(e)
     qid = registry.backlog(e.p).ask(tid, "agent", "which   way?")
-    found = watch.needs(e.p, NO_ROWS)
+    found = watch.needs(e.p)
     assert list(found) == [f"q:{qid}"]
     assert tid in found[f"q:{qid}"] and qid in found[f"q:{qid}"] and "which way?" in found[f"q:{qid}"]
 
@@ -94,127 +91,78 @@ def test_an_open_question_is_a_need(fake_git: FakeRepo):
 def test_a_task_waits_for_accept_only_when_after_check_says_owner(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     tid = in_review(e)
-    assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
-    assert tid in watch.needs(e.p, NO_ROWS)[f"accept:{tid}"]
+    assert list(watch.needs(e.p)) == [f"accept:{tid}"]
+    assert tid in watch.needs(e.p)[f"accept:{tid}"]
     registry.backlog(e.p).update(tid, accepted={"by": "owner"})
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}
     registry.backlog(e.p).update(tid, accepted=None, check={**CHECK, "head": "other"})  # a check for another tip than the verdict's
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}
     head = fake_git.find("b")
     c = {**CHECK, "head": head, "main": fake_git.find("main"), "review": "open 1"}
     registry.backlog(e.p).update(tid, check=c, review={"round": 2, "tip": head, "open": 1})  # waiting after the rounds
-    assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
+    assert list(watch.needs(e.p)) == [f"accept:{tid}"]
 
 
 def test_accept_follows_the_stored_ci_result(fake_git: FakeRepo):
     e = Env(repo=fake_git, autonomy="low")
     tid = in_review(e, check={"risk": "low", "ci": "pass"})
-    assert watch.needs(e.p, NO_ROWS) == {}  # the loop merges it
+    assert watch.needs(e.p) == {}  # the loop merges it
     c = {**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main"), "ci": "fail"}
     registry.backlog(e.p).update(tid, check=c, failure_streak=2)  # failures went back to its agent twice: the owner decides
-    assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
+    assert list(watch.needs(e.p)) == [f"accept:{tid}"]
 
 
 def test_a_pr_without_checks_waits_for_the_owner_but_a_local_branch_is_merged(fake_git: FakeRepo):
     e = Env(repo=fake_git, autonomy="low")
     tid = in_review(e, check={"risk": "low", "ci": "none"}, pr={"number": 1})  # the provider has CI and the PR has no checks: the loop leaves it to the owner
-    assert list(watch.needs(e.p, NO_ROWS)) == [f"accept:{tid}"]
+    assert list(watch.needs(e.p)) == [f"accept:{tid}"]
     registry.backlog(e.p).update(
         tid, check={**CHECK, "risk": "low", "head": fake_git.find("b"), "main": fake_git.find("main")}
     )  # local: no CI, the autonomy merges it
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}
 
 
 def test_a_task_the_autonomy_merges_is_not_a_need(fake_git: FakeRepo):
     e = Env(repo=fake_git, autonomy="low")
     in_review(e, check={"risk": "low"})
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}
 
 
 @pytest.mark.parametrize("reason", ["x", "could not launch its agent: boom"])
 def test_a_blocked_task_is_a_need_with_its_reason(fake_git: FakeRepo, reason: str):
     e = Env(repo=fake_git)
     tid = task(e, blocked=reason)
-    found = watch.needs(e.p, NO_ROWS)
+    found = watch.needs(e.p)
     assert list(found) == [f"blocked:{tid}"]
     assert tid in found[f"blocked:{tid}"] and reason in found[f"blocked:{tid}"]
     registry.backlog(e.p).update(tid, status="done")
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}
 
 
 def test_main_tests_failing_is_a_need(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     (e.p.state).mkdir(parents=True, exist_ok=True)
     util.write_json(e.p.state / "ci.json", {"result": "fail", "since": "t1"})
-    assert list(watch.needs(e.p, NO_ROWS)) == ["ci:t1"]
+    assert list(watch.needs(e.p)) == ["ci:t1"]
     util.write_json(e.p.state / "ci.json", {"result": "pass", "since": "t1"})
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}
 
 
-def test_a_parent_agent_idle_in_its_chat_is_a_need(fake_git: FakeRepo):
+def test_a_parent_is_a_need_only_through_its_open_question(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     tid = parent(e)
-    idle = ClaudeRows({"s1": row()})
-    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
-    assert tid in watch.needs(e.p, idle)[f"parent:{tid}"]
-    assert watch.needs(e.p, ClaudeRows({"s1": row(state="working", status="busy")})) == {}
-    assert watch.needs(e.p, ClaudeRows({"s1": row(pid=None)})) == {}  # stopped
+    sub = subtask(e, tid, "refining")
+    listing(e, row())  # its session idle
+    registry.backlog(e.p).update(sub, status="done")
+    assert json.loads(fm(e.home, "needs", "--json")) == []
     qid = registry.backlog(e.p).ask(tid, "agent", "q?")
-    assert list(watch.needs(e.p, idle)) == [f"q:{qid}"]
+    assert [(n["kind"], n["key"]) for n in json.loads(fm(e.home, "needs", "--json"))] == [("question", f"q:{qid}")]
 
 
-def test_a_parent_waits_for_the_owner_only_when_none_of_its_subtasks_is_open(fake_git: FakeRepo):
-    e = Env(repo=fake_git)
-    tid = parent(e)
-    idle = ClaudeRows({"s1": row()})
-    sub = subtask(e, tid, "refining")
-    assert watch.needs(e.p, idle) == {}
-    for closed in ("done", "canceled"):
-        registry.backlog(e.p).update(sub, status=closed)
-        assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
-
-
-def test_a_parent_with_a_message_not_yet_delivered_is_not_a_need(fake_git: FakeRepo):
-    e = Env(repo=fake_git)
-    tid = parent(e)
-    sub = subtask(e, tid, "refining")
-    idle = ClaudeRows({"s1": row()})
-    registry.backlog(e.p).update(sub, status="done")
-    parents.notify(e.p)  # files the message for the parent's agent; the loop delivers it a tick later
-    assert watch.needs(e.p, idle) == {}
-    registry.backlog(e.p).mark_delivered(f"{tid} S1")
-    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
-
-
-def test_a_parent_just_sent_a_message_is_not_a_need_until_the_margin_passes(fake_git: FakeRepo):
-    e = Env(repo=fake_git)
-    sid = "ab12cd34-0000-0000"
-    tid = parent(e, sid)
-    who = {"kind": "parent", "session": sid, "name": "p1"}
-    registry.backlog(e.p).update(tid, agent=who)
-    sub = subtask(e, tid, "refining")
-    idle = ClaudeRows({sid: row(sid)})
-    registry.backlog(e.p).update(sub, status="done")
-    parents.notify(e.p)
-    listing(e, row(sid, pid=None))  # stopped: the loop resumes it with the message
-    talk.deliver_answers(e.p, registry.rows(e.p))
-    assert backlog.get(registry.backlog(e.p).load(), tid)["agent"].get("started")
-    assert watch.needs(e.p, idle) == {}  # delivered, the listing does not show it busy yet
-    assert watch.needs(e.p, ClaudeRows({sid: row(sid, state="working", status="busy")})) == {}
-    late = (datetime.now() - timedelta(seconds=watch.AFTER_SEND_S + 5)).strftime("%Y-%m-%d %H:%M:%S")
-    registry.backlog(e.p).update(tid, agent={**who, "started": late})
-    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]  # it worked and went idle
-    future = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")  # a clock stepped back
-    registry.backlog(e.p).update(tid, agent={**who, "started": future})
-    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
-
-
-def test_questions_blocked_and_parents_at_start_are_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+def test_questions_and_blocked_at_start_are_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     task(e, blocked="x")
     registry.backlog(e.p).ask(task(e), "agent", "q?")
-    parent(e)
-    listing(e, row())
     drive(e, monkeypatch, lambda: None, lambda: None)
     assert printed(capsys) == []
 
@@ -291,7 +239,6 @@ def test_each_thing_is_printed_once_when_it_starts(fake_git: FakeRepo, monkeypat
 def test_progress_merges_and_unblocked_print_nothing(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     tid = task(e, blocked="x")
-    parent_id = parent(e)
     listing(e, row(state="working", status="busy"))
     drive(
         e,
@@ -299,7 +246,6 @@ def test_progress_merges_and_unblocked_print_nothing(fake_git: FakeRepo, monkeyp
         lambda: registry.backlog(e.p).update(tid, blocked="", status="in progress"),
         lambda: registry.backlog(e.p).update(tid, status="done"),
         lambda: listing(e, row(state="working", status="busy", pid=2)),
-        lambda: registry.backlog(e.p).update(parent_id, notified=["TY-9"]),
     )
     assert printed(capsys) == []
 
@@ -326,14 +272,6 @@ def test_cli_watch_once_exits_after_its_first_line(fake_git: FakeRepo, monkeypat
     assert len(out.splitlines()) == 1 and tid in out
 
 
-def test_an_unreadable_listing_does_not_reprint_parents(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
-    e = Env(repo=fake_git)
-    parent(e)
-    listing(e, row())
-    drive(e, monkeypatch, lambda: (e.bin / "agents.json").write_text("not json"), lambda: listing(e, row()))
-    assert printed(capsys) == []
-
-
 def test_a_poll_that_cannot_read_the_backlog_does_not_end_watch(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     e = Env(repo=fake_git)
     tid = task(e)
@@ -356,16 +294,9 @@ def test_events_text_does_not_change_what_is_printed(fake_git: FakeRepo):
     tid = task(e)
     for text in ("asks the owner (question): x", "blocked: x", "launch failed: x", "ready for review", "checked: tests fail"):
         backlog.event(e.p, tid, text)
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}
     registry.backlog(e.p).update(tid, blocked="x")
-    before = watch.needs(e.p, NO_ROWS)
+    before = watch.needs(e.p)
     events = e.p.state / "events.jsonl"
     events.write_text(events.read_text().replace("blocked: x", "reworded").replace("asks the owner", "pregunta"))
-    assert watch.needs(e.p, NO_ROWS) == before
-
-
-def test_watch_refuses_without_the_listing(fake_git: FakeRepo):
-    e = Env(repo=fake_git)
-    (e.bin / "agents.json").write_text("not json")
-    with pytest.raises(SystemExit, match="needs the session listing"):
-        fm(e.home, "watch")
+    assert watch.needs(e.p) == before

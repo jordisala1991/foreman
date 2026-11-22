@@ -16,7 +16,6 @@ from foreman.core.project import registry as homes
 from foreman.core.project.config import Project
 from foreman.core.tasks import recurring, runs
 from foreman.providers import registry
-from foreman.providers.claude.rows import ClaudeRows
 from foreman.steps import watch
 
 Shape = dict[str, Any]
@@ -29,7 +28,7 @@ class OrNull(NamedTuple):
 
 
 CHAIN = {"lens": str, "step": int, "cap": int, "open": str}
-KINDS = frozenset({"question", "accept", "blocked", "main", "parent"})  # a field frozen to these values
+KINDS = frozenset({"question", "accept", "blocked", "main"})  # a field frozen to these values
 AGENT_KINDS = frozenset({"planning", "responsible", "review", "hunter", "parent", "chain", "mechanic"})
 TEXT_OR_NULL = (str, type(None))
 INT_OR_NULL = (int, type(None))
@@ -211,18 +210,17 @@ def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
     stuck = task(e, blocked="why")
     review = in_review(e, check={**CHECK, "at": "2026-11-22 10:00:00"}, report={"summary": "\n\nline one\nmore"})
     util.write_json(e.p.state / "ci.json", {"result": "fail", "since": "2026-11-22 09:00:00"})
-    idle = parent(e)
+    parent(e)  # idle, with no open question: not a need
     listing(e, row())
     found = read(e, "needs", "--json")
     assert all(conforms(n, SHAPES["needs"]) for n in found)
     by_kind = {n["kind"]: n for n in found}
-    assert [n["kind"] for n in found] == ["question", "accept", "blocked", "main", "parent"]
+    assert [n["kind"] for n in found] == ["question", "accept", "blocked", "main"]
     assert by_kind["question"] == {"kind": "question", "task": asking, "since": asked, "text": "which   way?\n\nthis or that", "key": f"q:{qid}"}
     assert (by_kind["blocked"]["task"], by_kind["blocked"]["text"], by_kind["blocked"]["since"]) == (stuck, "why", None)
     assert (by_kind["accept"]["task"], by_kind["accept"]["text"], by_kind["accept"]["since"]) == (review, "line one", "2026-11-22 10:00:00")
     assert (by_kind["main"]["task"], by_kind["main"]["since"]) == ("", "2026-11-22 09:00:00")
-    assert (by_kind["parent"]["task"], by_kind["parent"]["since"]) == (idle, None)
-    assert {n["key"] for n in found} == set(watch.needs(e.p, ClaudeRows({"s1": row()})))  # the same set as `watch --once`
+    assert {n["key"] for n in found} == set(watch.needs(e.p))  # the same set as `watch --once`
 
 
 def test_agents_lists_what_is_live_now(fake_git: FakeRepo):

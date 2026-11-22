@@ -74,11 +74,11 @@ def tick(p: Project) -> None:
             ("queue", lambda: run_queue(p, rows)),
             ("health", lambda: health.run(p, rows)),
             ("blockers", lambda: release.run(p)),
-            ("parents", lambda: parents.run(p, rows)),
+            ("parents", lambda: parents.run(p, registry.rows(p))),  # read again: `recover` may have resumed a parent
             ("launch", lambda: launch_free(p)),
             ("mechanic", lambda: mechanic.run(p, rows)),
             ("folders", lambda: folders.run(p, rows)),
-            ("notify", lambda: notify.run(p, rows)),
+            ("notify", lambda: notify.run(p)),
         ]
     with registry.tick_scope(p):  # the tick loads the backlog once
         for name, step in steps:

@@ -318,12 +318,12 @@ def test_relaunch_names_orca_when_its_listing_is_unreadable(s: Setup):
     assert "orca" in str(refused.value) and "claude" not in str(refused.value)
 
 
-def test_watch_names_orca_when_its_listing_is_unreadable(s: Setup):
+def test_agents_names_orca_when_its_listing_is_unreadable(s: Setup):
     toml = s.e.home / "foreman.toml"
     toml.write_text(toml.read_text().replace("[agents]\n", '[agents]\nrunner = "orca"\n'))  # the CLI reloads the toml
     s.orca.down(opens=False)
     with pytest.raises(SystemExit) as refused:
-        fm(s.e.home, "watch")
+        fm(s.e.home, "agents", "--json")
     assert "orca" in str(refused.value) and "claude" not in str(refused.value)
 
 
@@ -363,4 +363,4 @@ def test_an_orca_restart_closes_the_parents_run_as_runner_unavailable(s: Setup):
     first, second = (r for r in runs.load(s.p) if r.task == P)
     assert (first.outcome, first.failure_reason) == ("failed", "runner_unavailable")
     assert (second.attempt, second.active) == (2, True)
-    assert s.orca.verbs().count("orchestration worker-start") == 2
+    assert (s.orca.verbs().count("orchestration worker-start"), s.orca.verbs().count("orchestration send")) == (1, 1)  # resumed

@@ -1,6 +1,7 @@
-"""The loop's recover step: an active run whose session ended, never started or went silent is closed as failed with its
-reason (`core/tasks/recovery.py`), then retried, its session resumed or else started again through its kind's own launch
-path, or handed to the owner. It runs first thing after a loop restart too: the ledger and the runner's listing are all
+"""The loop's recover step: a parent's or chain's run whose session idles is closed as done (its run is one turn); an
+active run whose session ended, never started or went silent is closed as failed with its reason
+(`core/tasks/recovery.py`), then retried, its session resumed or else started again through its kind's own launch path,
+or handed to the owner. It runs first thing after a loop restart too: the ledger and the runner's listing are all
 it reads, and `state/runner.json` keeps the runner's epoch to tell a runner restart from a session's own end."""
 
 from pathlib import Path
@@ -11,7 +12,7 @@ from ..core.project.config import Project
 from ..core.tasks import backlog, questions, recovery, runs
 from ..providers import registry
 from ..providers.runner import Rows, State, ref_of
-from ..services.agents.launch import record_run
+from ..services.agents.launch import launch_parent, record_run
 from ..services.agents.running import idle_s, last_said, send
 from .live import ROLE
 from .mechanic import note_missing
@@ -22,7 +23,9 @@ FINISH = {
     "review": "run `foreman verdict`",
     "hunter": "write your findings file",
     "mechanic": "run `foreman diagnose`",
+    "parent": "end your turn once you have done what was asked (`foreman done` only on the owner's yes)",
 }
+FINISH["chain"] = FINISH["parent"]
 DROPPED = ("hunter", "review", "mechanic")  # a dropped record is launched again by the review step or the mechanic step
 
 
@@ -34,7 +37,7 @@ def message(tid: str, kind: str, why: str) -> str:
 
 
 def run(p: Project, rows: Rows) -> None:
-    """Each active run of an open task that is neither blocked nor waiting for the loop; nothing on an unreadable listing."""
+    """Each active run of an open task that is not blocked; nothing on an unreadable listing."""
     if not rows.has_sessions():
         return
     state = p.state / "runner.json"
@@ -44,22 +47,24 @@ def run(p: Project, rows: Rows) -> None:
     waiting = questions.tasks_waiting(d)
     active = [r for r in runs.load(p) if r.active]
     for i in backlog.tasks(d):
-        if i["status"] in backlog.CLOSED or i.get("blocked") or i["id"] in waiting:
+        if i["status"] in backlog.CLOSED or i.get("blocked"):
             continue
         for r in (r for r in active if r.task == i["id"]):
-            recover(p, i, r, rows, restarted)
+            if facts := facts_of(i, r, rows, restarted):
+                recover(p, i, r, facts, i["id"] in waiting)
     if rows.epoch():
         util.write_json(state, {"epoch": rows.epoch()})
 
 
-def recover(p: Project, i: dict[str, Any], r: runs.Run, rows: Rows, restarted: bool) -> None:
-    role = ROLE.get(r.kind, "agent")
-    record: dict[str, Any] = i.get(role) or {}
+def facts_of(i: dict[str, Any], r: runs.Run, rows: Rows, restarted: bool) -> recovery.Facts | None:
+    """What the loop sees of the run's session; None for a run with no session to look at, or a hunter whose written file
+    is its outcome (the queue step closes its run done)."""
+    record: dict[str, Any] = i.get(ROLE.get(r.kind, "agent")) or {}
     ref = ref_of(record)
     if ref is None or (r.kind == "hunter" and Path(record.get("file") or "").is_file()):
-        return  # a hunter's written file is its outcome: the queue step closes its run done
+        return None
     seen = rows.state(ref)
-    facts = recovery.Facts(
+    return recovery.Facts(
         known=bool(record.get("session")),
         ended=seen in (State.ENDED, State.GONE),
         restarted=restarted,
@@ -67,15 +72,25 @@ def recover(p: Project, i: dict[str, Any], r: runs.Run, rows: Rows, restarted: b
         quiet_s=idle_s(record),
         age_s=util.age_s(r.started) or 0,
     )
+
+
+def recover(p: Project, i: dict[str, Any], r: runs.Run, facts: recovery.Facts, waiting: bool) -> None:
+    """A parent's or chain's run whose turn is over ends done; else a run of a task not waiting for the loop (an open
+    question or a message not yet delivered) that ended without an outcome fails, then is retried or handed to the owner."""
+    tid = i["id"]
+    if r.kind in recovery.IDLE_KINDS and recovery.turn_over(facts):
+        runs.end(p, tid, (r.kind,), "done")
+        return
+    if waiting:
+        return
     why = recovery.reason(r.kind, facts)
     if not why:
         return
-    tid = i["id"]
     runs.end(p, tid, (r.kind,), "failed", why)
     n = recovery.streak([x for x in runs.load(p) if x.task == tid and x.kind == r.kind])
     if recovery.next_step(why, n) == "owner":
         to_owner(p, i, r.kind, why, n)
-    elif r.kind not in recovery.IDLE_KINDS:  # a parent is never resumed: the parents step launches a new one, told where it stands
+    else:
         retry(p, i, r.kind, why, n)
 
 
@@ -91,7 +106,9 @@ def retry(p: Project, i: dict[str, Any], kind: str, why: str, n: int) -> None:
             record_run(p, tid, kind, ref, record)
         backlog.event(p, tid, f"{kind} run ended ({why}): resumed, attempt {n + 1}")
         return
-    if kind in DROPPED:
+    if kind in recovery.IDLE_KINDS:  # a parent stays in backlog: a new session, told where it stands
+        launch_parent(p, i)
+    elif kind in DROPPED:
         drop(p, tid, role)
     else:
         registry.backlog(p).set_status(tid, "backlog" if i["status"] == "refining" else "ready", f"recovery: {why}")

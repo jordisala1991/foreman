@@ -9,7 +9,8 @@ RETRYABLE = ("session_ended", "runner_unavailable", "silent_too_long")
 MAX_ATTEMPTS = 2  # failed runs in a row of a kind; the next failure goes to the owner
 QUIET_S = 600  # an agent idle and its transcript quiet this long has stopped without finishing
 LAUNCH_GRACE_S = 120  # a launched session the runner has not listed after this long never started
-IDLE_KINDS = ("parent", "chain")  # they idle legitimately, waiting for a subtask or the owner
+IDLE_KINDS = ("parent", "chain")  # their run is one turn: done once the session idles
+SETTLE_S = 60  # the listing may still show a session idle this long after a message was sent to it
 
 
 class Facts(NamedTuple):
@@ -34,6 +35,11 @@ def reason(kind: str, f: Facts) -> str:
     if f.idle and f.quiet_s >= QUIET_S and kind not in IDLE_KINDS:
         return "silent_too_long"
     return ""
+
+
+def turn_over(f: Facts) -> bool:
+    """A parent's or chain's turn is over: its session is alive, idle, and quiet for SETTLE_S."""
+    return f.known and not f.ended and f.idle and f.quiet_s >= SETTLE_S
 
 
 def streak(of_kind: list[Run]) -> int:
