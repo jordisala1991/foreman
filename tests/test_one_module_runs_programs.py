@@ -32,6 +32,13 @@ def lint(tmp_path: Path, source: str) -> subprocess.CompletedProcess[str]:
         'import multiprocessing\n\nmultiprocessing.get_context("spawn").Process(target=print).start()\n',
         'import ctypes\n\nctypes.CDLL(None).system(b"ls")\n',
         "from multiprocessing import Process\n\nprint(Process)\n",
+        "from concurrent.futures import ProcessPoolExecutor\n\nprint(ProcessPoolExecutor)\n",
+        "import concurrent.futures\n\nprint(concurrent.futures.ProcessPoolExecutor)\n",
+        "from concurrent.futures import process\n\nprint(process)\n",
+        "import _posixsubprocess\n\nprint(_posixsubprocess)\n",
+        "import _multiprocessing\n\nprint(_multiprocessing)\n",
+        "import _ctypes\n\nprint(_ctypes)\n",
+        "import socketserver\n\nprint(socketserver.ForkingMixIn)\n",
     ],
 )
 def test_a_way_to_start_a_program_fails_lint(tmp_path: Path, source: str) -> None:
@@ -42,3 +49,8 @@ def test_a_way_to_start_a_program_fails_lint(tmp_path: Path, source: str) -> Non
 
 def test_a_module_that_runs_nothing_passes_lint(tmp_path: Path) -> None:
     assert lint(tmp_path, "import os\n\nprint(os.getpid())\n").returncode == 0
+
+
+def test_threads_do_not_start_a_program(tmp_path: Path) -> None:
+    source = "from concurrent.futures import ThreadPoolExecutor\nfrom socketserver import ThreadingMixIn\n\nprint(ThreadPoolExecutor, ThreadingMixIn)\n"
+    assert lint(tmp_path, source).returncode == 0
