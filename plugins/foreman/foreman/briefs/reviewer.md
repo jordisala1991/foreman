@@ -7,7 +7,7 @@ Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
 
-$type_section$vocabulary# How
+$type_section$vocabulary$unasked# How
 1. **Read** the acceptance criteria, `${hunter_file}`, then the diff (`git diff $main...$branch`) and the plan (`$plan`) as you need them. The responsible agent's report (`$report`) is what it says, never evidence.
 2. **Each Wrong or Missing finding:** try to confirm it: run it (the tests, a command, a one-off call) or follow the exact code path, line by line, from the input to the wrong result. Then:
    - **confirmed**: you saw it fail, or traced the whole path → To fix, with that evidence.
@@ -15,6 +15,7 @@ $type_section$vocabulary# How
    - **neither**: it stays in To fix, with the code path as far as you followed it. Being unsure is not a refutation: a finding leaves only with a cited refutation.
    A finding that names no wrong result (style, naming, «could be cleaner», «a test would be nice») has nothing to confirm: Noted.
    A finding about screenshots (missing before or after, or an image that does not match its criterion line) is confirmed by looking: open the images named in the report's Proof (the folder named like `$report` without `.md`) and compare each with its criterion line. No before and after for a screen the task changes is confirmed; an image that shows what its line claims refutes the second kind. Only the hunter's findings count: if the hunter raised none for a task with no visual change, add nothing.
+   A finding about a case no acceptance criterion asks for (a race, edge case, bad input or security case) stays in To fix only if it names the path (the input or event that real use reaches, and how likely it is) and you confirmed that path as above. With no such path, or one only a contrived input reaches, it goes to Noted as «no path: …», even if you could not refute it: «neither» does not apply to it. A To fix finding of this kind states its path.
 3. **Each Too much item:** check that it is in the diff and that no acceptance criteria line or plan item needs it. If one does, cite it and move the item to Noted; otherwise it stays: «remove X».
 4. **Something new you notice** goes to Noted.
 5. **Acceptance criteria table:** rebuild it with your own evidence.

@@ -7,7 +7,7 @@ Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
 
-$type_section$vocabulary# How
+$type_section$vocabulary$unasked# How
 1. **Coverage is your job.** Report every problem you suspect, including ones you are unsure of or think minor. Do not filter for importance or confidence: the reviewer does that. Give each finding a confidence: high, medium or low.
 2. **Read in this order:** the acceptance criteria; the diff (`git diff $main...$branch`, then the touched files whole where the diff is not enough); the plan (`$plan`, if any): its decisions and out of scope are settled, its edge cases are cases to check; the responsible agent's report (`$report`) **last**: check each thing it says against the code, never take one as evidence.
 3. **Acceptance criteria table:** every line of the acceptance criteria gets a row: met / not met / not shown, with its evidence.
@@ -15,6 +15,7 @@ $type_section$vocabulary# How
 5. **Look where reviews miss:** a slow or blocking call inside a loop tick, hook or handler; something missing, failed or timed out read as «none», «zero» or «clean»; a check that also blocks normal work; the project's own rules (its CLAUDE.md and the docs it points to).
 6. **Screenshots:** if the diff or the acceptance criteria change something the owner sees (a screen, a page, a panel view), the report's Proof must show before and after screenshots of each screen it changes, in the row of the criterion that line proves. Open each image (they sit in the folder named like `$report` without `.md`). Report a finding (kind Wrong, high confidence) for each screen that lacks the before, the after or both, naming the screen; and for each screenshot that does not show what its criterion line claims. If nothing the owner sees changes, report nothing about screenshots.
 7. **Evidence:** every finding names a file:line; anything you say you ran is a command from this session, with its output. A claim of the report written as seen, with no command, test or file:line behind it, is a finding (kind Wrong).
+8. **Cases nobody asked for:** a finding about a race, edge case, bad input or security case that no acceptance criterion asks for says, in «what happens», the path: the input or event that real use reaches, and how likely it is. With none, write «path: none» and confidence low (the reviewer moves it to Noted).
 $round2
 
 # Output

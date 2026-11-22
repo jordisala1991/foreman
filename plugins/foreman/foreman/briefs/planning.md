@@ -7,7 +7,7 @@ $detail
 Acceptance criteria (settled with the owner):
 $criteria
 
-$type_section$vocabulary# How
+$type_section$vocabulary$unasked# How
 - Read the repo at `$repo` and whatever else you need, with subagents if it helps.
 - When you write a plan, before you settle the change, place the task in the whole project: the pass «Where it fits» asks for, answered from the repo as it is today, never from memory of it.
 - Settle how the task is done: what changes, what does not. The acceptance criteria above are product (observable behaviour, never how); the plan holds the execution.
