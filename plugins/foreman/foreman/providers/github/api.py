@@ -1,6 +1,7 @@
-"""`gh` for the backlog on GitHub: one GraphQL request at a time, and the rate limit's stop. When GitHub says the limit is
-spent, the reset is kept in the stop file and every call until then raises `RateLimited` without running gh: each foreman
-process obeys it, and nothing here waits or tries again (retrying is `loop.guarded`'s)."""
+"""`gh` for the GitHub adapter, the one place it runs: the backlog's GraphQL requests and the provider's commands, and
+the rate limit's stop. When GitHub says the limit is spent, the reset is kept in the stop file and every call until then
+raises `RateLimited` without running gh: each foreman process obeys it, and nothing here waits or tries again (retrying
+is `loop.guarded`'s)."""
 
 import json
 import time
@@ -11,6 +12,7 @@ from ... import proc, util
 from .. import ProviderError
 from .types import PermanentError, RateLimited, TransientError, failure
 
+STOP_FILE = "github-rate-limit.json"
 GRAPHQL = ("api", "graphql", "--input", "-")
 
 
@@ -23,8 +25,9 @@ def _until(reset: int) -> RateLimited:
 
 
 class Api:
-    def __init__(self, stop: Path) -> None:
+    def __init__(self, stop: Path, cwd: Path | None = None) -> None:
         self.stop = stop
+        self.cwd = cwd  # where gh runs: the repo, for `{owner}/{repo}` placeholders
 
     def run(self, *args: str, input: str | None = None) -> proc.Result:
         """`gh <args>`; a non-zero exit is a failure with gh's error."""
@@ -59,7 +62,7 @@ class Api:
         if isinstance(at := reset.get("reset"), int) and at > time.time():
             raise _until(at)
         try:
-            return proc.run(["gh", *args], input=input)
+            return proc.run(["gh", *args], cwd=self.cwd, input=input)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
 

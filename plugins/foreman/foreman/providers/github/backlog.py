@@ -19,7 +19,7 @@ from ...core.tasks import changes, drags, ids
 from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks
 from ...core.tasks.issues import Issue, joined, stub, with_old_blockers, without_old_blockers
 from ...core.tasks.questions import Question
-from .api import Api
+from .api import STOP_FILE, Api
 from .apply import Where, apply, file
 from .files import Cards, Files
 from .issues import Read, read_one, read_open
@@ -32,7 +32,7 @@ class GitHubBacklog:
         self.old = old  # the old file's backlog: its closed tasks stay there
         self.shared = shared
         self.seen = seen  # serves the saved cards, never the Board
-        self.api = Api(p.state / "github-rate-limit.json")
+        self.api = Api(p.state / STOP_FILE)
         self.prefix = str(p.get("project", "prefix"))
         self.files = Files(p.state)
         self.lock = p.state / "backlog"  # util.file_lock adds .lock

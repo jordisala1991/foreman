@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from ... import proc, util
+from ...core.project.config import Project
 from ...core.review import evidence
 from ...core.review.inline import Review
 from .. import Change, ChangeState, FailedCheck, Provider, ProviderError, Published
-from ..repo import RepoError
+from ..repo import Repo, RepoError
 from . import review as ghreview
+from .api import STOP_FILE, Api
 from .checks import down, open_prs, pull
 from .types import STATES, PermanentError, PullRequest, TransientError, failure
 
@@ -51,10 +53,16 @@ class GitHub(Provider):
     has_ci = True
     name = "github"
 
+    def __init__(self, p: Project, repo: Repo) -> None:
+        super().__init__(p, repo)
+        self.api = Api(p.state / STOP_FILE, p.repo)
+
     def run(self, prog: str, *args: str, check: bool = True, input: str | None = None) -> proc.Result:
-        argv = [prog, *args] if prog == "gh" else [prog, "-C", str(self.p.repo), *args]
+        """`gh` goes through `Api` (rate-limit stop, failures mapped there); `check` applies to git only."""
+        if prog == "gh":
+            return self.api.run(*args, input=input)
         try:
-            r = proc.run(argv, cwd=self.p.repo if prog == "gh" else None, input=input)
+            r = proc.run([prog, "-C", str(self.p.repo), *args], input=input)
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
         if check and r.code != 0:
