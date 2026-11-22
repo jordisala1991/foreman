@@ -27,7 +27,7 @@ def values(p: Project) -> dict[str, str]:
         "home": str(p.home),
         "repos": ", ".join(str(r) for r in p.repos),
         "main": str(p.get("project", "main")),
-        "slots": str(slots(p)),
+        "slots": str(p.get("agents", "slots")),
     }
 
 
