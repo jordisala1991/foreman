@@ -50,6 +50,12 @@ def parent(e: Env, sid: str = "s1") -> str:
     return task(e, status="backlog", agent={"kind": "parent", "session": sid})
 
 
+def subtask(e: Env, pid: str, status: str) -> str:
+    tid = registry.backlog(e.p).add("sub", status="backlog", criteria="c", parent=pid)
+    registry.backlog(e.p).update(tid, status=status)
+    return tid
+
+
 def blocked(e: Env, tid: str, reason: str) -> Callable[[], None]:
     def change() -> None:
         registry.backlog(e.p).update(tid, blocked=reason)
@@ -154,6 +160,17 @@ def test_a_parent_agent_idle_in_its_chat_is_a_need(fake_git: FakeRepo):
     assert watch.needs(e.p, ClaudeRows({"s1": row(pid=None)})) == {}  # stopped
     qid = registry.backlog(e.p).ask(tid, "agent", "q?")
     assert list(watch.needs(e.p, idle)) == [f"q:{qid}"]
+
+
+def test_a_parent_waits_for_the_owner_only_when_none_of_its_subtasks_is_open(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    tid = parent(e)
+    idle = ClaudeRows({"s1": row()})
+    sub = subtask(e, tid, "refining")
+    assert watch.needs(e.p, idle) == {}
+    for closed in ("done", "canceled"):
+        registry.backlog(e.p).update(sub, status=closed)
+        assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
 
 
 def test_questions_blocked_and_parents_at_start_are_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
