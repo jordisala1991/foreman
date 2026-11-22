@@ -108,8 +108,29 @@ def new_id(p: Project, d: Data) -> str:
     return f"{prefix}-{max(nums, default=0) + 1}"
 
 
-def event(p: Project, tid: str | None, text: str) -> None:
-    util.append_jsonl(p.state / "events.jsonl", {"time": util.now(), "task": tid, "text": text})
+STATUS_KINDS = {"in review": "built"}  # the kind of the event a status move writes; any other move is `other`
+KINDS = ("planned", "built", "rejected", "conflict", "failing", "review", "accepted", "merged", "other")
+
+
+def event(p: Project, tid: str | None, text: str, kind: str = "other") -> None:
+    util.append_jsonl(p.state / "events.jsonl", {"time": util.now(), "task": tid, "text": text, "kind": kind})
+
+
+class Event(TypedDict):
+    """One step of a task's path: when, which kind (one of `KINDS`) and its text."""
+
+    at: str
+    kind: str
+    text: str
+
+
+def history(p: Project, tid: str) -> list[Event]:
+    """The events of a task in time order; a row without a kind (written before kinds) is `other`, never dropped."""
+    return [
+        {"at": str(r["time"]), "kind": r["kind"] if r.get("kind") in KINDS else "other", "text": str(r["text"])}
+        for r in util.read_jsonl(p.state / "events.jsonl")
+        if r.get("task") == tid
+    ]
 
 
 class Chain(TypedDict):

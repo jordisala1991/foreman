@@ -11,6 +11,8 @@ from ..providers.runner import Rows, State, ref_of
 from ..services.agents.launch import ended, record_run, run_kind
 from ..services.agents.running import send, update_agent
 
+EVENT_KINDS = {"rejection": "rejected", "conflict": "conflict", "failing": "failing"}  # a review return stays `other`
+
 
 def deliver_answers(p: Project, rows: Rows) -> None:
     d = registry.backlog(p).load()
@@ -89,7 +91,7 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
     runs.end(p, tid, ("hunter", "review"), "canceled")  # a review of the old tip has nothing left to decide
     if ref := ref_of(agent):  # the same session works again: a new run of it (the last ended at `foreman done`)
         record_run(p, tid, "responsible", ref, agent)
-    backlog.event(p, tid, f"→ in progress: returned to its agent ({kind}): {note}")
+    backlog.event(p, tid, f"→ in progress: returned to its agent ({kind}): {note}", EVENT_KINDS.get(kind, "other"))
 
 
 def unblock(p: Project, tid: str) -> None:

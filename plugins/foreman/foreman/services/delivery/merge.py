@@ -21,7 +21,7 @@ def accept(p: Project, tid: str, by: str = "owner") -> str:
     if checked.get("head") != head:
         raise git.DeliveryError(f"{i['branch']} moved since it was checked: wait for the next check")
     registry.backlog(p).update(tid, accepted={"by": by, "head": head, "at": util.now()})
-    backlog.event(p, tid, f"accepted by {by}: waiting for the merge")
+    backlog.event(p, tid, f"accepted by {by}: waiting for the merge", "accepted")
     return head
 
 
@@ -72,7 +72,7 @@ def merge_accepted(p: Project, tid: str) -> str:
             provider.ready(change)
         ref = request_merge(p, i, provider, change)
         registry.backlog(p).update(tid, merge=ref)
-        backlog.event(p, tid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}")
+        backlog.event(p, tid, f"merged as {ref[:9]} ({providers.merge_strategy(p)}); waiting to see it in {p.get('project', 'main')}", "merged")
         change = replace(change, merge=ref)
     seen = provider.state(change)
     if seen.closed and not seen.merged:
