@@ -437,11 +437,11 @@ A sandbox task (`runner = "orca"`) ran planning, responsible, hunter and reviewe
 
 ### The port
 
-From what foreman used in `services/claude/sessions.py` (moved to `providers/claude/`; line numbers are from before the move) (`command` :68, `start` :102, `resume` :108, `listing` :134, `state` :148,
+From what foreman used in the claude sessions module (now `providers/claude/`; line numbers are from before the move) (`command` :68, `start` :102, `resume` :108, `listing` :134, `state` :148,
 `alive` :154, `busy` :160, `stop` :172, `find` :97, `SessionError` :31) and its callers (`services/agents/launch.py`, `running.py`,
 `steps/mechanic.py`, `parents.py`, `reviewing.py`, `talk.py`, `services/delivery/merge.py`, `loop/queue.py`, `tick.py`,
 `ui/panel/views.py`, `ui/cli/ops.py`). Two real implementations, so a port is allowed. Package `foreman/providers/`, module
-`runner.py` (layer ports); adapters `providers/claude/` (today's `services/claude/sessions.py` and `login.py`, moved) and
+`runner.py` (layer ports); adapters `providers/claude/` (today's claude sessions module and `login.py`, moved) and
 `providers/orca/`; the registry hands it out (`registry.runner(p)`), as it does `registry.repo(p)`.
 
 ```
