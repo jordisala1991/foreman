@@ -8,6 +8,13 @@ from ...providers import registry
 from .. import lock
 
 BRIEFS = Path(__file__).parents[2] / "briefs"
+UNASKED = (  # each brief follows it with its own role line
+    "# Cases nobody asked for\nBefore adding handling for a race, an edge case, a bad input or a security case that no acceptance "
+    "criterion asks for, or sending one to be fixed, state its concrete failure path: the input or event that causes it, how likely "
+    "real use is to reach it, and what it costs to handle. A path reproduced with ordinary input through the project's own commands "
+    "(a typo, a 0, an empty value) is real. Handle a real case where the bad value enters, not with a guard where it crashes. "
+    "Add no compatibility shims, dual paths, fallbacks or legacy adapters unless a criterion asks for one.\n"
+)
 
 
 def agent_name(p: Project, tid: str, kind: str) -> str:
@@ -89,6 +96,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "plan_section": plan_section(i),
         "type_section": tasktypes.section(i),
         "vocabulary": vocabulary_section(p),
+        "unasked": UNASKED,
         "model_effort": f"{i.get('model') or 'project default'} / {i.get('effort') or 'project default'}",
         "round2": "",
         "owner_notes": owner_notes_section(p, i["id"]) if kind in ("reviewer", "hunter") else "",
