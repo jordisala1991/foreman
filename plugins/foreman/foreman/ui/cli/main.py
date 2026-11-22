@@ -10,7 +10,7 @@ from ...core.tasks import backlog
 from ...providers import ConfigError, Permanent, ProviderError, Transient
 from .agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .board import cmd_backlog
-from .ops import cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics, cmd_watch
+from .ops import cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics, cmd_needs, cmd_watch
 from .owner import (
     cmd_accept,
     cmd_add,
@@ -27,7 +27,7 @@ from .owner import (
     cmd_unblock,
 )
 from .parser import parser
-from .plugin import cmd_project, cmd_session_context
+from .plugin import cmd_project, cmd_projects, cmd_session_context
 from .view import cmd_list, cmd_show
 
 Handler = Callable[[argparse.Namespace], object]
@@ -61,9 +61,11 @@ HANDLERS: dict[str, Handler] = {
     "backlog": cmd_backlog,
     "lock": cmd_lock,
     "watch": cmd_watch,
+    "needs": cmd_needs,
     "guard": cmd_guard,
     "launchd": cmd_launchd,
     "project": cmd_project,
+    "projects": cmd_projects,
     "session-context": cmd_session_context,
 }
 

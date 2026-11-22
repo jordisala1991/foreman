@@ -52,6 +52,11 @@ def heartbeat(p: Project) -> dict[str, Any]:
     return util.json_object(util.read_json(p.state / "loop.json", {})) or {}
 
 
+def loop_beat(p: Project) -> dict[str, Any]:
+    """The loop's last beat's time and whether the loop is alive, as the panel and `health --json` show them."""
+    return {"time": heartbeat(p).get("time"), "alive": not loop_dead(p)}
+
+
 def loop_dead(p: Project) -> list[Finding]:
     hb = heartbeat(p)
     limit = 3 * int(p.get("health", "loop_seconds"))

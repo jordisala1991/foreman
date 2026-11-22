@@ -1,4 +1,5 @@
-"""The plugin's commands: `foreman session-context` (Claude Code's SessionStart hook) and `foreman project` (the skill's values)."""
+"""The plugin's commands: `foreman session-context` (Claude Code's SessionStart hook), `foreman project` (the skill's values) and
+`foreman projects --json` (every registered project, for other programs)."""
 
 import argparse
 import contextlib
@@ -6,7 +7,8 @@ import os
 import sys
 
 from ...core.project import plugin, registry
-from .common import home
+from ...steps.health import checks
+from .common import home, print_json
 
 
 def cmd_session_context(a: argparse.Namespace) -> None:
@@ -28,3 +30,24 @@ def cmd_project(a: argparse.Namespace) -> None:
     vals = plugin.values(home(a))
     for k in plugin.PLACEHOLDERS:
         print(f"{k}: {vals[k]}")
+
+
+def cmd_projects(a: argparse.Namespace) -> None:
+    """Every registered project as JSON (DESIGN.md «The JSON reads»); a home whose foreman.toml cannot be loaded is one line on stderr."""
+    projects, broken = registry.load_all()
+    for b in broken:
+        print(f"foreman: unreadable: {b.home}: {b.reason}", file=sys.stderr)
+    print_json(
+        [
+            {
+                "name": p.name,
+                "prefix": str(p.get("project", "prefix")),
+                "home": str(p.home),
+                "repo": str(p.repo),
+                "main": str(p.get("project", "main")),
+                "autonomy": str(p.get("merge", "autonomy")),
+                "loop_running": not checks.loop_dead(p),
+            }
+            for p in projects
+        ]
+    )

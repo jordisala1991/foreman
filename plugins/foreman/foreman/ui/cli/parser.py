@@ -28,6 +28,10 @@ def _repo(s: argparse.ArgumentParser) -> None:
     s.add_argument("--repo", metavar="KEY", help="the task's repo: a [repos.K] key (projects with several repos)")
 
 
+def _json(s: argparse.ArgumentParser, required: bool = False) -> None:
+    s.add_argument("--json", action="store_true", required=required, help="print JSON: a contract for other programs (DESIGN.md «The JSON reads»)")
+
+
 def _filing(c: Command) -> None:
     s = c("init", "make a project home and register it")
     s.add_argument("--repo", required=True)
@@ -47,6 +51,7 @@ def _filing(c: Command) -> None:
     _repo(s)
     s = c("list", "the backlog and the open questions")
     s.add_argument("--all", action="store_true")
+    _json(s)
     s = c("show", "one task, as stored")
     s.add_argument("id")
 
@@ -123,6 +128,8 @@ def _operations(c: Command) -> None:
     s = c("watch", "print one line each time something starts needing the owner (--once: exit after the first)")
     s.add_argument("--once", action="store_true")
     s = c("health", "the health checks, from outside the loop")
+    _json(s)
+    _json(c("needs", "what waits for the owner now, as JSON"), required=True)
     s = c(
         "backlog",
         "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows;"
@@ -141,6 +148,7 @@ def _operations(c: Command) -> None:
     s.add_argument("command", nargs=argparse.REMAINDER)
     c("guard", "(hook) the agents' PreToolUse guard")
     c("project", "this project's values: name, prefix, home, repos, main, slots")
+    _json(c("projects", "every registered project, as JSON"), required=True)
     c("session-context", "(hook) Claude Code's SessionStart: the project's instructions for a session in one of its folders")
     s = c("panel", "serve the panel")
     s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from other devices (the key is required)")

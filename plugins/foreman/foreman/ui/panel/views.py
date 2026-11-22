@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from ... import launcher, util
+from ... import util
 from ...core.oversight import costs
 from ...core.project import registry
 from ...core.project.config import Project
@@ -15,7 +15,7 @@ from ...providers.runner import Rows, State, ref_of
 from ...services import lock
 from ...services.delivery import pulls
 from ...steps import metrics, schedule
-from ...steps.health import checks, health
+from ...steps.health import checks, health, notes
 
 RECENT_DAYS = 7  # closed tasks the tasks screen still shows
 Obj = dict[str, Any]
@@ -38,8 +38,7 @@ def project(q: dict[str, list[str]]) -> Project:
 
 
 def loop_beat(p: Project) -> Obj:
-    hb = checks.heartbeat(p)
-    return {"time": hb.get("time"), "alive": not checks.loop_dead(p)}
+    return checks.loop_beat(p)
 
 
 def needs(d: Obj) -> int:
@@ -136,8 +135,5 @@ def system(p: Project) -> Obj:
 
 
 def versions(p: Project) -> Obj:
-    try:
-        now: str | None = launcher.installed().version
-    except launcher.LauncherError:
-        now = None
-    return {"loop": checks.heartbeat(p).get("version"), "panel": launcher.ROOT.name, "installed": now}
+    v = notes.facts(p)
+    return {"loop": v["loop"], "panel": v["this"], "installed": v["installed"]}

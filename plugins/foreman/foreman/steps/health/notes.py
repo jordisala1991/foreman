@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import TypedDict
 
 from ... import launcher
 from ...core.project import registry
@@ -42,12 +43,25 @@ def _includes_fm_md(claude_md: Path) -> bool:
     return "@.claude/fm.md" in (line.strip() for line in lines)
 
 
+class Versions(TypedDict):
+    """Which fm the loop (None before its first beat), this command and Claude Code's install are (None with none: `why`)."""
+
+    loop: str | None
+    this: str
+    installed: str | None
+    why: str
+
+
+def facts(p: Project) -> Versions:
+    try:
+        installed, why = launcher.installed().version, ""
+    except launcher.LauncherError as e:
+        installed, why = None, str(e)
+    return Versions(loop=checks.heartbeat(p).get("version"), this=launcher.ROOT.name, installed=installed, why=why)
+
+
 def versions(p: Project) -> list[str]:
     """Which fm this command, the loop and Claude Code's install are; and that foreman@foreman cannot start the launchd jobs."""
-    hb = checks.heartbeat(p)
-    try:
-        now, why = launcher.installed().version, ""
-    except launcher.LauncherError as e:
-        now, why = "none", str(e)
-    out = [f"versions: this command {launcher.ROOT.name} · the loop {hb.get('version') or 'unknown'} · installed {now}"]
-    return out + [f"! foreman@foreman cannot start the loop and the panel: {why}"] if why else out
+    v = facts(p)
+    out = [f"versions: this command {v['this']} · the loop {v['loop'] or 'unknown'} · installed {v['installed'] or 'none'}"]
+    return out + [f"! foreman@foreman cannot start the loop and the panel: {v['why']}"] if v["why"] else out

@@ -1106,13 +1106,13 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 |---|---|---|---|
 | ui | `foreman/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, board, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
-| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, folders, notify, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
+| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, folders, notify, parents, metrics, schedule, `health/`: health, checks, main_tests, notes, report | one step of a tick, or a view over several pieces |
 | services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo, the runner and the backlog (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`, `registry.backlog(p)`; `registry.tick_scope(p)` makes a tick load the backlog once) (the only importer of the adapters outside `providers/`, save `steps/health/checks.py` and `steps/health/orca.py`; enforced by `tests/test_adapters_only_through_registry.py`, not by tach) |
 | adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review, api, board, issues, backlog, apply, writes, files, cutover · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo · runner · backlog | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`); `Backlog`, every read and write of the backlog (tasks cross it as dicts) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
-| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, editing, recurring, board, ids, issues, changes, drags, cutover · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, shellscope, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, listing, editing, recurring, board, ids, issues, changes, drags, cutover · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, shellscope, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
 Core areas, in their `depends_on` order: `project` (foreman.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
 `tasks` (the backlog's vocabulary and pure functions, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
@@ -1199,6 +1199,20 @@ task.
 `Backlog` (FN-235, built): every read and write of the backlog, `providers/backlog.py`, through `registry.backlog(p)`
 (`find(id)` reads one task now, also one the open read does not hold); adapters `backlogfile` (`<home>/backlog.json`) and,
 with `[backlog]`, `github/backlog` (FN-236: reads; FN-237: writes; FN-140, «The backlog on GitHub»).
+
+### The JSON reads (FN-359)
+
+Other programs read fm through the command line alone (the dashboard, in its own repo, reads nothing else). These outputs
+are the public contract for them: `tests/test_json_contract.py` freezes each one's field names and types. Adding a field
+is free; renaming, removing or retyping one is the owner's decision. Their text output stays as it was.
+
+| Command | Shape |
+|---|---|
+| `foreman projects --json` | array; each `{name, prefix, home, repo, main, autonomy: str, loop_running: bool}`; a home whose foreman.toml cannot be loaded is a line on stderr |
+| `foreman list --json [--all]` | array; each task `{id, status, type, title, agent, repo, parent, priority, model, effort, blocked, waiting, recurring: str, chain: {lens: str, step: int, cap: int, open: str} or null}` (`""` when the task lacks the fact, `priority` `none`), in `list`'s order (`core/tasks/listing.py`) |
+| `foreman needs --json` | array, `watch`'s set now (`steps/watch.py` `found`); each `{kind, task, text, key: str, since: str or null}`; kind `question`, `accept`, `blocked`, `main` or `parent`; `since` the stamp stored (the question's `asked`, the check's `at`, `ci.json`'s `since`), null for blocked and parent; `text` as stored: the question, the first line of the delivery summary (stripped, as the review description shows it), the block, the parent's title; `tests fail on main` for main |
+| `foreman health --json` | object `{loop: {time: str or null, alive: bool}, versions: {loop: str or null, this: str, installed: str or null}, recurring: [{name, title, trigger, open: str, left: int or null, next: str or null, chain: {lens, step, cap, open} as in `list`, or null}], findings: [{key, title, meaning, evidence, hypothesis, repo: str}], warnings: [str]}` (`steps/health/report.py`) |
+| `foreman show ID` | object: the task as stored, with what `show` adds (`id`, `title`, `status`, `blocked`, `priority` are frozen) |
 
 ### Rules
 
