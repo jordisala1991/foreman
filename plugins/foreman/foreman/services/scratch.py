@@ -7,7 +7,7 @@ from ..core.project.config import Project
 
 
 def folder(p: Project, tid: str, rnd: int, tip: str, role: str) -> Path:
-    return p.home / "scratch" / f"{tid}-r{rnd}-{tip[:9]}-{role}"
+    return p.scratch / f"{tid}-r{rnd}-{tip[:9]}-{role}"
 
 
 def make(p: Project, tid: str, rnd: int, tip: str, role: str) -> Path:
@@ -20,7 +20,7 @@ def make(p: Project, tid: str, rnd: int, tip: str, role: str) -> Path:
 
 def sweep(p: Project, keep: set[Path]) -> None:
     """Removes every scratch folder not in `keep`."""
-    root = p.home / "scratch"
+    root = p.scratch
     if not root.is_dir():
         return
     for d in root.iterdir():
