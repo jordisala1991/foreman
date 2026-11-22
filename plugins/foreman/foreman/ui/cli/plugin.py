@@ -6,6 +6,7 @@ import contextlib
 import os
 import sys
 
+from ... import providers
 from ...core.project import plugin, registry
 from ...steps.health import checks
 from .common import home, print_json
@@ -33,12 +34,19 @@ def cmd_project(a: argparse.Namespace) -> None:
 
 
 def cmd_projects(a: argparse.Namespace) -> None:
-    """Every registered project as JSON (DESIGN.md «The JSON reads»); a home whose foreman.toml cannot be loaded is one line on stderr."""
+    """Every registered project as JSON (DESIGN.md «The JSON reads»); a home whose foreman.toml cannot be loaded is one line on stderr,
+    a project whose `[merge] strategy` is not valid is one too."""
     projects, broken = registry.load_all()
     for b in broken:
         print(f"foreman: unreadable: {b.home}: {b.reason}", file=sys.stderr)
-    print_json(
-        [
+    rows: list[dict[str, object]] = []
+    for p in projects:
+        try:
+            strategy = providers.merge_strategy(p)
+        except providers.ConfigError as e:
+            print(f"foreman: unreadable: {p.home}: {e}", file=sys.stderr)
+            continue
+        rows.append(
             {
                 "name": p.name,
                 "prefix": str(p.get("project", "prefix")),
@@ -46,10 +54,9 @@ def cmd_projects(a: argparse.Namespace) -> None:
                 "repo": str(p.repo),
                 "main": str(p.get("project", "main")),
                 "autonomy": str(p.get("merge", "autonomy")),
-                "strategy": str(p.get("merge", "strategy")),
+                "strategy": strategy,
                 "loop_running": not checks.loop_dead(p),
                 "slots": plugin.slots(p),
             }
-            for p in projects
-        ]
-    )
+        )
+    print_json(rows)
