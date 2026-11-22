@@ -120,6 +120,13 @@ def test_handle_is_the_orca_session_id(s: Setup):
     assert Orca(s.p).handle(SessionRef("a", "sid")) == ""
 
 
+def test_handle_of_a_live_ref_without_a_kept_pane_is_asked_of_orca(s: Setup):
+    ref = s.start()
+    assert ref.pane
+    bare = dataclasses.replace(ref, pane=None)
+    assert Orca(s.p).handle(bare) == Orca(s.p).handle(ref) != ""
+
+
 @pytest.mark.parametrize(("word", "state"), [("working", State.WORKING), ("done", State.IDLE), ("blocked", State.WAITING), ("waiting", State.WAITING)])
 def test_the_state_is_the_row_of_the_workers_pane(s: Setup, word: str, state: State):
     ref = s.start()

@@ -57,8 +57,9 @@ class Orca:
         return SessionRef(sid[:8], sid, str(w.get("terminal") or "") or None, pane(dispatch), dispatch=dispatch, coordinator=handle)
 
     def handle(self, ref: SessionRef) -> str:
-        """Orca's session id, from the kept pane; "" without one."""
-        return session_id(ref.pane) if ref.pane else ""
+        """Orca's session id, from the kept pane (asked of Orca by the dispatch when none was kept); "" without one."""
+        key = ref.pane or (pane(ref.dispatch) if ref.dispatch else None)
+        return session_id(key) if key else ""
 
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef:
         """A message to the chat; one Orca ended (a restart) is resumed by it. Orca answers a send that had to start the
