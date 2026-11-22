@@ -7,7 +7,7 @@ Then the steps, in this order (a broken one is logged in state/errors.jsonl and 
 4. sources: plug-in signals, and recurring entries that fell due, become tasks (steps/sources.py, steps/schedule.py)
 5. answers: the owner's answers go back to its agent (its own session, resumed) (steps/talk.py)
 6. recover: an active run whose session ended, never started or went silent is closed as failed with its reason, then
-   resumed or started again, twice at most in a row, then handed to the owner (steps/recover.py); waiting: under Orca, an
+   resumed or started again while fewer than 2 runs of its kind failed in a row, then handed to the owner (steps/recover.py); waiting: under Orca, an
    agent that waits for an answer in its chat gets one event (steps/talk.py)
 7. pulls: with a provider that has PRs (GitHub), a running task's branch is pushed and it gets a draft PR (services/delivery/pulls.py)
 8. queue: accepted tasks are merged first; then a branch whose head or main's moved is checked (tests, diff, risk) in
