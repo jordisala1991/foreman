@@ -24,11 +24,13 @@ def own_names(root: Path) -> list[str]:
 
 def leaks(root: Path) -> list[str]:
     names = sorted(own_names(root), key=len, reverse=True)  # longest first: tach.toml before tach, pytest-xdist before pytest
-    pattern = re.compile(r"(?<![\w-])(?:" + "|".join(map(re.escape, names)) + r")(?![\w-])")
+    escaped = [re.escape(n).replace(r"\ ", r"\s+") for n in names]  # `make check` also when wrapped or spaced twice
+    pattern = re.compile(r"(?<![\w-])(?:" + "|".join(escaped) + r")(?![\w-])")
     found: list[str] = []
-    for f in sorted(p for d in TEXTS for p in (root / d).rglob("*") if p.is_file()):
-        for n, line in enumerate(f.read_text().splitlines(), 1):
-            found += [f"{f.relative_to(root).as_posix()}:{n} {m.group()}" for m in pattern.finditer(line)]
+    for f in sorted(p for d in TEXTS for p in (root / d).rglob("*.md")):
+        text = f.read_text()
+        for m in pattern.finditer(text):
+            found.append(f"{f.relative_to(root).as_posix()}:{text.count(chr(10), 0, m.start()) + 1} {' '.join(m.group().split())}")
     return found
 
 
@@ -57,6 +59,8 @@ S = "plugins/foreman/foreman/shared"
         (f"{S}/instructions.md", "Never edit tach.toml.", ["tach.toml"]),
         (f"{S}/skills/define-task/SKILL.md", "run pytest, then ruff", ["pytest", "ruff"]),
         (f"{B}/hunter.md", "see the Makefile", ["Makefile"]),
+        (f"{B}/chain.md", "then run make\ncheck", ["make check"]),
+        (f"{B}/parent.md", "then run make  check", ["make check"]),
     ],
 )
 def test_a_name_of_our_repo_is_reported(tmp_path: Path, rel: str, text: str, expected: list[str]):
@@ -73,4 +77,5 @@ def test_a_new_root_file_is_reported_with_no_edit(tmp_path: Path):
 def test_other_text_is_not_reported(tmp_path: Path):
     tree(tmp_path, f"{B}/a.md", "README.md, CLAUDE.md, AGENTS.md, the project's design doc, its architecture rules, a tachometer")
     tree(tmp_path, "plugins/foreman/foreman/services/agents/brief.py", "Use the terms of `GLOSSARY.md`")
+    (tmp_path / B / ".DS_Store").write_bytes(b"\x00\xff\xfe\x80")
     assert leaks(tmp_path) == []
