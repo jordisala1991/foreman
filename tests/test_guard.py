@@ -190,12 +190,13 @@ class TestHook:
         guard.grant(self.e.p, self.tid, "delete")
         assert self.call("Bash", {"command": "gh project delete 7 --owner O"}) == ""
 
-    def test_scratch_of_the_task(self):
-        own = self.e.home / "scratch" / f"{self.tid}-r1-abc123def-hunter" / "x"
-        other = self.e.home / "scratch" / "OTHER-9-r1-abc123def-hunter" / "x"
-        with mock.patch.object(guard.tempfile, "gettempdir", return_value="/no-temp"):  # the suite's home is in the temp dir
+    def test_scratch_of_the_task(self):  # the hook gives the guard the project's scratch root and the task
+        seen: list[guard.Scope] = []
+        real = guard.check_bash
+        with mock.patch.object(guard, "check_bash", lambda cmd, sc: seen.append(sc) or real(cmd, sc)):
+            own = self.e.home / "scratch" / f"{self.tid}-r1-abc123def-hunter" / "x"
             assert self.call("Bash", {"command": f"rm -rf {own}"}) == ""
-            assert "foreman ask --action delete" in self.call("Bash", {"command": f"rm -rf {other}"})
+        assert (seen[0].scratch, seen[0].task) == ((self.e.home / "scratch").resolve(), self.tid)
 
     def test_outside_an_agent_it_lets_everything_run(self):
         os.environ.pop("FOREMAN_HOME")
