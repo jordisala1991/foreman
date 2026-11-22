@@ -56,6 +56,9 @@ class FakeRunner:
     def relaunch(self, ref: SessionRef, agent: Agent, message: str, cwd: Path) -> SessionRef:
         return self.start(agent, message, cwd)
 
+    def handle(self, ref: SessionRef) -> str:
+        return ref.short
+
     def rows(self) -> FakeRows:
         return FakeRows(self.states)
 

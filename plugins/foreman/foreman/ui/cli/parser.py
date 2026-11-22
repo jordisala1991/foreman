@@ -130,6 +130,7 @@ def _operations(c: Command) -> None:
     s = c("health", "the health checks, from outside the loop")
     _json(s)
     _json(c("needs", "what waits for the owner now, as JSON"), required=True)
+    _json(c("agents", "the agents the loop has live now, as JSON"), required=True)
     s = c(
         "backlog",
         "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows;"

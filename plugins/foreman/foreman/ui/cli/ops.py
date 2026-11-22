@@ -1,4 +1,4 @@
-"""The operator's commands: loop, health, metrics, watch, needs, guard, lock, launchd."""
+"""The operator's commands: loop, health, metrics, watch, needs, agents, guard, lock, launchd."""
 
 import argparse
 import os
@@ -13,7 +13,7 @@ from ...loop import tick
 from ...providers import registry as provider_registry
 from ...providers.runner import Rows, unreadable
 from ...services import lock
-from ...steps import metrics, schedule, watch
+from ...steps import live, metrics, schedule, watch
 from ...steps.health import health, notes, orca, report
 from .common import home, print_json
 
@@ -70,6 +70,16 @@ def cmd_needs(a: argparse.Namespace) -> None:
     """`watch`'s set of needs now, as JSON (DESIGN.md «The JSON reads»)."""
     p = home(a)
     print_json([{"kind": n.kind, "task": n.task, "since": n.since, "text": n.text, "key": n.key} for n in watch.found(p, _listing(p, "needs"))])
+
+
+def cmd_agents(a: argparse.Namespace) -> None:
+    """The agents live now, as JSON (DESIGN.md «The JSON reads»)."""
+    p = home(a)
+    out = [
+        {"task": x.task, "kind": x.kind, "model": x.model, "effort": x.effort, "started": x.started, "round": x.round, "session": x.session, "handle": x.handle}
+        for x in live.agents(p, _listing(p, "agents"))
+    ]
+    print_json(out)
 
 
 def cmd_guard(a: argparse.Namespace) -> None:

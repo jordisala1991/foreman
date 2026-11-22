@@ -11,9 +11,17 @@ from ..runner import SessionRef, State
 STATES = {"working": State.WORKING, "done": State.IDLE}  # any other word (blocked, waiting…) is WAITING
 
 
+CHAT_PREFIX = "structured-agent-session-"
+
+
 def chat(pane: str) -> str:
     """The chat's part of a pane key: `structured-agent-session-<id>`."""
     return pane.split(":", 1)[0]
+
+
+def session_id(pane: str) -> str:
+    """Orca's session id: the `<id>` of the chat's part of a pane key."""
+    return chat(pane).removeprefix(CHAT_PREFIX)
 
 
 def states(ps: dict[str, Any]) -> dict[str, str]:

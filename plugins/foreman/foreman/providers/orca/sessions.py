@@ -12,7 +12,7 @@ from ..runner import Agent, RunnerError, SessionRef
 from . import cli, settings
 from .cli import OrcaError, orca
 from .coordinator import coordinator, ensure_repos
-from .rows import OrcaRows, states
+from .rows import OrcaRows, session_id, states
 
 
 def pane(dispatch: str) -> str | None:
@@ -55,6 +55,10 @@ class Orca:
             self.stop(SessionRef("", None, dispatch=dispatch))
             raise RunnerError("the agent's SessionStart hook wrote no session id")
         return SessionRef(sid[:8], sid, str(w.get("terminal") or "") or None, pane(dispatch), dispatch=dispatch, coordinator=handle)
+
+    def handle(self, ref: SessionRef) -> str:
+        """Orca's session id, from the kept pane; "" without one."""
+        return session_id(ref.pane) if ref.pane else ""
 
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef:
         """A message to the chat; one Orca ended (a restart) is resumed by it. Orca answers a send that had to start the

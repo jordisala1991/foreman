@@ -114,6 +114,12 @@ def test_a_send_after_a_restart_keeps_the_new_dispatch(s: Setup):
     assert backlog.get(registry.backlog(s.p).load(), tid)["agent"]["dispatch"] == new
 
 
+def test_handle_is_the_orca_session_id(s: Setup):
+    pane = "structured-agent-session-f8b0cecd-e4ef-4afa-879d-bc2554b9b0e2:63ffab2a-c77d-4a5b-a65c-6e5226a0e917"
+    assert Orca(s.p).handle(SessionRef("a", "sid", "structworker_x", pane)) == "f8b0cecd-e4ef-4afa-879d-bc2554b9b0e2"
+    assert Orca(s.p).handle(SessionRef("a", "sid")) == ""
+
+
 @pytest.mark.parametrize(("word", "state"), [("working", State.WORKING), ("done", State.IDLE), ("blocked", State.WAITING), ("waiting", State.WAITING)])
 def test_the_state_is_the_row_of_the_workers_pane(s: Setup, word: str, state: State):
     ref = s.start()

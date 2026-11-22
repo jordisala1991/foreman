@@ -29,6 +29,7 @@ class OrNull(NamedTuple):
 
 CHAIN = {"lens": str, "step": int, "cap": int, "open": str}
 KINDS = frozenset({"question", "accept", "blocked", "main", "parent"})  # a field frozen to these values
+AGENT_KINDS = frozenset({"planning", "responsible", "review", "hunter", "parent", "chain", "mechanic"})
 TEXT_OR_NULL = (str, type(None))
 INT_OR_NULL = (int, type(None))
 
@@ -51,6 +52,7 @@ SHAPES: dict[str, Shape] = {
         "chain": OrNull(CHAIN),
     },
     "needs": {"kind": KINDS, "task": str, "since": TEXT_OR_NULL, "text": str, "key": str},
+    "agents": {"task": str, "kind": AGENT_KINDS, "model": str, "effort": str, "started": str, "round": INT_OR_NULL, "session": str, "handle": str},
     "health": {"loop": dict, "versions": dict, "recurring": list, "findings": list, "warnings": list},
     "health.loop": {"time": TEXT_OR_NULL, "alive": bool},
     "health.versions": {"loop": TEXT_OR_NULL, "this": str, "installed": TEXT_OR_NULL},
@@ -69,8 +71,8 @@ SHAPES: dict[str, Shape] = {
 
 
 def _fits(value: object, t: Any) -> bool:
-    if t is KINDS:
-        return value in KINDS
+    if isinstance(t, frozenset):
+        return value in t
     if isinstance(t, OrNull):
         return value is None or ((obj := util.json_object(value)) is not None and conforms(obj, t.shape))
     return isinstance(value, t) and not (isinstance(value, bool) and bool not in (t if isinstance(t, tuple) else (t,)))
@@ -94,6 +96,11 @@ def test_the_freeze_catches_a_rename_a_removal_and_allows_an_addition():
     assert not conforms({k: v for k, v in good.items() if k != "kind"}, SHAPES["needs"])
     assert not conforms({**good, "since": 3}, SHAPES["needs"])
     assert not conforms({**good, "kind": "go"}, SHAPES["needs"])
+    agent = {"task": "TY-1", "kind": "chain", "model": "m", "effort": "e", "started": "s", "round": None, "session": "s1", "handle": "h"}
+    assert conforms(agent, SHAPES["agents"])
+    assert conforms({**agent, "extra": 1}, SHAPES["agents"])
+    assert not conforms({**{k: v for k, v in agent.items() if k != "handle"}, "id": "h"}, SHAPES["agents"])
+    assert not conforms({**agent, "kind": "reviewer"}, SHAPES["agents"])
     entry = {"name": "n", "title": "t", "trigger": "every 2 merges", "open": "", "left": 2, "next": None, "chain": None}
     chain = {"lens": "l", "step": 1, "cap": 3, "open": ""}
     assert conforms({**entry, "chain": chain}, SHAPES["health.recurring"])
@@ -155,6 +162,44 @@ def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
     assert (by_kind["main"]["task"], by_kind["main"]["since"]) == ("", "2026-11-22 09:00:00")
     assert (by_kind["parent"]["task"], by_kind["parent"]["since"]) == (idle, None)
     assert {n["key"] for n in found} == set(watch.needs(e.p, ClaudeRows({"s1": row()})))  # the same set as `watch --once`
+
+
+def test_agents_lists_what_is_live_now(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    n = iter(range(1, 20))
+
+    def rec(**f: object) -> dict[str, Any]:
+        sid = f"s{next(n)}"
+        return {"short": sid[:2], "session": sid, "model": "opus", "effort": "high", "started": "2026-11-22 10:00:00", **f}
+
+    reviews = [{"round": 1, "tip": "t", "open": 1}]
+    first = task(e, status="in progress", agent=rec(kind="responsible"), reviews=reviews)
+    second = task(e, status="in progress", agent=rec(kind="responsible"))
+    third = task(e, status="in review", hunter=rec(round=1), reviewer=rec(round=2))
+    chain = {"lens": "l", "max_steps": 3, "max_lines": 100}
+    chained = task(e, status="backlog", agent=rec(kind="parent"), chain=chain)
+    plain = task(e, status="backlog", agent=rec(kind="parent"))
+    fixing = task(e, status="triage", mechanic=rec(kind="mechanic"))
+    planning = task(e, status="refining", agent=rec(kind="planning"))
+    task(e, status="in progress", agent=rec(kind="responsible"))  # s9: its session ended
+    task(e, status="done", agent=rec(kind="responsible"))  # s10: alive, its task closed
+    task(e, status="in progress", agent=rec(kind="responsible"))  # s11: no row
+    rows = [row(f"s{i}") for i in (1, 2, 3, 4, 5, 6, 7, 8, 10)]
+    listing(e, *rows, row("s9", state="stopped"))
+    found = read(e, "agents", "--json")
+    assert all(conforms(x, SHAPES["agents"]) for x in found)
+    assert [(x["task"], x["kind"], x["round"]) for x in found] == [
+        (first, "responsible", 2),
+        (second, "responsible", None),
+        (third, "hunter", 1),
+        (third, "review", 2),
+        (chained, "chain", None),
+        (plain, "parent", None),
+        (fixing, "mechanic", None),
+        (planning, "planning", None),
+    ]
+    assert [(x["session"], x["handle"]) for x in found][:2] == [("s1", "s1"), ("s2", "s2")]
+    assert (found[0]["model"], found[0]["effort"], found[0]["started"]) == ("opus", "high", "2026-11-22 10:00:00")
 
 
 def test_health_gives_what_health_prints(env: Env):
