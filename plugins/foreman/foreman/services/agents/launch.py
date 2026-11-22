@@ -106,7 +106,8 @@ def launch_parent(p: Project, i: dict[str, Any]) -> SessionRef | None:
     old: dict[str, Any] = i.get("agent") or {}
     d = registry.backlog(p).load()
     missed = [q for q in questions.undelivered(d) if q["task"] == tid] if old else []
-    standing = chains.standing(backlog.tasks(d), i, [q["answer"] for q in missed]) if old else ""
+    standing = chains.standing(backlog.tasks(d), i, [questions.message_for(i, q) for q in missed]) if old else ""
+    told = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]  # what the brief says: the same snapshot
     try:
         title = util.session_title(tid, "parent", i["title"])
         ref = runner.start(Agent(tid, name, model, effort, title), _parent_brief(p, i, standing), cwd)
@@ -124,7 +125,7 @@ def launch_parent(p: Project, i: dict[str, Any]) -> SessionRef | None:
         still = it["status"] == "backlog" and not it.get("blocked") and now.get("session") == old.get("session")
         if still:
             it["agent"] = agent
-            it["notified"] = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]
+            it["notified"] = told
             record_session(it, ref, "parent")
     if not still:  # the owner cancelled or changed it while the session started
         runner.stop(ref)

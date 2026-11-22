@@ -166,6 +166,13 @@ class TestRelaunch:
         tid = registry.backlog(self.e.p).add("x", status="ready", criteria="y")
         assert refused(self.e, tid) == f"foreman: {tid} has no live agent"
 
+    def test_a_blocked_stopped_parent_is_refused_with_its_reason_and_starts_nothing(self) -> None:
+        tid, role = parent(self.e)
+        self.e.set_state(self.e.task(tid)[role]["name"], "stopped")
+        registry.backlog(self.e.p).update(tid, blocked="because")
+        assert refused(self.e, tid) == f"foreman: {tid} is blocked: because; unblock it first"
+        assert len(self.e.calls()) == 1
+
     def test_a_stopped_agent_is_refused(self) -> None:
         tid, role = responsible(self.e)
         self.e.set_state(self.e.task(tid)[role]["name"], "stopped")

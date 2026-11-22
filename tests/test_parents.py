@@ -12,7 +12,8 @@ from foreman.core.tasks import backlog, questions, subtasks
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.providers.runner import NO_ROWS
-from foreman.steps import parents, watch
+from foreman.services.agents.launch import launch_parent
+from foreman.steps import parents
 
 
 def resumes(e: Env, sid: str) -> list[dict[str, Any]]:
@@ -167,10 +168,12 @@ class TestRelaunched:
         parents.run(self.e.p, registry.rows(self.e.p))
         assert len(self.e.calls()) == 1
 
-    def test_the_owner_is_no_longer_waited_on_once_it_runs(self):
-        self.e.set_state(self.old["name"], "stopped")
-        tick.tick(self.e.p)
-        assert f"parent:{self.P}" not in [n.key for n in watch.found(self.e.p, registry.rows(self.e.p))]
+    def test_a_permission_answer_it_missed_keeps_its_wording_in_the_brief(self):
+        qid = registry.backlog(self.e.p).ask(self.P, self.old["name"], "may I push?", kind="permission", action="push")
+        registry.backlog(self.e.p).answer(qid, "go on")
+        launch_parent(self.e.p, self.e.task(self.P))
+        assert f"The owner answered your request {qid} (push)" in self.e.calls()[-1]["argv"][-1]
+        assert [q for q in questions.undelivered(registry.backlog(self.e.p).load()) if q["task"] == self.P] == []
 
 
 class TestClosing:

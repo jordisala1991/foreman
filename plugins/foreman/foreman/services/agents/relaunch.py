@@ -7,7 +7,7 @@ from typing import Any
 
 from ... import util
 from ...core.project.config import Project
-from ...core.tasks import backlog
+from ...core.tasks import backlog, blockers
 from ...providers import registry
 from ...providers.runner import Agent, Rows, RunnerError, ref_of, unreadable
 from .launch import ended, launch_parent, record_session
@@ -64,6 +64,10 @@ def _launch_anew(p: Project, tid: str, task: dict[str, Any], rows: Rows) -> tupl
     old: dict[str, Any] = task.get("agent") or {}
     if task["status"] in backlog.CLOSED or not ended(old, rows):
         raise RunnerError(f"{tid} has no live agent")
+    if task.get("blocked"):
+        raise RunnerError(f"{tid} is blocked: {task['blocked']}; unblock it first")
+    if waits := blockers.pending(task, backlog.tasks(registry.backlog(p).load())):
+        raise RunnerError(f"{tid} waits for {', '.join(waits)} to be done")
     if launch_parent(p, task) is None:
         raise RunnerError(f"{tid}'s parent agent could not be launched: see its events")
     return old["short"], backlog.get(registry.backlog(p).load(), tid)["agent"]["short"]
