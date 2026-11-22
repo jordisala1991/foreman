@@ -8,7 +8,7 @@ from .. import util
 from ..core.project.config import Project, ProjectError
 from ..core.review import reviews
 from ..core.rules import decide
-from ..core.tasks import backlog, questions
+from ..core.tasks import backlog, questions, subtasks
 from ..providers import registry
 from ..providers.runner import NO_ROWS, Rows, ref_of
 
@@ -39,8 +39,9 @@ def needs(p: Project, rows: Rows) -> dict[str, str]:
     asked = {q["task"] for q in questions.open_questions(d)}
     for q in questions.open_questions(d):
         found[f"q:{q['id']}"] = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
-    open_tasks = [i for i in backlog.tasks(d) if i["status"] not in backlog.CLOSED]
-    for i in backlog.tasks(d):
+    all_tasks = backlog.tasks(d)
+    open_tasks = [i for i in all_tasks if i["status"] not in backlog.CLOSED]
+    for i in all_tasks:
         if _waits_for_accept(p, i):
             found[f"accept:{i['id']}"] = _line(f"{i['id']} waits for the owner's accept: {i['title']}")
     for i in open_tasks:
@@ -52,7 +53,8 @@ def needs(p: Project, rows: Rows) -> dict[str, str]:
     for i in open_tasks:
         agent: backlog.Agent = i.get("agent") or {}
         ref = ref_of(agent)
-        if agent.get("kind") == "parent" and i["id"] not in asked and rows.alive(ref) and not rows.busy(ref):
+        waits_on_subtasks = any(s["status"] not in backlog.CLOSED for s in subtasks.of(all_tasks, i["id"]))
+        if agent.get("kind") == "parent" and i["id"] not in asked and rows.alive(ref) and not rows.busy(ref) and not waits_on_subtasks:
             found[f"parent:{i['id']}"] = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
     return found
 
