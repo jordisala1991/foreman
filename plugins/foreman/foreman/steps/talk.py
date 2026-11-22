@@ -119,11 +119,14 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
     backlog.event(p, tid, f"→ in progress: returned to its agent ({kind}): {note}")
 
 
-def tell_unblocked(p: Project, tid: str) -> None:
-    """The owner cleared a block: the task's idle agent is told (a message the loop delivers, which also resets its nudge)."""
+def unblock(p: Project, tid: str) -> None:
+    """The owner clears a block (plain unblock). In the same write, a blocked running task's agent is told: a message the
+    loop delivers, which also resets its nudge, so no tick sees the task unblocked with a stale nudge."""
     with registry.backlog(p).edit() as d:
         i = backlog.get(d, tid)
-        if i["status"] not in backlog.RUNNING or ref_of(i.get("agent") or {}) is None:
+        was_blocked = bool(i.get("blocked"))
+        i.update(blocked="", pr_error="", retry_error="", retry_count=0)
+        if not was_blocked or i["status"] not in backlog.RUNNING or ref_of(i.get("agent") or {}) is None:
             return
         questions.message(d, i, "U", ("unblock",), kind="unblock", text="unblock", answer="unblock", at=util.now())
     backlog.event(p, tid, "owner cleared the block: its agent is told")

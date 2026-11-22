@@ -219,3 +219,9 @@ class TestUnblock:
         registry.backlog(e.p).update(tid, blocked="x")
         fm(e.home, "unblock", tid)
         assert questions.undelivered(registry.backlog(e.p).load()) == []
+
+    def test_unblock_of_a_task_that_is_not_blocked_files_no_message(self):
+        e = Env(repo=self.fake)
+        tid = launched(e)
+        fm(e.home, "unblock", tid)
+        assert questions.undelivered(registry.backlog(e.p).load()) == []
