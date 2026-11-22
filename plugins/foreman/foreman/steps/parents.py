@@ -1,58 +1,16 @@
 """The parent agent: a session per let-in parent task, with no worktree, that follows its subtasks with the owner. The
 parent keeps status backlog while it lives; it is told when a subtask is merged or canceled (`notified` lists those
-already told), and closes only by its own `foreman done` after the owner's yes. A chain parent (filed by a lens entry,
-`core/tasks/chains.py`) gets its agent before any subtask, and its agent closes it without the owner's yes."""
+already told), and closes only by its own `foreman done` after the owner's yes. A parent whose session ended gets a new
+one on the next pass, told where it stands. A chain parent (filed by a lens entry, `core/tasks/chains.py`) gets its agent
+before any subtask, and its agent closes it without the owner's yes."""
 
 from typing import Any
 
-from .. import util
 from ..core.project.config import Project
 from ..core.tasks import backlog, blockers, chains, questions, subtasks
 from ..providers import registry
-from ..providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, State, ref_of, stop_live
-from ..services.agents.brief import agent_name, brief, lens_file
-from ..services.agents.launch import record_session
-from ..services.agents.worktree import agent_folder
-
-
-def launch(p: Project, i: dict[str, Any]) -> None:
-    tid = i["id"]
-    name = agent_name(p, tid, "parent")
-    model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
-    runner = registry.runner(p)
-    cwd = agent_folder(p, name, p.repo, p.get("project", "main"))
-    try:
-        title = util.session_title(tid, "parent", i["title"])
-        ref = runner.start(Agent(tid, name, model, effort, title), _brief(p, i), cwd)
-    except RunnerUnavailable as e:  # Orca is down: the next tick tries again
-        backlog.event(p, tid, f"launch postponed: {e}")
-        return
-    except RunnerError as e:
-        registry.backlog(p).update(tid, blocked=f"could not launch its agent: {e}")
-        backlog.event(p, tid, f"launch failed: {e}")
-        return
-    agent = {"name": name, **ref.fields(), "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
-    with registry.backlog(p).edit() as d:
-        it = backlog.get(d, tid)
-        still = it["status"] == "backlog" and not it.get("blocked")
-        if still:
-            it["agent"] = agent
-            it["notified"] = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]
-            record_session(it, ref, "parent")
-    if not still:  # the owner cancelled or changed it while the session started
-        runner.stop(ref)
-        backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")
-        return
-    backlog.event(p, tid, f"launched {name} (parent, {model}, {effort}, session {ref.short})")
-
-
-def _brief(p: Project, i: dict[str, Any]) -> str:
-    """A chain parent's agent reads `chain.md`, told its lens report, cap and budget; any other parent's reads `parent.md`."""
-    c: backlog.Chain | None = i.get("chain")
-    if not c:
-        return brief(p, i, "parent")
-    extra = {"lens": c["lens"], "lens_report": str(lens_file(p, c["lens"])), "max_steps": c["max_steps"], "max_lines": c["max_lines"]}
-    return brief(p, i, "chain", extra)
+from ..providers.runner import Rows, State, ref_of, stop_live
+from ..services.agents.launch import ended, launch_parent
 
 
 def notify(p: Project) -> None:
@@ -86,8 +44,9 @@ def run(p: Project, rows: Rows) -> None:
         return
     tasks = backlog.tasks(registry.backlog(p).load())
     for i in tasks:
-        if i["status"] == "backlog" and not i.get("blocked") and not i.get("agent") and chains.is_parent(tasks, i) and not blockers.pending(i, tasks):
-            launch(p, i)
+        gone = not i.get("agent") or ended(i["agent"], rows)
+        if i["status"] == "backlog" and not i.get("blocked") and gone and chains.is_parent(tasks, i) and not blockers.pending(i, tasks):
+            launch_parent(p, i)
 
 
 def finish(p: Project, tid: str, summary: str) -> str:

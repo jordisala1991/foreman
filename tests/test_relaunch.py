@@ -1,6 +1,6 @@
 """`foreman relaunch FN-n`: the task's idle agent is stopped and a copy of its session (same conversation, new id) starts
 with today's flags; the copy becomes the task's session and the loop talks to it. Refused, with nothing stopped, for a
-busy agent, no live agent, or when an agent runs it."""
+busy agent, no live agent, or when an agent runs it. A parent whose session ended is launched anew instead."""
 
 import json
 import os
@@ -144,13 +144,49 @@ class TestRelaunch:
             assert e.calls()[-1]["argv"][:3] == ["--bg", "--resume", new["sessionId"]]
             assert len(e.calls()[-1]["argv"]) == 4
 
-    def test_a_working_agent_is_refused(self) -> None:
-        tid, _ = responsible(self.e)
+    @pytest.mark.parametrize("kind", ["responsible", "parent"])
+    def test_a_working_agent_is_refused(self, kind: str) -> None:
+        tid, _ = KINDS[kind](self.e)
         assert "is working: relaunch it when it is idle" in refused(self.e, tid)
+
+    @pytest.mark.parametrize("kind", ["parent", "chain parent"])
+    def test_a_stopped_parent_is_launched_anew(self, kind: str) -> None:
+        e = self.e
+        tid, role = KINDS[kind](e)
+        old = e.task(tid)[role]
+        e.set_state(old["name"], "stopped")
+        assert fm(e.home, "relaunch", tid).strip().startswith(f"{tid}: relaunched, session {old['short']} → ")
+        a = e.task(tid)[role]
+        assert a["session"] != old["session"]
+        assert a["session"] in e.task(tid)["sessions"]
+        assert "Where it stands" in e.calls()[-1]["argv"][-1]
+        assert not [c for c in e.calls() if "--resume" in c["argv"]]
 
     def test_a_task_with_no_agent_is_refused(self) -> None:
         tid = registry.backlog(self.e.p).add("x", status="ready", criteria="y")
         assert refused(self.e, tid) == f"foreman: {tid} has no live agent"
+
+    def test_a_blocked_stopped_parent_is_refused_with_its_reason_and_starts_nothing(self) -> None:
+        tid, role = parent(self.e)
+        self.e.set_state(self.e.task(tid)[role]["name"], "stopped")
+        registry.backlog(self.e.p).update(tid, blocked="because")
+        assert refused(self.e, tid) == f"foreman: {tid} is blocked: because; unblock it first"
+        assert len(self.e.calls()) == 1
+
+    def test_a_stopped_parent_that_is_not_in_backlog_is_refused_with_its_state_and_starts_nothing(self) -> None:
+        tid, role = parent(self.e)
+        self.e.set_state(self.e.task(tid)[role]["name"], "stopped")
+        registry.backlog(self.e.p).update(tid, status="ready")
+        assert refused(self.e, tid) == f"foreman: {tid} is ready: only a parent in backlog is launched anew"
+        assert len(self.e.calls()) == 1
+
+    def test_a_stopped_parent_waiting_for_a_blocker_is_refused_and_starts_nothing(self) -> None:
+        tid, role = parent(self.e)
+        other = registry.backlog(self.e.p).add("other", status="backlog", criteria="c")
+        self.e.set_state(self.e.task(tid)[role]["name"], "stopped")
+        registry.backlog(self.e.p).update(tid, blocked_by=[other])
+        assert refused(self.e, tid) == f"foreman: {tid} waits for {other} to be done"
+        assert len(self.e.calls()) == 1
 
     def test_a_stopped_agent_is_refused(self) -> None:
         tid, role = responsible(self.e)

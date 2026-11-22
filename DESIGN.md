@@ -129,7 +129,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
-   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py`).
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:98`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed).
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
@@ -630,7 +630,7 @@ Local state sits in `<home>/state/runs.json`, one object per task id holding the
 | ready | Ready | open | `foreman ready` (planning agent); `foreman unblock --relaunch` of an in-progress task. (`foreman add --ready` is declared and read by nothing: it files in backlog) |
 | in progress | In progress | open | the loop (launch step); `foreman reject` and the loop's returns to the agent (`steps/talk.py:111`: review, conflict, failing tests or CI) |
 | in review | In review | open | `foreman done` (responsible agent; a parent agent's `foreman done` closes its parent instead) |
-| done | Done | closed, completed | the loop's merge step (`services/delivery/merge.py:90`) after the owner's accept or the autonomy; a parent that closes by itself or by its agent's `foreman done` with at least one subtask done (`core/tasks/subtasks.py:37`, `steps/parents.py:102`); a source's `done` |
+| done | Done | closed, completed | the loop's merge step (`services/delivery/merge.py:90`) after the owner's accept or the autonomy; a parent that closes by itself or by its agent's `foreman done` with at least one subtask done (`core/tasks/subtasks.py:37`, `steps/parents.py:61`); a source's `done` |
 | canceled | Canceled | closed, not planned | `foreman cancel`; the loop when a parent is canceled (its open subtasks) or a source says `cancel`; a parent that closes with no subtask done (same lines as done) |
 | duplicate | Duplicate | closed, duplicate | nothing sets it today (no code path; none of the 234 tasks has it); the column and the mapping exist so a command can later |
 
@@ -853,15 +853,15 @@ filed in triage (`foreman/core/tasks/backlog.py:149-150`). The count starts when
 
 A due lens entry files its parent in backlog with `chain = {lens, max_steps, max_lines}` (`schedule._fields`,
 `foreman/steps/schedule.py:34-44`). Today a parent is a task with subtasks: it is never planned (`foreman/loop/launch.py:25`),
-has no type (`foreman/core/tasks/tasktypes.py:20`) and gets its agent only once it has a subtask (`foreman/steps/parents.py:72`).
+has no type (`foreman/core/tasks/tasktypes.py:20`) and gets its agent only once it has a subtask (`foreman/steps/parents.py:36`).
 A new pure module `foreman/core/tasks/chains.py` (area `tasks`) has `is_parent(tasks, i)`: it has subtasks or `chain`;
 those three sites use it, so a chain parent gets its agent before its first step. The agent's kind stays `parent`, with
-planning's model and effort (`parents.py:18`); `parents.launch` renders `briefs/chain.md` instead of `parent.md`
-(`parents.py:21`), with `extra` = lens, report path, `max_steps`, `max_lines` (`foreman/services/agents/brief.py:83,87`).
+planning's model and effort (`foreman/services/agents/launch.py:98`); `launch_parent` renders `briefs/chain.md` instead of `parent.md`
+(`launch.py:140`), with `extra` = lens, report path, `max_steps`, `max_lines` (`foreman/services/agents/brief.py:83,87`).
 `parent.md` makes every Go, add and the close wait for the owner's yes (`foreman/briefs/parent.md:18,24,31`); the chain
 agent waits for none. Its steps enter backlog (today an agent's `foreman add --parent` is always triage,
 `foreman/ui/cli/owner.py:33`); it closes the chain with `foreman done` (`foreman/ui/cli/agent.py:27-29`), done also with
-no step (today refused, `parents.py:76-84`, `subtasks.py:32-36`); it `foreman ask`s the owner only at the cap. A parent
+no step (today refused, `parents.py:52-60`, `subtasks.py:32-36`); it `foreman ask`s the owner only at the cap. A parent
 with an agent is not closed by its subtasks (`foreman/services/delivery/merge.py:130`): a chain ends only by its agent.
 
 ### The audit and a step
@@ -874,7 +874,7 @@ criteria, model, effort and type from the parent (today they come from the flags
 writes only title and detail and no agent writes criteria. A step fixes exactly one finding within `max_lines` changed
 lines (not counting tests, generated and lock files, as `large_lines`); its report shows the evidence before and after;
 it writes its History line in the lens report. It is planned, built, reviewed and accepted as any task (merging without
-the owner is FN-112's). When it closes the agent is told (`parents.py:42-58`) with a chain wording of `subtasks.notice`
+the owner is FN-112's). When it closes the agent is told (`parents.py:16-33`) with a chain wording of `subtasks.notice`
 (`subtasks.py:62-71`): «file the next step or close the chain»; it reads the report, rewrites the Frontier, and files
 the next step or closes.
 

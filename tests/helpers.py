@@ -116,8 +116,8 @@ FAKE = textwrap.dedent("""\
         sys.exit(0)
     title = a[a.index("-n") + 1]
     name = json.loads(a[a.index("--settings") + 1])["env"]["FOREMAN_AGENT"]
-    short = hashlib.sha1(name.encode()).hexdigest()[:8]
     rows = rows_of("agents.json")
+    short = hashlib.sha1((name + str(sum(r["name"] == name for r in rows))).encode()).hexdigest()[:8]  # a new session per start
     rows.append({"id": short, "sessionId": short + "-0000-0000", "name": name, "title": title, "state": "working", "pid": 1})
     save("agents.json", rows)
     print(f"backgrounded · {short} · {name}")
