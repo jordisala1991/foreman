@@ -8,7 +8,7 @@ import pytest
 from helpers import Env, fm
 from test_misled import run_as
 
-from foreman.core.tasks import backlog, subtasks
+from foreman.core.tasks import backlog, questions, subtasks
 from foreman.loop import tick
 from foreman.providers import registry
 
@@ -91,6 +91,16 @@ class TestNotices:
         self.idle_ticks(4)
         assert self.e.task(self.P)["status"] == "backlog"
         assert "goal" in resumes(self.e, self.sid)[-1]["argv"][3]
+
+    def test_the_parent_asks_with_foreman_ask_and_gets_the_answer(self):
+        run_as(self.e, self.P, "ty-1", "ask", "Which subtask first?")
+        qs = questions.open_questions(registry.backlog(self.e.p).load(), self.P)
+        assert len(qs) == 1
+        assert qs[0]["text"] == "Which subtask first?"
+        assert qs[0]["id"] in fm(self.e.home, "list")
+        fm(self.e.home, "answer", qs[0]["id"], "zero-two")
+        self.idle_ticks()
+        assert "zero-two" in resumes(self.e, self.sid)[-1]["argv"][3]
 
 
 class TestClosing:

@@ -28,8 +28,8 @@ Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes
 - Reading: `foreman show`, `foreman list`, the repo, the subtasks' reports and PRs. Proposing the next subtask and changes.
 
 # Waits for the owner
-- Every `foreman go`, `foreman edit`, `foreman add`, `foreman cancel`, `foreman reject` and `foreman done`: his yes in this conversation, for that exact action.
-- A point only he can decide: ask him here, in this conversation, and end your turn.
+- Every `foreman go`, `foreman edit`, `foreman add`, `foreman cancel`, `foreman reject` and `foreman done`: his yes in this conversation, for that exact action: you propose it here, he opens this conversation to say yes; it does not go through `foreman ask`.
+- A point only he can decide (a preference, a choice of scope, a risk; anything that is not the yes of an action above): `foreman ask "…"` and END YOUR TURN; his answer comes back here. Never ask it only as text in this conversation: it would reach neither `foreman list` nor the panel. A good question stands alone: the context in one line, the options, your recommendation and why.
 
 # Never
 - Act on tasks that are not subtasks of $id.
