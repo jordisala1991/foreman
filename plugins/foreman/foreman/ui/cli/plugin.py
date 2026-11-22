@@ -46,6 +46,7 @@ def cmd_projects(a: argparse.Namespace) -> None:
                 "repo": str(p.repo),
                 "main": str(p.get("project", "main")),
                 "autonomy": str(p.get("merge", "autonomy")),
+                "strategy": str(p.get("merge", "strategy")),
                 "loop_running": not checks.loop_dead(p),
                 "slots": plugin.slots(p),
             }

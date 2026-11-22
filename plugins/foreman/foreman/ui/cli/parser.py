@@ -135,6 +135,9 @@ def _operations(c: Command) -> None:
     _json(s, required=True)
     s.add_argument("--task", metavar="ID", help="only this task's runs")
     s.add_argument("--active", action="store_true", help="only the runs that have not ended")
+    s = c("events", "a task's events in time order, as JSON")
+    _json(s, required=True)
+    s.add_argument("--task", metavar="ID", required=True)
     s = c(
         "backlog",
         "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows;"

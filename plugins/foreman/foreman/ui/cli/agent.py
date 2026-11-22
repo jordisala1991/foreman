@@ -55,7 +55,7 @@ def cmd_verdict(a: argparse.Namespace) -> None:
     if tip == newest:  # an older launch's reviewer was superseded: its verdict ends no run
         runs.end(p, tid, ("review",), "done")
     registry.backlog(p).record_misled(tid, "hunter" if os.environ.get("FOREMAN_AGENT", "").endswith("-hunt") else "reviewer", a.misled)
-    backlog.event(p, tid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
+    backlog.event(p, tid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})", "review")
     print("Verdict recorded. End your turn.")
 
 
@@ -79,7 +79,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
                 i[k] = v
         i["status"], i["blocked"] = "ready", ""
     runs.end(p, tid, ("planning",), "done")
-    backlog.event(p, tid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
+    backlog.event(p, tid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""), "other" if a.no_plan else "planned")
     registry.backlog(p).record_misled(tid, "planning", a.misled)
     print(f"{tid} is ready; the loop will launch its responsible agent. End your turn.")
 

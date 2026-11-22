@@ -10,7 +10,7 @@ from ...core.tasks import backlog
 from ...providers import ConfigError, Permanent, ProviderError, Transient
 from .agent import cmd_ask, cmd_block, cmd_diagnose, cmd_done, cmd_ready, cmd_verdict
 from .board import cmd_backlog
-from .ops import cmd_agents, cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics, cmd_needs, cmd_runs, cmd_watch
+from .ops import cmd_agents, cmd_events, cmd_guard, cmd_health, cmd_launchd, cmd_lock, cmd_loop, cmd_metrics, cmd_needs, cmd_runs, cmd_watch
 from .owner import (
     cmd_accept,
     cmd_add,
@@ -64,6 +64,7 @@ HANDLERS: dict[str, Handler] = {
     "needs": cmd_needs,
     "agents": cmd_agents,
     "runs": cmd_runs,
+    "events": cmd_events,
     "guard": cmd_guard,
     "launchd": cmd_launchd,
     "project": cmd_project,
