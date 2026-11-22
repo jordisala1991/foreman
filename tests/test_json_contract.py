@@ -34,7 +34,7 @@ TEXT_OR_NULL = (str, type(None))
 INT_OR_NULL = (int, type(None))
 
 SHAPES: dict[str, Shape] = {
-    "projects": {"name": str, "prefix": str, "home": str, "repo": str, "main": str, "autonomy": str, "loop_running": bool},
+    "projects": {"name": str, "prefix": str, "home": str, "repo": str, "main": str, "autonomy": str, "loop_running": bool, "slots": int},
     "list": {
         "id": str,
         "status": str,
@@ -120,6 +120,23 @@ def test_projects_lists_every_registered_project(env: Env):
     util.write_json(e.p.state / "loop.json", {"epoch": time.time(), "time": util.now()})
     entry = next(x for x in read(e, "projects", "--json") if x["home"] == str(e.home))
     assert entry["loop_running"] is True
+
+
+def printed(e: Env) -> int:
+    return int(fm(e.home, "project").split("slots: ")[1].split()[0])
+
+
+def test_projects_slots_is_what_project_prints():
+    configured = Env(slots=3)
+    default = Env()
+    toml = default.home / "foreman.toml"
+    toml.write_text(toml.read_text().replace("slots = 2\n", ""), encoding="utf-8")
+    for e, expected in ((configured, 3), (default, None)):
+        homes.register(e.home)
+        row = next(x for x in read(e, "projects", "--json") if x["home"] == str(e.home))
+        assert type(row["slots"]) is int
+        assert row["slots"] == printed(e)
+        assert expected is None or row["slots"] == expected
 
 
 def test_list_gives_every_task_with_the_fields_list_prints(env: Env):

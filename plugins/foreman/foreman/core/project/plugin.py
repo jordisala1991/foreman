@@ -15,6 +15,11 @@ PLUGIN = "foreman@foreman"
 PLACEHOLDERS = ("project", "prefix", "home", "repos", "main", "slots")
 
 
+def slots(p: Project) -> int:
+    """How many agents run at once: the configured value, else the default."""
+    return int(p.get("agents", "slots"))
+
+
 def values(p: Project) -> dict[str, str]:
     return {
         "project": p.name,
@@ -22,7 +27,7 @@ def values(p: Project) -> dict[str, str]:
         "home": str(p.home),
         "repos": ", ".join(str(r) for r in p.repos),
         "main": str(p.get("project", "main")),
-        "slots": str(p.get("agents", "slots")),
+        "slots": str(slots(p)),
     }
 
 
