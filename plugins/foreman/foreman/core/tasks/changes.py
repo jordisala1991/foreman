@@ -37,7 +37,10 @@ def known(d: Data, source: str | None) -> bool:
 
 
 def moved(d: Data, tid: str, status: str, keys: dict[str, Any]) -> bool:
-    """Moves the task to `status` with `keys`; False when it was not moved (canceling a task closed meanwhile keeps it)."""
+    """Moves the task to `status` with `keys`; False when it was not moved (canceling a task closed meanwhile keeps it).
+
+    A task moved to an open status loses its closed date.
+    """
     if status not in STATUSES:
         raise BacklogError(f"bad status {status!r}")
     i = get(d, tid)
@@ -46,6 +49,8 @@ def moved(d: Data, tid: str, status: str, keys: dict[str, Any]) -> bool:
     i.update(keys, status=status)
     if status in CLOSED:
         i["closed"] = date.today().isoformat()
+    else:
+        i.pop("closed", None)
     return True
 
 
