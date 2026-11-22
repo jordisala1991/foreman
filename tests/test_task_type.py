@@ -19,7 +19,7 @@ from foreman.ui.panel import views
 KINDS = ("responsible", "planning", "reviewer", "hunter")
 BUG = ("reproduce the bug with a test that fails", "name its cause in the report")
 MECHANICAL = ("No design decisions", "the diff is the proof")
-DEFINITION = ("changes only documents", "DESIGN.md", "without filing them")
+DEFINITION = ("changes only documents", "the definition goes in DESIGN.md", "without filing them")
 
 
 class TestTaskType:
