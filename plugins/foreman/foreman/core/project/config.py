@@ -185,6 +185,11 @@ class Project:
         return self.home / "state"
 
     @property
+    def scratch(self) -> Path:
+        """The reviews' scratch folders' root."""
+        return self.home / "scratch"
+
+    @property
     def paused(self) -> str:
         """Why launching is paused: the flag file's text (`yes` when empty); empty when it is not."""
         f = self.state / "paused"

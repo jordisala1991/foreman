@@ -19,7 +19,8 @@ def LOCAL(p: Project, tid: str) -> Local | None:  # the finder `foreman guard` p
 
 class TestBash:
     def check(self, cmd: str, branch: str = "foreman/ty-1", own: str = "/w/ty-1") -> str | None:
-        return guard.check_bash(cmd, guard.Scope(own, [Path(own)], branch, Path("/h/foreman.toml"), []))
+        sc = guard.Scope(own, [Path(own)], branch, Path("/h/foreman.toml"), [], scratch=Path("/h/scratch"), task="TY-1")
+        return guard.check_bash(cmd, sc)
 
     def test_publish_by_program_name(self):
         assert self.check("npm publish") == "publish"
@@ -80,6 +81,53 @@ class TestBash:
         assert self.check("git branch -D foreman/ty-1") is None
         assert self.check("git worktree remove /w/ty-2") == "delete"
 
+    def test_own_scratch_folder_absolute(self):
+        assert self.check("rm -rf /h/scratch/TY-1-r1-abc123def-hunter/t") is None
+        assert self.check("rm -rf /h/scratch/TY-1/x") is None
+        assert self.check("cd /h/scratch/TY-1-r1-a-hunter && rm -f t.py 2>/dev/null") is None  # a redirect is not a target
+        assert self.check("rm -f /Users/x 2>/dev/null") == "delete"
+
+    def test_relative_after_cd(self):
+        assert self.check("cd /h/scratch/TY-1-r1-a-hunter && rm -rf t") is None
+        assert self.check("cd /tmp/x; rm -rf y") is None
+        assert self.check("cd /Users/x; cd /w/ty-1; rm -rf build") is None
+        assert self.check("cd /Users/x && rm -rf t") == "delete"
+        assert self.check("cd /h/scratch/TY-1-r1-a-hunter; rm -rf ../TY-2-r1-a-hunter") == "delete"
+
+    def test_variable_set_in_the_command(self):
+        assert self.check("S=/tmp/x; rm -rf $S/y") is None
+        assert self.check('S=/h/scratch/TY-1-r1-a-hunter; rm -rf "$S/t"') is None
+        assert self.check("S=/tmp/x; git worktree remove --force $S") is None
+        assert self.check("S=/tmp/x; cd $S; rm -rf t") is None
+        assert self.check("export S=/tmp/x && rm -rf ${S}/y") is None
+
+    def test_variable_or_cd_pointing_outside(self):
+        assert self.check("S=/Users/x; rm -rf $S") == "delete"
+        assert self.check("S=/Users/x; rm -rf ${S}/y") == "delete"
+        assert self.check("S=/Users/x; cd $S; rm -rf t") == "delete"
+
+    def test_unresolved_variable_is_outside(self):
+        for cmd in (
+            "rm -rf $S/y",
+            "rm -rf $HOME/x",
+            "S=$(mktemp -d); rm -rf $S",
+            "S=/tmp/x; S=$(mktemp -d -p /Users/x); rm -rf $S",
+            "S=/tmp/x rm -rf $S",
+            "cd $UNSET; rm -rf t",
+        ):
+            assert self.check(cmd) == "delete", cmd
+
+    def test_other_tasks_scratch_and_the_root(self):
+        for path in ("/h/scratch/TY-10-r1-a-hunter", "/h/scratch/TY-2-r1-a-hunter", "/h/scratch", "/h/scratch/x"):
+            assert self.check(f"rm -rf {path}") == "delete", path
+
+    def test_worktree_remove_only_of_scratch_or_temp(self):
+        assert self.check("git worktree remove /tmp/x") is None
+        assert self.check("git worktree remove /h/scratch/TY-1-r1-a-hunter") is None
+        assert self.check("git worktree remove /w/ty-2") == "delete"
+        assert self.check("git worktree remove /w/ty-1") == "delete"
+        assert self.check("git -C /w/ty-1 worktree remove /tmp/x") == "delete"
+
     def test_config(self):
         assert self.check("sed -i '' s/manual/low/ /h/foreman.toml") == "config"
         assert self.check("echo x >> /h/foreman.toml") == "config"
@@ -125,6 +173,13 @@ class TestHook:
         assert self.call("Bash", {"command": "gh repo delete X --yes"})
         guard.grant(self.e.p, self.tid, "delete")
         assert self.call("Bash", {"command": "gh project delete 7 --owner O"}) == ""
+
+    def test_scratch_of_the_task(self):
+        own = self.e.home / "scratch" / f"{self.tid}-r1-abc123def-hunter" / "x"
+        other = self.e.home / "scratch" / "OTHER-9-r1-abc123def-hunter" / "x"
+        with mock.patch.object(guard.tempfile, "gettempdir", return_value="/no-temp"):  # the suite's home is in the temp dir
+            assert self.call("Bash", {"command": f"rm -rf {own}"}) == ""
+            assert "foreman ask --action delete" in self.call("Bash", {"command": f"rm -rf {other}"})
 
     def test_outside_an_agent_it_lets_everything_run(self):
         os.environ.pop("FOREMAN_HOME")

@@ -14,7 +14,7 @@ import shlex
 import sys
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ from ... import util
 from ..project.config import Project
 from ..review import evidence
 from ..tasks.backlog import Local
+from . import shellscope
 
 PUBLISH = {
     ("npm", "publish"),
@@ -49,7 +50,7 @@ WHY = {
 
 
 def segments(cmd: str) -> list[list[str]]:
-    """The simple commands of a shell line, as words; operators inside quotes are words, not separators."""
+    """The simple commands of a shell line, as raw words; operators inside quotes are words, not separators."""
     lex = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars=";&|<>")
     lex.whitespace_split = True
     out: list[list[str]] = [[]]
@@ -61,7 +62,7 @@ def segments(cmd: str) -> list[list[str]]:
                 out[-1].append(tok)
     except ValueError:  # unbalanced quotes: fall back to plain words
         return [cmd.split()]
-    return [words(s) for s in out if s]
+    return [s for s in out if s]
 
 
 def writes(w: list[str], cwd: str, target: Path) -> bool:
@@ -82,20 +83,20 @@ def writes(w: list[str], cwd: str, target: Path) -> bool:
     return False
 
 
-def words(w: list[str]) -> list[str]:
-    w = list(w)
-    while w and (re.match(r"^\w+=", w[0]) or w[0] in ("sudo", "env", "command", "exec", "time", "nohup")):
-        w = w[1:]
-    if w:
-        w[0] = os.path.basename(w[0])
-    return w
-
-
-def _mine(path: str, cwd: str, own: list[Path]) -> bool:
+def _mine(path: str, cwd: str, sc: "Scope", worktree: bool = True) -> bool:
+    """`path` is under the temp dirs, the task's own scratch folders or (with `worktree`) its worktree. A variable or a
+    folder the command does not resolve counts as outside."""
     p = Path(os.path.expanduser(path))
+    if "$" in path or "`" in path or (not p.is_absolute() and cwd == shellscope.UNKNOWN):
+        return False
     p = (Path(cwd) / p if not p.is_absolute() else p).resolve()
-    roots = [*own, Path(tempfile.gettempdir()).resolve(), Path("/tmp").resolve()]
-    return any(p == r or r in p.parents for r in roots)
+    roots = [*(sc.own if worktree else []), Path(tempfile.gettempdir()).resolve(), Path("/tmp").resolve()]
+    if any(p == r or r in p.parents for r in roots):
+        return True
+    if not (sc.task and sc.scratch and sc.scratch in p.parents):
+        return False
+    name = p.relative_to(sc.scratch).parts[0]
+    return name == sc.task or name.startswith(sc.task + "-")
 
 
 @dataclass
@@ -108,6 +109,8 @@ class Scope:
     config: Path
     extra: list[dict[str, str]]
     mains: set[str] = field(default_factory=lambda: set(MAIN))
+    scratch: Path | None = None  # the project's scratch root, resolved
+    task: str = ""  # the task whose scratch folders are own
 
 
 def _git_args(args: list[str]) -> list[str]:
@@ -141,25 +144,28 @@ def _push(args: list[str], sc: Scope) -> str | None:
     return None
 
 
-def _git(sub: str, args: list[str], sc: Scope) -> str | None:
+def _git(sub: str, args: list[str], sc: Scope, here: bool) -> str | None:
     if sub == "push":
         return _push(args, sc)
     if sub == "branch" and any(a in ("-d", "-D", "--delete") for a in args):
         return "delete" if any(a != sc.branch for a in args[1:] if not a.startswith("-")) else None
     if sub == "worktree" and "remove" in args:
-        return "delete"
+        targets = [a for a in args[args.index("remove") + 1 :] if not a.startswith("-")]
+        return None if here and targets and all(_mine(t, sc.cwd, sc, worktree=False) for t in targets) else "delete"
     return None
 
 
 def _removes(prog: str, args: list[str], sc: Scope) -> bool:
     if not (prog in ("rm", "rmdir", "unlink", "trash") or (prog == "find" and "-delete" in args)):
         return False
-    targets = [a for a in args if not a.startswith("-")] if prog != "find" else args[:1]
-    return any(not _mine(t, sc.cwd, sc.own) for t in targets)
+    plain = [a for n, a in enumerate(args) if a not in REDIRECTS and (n == 0 or args[n - 1] not in REDIRECTS)]
+    targets = [a for a in plain if not a.startswith("-")] if prog != "find" else args[:1]
+    return any(not _mine(t, sc.cwd, sc) for t in targets)
 
 
 def _segment(w: list[str], sc: Scope) -> str | None:
     prog, args = w[0], w[1:]
+    here = args[:1] not in (["-C"], ["-c"])  # git runs in the command's folder
     if prog == "git":
         args = _git_args(args)
     sub = next((a for a in args if not a.startswith("-")), "")
@@ -167,7 +173,7 @@ def _segment(w: list[str], sc: Scope) -> str | None:
         return "delete"
     if _publishes(prog, sub, args):
         return "publish"
-    found = _git(sub, args, sc) if prog == "git" else None
+    found = _git(sub, args, sc, here) if prog == "git" else None
     if found:
         return found
     if _removes(prog, args, sc):
@@ -180,8 +186,8 @@ def _segment(w: list[str], sc: Scope) -> str | None:
 
 def check_bash(cmd: str, sc: Scope) -> str | None:
     """The name of the first action of the list that `cmd` runs, or None."""
-    for w in segments(cmd):
-        found = _segment(w, sc) if w else None
+    for w, cwd in shellscope.walk(segments(cmd), sc.cwd):
+        found = _segment(w, replace(sc, cwd=cwd))
         if found:
             return found
     return None
@@ -192,7 +198,10 @@ def main_branches(p: Project) -> set[str]:
     return MAIN | {p.get("project", "main")} | {str(r["main"]) for r in p.cfg["repos"].values()}
 
 
-def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, local: Local | None) -> str | None:
+def check(p: Project, d: dict[str, Any], local: Local | None, tid: str) -> str | None:
+    """The action of the list that the hook's call `d` (tool_name, tool_input, cwd) runs, or None."""
+    tool, cwd = d.get("tool_name", ""), d.get("cwd") or os.getcwd()
+    inp: dict[str, Any] = d.get("tool_input") or {}
     own = [Path(local.worktree).resolve()] if local and local.worktree else []
     branch = local.branch if local else ""
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
@@ -201,7 +210,7 @@ def check(p: Project, tool: str, inp: dict[str, Any], cwd: str, local: Local | N
             return "config"
         return None
     if tool == "Bash":
-        scope = Scope(cwd, own, branch, p.config_file, p.get("guard", "ask"), main_branches(p))
+        scope = Scope(cwd, own, branch, p.config_file, p.get("guard", "ask"), main_branches(p), p.scratch.resolve(), tid)
         return check_bash(str(inp.get("command", "")), scope)
     return None
 
@@ -230,8 +239,7 @@ def hook(stdin: str, local: Callable[[Project, str], Local | None]) -> str:
             return ""
         d = json.loads(stdin or "{}")
         p = Project.load(home)
-        tool_input: dict[str, Any] = d.get("tool_input") or {}
-        action = check(p, d.get("tool_name", ""), tool_input, d.get("cwd") or os.getcwd(), local(p, tid))
+        action = check(p, d, local(p, tid), tid)
         if not action or granted(p, tid, action):
             return ""
         util.append_jsonl(
