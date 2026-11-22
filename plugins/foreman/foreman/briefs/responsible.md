@@ -11,10 +11,7 @@ $plan_section
 # Where
 Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured.
 
-$type_section# Vocabulary
-Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
-
-# How
+$type_section$vocabulary# How
 - Understand the task, then split it into steps if it helps. Use subagents (Agent tool) for independent pieces or searches; brief them as peers and pin their scope to this worktree.
 - Aim for the smallest change that does the task right. Write code for what the goal and the acceptance criteria ask, and for what normal use of it will hit; nothing for cases nobody asked about (no guards for what cannot happen, no options, state or retries the task does not need). If unsure whether a case matters, leave it out and say so in the report.
 - A bug fix, or a line of the acceptance criteria that describes behaviour: write its test first, see it fail, then make it pass.

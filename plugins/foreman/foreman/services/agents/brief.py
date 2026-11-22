@@ -63,6 +63,13 @@ def owner_notes_section(p: Project, tid: str) -> str:
     )
 
 
+def vocabulary_section(p: Project) -> str:
+    """The Vocabulary paragraph, only for a repo that has a GLOSSARY.md at its root."""
+    if not (p.repo / "GLOSSARY.md").is_file():
+        return ""
+    return "# Vocabulary\nUse the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.\n\n"
+
+
 def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None = None) -> str:
     a: dict[str, Any] = i.get("acceptance") or {}
     values = {
@@ -81,6 +88,7 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "plan": str(plan_file(p, i["id"])),
         "plan_section": plan_section(i),
         "type_section": tasktypes.section(i),
+        "vocabulary": vocabulary_section(p),
         "model_effort": f"{i.get('model') or 'project default'} / {i.get('effort') or 'project default'}",
         "round2": "",
         "owner_notes": owner_notes_section(p, i["id"]) if kind in ("reviewer", "hunter") else "",
