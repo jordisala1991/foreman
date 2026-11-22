@@ -13,6 +13,7 @@ from ..providers import registry
 from ..providers.runner import NO_ROWS, Rows, ref_of
 
 EVERY_S = 10
+AFTER_SEND_S = 60  # the listing may still show an agent idle this long after a message was sent to it
 
 
 def pause() -> None:
@@ -31,8 +32,15 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
     return decide.after_check(c, p.for_task(i).get("merge", "autonomy"), has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
 
 
+def recently_sent(agent: backlog.Agent) -> bool:
+    """A message was sent to this agent (delivery stamps `started`) less than AFTER_SEND_S ago."""
+    age = util.age_s(agent.get("started"))
+    return age is not None and age < AFTER_SEND_S
+
+
 def needs(p: Project, rows: Rows) -> dict[str, str]:
-    """What needs the owner now: key → one line, in the order questions, accepts, blocked, main, parents."""
+    """What needs the owner now: key → one line, in the order questions, accepts, blocked, main, parents (not one a message
+    reached within AFTER_SEND_S)."""
     with registry.view_scope(p):
         d = registry.backlog(p).load()
     found: dict[str, str] = {}
@@ -54,7 +62,8 @@ def needs(p: Project, rows: Rows) -> dict[str, str]:
         agent: backlog.Agent = i.get("agent") or {}
         ref = ref_of(agent)
         waits_on_subtasks = any(s["status"] not in backlog.CLOSED for s in subtasks.of(all_tasks, i["id"]))
-        if agent.get("kind") == "parent" and i["id"] not in waiting and rows.alive(ref) and not rows.busy(ref) and not waits_on_subtasks:
+        idle = rows.alive(ref) and not rows.busy(ref)
+        if agent.get("kind") == "parent" and i["id"] not in waiting and idle and not waits_on_subtasks and not recently_sent(agent):
             found[f"parent:{i['id']}"] = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
     return found
 

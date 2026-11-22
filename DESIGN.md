@@ -1250,7 +1250,7 @@ Every finding has three parts: what it means, the evidence fm gathered, and a hy
 `foreman watch` (FN-221, `foreman/steps/watch.py`) prints one line, with the task id and why, each time something starts
 needing the owner: an open question, a task waiting for his accept (`decide.after_check` says `owner`, so autonomy-merged
 tasks print nothing), a blocked task (a failed launch is one), main's tests failing, a parent agent whose session is alive
-and idle (it ended its turn waiting for him in its own chat). It decides from the backlog, `state/ci.json` and the session
+and idle (it ended its turn waiting for him in its own chat; not for 60 s after a message was sent to it, `watch.AFTER_SEND_S`: the listing may still show it idle). It decides from the backlog, `state/ci.json` and the session
 listing (`registry.rows`), never from the text of `events.jsonl`. Every 10 s it looks again; its seen set lives in memory,
 so the accepts already waiting at start are printed once and the other needs at start are not (`foreman list` shows them). `--once` exits after the first line printed after the start; without it
 the command streams (a monitor).

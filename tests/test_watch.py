@@ -4,6 +4,7 @@ session listing (never the text of events.jsonl). Assertions are on keys and on 
 import contextlib
 import json
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -183,6 +184,22 @@ def test_a_parent_with_a_message_not_yet_delivered_is_not_a_need(fake_git: FakeR
     assert watch.needs(e.p, idle) == {}
     registry.backlog(e.p).mark_delivered(f"{tid} S1")
     assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
+
+
+def test_a_parent_just_sent_a_message_is_not_a_need_until_the_margin_passes(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    tid = parent(e)
+    sub = subtask(e, tid, "refining")
+    idle = ClaudeRows({"s1": row()})
+    registry.backlog(e.p).update(sub, status="done")
+    parents.notify(e.p)
+    registry.backlog(e.p).mark_delivered(f"{tid} S1")
+    registry.backlog(e.p).update(tid, agent={"kind": "parent", "session": "s1", "started": util.now()})  # what delivery stamps
+    assert watch.needs(e.p, idle) == {}  # delivered, the listing does not show it busy yet
+    assert watch.needs(e.p, ClaudeRows({"s1": row(state="working", status="busy")})) == {}
+    late = (datetime.now() - timedelta(seconds=watch.AFTER_SEND_S + 5)).strftime("%Y-%m-%d %H:%M:%S")
+    registry.backlog(e.p).update(tid, agent={"kind": "parent", "session": "s1", "started": late})
+    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]  # it worked and went idle
 
 
 def test_questions_blocked_and_parents_at_start_are_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
