@@ -2,11 +2,11 @@
 
 import json
 from datetime import datetime
-from typing import Unpack
+from typing import Any, Unpack
 from unittest import mock
 
 import pytest
-from helpers import fm
+from helpers import Env, fm
 
 from foreman import util
 from foreman.core.project.config import Project, ProjectError
@@ -23,7 +23,7 @@ CLEANUP = '[[recurring]]\nname = "cleanup"\ntitle = "Prune"\ncriteria = "pruned"
 
 class TestRecurring:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env) -> None:
+    def set_up(self, owner: None, env: Env) -> None:
         self.e = env
         self.p = self.e.p
 
@@ -48,7 +48,7 @@ class TestRecurring:
         with mock.patch("foreman.util.now", return_value=at):
             registry.backlog(self.p).set_status(tid, status)
 
-    def mine(self) -> list[dict]:
+    def mine(self) -> list[dict[str, Any]]:
         return [i for i in backlog.tasks(registry.backlog(self.p).load()) if i.get("source") == "recurring:cleanup"]
 
     def refused(self, text: str, *needles: str) -> None:
@@ -144,7 +144,7 @@ class TestRecurring:
     # ---- open blocks, the close restarts
 
     @pytest.mark.parametrize("closing", ("done", "canceled"))
-    def test_open_task_blocks_and_its_close_restarts(self, closing) -> None:
+    def test_open_task_blocks_and_its_close_restarts(self, closing: str) -> None:
         self.entries('[[recurring]]\nname = "cleanup"\ntitle = "Prune"\nevery_merges = 1\n')
         self.seen()
         self.merged("one", "2026-11-15 01:00:00")
