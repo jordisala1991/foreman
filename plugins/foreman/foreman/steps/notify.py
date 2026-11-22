@@ -27,8 +27,8 @@ def run(p: Project, rows: Rows) -> None:
         watch.keep_parents(found, stored)
     util.write_json(file, found)
     for key, line in fresh.items():
-        # a key of its own each time: a need that returns while its last command still runs is not dropped
-        util.start_background(f"{p.state}:notify:{key}:{time.time_ns()}", p.state / "errors.jsonl", lambda line=line: send(p, cmd, line))
+        # a key of its own each time (one thread per key): a need that returns while its last command runs is not dropped; the entry goes when the command ends
+        util.start_background(f"{p.state}:notify:{key}:{time.time_ns()}", p.state / "errors.jsonl", lambda line=line: send(p, cmd, line), forget=True)
 
 
 def send(p: Project, cmd: str, line: str) -> None:

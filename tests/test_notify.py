@@ -1,6 +1,7 @@
 """[owner] notify: the loop's last step runs the owner's command once per need `watch.needs` finds new, the line as its last
 argument, in the background, with a time limit. Needs are the ones `foreman watch` prints (tests/test_watch.py)."""
 
+import time
 from pathlib import Path
 
 import pytest
@@ -243,3 +244,45 @@ def test_a_command_that_cannot_be_split_is_one_health_finding(fake_git: FakeRepo
     settle()
     health.run(p, NO_ROWS)
     assert len(findings(p)) == 1
+
+
+def leftovers(p: Project) -> list[str]:
+    return [k for k in {*util.BACKGROUND, *util.STARTED} if k.startswith(f"{p.state}:notify:")]
+
+
+def test_finished_commands_leave_no_entry(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    p = first_run(e)
+    for _ in range(3):
+        task(e, blocked="x")
+    notify.run(p, NO_ROWS)
+    settle()
+    assert len(notes(e)) == 3
+    assert leftovers(p) == []
+
+
+def test_a_need_that_returns_while_its_last_command_runs_starts_its_own(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    up, go = e.bin / "up.txt", e.bin / "go"
+    hold = script(e, "hold", f"echo up >> {up}; while [ ! -e {go} ]; do sleep 0.05; done")
+    p = first_run(e, str(hold))
+    tid = task(e, blocked="x")
+
+    def started(n: int) -> None:
+        for _ in range(200):
+            if up.exists() and len(up.read_text().splitlines()) >= n:
+                return
+            time.sleep(0.05)
+        raise AssertionError(f"command {n} never started")
+
+    notify.run(p, NO_ROWS)
+    started(1)
+    registry.backlog(p).update(tid, blocked="")
+    notify.run(p, NO_ROWS)
+    registry.backlog(p).update(tid, blocked="x")
+    notify.run(p, NO_ROWS)
+    started(2)
+    go.touch()
+    settle()
+    assert len(up.read_text().splitlines()) == 2
+    assert leftovers(p) == []
