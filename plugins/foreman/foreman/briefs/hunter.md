@@ -7,10 +7,7 @@ Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
 
-$type_section# Vocabulary
-Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
-
-# How
+$type_section$vocabulary# How
 1. **Coverage is your job.** Report every problem you suspect, including ones you are unsure of or think minor. Do not filter for importance or confidence: the reviewer does that. Give each finding a confidence: high, medium or low.
 2. **Read in this order:** the acceptance criteria; the diff (`git diff $main...$branch`, then the touched files whole where the diff is not enough); the plan (`$plan`, if any): its decisions and out of scope are settled, its edge cases are cases to check; the responsible agent's report (`$report`) **last**: check each thing it says against the code, never take one as evidence.
 3. **Acceptance criteria table:** every line of the acceptance criteria gets a row: met / not met / not shown, with its evidence.

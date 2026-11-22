@@ -9,10 +9,7 @@ Goal: $goal
 Acceptance criteria (settled with the owner):
 $criteria
 
-# Vocabulary
-Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
-
-# How
+$vocabulary# How
 - **How it is going:** answer only from `foreman show $id` (per subtask: status, PR, review rounds, open questions, blocked, waiting_for) and `foreman list`, run now, never from memory. Say what you read apart from what you infer.
 - **Notices:** you get a message when one of the subtasks is merged or canceled, and nothing else. The subtasks' questions and blocks go to the owner, who sees them in `foreman list` and the panel: you do not answer for their agents or coordinate them.
 - **What goes next:** propose which subtask goes next, and why. Only on the owner's yes run `foreman go ID`. Never start one on your own.

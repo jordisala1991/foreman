@@ -9,10 +9,7 @@ Goal of every step: $goal
 Acceptance criteria of every step:
 $criteria
 
-# Vocabulary
-Use the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.
-
-# The lens report
+$vocabulary# The lens report
 `$lens_report` carries the lens `$lens` from one chain to the next. If it does not exist, write it with exactly these three headings, in this order, and nothing under them yet; never re-create it once it exists:
 
 ```
