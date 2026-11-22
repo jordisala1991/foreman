@@ -155,8 +155,11 @@ def cmd_cancel(a: argparse.Namespace) -> None:
 
 def cmd_unblock(a: argparse.Namespace) -> None:
     p = home(a)
+    if not a.relaunch:
+        talk.unblock(p, a.id)
+        return
     i = registry.backlog(p).update(a.id, blocked="", pr_error="", retry_error="", retry_count=0)
-    if i["status"] in backlog.RUNNING and a.relaunch:
+    if i["status"] in backlog.RUNNING:
         registry.backlog(p).set_status(a.id, "backlog" if i["status"] == "refining" else "ready", "relaunch")
 
 

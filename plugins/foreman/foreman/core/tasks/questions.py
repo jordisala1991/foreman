@@ -62,5 +62,7 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
         return f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». " + (
             "It is allowed once: run it again." if q.get("allowed") else "It is not allowed."
         )
+    elif q.get("kind") == "unblock":
+        return f"The owner cleared the block on task {i['id']}: carry on with the task."
     else:
         return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
