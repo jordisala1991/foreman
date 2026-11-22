@@ -156,6 +156,16 @@ def test_a_done_tasks_closed_in_list_is_the_closed_show_prints(env: Env):
     assert listed[tid]["closed"] == read(env, "show", tid)["closed"]
 
 
+def test_a_done_task_sent_through_go_has_no_closed_in_list(env: Env):
+    b = registry.backlog(env.p)
+    tid = b.add("t", criteria="c")
+    b.set_status(tid, "done")
+    fm(env.home, "go", tid)
+    row = {r["id"]: r for r in read(env, "list", "--json", "--all")}[tid]
+    assert row["status"] == "backlog"
+    assert row["closed"] is None
+
+
 def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     asking = task(e)
