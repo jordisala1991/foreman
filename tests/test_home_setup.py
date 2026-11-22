@@ -40,7 +40,6 @@ class TestHomeSetup:
         assert not (h / ("fm" + ".toml")).exists()  # the old name, from parts for the scan
         assert "claude plugin marketplace add jordisala1991/foreman#foreman-next\nclaude plugin install foreman@foreman\n" in out
         assert "fm =" not in (h / "foreman.toml").read_text()
-        assert "parent_relaunches = 2" in (h / "foreman.toml").read_text()
 
         (h / "instructions.md").write_text("Habla en español.\n")
         (h / "CLAUDE.md").write_text("owner\n")

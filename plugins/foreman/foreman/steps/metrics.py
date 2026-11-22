@@ -1,5 +1,5 @@
 """What the system knows about how it works, per task: cost (its agents' transcripts, list prices), time (filed →
-in review → done), rework (rejected by the owner), nudges (ended a turn without finishing), questions to the owner,
+in review → done), rework (rejected by the owner), nudges (always 0 since the recover step replaced the nudge, FN-394), questions to the owner,
 guard stops, and what misled its agents (their own words, from `--misled`, per agent)."""
 
 import re

@@ -27,8 +27,7 @@ def _foreman_toml(home: Path, prefix: str, repo: str) -> None:
     f.write_text(
         f'[project]\nname = "{home.name}"\nprefix = "{prefix}"\nrepo = "{repo}"\nmain = "main"\n\n'
         '[agents]\nslots = 2\nmodel = "sonnet"\neffort = "medium"\n'
-        'planning_model = "sonnet"\nplanning_effort = "high"\nreview_model = "sonnet"\nreview_effort = "high"\n'
-        "parent_relaunches = 2  # a parent whose new session ends without progress is launched again this often, then blocked\n\n"
+        'planning_model = "sonnet"\nplanning_effort = "high"\nreview_model = "sonnet"\nreview_effort = "high"\n\n'
         '[merge]\nautonomy = "manual"  # manual | low | medium\nprovider = "local"\nstrategy = "squash"  # squash | merge\ntest = ""\n',
         encoding="utf-8",
     )

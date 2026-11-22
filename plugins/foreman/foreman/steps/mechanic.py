@@ -10,19 +10,15 @@ from ..providers import registry
 from ..providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, State, ref_of, stop_live
 from ..services.agents.brief import brief
 from ..services.agents.launch import record_run, record_session
-from ..services.agents.running import diagnosing, idle_s, running
+from ..services.agents.running import diagnosing, running
 from ..services.agents.worktree import agent_folder
-from .talk import NUDGE_IDLE_S
 
 TIMEOUT_S = 1800
 
 
-def missing_why(m: dict[str, Any], rows: Rows) -> str:
-    if (util.age_s(m.get("started")) or 0) > TIMEOUT_S:
-        return "ran longer than 30 minutes"
-    if rows.has_sessions() and m.get("session") and not rows.busy(ref_of(m)) and idle_s(m) > NUDGE_IDLE_S:
-        return "ended without writing a diagnosis"
-    return ""
+def missing_why(m: dict[str, Any]) -> str:
+    """A mechanic that ran too long; one that ended or went silent is the recover step's (steps/recover.py)."""
+    return "ran longer than 30 minutes" if (util.age_s(m.get("started")) or 0) > TIMEOUT_S else ""
 
 
 def note_missing(p: Project, tid: str, why: str) -> None:
@@ -68,7 +64,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
 
 def run(p: Project, rows: Rows) -> None:
     for i in backlog.tasks(registry.backlog(p).load()):
-        if diagnosing(i) and (why := missing_why(i["mechanic"], rows)):
+        if diagnosing(i) and (why := missing_why(i["mechanic"])):
             note_missing(p, i["id"], why)
     d = registry.backlog(p).load()
     for i in backlog.tasks(d):

@@ -96,12 +96,10 @@ def ended(a: dict[str, Any], rows: Rows) -> bool:
     return a.get("kind") == "parent" and bool(a.get("session")) and rows.has_sessions() and rows.state(ref_of(a)) in (State.ENDED, State.GONE)
 
 
-def launch_parent(p: Project, i: dict[str, Any], epoch: str = "", by_owner: bool = False) -> SessionRef | None:
+def launch_parent(p: Project, i: dict[str, Any]) -> SessionRef | None:
     """Starts the parent agent of task `i`: its first, or one that replaces an ended session and is told where the task
-    stands. The new session, or None when the launch was postponed, failed or undone. The agent record keeps what
-    `chains.stalled` needs (`mark`, the runner's `epoch`, the sessions `ended` without progress): once more than
-    `[agents] parent_relaunches` ended so, the task is blocked instead; the owner's `foreman relaunch` (`by_owner`)
-    starts the count again."""
+    stands. The new session, or None when the launch was postponed, failed or undone. How often an ended parent is
+    launched again is the recover step's (steps/recover.py)."""
     tid = i["id"]
     name = brief.agent_name(p, tid, "parent")
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
@@ -109,11 +107,6 @@ def launch_parent(p: Project, i: dict[str, Any], epoch: str = "", by_owner: bool
     cwd = worktree.agent_folder(p, name, p.repo, p.get("project", "main"))
     old: dict[str, Any] = i.get("agent") or {}
     d = registry.backlog(p).load()
-    mark = chains.mark(d, tid)
-    stalled = [] if by_owner else chains.stalled(old, mark, epoch)
-    if len(stalled) > int(p.get("agents", "parent_relaunches")):
-        _block_stalled(p, tid, old, stalled)
-        return None
     missed = [q for q in questions.undelivered(d) if q["task"] == tid] if old else []
     standing = chains.standing(backlog.tasks(d), i, [questions.message_for(i, q) for q in missed]) if old else ""
     told = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]  # what the brief says: the same snapshot
@@ -128,7 +121,6 @@ def launch_parent(p: Project, i: dict[str, Any], epoch: str = "", by_owner: bool
         backlog.event(p, tid, f"launch failed: {e}")
         return None
     agent = {"name": name, **ref.fields(), "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
-    agent |= {"epoch": epoch, "mark": mark, "ended": stalled}
     with registry.backlog(p).edit() as d:
         it = backlog.get(d, tid)
         now: dict[str, Any] = it.get("agent") or {}
@@ -141,21 +133,11 @@ def launch_parent(p: Project, i: dict[str, Any], epoch: str = "", by_owner: bool
         runner.stop(ref)
         backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")
         return None
-    if old:
-        runs.end(p, tid, ("parent", "chain"), "failed", "its session ended")
     record_run(p, tid, run_kind(i, agent), ref, agent)
     for q in missed:  # the brief carries them: the loop must not send them again
         registry.backlog(p).mark_delivered(q["id"])
     backlog.event(p, tid, f"launched {name} (parent, {model}, {effort}, session {ref.short})")
     return ref
-
-
-def _block_stalled(p: Project, tid: str, old: dict[str, Any], stalled: list[str]) -> None:
-    """Blocks a parent whose sessions ended in a row without progress; `ended` is cleared, so an unblock launches it again."""
-    n = len(stalled)
-    why = f"its parent agent ended {n} times in a row without progress (sessions {', '.join(stalled)}); foreman unblock launches it again"
-    registry.backlog(p).update(tid, blocked=why, agent={**old, "ended": []})
-    backlog.event(p, tid, f"blocked: parent agent ended {n} times without progress")
 
 
 def _parent_brief(p: Project, i: dict[str, Any], standing: str) -> str:

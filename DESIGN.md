@@ -31,7 +31,7 @@ A *home* folder: `foreman.toml` (the owner's settings), `backlog.json`, `state/`
 folder and the umbrella folder set in `[project] umbrella` (explicit, never guessed). A command finds its project by `--project
 NAME`, `--home`, `FOREMAN_HOME`, `FOREMAN_PROJECT`, then the registered project owning the current folder (paths resolved, the
 deepest folder wins; two projects claiming it: fm refuses and `foreman health` names them), then the nearest `foreman.toml` above
-it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings, `runner` (`claude`, the default), `parent_relaunches` (how often a parent whose session ends without progress is launched again, default 2); `[merge]
+it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings, `runner` (`claude`, the default); `[merge]
 autonomy`, `provider`, `strategy`, `test`, `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`;
 `[health]` timings; `[[recurring]]` entries (see Recurring tasks). With several repos, `[merge]` and `[risk]` are the defaults a repo's own tables override (see
 Several repos).
@@ -63,9 +63,9 @@ A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and
   with `foreman ready --plan|--no-plan`.
 - `ready`: has acceptance criteria and a plan (or none, if trivial). `in progress`: its responsible agent works, in its own worktree and branch.
 - `in review`: delivered. The loop checks and reviews the branch; the owner accepts it or rejects it with a note.
-- `blocked`: a reason set by an agent (`foreman block`), by the loop (could not launch; stopped without finishing after a
-  nudge). The owner clears it (`foreman unblock [--relaunch]`); a plain unblock of a running task with an agent also tells the agent
-  the block is cleared (a message the loop delivers, resetting its nudge).
+- `blocked`: a reason set by an agent (`foreman block`), by the loop (could not launch; its agent stopped without finishing,
+  twice in a row: the recover step). The owner clears it (`foreman unblock [--relaunch]`); a plain unblock of a running task with
+  an agent also tells the agent the block is cleared (a message the loop delivers) and starts a new run of its session.
 - `blocked_by` (`foreman add/edit --blocked-by FN-n …`; `none` clears): the task is never planned or launched until every
   blocker is `done`, then the loop marks it unblocked in the history. A canceled or duplicate blocker blocks the task
   with a reason: the owner edits `--blocked-by` or cancels, then `foreman unblock`.
@@ -109,8 +109,20 @@ on). The heartbeat is written before every step, so a long test run does not loo
    a failed try is retried next tick; the answer stays not delivered and `foreman health` shows it after 10 minutes. A session id not listed yet at launch is
    filled in from its short id on a later tick. `foreman relaunch` is the one resume that sends flags, on purpose: a
    copy under a new id with today's `--settings` (PATH, guard, env), recorded as the task's session.
-4. **agents**: an agent whose session ended its turn without `foreman done`/`ready`/`ask`/`block`, and whose transcript
-   has been quiet for 10 minutes (so not while the owner is talking to it), is nudged once, then blocked.
+4. **recover** (`foreman/steps/recover.py`, its rules pure in `foreman/core/tasks/recovery.py`): each active run (the ledger) of
+   an open task that is neither blocked nor waiting (an open question, a message on its way) is looked at in the runner's listing;
+   it is over with no outcome when its session is ENDED or GONE (`session_ended`, or `runner_unavailable` when the runner's epoch
+   changed since the last pass, kept in `state/runner.json`), when it never got a session id within 2 minutes (`launch_failed`),
+   or when it is idle and its transcript quiet for 10 minutes (`silent_too_long`; never a parent, which idles waiting). The run is
+   closed as failed with that reason. The first three are retried while fewer than 2 runs of that kind failed in a row: the
+   session is resumed with a message naming the reason and how to finish (a new run of it, attempt + 1), or, when the runner
+   cannot resume it, started again through its kind's own launch path (a planning or responsible task goes back to `backlog` or
+   `ready`, a hunter's, reviewer's or mechanic's record is dropped so its step launches it again, a parent always gets a new
+   session from the parents step, told where it stands). Past that, or for `launch_failed`, the owner gets one need: the task is
+   blocked with «its agent stopped without finishing (reason, attempt n); it last said: …» (the last text of its transcript),
+   or a mechanic leaves its «Diagnosis missing» note. An unreadable listing does nothing; it runs right after `answers`, on a
+   listing read again (an owner's answer or unblock resumes a session first), and on a loop's first pass after a restart
+   before any launch. A hunter whose findings file is written is not judged: the queue step closes its run done.
 5. **queue**: accepted tasks are merged first, one at a time; with a test command, each only once its tests pass on it
    merged with main as main is at that moment (the merged check, `loop.gate_merge`: see below). Then a branch in review whose head or main's head changed is checked,
    one at a time, in the background (a tick waits for it only `BACKGROUND_WAIT_S`, so answers, launches and merges keep
@@ -130,13 +142,14 @@ on). The heartbeat is written before every step, so a long test run does not loo
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
-   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:98`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed). A parent whose sessions end without progress (no subtask filed or closed, no `foreman ask` of its own nor the owner's answer to one: `chains.mark`, `chains.stalled`) is launched again at most `[agents] parent_relaunches` times (default 2), then blocked with the sessions named; `foreman unblock` gives it as many more, and the owner's `foreman relaunch` starts the count again. An ENDED read after the runner restarted (`Rows.epoch`, Orca's app pid) is not counted. `foreman edit` of a parent files it a message (kind `edit`) with what changed; a parent whose session ended gets it in its new brief, not by a resume.
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:99`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed); how often is the recover step's (two failed runs in a row, then the owner). `foreman edit` of a parent files it a message (kind `edit`) with what changed; a parent whose session ended gets it in its new brief, not by a resume.
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
 9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
-   that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.
+   that ran over 30 minutes leaves a «Diagnosis missing» note; one that ended or went silent is the recover step's (resumed
+   once, then the same note).
 10. **folders** (after mechanic): under Orca, removes an agent folder once its agent finished its part and its session is not in use,
     and every folder of a closed task; a failure is a line in `errors.jsonl`, tried next tick (`foreman/steps/folders.py`).
 
@@ -156,8 +169,7 @@ or, once, to the owner when the rounds run out. Each launch event ends with the 
 |---|---|---|---|
 | A tip with no review, in rounds 1-2 | launches the hunter if a slot is free; else waits | `review_step` → `hunt` / `wait` | `test_no_hunter_launches_it` |
 | The hunter's file is written and the hunter is not working | launches the reviewer if a slot is free; else waits | `review_step` → `review` / `wait` | `test_hunter_file_and_ended_launches_reviewer` |
-| The hunter ended without its findings file | blocks the task | `review_step` → `block` | `test_hunter_without_file_blocks` |
-| The reviewer ended without a verdict | blocks the task | `review_step` → `block` | `test_reviewer_without_verdict_blocks` |
+| The hunter stopped before its findings file, or the reviewer before a verdict | the recover step resumes it, or drops its record so this table launches it again; the second time in a row, blocks the task | `steps/recover.py` | `test_a_hunter_that_ends_without_its_file_is_resumed`, `test_a_session_the_runner_cannot_resume_is_started_again` |
 | Verdict with findings open before the last round | back to its agent for review: its note, once | `review_step` → `back` | `test_open_findings_go_back_once` |
 | A new tip that only merges main, with no conflict | no review: the verdict holds (`review.holds`) | `launch_rule` → `hold` | `test_a_clean_merge_or_a_closed_review_holds`, `test_a_clean_merge_of_main_launches_nothing` |
 | A new tip after the loop acted on a verdict of the last round, open or clean (`review_for` none) | no review: the verdict holds; what is open stays for the owner; no round 3 runs by itself (after a round-1 verdict, a new tip gets round 2) | `closes_review`, `launch_rule` → `hold` | `test_a_review_closes_after_the_last_round`, `test_after_two_clean_rounds_a_new_tip_launches_nothing`, `test_a_clean_merge_or_a_closed_review_holds`, `test_after_round_two_later_tips_launch_no_review`, `test_a_new_tip_after_a_clean_verdict_gets_a_review` |
@@ -338,8 +350,8 @@ second headless Orca only.
   (E2, E8: the agent went on and answered its brief). Only for a folder inside the project's repos or worktrees folder. Pending Q2.
   A dialog D6 may not answer stays WAITING (D3), so nothing is sent to the agent. For any WAITING agent the loop writes one event on its
   task, «NAME waits in its Orca tab» (the tab shows why); the owner sees it in the panel, with the agent's state WAITING (`agent_state`,
-  `ui/panel/views.py:66`; the panel's agent line gains a «waiting» label: `panel/src/cards.tsx`, `panel/src/strings/*.json`, `lib.ts`); `foreman list` and `foreman show` print neither. Written once, marked as a nudge is (`agent.waiting_seen`, as
-  `agent.nudged` in `steps/talk.py`), cleared when the agent leaves WAITING.
+  `ui/panel/views.py:66`; the panel's agent line gains a «waiting» label: `panel/src/cards.tsx`, `panel/src/strings/*.json`, `lib.ts`); `foreman list` and `foreman show` print neither. Written once, marked
+  (`agent.waiting_seen`, `steps/talk.py`), cleared when the agent leaves WAITING.
 - **D7 Orca down.** `orca status --json` says it (`app.running: false`); any other call's `runtime_unavailable` → `RunnerUnavailable(RunnerError)`.
   A launch that gets it leaves the task as it is (no block), writes one event and is retried next tick; a send is retried as any
   failure. Foreman never runs `orca open` (Q3). The binary is `$ORCA_BIN`, else `orca` on PATH, else
@@ -472,7 +484,7 @@ class Rows(Protocol):                                                           
     def alive(self, ref: SessionRef | None) -> bool
     def find(self, short: str) -> str | None
     def short(self, session: str) -> str | None                                          # claude: the listing's id (today merge.py:117); orca: session[:8]
-    def has_sessions(self) -> bool                                                        # the snapshot holds a session: an empty listing is no listing (mechanic.missing_why)
+    def has_sessions(self) -> bool                                                        # the snapshot holds a session: an empty listing is no listing (recover.run)
     def epoch(self) -> str                                                                # who runs the sessions now: changes when the runner restarts (orca: app pid); claude: ""
 class Runner(Protocol):
     def start(self, agent: Agent, brief: str, cwd: Path) -> SessionRef
@@ -615,7 +627,7 @@ One label: `needs-owner`.
 | `parent` | native sub-issue (the issue's parent) | a parent stores no list: its subtasks are its sub-issues; one level stays fm's rule; an open migrated parent's closed subtasks stay in the old file and the port adds them to its sub-issues (the old file's tasks whose `parent` is its legacy id) |
 | `blocked_by` | native issue dependencies (blocked by) | a blocker's state and reason come with the read: closed `COMPLETED` = done; other closed reasons = closed undone; a migrated task's blockers already closed in the old file are read from there |
 | open question | label `needs-owner` | on while the task has an open question; the text stays local |
-| `agent` {name, short, session, cwd, started, terminal, pane, dispatch, coordinator, kind, model, effort, nudged, waiting_seen, epoch, mark, ended} | local | keyed by task id |
+| `agent` {name, short, session, cwd, started, terminal, pane, dispatch, coordinator, kind, model, effort, waiting_seen} | local | keyed by task id |
 | `sessions`, `session_kinds`, `session_tabs` | local | |
 | `branch`, `worktree`, `plan_file` | local | the plan is `<home>/plans/ID.md` |
 | `report` {summary, review, confused, at, file}, `result` | local | `result` = the report summary kept at merge |
@@ -624,7 +636,7 @@ One label: `needs-owner`.
 | `mechanic` {name, short, session, kind, model, effort, started, …}, `diagnosis` {at, file, missing} | local | `<home>/diagnoses/` |
 | `pr` {number, url, draft, described, commented, …}, `pr_error` | local | the PR is found by its branch; its text says `Task: #<issue>` (never `Closes`) |
 | `accepted` {by, head, at}, `merging`, `merge`, `commit`, `acceptance.verdict` | local | the owner's accept and the merge record, tied to a branch tip |
-| `nudges`, `retry_count`, `retry_error`, `check_retry_count`, `check_retry_error`, `notified`, `released` | local | the loop's counters and once-flags |
+| `nudges` (no longer written: the recover step replaced the nudge), `retry_count`, `retry_error`, `check_retry_count`, `check_retry_error`, `notified`, `released` | local | the loop's counters and once-flags |
 | `plan`, `subs`, `defined_by`, `undelivered` (as a task key) | not carried | no code reads them; `plan` and `subs` are always `[]`; they stay in the read-only old file |
 | file keys `schema_version`, `updated`, `projects`, `archive` | not carried | bookkeeping of the old file; `projects` and `archive` are empty in fm's `backlog.json` |
 | `decisions`, `decisions_resolved` | local, `<home>/state/questions.json` | open questions; answered ones and the messages for an agent (kinds `note`, `subtask`, …); ids `FN-n Qk` unchanged |
@@ -640,7 +652,7 @@ Local state sits in `<home>/state/runs.json`, one object per task id holding the
 | backlog | Backlog | open | `foreman go`; filing with criteria (`foreman add`, the panel in a one-repo project, recurring entries not marked `triage`); `foreman edit` of criteria, detail or repo on a ready task (drops its plan); `foreman unblock --relaunch` of a refining task |
 | refining | Refining | open | the loop (launch step, `services/agents/launch.py:82`) |
 | ready | Ready | open | `foreman ready` (planning agent); `foreman unblock --relaunch` of an in-progress task. (`foreman add --ready` is declared and read by nothing: it files in backlog) |
-| in progress | In progress | open | the loop (launch step); `foreman reject` and the loop's returns to the agent (`steps/talk.py:111`: review, conflict, failing tests or CI) |
+| in progress | In progress | open | the loop (launch step); `foreman reject` and the loop's returns to the agent (`steps/talk.py:59`: review, conflict, failing tests or CI) |
 | in review | In review | open | `foreman done` (responsible agent; a parent agent's `foreman done` closes its parent instead) |
 | done | Done | closed, completed | the loop's merge step (`services/delivery/merge.py:90`) after the owner's accept or the autonomy; a parent that closes by itself or by its agent's `foreman done` with at least one subtask done (`core/tasks/subtasks.py:37`, `steps/parents.py:61`); a source's `done` |
 | canceled | Canceled | closed, not planned | `foreman cancel`; the loop when a parent is canceled (its open subtasks) or a source says `cancel`; a parent that closes with no subtask done (same lines as done) |
@@ -868,7 +880,7 @@ A due lens entry files its parent in backlog with `chain = {lens, max_steps, max
 has no type (`foreman/core/tasks/tasktypes.py:20`) and gets its agent only once it has a subtask (`foreman/steps/parents.py:36`).
 A new pure module `foreman/core/tasks/chains.py` (area `tasks`) has `is_parent(tasks, i)`: it has subtasks or `chain`;
 those three sites use it, so a chain parent gets its agent before its first step. The agent's kind stays `parent`, with
-planning's model and effort (`foreman/services/agents/launch.py:98`); `launch_parent` renders `briefs/chain.md` instead of `parent.md`
+planning's model and effort (`foreman/services/agents/launch.py:99`); `launch_parent` renders `briefs/chain.md` instead of `parent.md`
 (`launch.py:140`), with `extra` = lens, report path, `max_steps`, `max_lines` (`foreman/services/agents/brief.py:83,87`).
 `parent.md` makes every Go, add and the close wait for the owner's yes (`foreman/briefs/parent.md:18,24,31`); the chain
 agent waits for none. Its steps enter backlog (today an agent's `foreman add --parent` is always triage,
@@ -1006,7 +1018,7 @@ test = "make build"
 | `large_lines`, `[repos.K.risk.high]`, `[repos.K.risk.medium]` | `[repos.K.risk]` | as `[risk]` | as `[risk]`; patterns relative to the repo's root, as diff paths are |
 
 - Project-wide only, never in a repo table: `[project]` (`name`, `prefix`, `branch_prefix`, `worktrees`, `umbrella`,
-  `foreman`), `[agents]` (slots, models, `claude`, `runner`, `parent_relaunches`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
+  `foreman`), `[agents]` (slots, models, `claude`, `runner`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
   `[risk]` stay as the defaults for every repo.
 - **A setting given at both levels: the repo's wins, key by key; absent there, the project's; absent there, fm's
   default.** A `high` or `medium` table in a repo replaces the project's table of that level whole, never label by
@@ -1118,13 +1130,13 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 |---|---|---|---|
 | ui | `foreman/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, board, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
-| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, folders, notify, parents, metrics, schedule, live, `health/`: health, checks, main_tests, notes, report | one step of a tick, or a view over several pieces |
+| steps | `foreman/steps/` | sources, release, talk, recover, reviewing, mechanic, folders, notify, parents, metrics, schedule, live, `health/`: health, checks, main_tests, notes, report | one step of a tick, or a view over several pieces |
 | services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo, the runner and the backlog (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`, `registry.backlog(p)`; `registry.tick_scope(p)` makes a tick load the backlog once) (the only importer of the adapters outside `providers/`, save `steps/health/checks.py` and `steps/health/orca.py`; enforced by `tests/test_adapters_only_through_registry.py`, not by tach) |
 | adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review, api, board, issues, backlog, apply, writes, files, cutover · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |
 | ports | `foreman/providers/` | `__init__.py` · repo · runner · backlog | the `Provider` interface; `Repo`, every git operation on a repo (typed: heads, diff counts, conflicts, worktrees, the merge outcome); `Runner`, every agent session (typed: `State`, `SessionRef`, `Rows`); `Backlog`, every read and write of the backlog (tasks cross it as dicts) |
 | proc | `foreman/proc.py` | | the one module that runs programs |
-| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, listing, editing, recurring, board, ids, issues, changes, drags, cutover, runs · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, shellscope, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
+| core | `foreman/core/` | `project/`: config, registry, repos, plugin, recurring_table, backlog_table · `tasks/`: backlog, questions, blockers, subtasks, tasktypes, taskrepo, listing, editing, recurring, board, ids, issues, changes, drags, cutover, runs, recovery · `review/`: verdict, inline, describe, evidence, reviews · `rules/`: risk, decide · `oversight/`: guard, shellscope, diagnosis, costs | vocabulary, pure rules and the plain files that do not vary |
 
 Core areas, in their `depends_on` order: `project` (foreman.toml, the registry of homes, repos, the `[[recurring]]` tables, the plugin's text) →
 `tasks` (the backlog's vocabulary and pure functions, questions, blockers, subtasks, types, edits, recurring entries) and `review` (the verdict,
@@ -1224,7 +1236,7 @@ is free; renaming, removing or retyping one is the owner's decision. Their text 
 | `foreman list --json [--all]` | array; each task `{id, status, type, title, agent, repo, parent, priority, model, effort, blocked, waiting, recurring: str, chain: {lens: str, step: int, cap: int, open: str} or null, closed: str or null}` (`""` when the task lacks the fact, `priority` `none`; `closed` the date as stored, `YYYY-MM-DD`, null when the task has none), in `list`'s order (`core/tasks/listing.py`) |
 | `foreman needs --json` | array, `watch`'s set now (`steps/watch.py` `found`); each `{kind, task, text, key: str, since: str or null}`; kind `question`, `accept`, `blocked`, `main` or `parent`; `since` the stamp stored (the question's `asked`, the check's `at`, `ci.json`'s `since`), null for blocked and parent; `text` as stored: the question, the first line of the delivery summary (stripped, as the review description shows it), the block, the parent's title; `tests fail on main` for main |
 | `foreman agents --json` | array, the agents live now (`steps/live.py` `agents`): the active runs (`foreman runs`) whose session is alive, in backlog order, then start order; each `{task, kind, model, effort, started, session, handle: str, round: int or null}`. Live: its run is active, its task is open and the runner lists its session alive (idle included); a session started before the ledger has no run and is not listed. `kind` `planning`, `responsible`, `review` (the reviewer), `hunter`, `parent`, `chain` (a parent agent of a task with a chain) or `mechanic`; `round` the hunter's or reviewer's round, or a responsible agent's when above 1 (the round its next review will be), else null; `handle` the runner's id for the session (claude: the short id; orca: Orca's session id, from the kept pane or asked of Orca by the dispatch, `""` with neither); `started` the run's start |
-| `foreman runs --json [--task ID] [--active]` | array, the run ledger (`core/tasks/runs.py`, `<home>/state/ledger.jsonl`, append-only), in start order: every agent session the loop started; `--task` only that task's, `--active` only those not ended; each `{id, task, kind, session, handle, model, effort, started, failure_reason: str, attempt: int, ended: str or null, outcome: str or null}`. `kind` as in `agents`; `attempt` counts the task's runs of that kind; `session` and `handle` `""` while unknown; `outcome` `done`, `failed` or `canceled`, null while active; `failure_reason` `""` unless failed. A run ends where fm learns it: `foreman ready`, `done`, `verdict` (the newest reviewer's), `diagnose`, the hunter's file, a parent's close, a nudge that ends in a block, a review blocked without a result, a mechanic without a diagnosis, a parent whose session ended (failed), a merge or a cancel, and a new run of the same task and kind (canceled); `return_to_agent` cancels the hunter and review runs and starts a new responsible run on the same session; `foreman relaunch` starts a new run of the copy, but not in review |
+| `foreman runs --json [--task ID] [--active]` | array, the run ledger (`core/tasks/runs.py`, `<home>/state/ledger.jsonl`, append-only), in start order: every agent session the loop started; `--task` only that task's, `--active` only those not ended; each `{id, task, kind, session, handle, model, effort, started, failure_reason: str, attempt: int, ended: str or null, outcome: str or null}`. `kind` as in `agents`; `attempt` counts the task's runs of that kind; `session` and `handle` `""` while unknown; `outcome` `done`, `failed` or `canceled`, null while active; `failure_reason` `""` unless failed. A run ends where fm learns it: `foreman ready`, `done`, `verdict` (the newest reviewer's), `diagnose`, the hunter's file, a parent's close, the recover step (failed, with its reason: `session_ended`, `runner_unavailable`, `silent_too_long`, `launch_failed`), a mechanic over 30 minutes (failed), a merge or a cancel, and a new run of the same task and kind (canceled); `return_to_agent` cancels the hunter and review runs and starts a new responsible run on the same session; `foreman relaunch` starts a new run of the copy, but not in review |
 | `foreman health --json` | object `{loop: {time: str or null, alive: bool}, versions: {loop: str or null, this: str, installed: str or null}, recurring: [{name, title, trigger, open: str, left: int or null, next: str or null, chain: {lens, step, cap, open} as in `list`, or null}], findings: [{key, title, meaning, evidence, hypothesis, repo: str}], warnings: [str]}` (`steps/health/report.py`) |
 | `foreman show ID` | object: the task as stored, with what `show` adds (`id`, `title`, `status`, `blocked`, `priority` are frozen) |
 
@@ -1264,12 +1276,12 @@ its splits, not a new limit (changing `pyproject.toml` is the owner's call).
 ## Watching itself
 
 Metrics per task (`foreman metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; planning_usd of planning sessions and responsible_usd of responsible sessions, from `session_kinds`; review rounds), time to review and to
-done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (stopped without finishing),
+done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (always 0 since the recover step replaced the nudge, FN-394),
 questions to the owner, guard stops, risk, and what misled its agents (their `--misled` words, per agent).
 
 Health checks (`foreman/steps/health/`), each finding a triage task, deduplicated by key while open or while it persists:
 loop dead (heartbeat older than 3 ticks; from outside the loop: `foreman health`, the panel), agent stuck (working, its
-transcript silent for `stuck_minutes`), agent blocked (stopped after a nudge, or could not launch), orphan worktree,
+transcript silent for `stuck_minutes`), agent blocked (stopped without finishing, from the recover step, or could not launch), orphan worktree,
 a repo that is not a git checkout and fm or Claude files in a repo (several repos only),
 tests failing on main (the test command on main's head, when it moves or every `ci_every_minutes`; one task per failing
 episode, from the first failing run until a pass, with the commit, the failing step and the output tail), loop step errors.

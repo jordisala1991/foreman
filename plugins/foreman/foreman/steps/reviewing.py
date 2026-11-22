@@ -7,14 +7,14 @@ from typing import Any
 from ..core.project.config import Project
 from ..core.review import reviews
 from ..core.rules import decide
-from ..core.tasks import backlog, runs
+from ..core.tasks import backlog
 from ..providers import registry
 from ..providers.runner import Rows, ref_of
 from ..services import scratch
 from ..services.agents.launch import Scope, launch_reviewer
-from ..services.agents.running import idle_s, running
+from ..services.agents.running import running
 from ..services.delivery import git
-from .talk import NUDGE_IDLE_S, return_to_agent
+from .talk import return_to_agent
 
 
 def seen_of(p: Project, i: dict[str, Any], head: str, rows: Rows) -> decide.Seen:
@@ -33,8 +33,6 @@ def seen_of(p: Project, i: dict[str, Any], head: str, rows: Rows) -> decide.Seen
         free=running(registry.backlog(p).load()) < int(p.get("agents", "slots")),
         hunter_file=Path(h.get("file", "")).exists(),
         hunter_working=working(h, rows),
-        hunter_ended=ended(h, rows),
-        reviewer_ended=ended(r, rows),
         review_for=i.get("review_for", ""),
         merge=merge,
         auto=auto,
@@ -42,17 +40,14 @@ def seen_of(p: Project, i: dict[str, Any], head: str, rows: Rows) -> decide.Seen
 
 
 def apply_review(p: Project, i: dict[str, Any], head: str, step: decide.Step) -> None:
-    """Does what `decide.review_step` said: launch the hunter or the reviewer, carry the verdict to this tip, block, or
-    send the findings back once."""
+    """Does what `decide.review_step` said: launch the hunter or the reviewer, carry the verdict to this tip, or send the
+    findings back once."""
     v: dict[str, Any] = i.get("review") or {}
     if step.do in ("hunt", "review"):
         launch_reviewer(p, i, head, "hunter" if step.do == "hunt" else "reviewer", Scope(step.text, step.base))
     elif step.do == "hold":
         registry.backlog(p).update(i["id"], review={**v, "holds": head})
         backlog.event(p, i["id"], f"new tip {head[:9]} follows reviewed {v['tip'][:9]}: no review runs, its verdict holds")
-    elif step.do == "block":
-        block_review(p, i["id"], step.text)
-        runs.end(p, i["id"], ("hunter", "review"), "failed", step.text)
     elif step.do == "back":
         return_to_agent(p, i["id"], "review", step.text)
         registry.backlog(p).update(i["id"], review={**v, "returned": True})
@@ -60,15 +55,6 @@ def apply_review(p: Project, i: dict[str, Any], head: str, step: decide.Step) ->
 
 def working(a: dict[str, Any], rows: Rows) -> bool:
     return bool(a.get("session")) and rows.busy(ref_of(a))
-
-
-def ended(a: dict[str, Any], rows: Rows) -> bool:
-    return bool(a.get("session")) and not rows.busy(ref_of(a)) and idle_s(a) > NUDGE_IDLE_S
-
-
-def block_review(p: Project, tid: str, why: str) -> None:
-    registry.backlog(p).update(tid, blocked=why)
-    backlog.event(p, tid, f"blocked: {why}")
 
 
 def sweep_scratch(p: Project) -> None:

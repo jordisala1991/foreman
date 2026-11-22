@@ -7,7 +7,7 @@ Every finding has three parts: what it means, the evidence fm gathered, and a hy
 proposes a fix.
 
 Checks: loop dead (heartbeat too old: seen from outside the loop, `foreman health` and the panel) · agent stuck (its
-session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked after a nudge) · launch failed
+session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked by the recover step) · launch failed
 · orphan worktree (under the worktrees folder of any repo with no live task) · tests failing on main (the project's test command
 on main's head, every `ci_every_minutes`; one task per failing episode) · answer not delivered for 10 minutes · loop step errors."""
 

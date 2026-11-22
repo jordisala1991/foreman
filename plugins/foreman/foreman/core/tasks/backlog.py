@@ -11,7 +11,7 @@ Statuses, and who moves a task between them (DESIGN.md has the picture):
   in review    checked (tests, diff, risk) and reviewed; the owner accepts, or the autonomy does
   done | canceled | duplicate
 
-Keys added to a task: `agent` {name, session, short, kind: planning|responsible, started, nudged, terminal, pane, waiting_seen}, `branch`, `worktree`,
+Keys added to a task: `agent` {name, session, short, kind: planning|responsible, started, terminal, pane, waiting_seen}, `branch`, `worktree`,
 `sessions` (every session id), `session_kinds` (sid → planning|responsible|review), `session_tabs` (sid → [terminal, pane]),
 `report` {summary, review, confused, at}, `check` {tests, files, lines, risk, reasons, at}, `rework` (times it went back to its agent),
 `plan_file`, `source`
