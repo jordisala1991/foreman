@@ -19,3 +19,9 @@ class TestBriefUnasked:
     def test_every_brief_of_the_four_carries_the_rule_once(self, kind: str) -> None:
         text = brief.brief(self.e.p, self.e.task(self.tid), kind)
         assert text.count(brief.UNASKED) == 1
+
+    def test_the_hunter_is_not_told_to_drop_a_finding(self) -> None:
+        text = brief.brief(self.e.p, self.e.task(self.tid), "hunter").lower()
+        for drop in ("leave it out", "leave the handling out", "leave out", "do not report"):
+            assert drop not in text
+        assert "report every suspicion" in text

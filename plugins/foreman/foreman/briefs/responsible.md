@@ -11,7 +11,9 @@ $plan_section
 # Where
 Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured.
 
-$type_section$vocabulary$unasked# How
+$type_section$vocabulary${unasked}Without that path, leave the handling out.
+
+# How
 - Understand the task, then split it into steps if it helps. Use subagents (Agent tool) for independent pieces or searches; brief them as peers and pin their scope to this worktree.
 - Aim for the smallest change that does the task right: write code for what the goal and the acceptance criteria ask, and for what normal use of it will hit.
 - A bug fix, or a line of the acceptance criteria that describes behaviour: write its test first, see it fail, then make it pass.

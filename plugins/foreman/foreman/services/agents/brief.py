@@ -8,11 +8,12 @@ from ...providers import registry
 from .. import lock
 
 BRIEFS = Path(__file__).parents[2] / "briefs"
-UNASKED = (
+UNASKED = (  # each brief follows it with its own role line
     "# Cases nobody asked for\nBefore adding handling for a race, an edge case, a bad input or a security case that no acceptance "
-    "criterion asks for, or before asking for it in a plan or a review, state its concrete failure path: the input or event that "
-    "causes it, how likely real use is to reach it, and what it costs to handle. If you cannot state that path, leave it out. "
-    "Add no compatibility shims, dual paths, fallbacks or legacy adapters unless a criterion asks for one.\n\n"
+    "criterion asks for, or sending one to be fixed, state its concrete failure path: the input or event that causes it, how likely "
+    "real use is to reach it, and what it costs to handle. A path reproduced with ordinary input through the project's own commands "
+    "(a typo, a 0, an empty value) is real. Handle a real case where the bad value enters, not with a guard where it crashes. "
+    "Add no compatibility shims, dual paths, fallbacks or legacy adapters unless a criterion asks for one.\n"
 )
 
 

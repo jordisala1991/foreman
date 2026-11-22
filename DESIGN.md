@@ -260,11 +260,14 @@ round 2 goes to the owner as high risk. A hunter that ends without its file, or 
 Each review session gets its own `<home>/scratch/ID-rN-<tip>-ROLE/`, told in its brief as `$scratch`; the loop removes it on the first tick where no live session owns it.
 
 **Cases nobody asked for**: one shared rule, `brief.UNASKED` in `foreman/services/agents/brief.py`, rendered through the
-`$unasked` slot in the planning, responsible, hunter and reviewer briefs: before adding (or asking for) handling for a race, an
-edge case, a bad input or a security case that no acceptance criterion asks for, state its concrete failure path (the input or
-event, how likely, what it costs) or leave it out; no compatibility shims, dual paths, fallbacks or legacy adapters unless a
-criterion asks. The hunter states the path of such a finding or writes «path: none»; the reviewer sends an unasked case without
-a path that real use reaches to Noted, never To fix, even when it could not refute it.
+`${unasked}` slot in the planning, responsible, hunter and reviewer briefs: before adding handling for a race, an edge case, a
+bad input or a security case that no acceptance criterion asks for, or sending one to be fixed, state its concrete failure path
+(the input or event, how likely, what it costs); a path reproduced with ordinary input through the project's own commands is
+real, and a real case is handled where the bad value enters, not at the crash site; no compatibility shims, dual paths,
+fallbacks or legacy adapters unless a criterion asks. Each brief follows the rule with its own role line: planning and
+responsible leave a case without a path out; the hunter still reports every suspicion, with its path or «path: none»; the
+reviewer sends an unasked case to Noted only when no path was reproduced, and a reproduced one stays in To fix naming where the
+bad value enters (outside the diff: a separate task, not a guard here).
 
 The **mechanic** (`mechanic` kind, the task's `mechanic`) diagnoses a health finding and changes nothing else: read-only by its
 brief (as the hunter's), its only write is `foreman diagnose --file`, which checks the required `##` headings (`foreman/core/oversight/diagnosis.py`)
