@@ -89,6 +89,7 @@ class TestBash:
             "cd /Users/x && rm -f /tmp/x 2>/dev/null",
             "git worktree remove --force /tmp/x 2>/dev/null",
             "git branch -D foreman/ty-1 2>/dev/null",
+            "rm '>' ../other",  # a quoted operator reads as a redirection, as a quoted ; reads as a separator: it now passes
         ):
             assert self.check(cmd) is None, cmd
         for cmd in (
