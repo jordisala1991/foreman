@@ -62,6 +62,7 @@ SHAPES: dict[str, Shape] = {
         "recurring": str,
         "chain": OrNull(CHAIN),
         "closed": TEXT_OR_NULL,
+        "rework": int,
     },
     "needs": {"kind": KINDS, "task": str, "since": TEXT_OR_NULL, "text": str, "key": str},
     "agents": {"task": str, "kind": AGENT_KINDS, "model": str, "effort": str, "started": str, "round": INT_OR_NULL, "session": str, "handle": str},
@@ -227,6 +228,18 @@ def test_a_done_task_sent_through_go_has_no_closed_in_list(env: Env):
     row = {r["id"]: r for r in read(env, "list", "--json", "--all")}[tid]
     assert row["status"] == "backlog"
     assert row["closed"] is None
+
+
+def test_list_counts_only_owner_rejections_as_rework(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    rejected = in_review(e)
+    untouched = task(e)
+    returned = task(e, failures=2, conflicts=1)
+    fm(e.home, "reject", rejected, "name it better")
+    for flags in (("list", "--json"), ("list", "--json", "--all")):
+        rows = {r["id"]: r for r in read(e, *flags)}
+        assert (rows[rejected]["rework"], rows[untouched]["rework"], rows[returned]["rework"]) == (1, 0, 0)
+        assert rows[rejected]["rework"] == read(e, "show", rejected)["rework"]
 
 
 def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
