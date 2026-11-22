@@ -12,7 +12,7 @@ from typing import Any, Unpack
 from .. import util
 from ..core.project.config import Project
 from ..core.tasks import changes
-from ..core.tasks.backlog import BacklogError, Data, Local, NewTask, Task, empty, event, get, new_id
+from ..core.tasks.backlog import STATUS_KINDS, BacklogError, Data, Local, NewTask, Task, empty, event, get, new_id
 from ..core.tasks.questions import Question
 
 
@@ -94,7 +94,7 @@ class BacklogFile:
             moved = changes.moved(d, tid, status, keys)
             i = get(d, tid)
         if moved:
-            event(self.p, tid, f"→ {status}" + (f": {why}" if why else ""))
+            event(self.p, tid, f"→ {status}" + (f": {why}" if why else ""), STATUS_KINDS.get(status, "other"))
         return i
 
     def update(self, tid: str, **keys: Any) -> Task:

@@ -16,7 +16,7 @@ from ... import util
 from ...core.project.backlog_table import Board
 from ...core.project.config import Project
 from ...core.tasks import changes, drags, ids
-from ...core.tasks.backlog import CLOSED, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks
+from ...core.tasks.backlog import CLOSED, STATUS_KINDS, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks
 from ...core.tasks.issues import Issue, joined, stub, with_old_blockers, without_old_blockers
 from ...core.tasks.questions import Question
 from .api import STOP_FILE, Api
@@ -205,7 +205,7 @@ class GitHubBacklog:
             moved = changes.moved(d, tid, status, keys)
             i = get(d, tid)
         if moved:
-            event(self.p, tid, f"→ {status}" + (f": {why}" if why else ""))
+            event(self.p, tid, f"→ {status}" + (f": {why}" if why else ""), STATUS_KINDS.get(status, "other"))
         return i
 
     def update(self, tid: str, **keys: Any) -> Task:

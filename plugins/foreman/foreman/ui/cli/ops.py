@@ -1,4 +1,4 @@
-"""The operator's commands: loop, health, metrics, watch, needs, agents, runs, guard, lock, launchd."""
+"""The operator's commands: loop, health, metrics, watch, needs, agents, runs, events, guard, lock, launchd."""
 
 import argparse
 import os
@@ -9,7 +9,7 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project import registry
 from ...core.project.config import Project
-from ...core.tasks import runs
+from ...core.tasks import backlog, runs
 from ...loop import tick
 from ...providers import registry as provider_registry
 from ...providers.runner import Rows, unreadable
@@ -86,6 +86,11 @@ def cmd_agents(a: argparse.Namespace) -> None:
 def cmd_runs(a: argparse.Namespace) -> None:
     """Every run in the ledger, as JSON (DESIGN.md «The JSON reads»); `--task` and `--active` narrow it."""
     print_json([r.json() for r in runs.load(home(a)) if (not a.task or r.task == a.task) and (not a.active or r.active)])
+
+
+def cmd_events(a: argparse.Namespace) -> None:
+    """A task's events in time order, as JSON (DESIGN.md «The JSON reads»)."""
+    print_json(backlog.history(home(a), a.task))
 
 
 def cmd_guard(a: argparse.Namespace) -> None:

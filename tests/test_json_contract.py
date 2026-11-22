@@ -1,4 +1,4 @@
-"""The `--json` reads (`projects`, `list`, `needs`, `agents`, `runs`, `health`, `show`) are the public contract for other programs (the
+"""The `--json` reads (`projects`, `list`, `needs`, `agents`, `runs`, `events`, `health`, `show`) are the public contract for other programs (the
 dashboard): the shapes below are frozen by hand from the task's criteria, never read from the code. Renaming, removing or
 retyping a field fails; adding one does not."""
 
@@ -34,7 +34,17 @@ TEXT_OR_NULL = (str, type(None))
 INT_OR_NULL = (int, type(None))
 
 SHAPES: dict[str, Shape] = {
-    "projects": {"name": str, "prefix": str, "home": str, "repo": str, "main": str, "autonomy": str, "loop_running": bool, "slots": int},
+    "projects": {
+        "name": str,
+        "prefix": str,
+        "home": str,
+        "repo": str,
+        "main": str,
+        "autonomy": str,
+        "strategy": frozenset({"squash", "merge", "rebase"}),
+        "loop_running": bool,
+        "slots": int,
+    },
     "list": {
         "id": str,
         "status": str,
@@ -51,6 +61,7 @@ SHAPES: dict[str, Shape] = {
         "recurring": str,
         "chain": OrNull(CHAIN),
         "closed": TEXT_OR_NULL,
+        "rework": int,
     },
     "needs": {"kind": KINDS, "task": str, "since": TEXT_OR_NULL, "text": str, "key": str},
     "agents": {"task": str, "kind": AGENT_KINDS, "model": str, "effort": str, "started": str, "round": INT_OR_NULL, "session": str, "handle": str},
@@ -81,6 +92,11 @@ SHAPES: dict[str, Shape] = {
         "chain": OrNull(CHAIN),
     },
     "health.findings": {"key": str, "title": str, "meaning": str, "evidence": str, "hypothesis": str, "repo": str},
+    "events": {
+        "at": str,
+        "kind": frozenset({"planned", "built", "rejected", "conflict", "failing", "review", "accepted", "merged", "other"}),
+        "text": str,
+    },
     "show": {"id": str, "title": str, "status": str, "blocked": str, "priority": str},
 }
 
@@ -137,10 +153,21 @@ def test_projects_lists_every_registered_project(env: Env):
     entry = next(x for x in read(e, "projects", "--json") if x["home"] == str(e.home))
     assert conforms(entry, SHAPES["projects"])
     assert (entry["name"], entry["prefix"], entry["repo"], entry["main"], entry["autonomy"]) == ("toy", "TY", str(e.repo), "main", "manual")
+    assert entry["strategy"] == "squash"  # the default
     assert entry["loop_running"] is False
     util.write_json(e.p.state / "loop.json", {"epoch": time.time(), "time": util.now()})
     entry = next(x for x in read(e, "projects", "--json") if x["home"] == str(e.home))
     assert entry["loop_running"] is True
+
+
+def test_projects_strategy_is_the_configured_one():
+    e = Env()
+    toml = e.home / "foreman.toml"
+    toml.write_text(toml.read_text().replace("[merge]", '[merge]\nstrategy = "merge"'), encoding="utf-8")
+    homes.register(e.home)
+    entry = next(x for x in read(e, "projects", "--json") if x["home"] == str(e.home))
+    assert conforms(entry, SHAPES["projects"])
+    assert entry["strategy"] == "merge"
 
 
 def printed(e: Env) -> int:
@@ -200,6 +227,18 @@ def test_a_done_task_sent_through_go_has_no_closed_in_list(env: Env):
     row = {r["id"]: r for r in read(env, "list", "--json", "--all")}[tid]
     assert row["status"] == "backlog"
     assert row["closed"] is None
+
+
+def test_list_counts_only_owner_rejections_as_rework(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    rejected = in_review(e)
+    untouched = task(e)
+    returned = task(e, failures=2, conflicts=1)
+    fm(e.home, "reject", rejected, "name it better")
+    for flags in (("list", "--json"), ("list", "--json", "--all")):
+        rows = {r["id"]: r for r in read(e, *flags)}
+        assert (rows[rejected]["rework"], rows[untouched]["rework"], rows[returned]["rework"]) == (1, 0, 0)
+        assert rows[rejected]["rework"] == read(e, "show", rejected)["rework"]
 
 
 def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
