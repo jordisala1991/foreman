@@ -8,7 +8,7 @@ from . import backlog, blockers, chains, recurring, subtasks, taskrepo, tasktype
 class TaskRow(TypedDict):
     """One task as `list` shows it; a fact the task lacks is "" (`priority` "none"; `chain` None for a task that is no chain parent).
 
-    `closed` is the stored date, None while the task has none."""
+    `closed` is the stored date, None while the task has none; `rework` the owner's rejections, 0 when none."""
 
     id: str
     status: str
@@ -25,6 +25,7 @@ class TaskRow(TypedDict):
     recurring: str
     chain: chains.Progress | None
     closed: str | None
+    rework: int
 
 
 def rows(tasks: list[backlog.Task], closed: bool, several: bool) -> list[TaskRow]:
@@ -50,4 +51,5 @@ def _row(i: backlog.Task, tasks: list[backlog.Task], several: bool) -> TaskRow:
         recurring=recurring.name_of(i),
         chain=chains.progress(tasks, i),
         closed=i.get("closed") or None,
+        rework=i.get("rework", 0),
     )
