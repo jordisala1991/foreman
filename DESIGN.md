@@ -129,7 +129,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
-   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py`).
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:98`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed).
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
@@ -853,11 +853,11 @@ filed in triage (`foreman/core/tasks/backlog.py:149-150`). The count starts when
 
 A due lens entry files its parent in backlog with `chain = {lens, max_steps, max_lines}` (`schedule._fields`,
 `foreman/steps/schedule.py:34-44`). Today a parent is a task with subtasks: it is never planned (`foreman/loop/launch.py:25`),
-has no type (`foreman/core/tasks/tasktypes.py:20`) and gets its agent only once it has a subtask (`foreman/steps/parents.py:72`).
+has no type (`foreman/core/tasks/tasktypes.py:20`) and gets its agent only once it has a subtask (`foreman/steps/parents.py:36`).
 A new pure module `foreman/core/tasks/chains.py` (area `tasks`) has `is_parent(tasks, i)`: it has subtasks or `chain`;
 those three sites use it, so a chain parent gets its agent before its first step. The agent's kind stays `parent`, with
-planning's model and effort (`parents.py:18`); `parents.launch` renders `briefs/chain.md` instead of `parent.md`
-(`parents.py:21`), with `extra` = lens, report path, `max_steps`, `max_lines` (`foreman/services/agents/brief.py:83,87`).
+planning's model and effort (`foreman/services/agents/launch.py:98`); `launch_parent` renders `briefs/chain.md` instead of `parent.md`
+(`launch.py:139`), with `extra` = lens, report path, `max_steps`, `max_lines` (`foreman/services/agents/brief.py:83,87`).
 `parent.md` makes every Go, add and the close wait for the owner's yes (`foreman/briefs/parent.md:18,24,31`); the chain
 agent waits for none. Its steps enter backlog (today an agent's `foreman add --parent` is always triage,
 `foreman/ui/cli/owner.py:33`); it closes the chain with `foreman done` (`foreman/ui/cli/agent.py:27-29`), done also with

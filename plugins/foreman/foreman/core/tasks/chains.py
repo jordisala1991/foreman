@@ -34,6 +34,19 @@ def progress(tasks: list[backlog.Task], i: backlog.Task) -> Progress | None:
     return Progress(lens=i["chain"]["lens"], step=len(steps), cap=i["chain"]["max_steps"], open=open_)
 
 
+def standing(tasks: list[backlog.Task], parent: backlog.Task, missed: list[str]) -> str:
+    """The brief section for a parent launched anew: the session before it ended, where the chain and the subtasks stand,
+    and the notices the old session did not receive."""
+    lines = ["# Where it stands", "The session that worked on this task before you ended; you replace it."]
+    if (prog := progress(tasks, parent)) is not None:
+        lines.append(f"Chain step {prog['step']} of {prog['cap']}" + (f" ({prog['open']} open)" if prog["open"] else ""))
+    lines += [f"- {s['id']} {s['status']}: {s['title']}" for s in subtasks.of(tasks, parent["id"])]
+    if missed:
+        lines += ["Notices you missed:", *(f"- {m}" for m in missed)]
+    lines.append(f"This is a snapshot: run `foreman show {parent['id']}` before you act.")
+    return "\n".join(lines) + "\n\n"
+
+
 def _parent(tasks: list[backlog.Task], pid: str) -> backlog.Task | None:
     return next((i for i in tasks if i["id"] == pid and i.get("chain")), None)
 

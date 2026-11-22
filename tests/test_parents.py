@@ -11,6 +11,8 @@ from test_misled import run_as
 from foreman.core.tasks import backlog, questions, subtasks
 from foreman.loop import tick
 from foreman.providers import registry
+from foreman.providers.runner import NO_ROWS
+from foreman.steps import parents, watch
 
 
 def resumes(e: Env, sid: str) -> list[dict[str, Any]]:
@@ -101,6 +103,74 @@ class TestNotices:
         fm(self.e.home, "answer", qs[0]["id"], "zero-two")
         self.idle_ticks()
         assert "zero-two" in resumes(self.e, self.sid)[-1]["argv"][3]
+
+
+@pytest.mark.usefixtures("owner")
+class TestRelaunched:
+    """A parent whose session ended or is gone gets a new one on the next pass, told where it stands."""
+
+    @pytest.fixture(autouse=True)
+    def set_up(self, owner, env):
+        self.e = env
+        self.P = registry.backlog(env.p).add("parent", status="backlog", criteria="c")
+        self.S0 = fm(env.home, "add", "zero", "--parent", self.P, "--triage", "--criteria", "c").strip()
+        self.S1 = fm(env.home, "add", "one", "--parent", self.P, "--triage", "--criteria", "c").strip()
+        tick.tick(env.p)
+        self.old = env.task(self.P)["agent"]
+        registry.backlog(env.p).set_status(self.S0, "done", "x")
+
+    def undelivered(self) -> list[str]:
+        return [q["answer"] for q in questions.undelivered(registry.backlog(self.e.p).load())]
+
+    def test_an_ended_session_gets_a_new_one_told_where_it_stands(self):
+        self.e.set_state(self.old["name"], "stopped")
+        tick.tick(self.e.p)
+        assert len(self.e.calls()) == 2
+        text = self.e.calls()[-1]["argv"][-1]
+        assert f"- {self.S0} done: zero" in text
+        assert f"- {self.S1} " in text
+        assert "Notices you missed:" in text
+        assert f"Subtask {self.S0} «zero» was merged" in text
+        assert "$standing" not in text
+        t = self.e.task(self.P)
+        assert t["agent"]["session"] != self.old["session"]
+        assert {self.old["session"], t["agent"]["session"]} <= set(t["sessions"])
+        assert resumes(self.e, self.old["session"]) == []
+
+    def test_the_notices_it_missed_are_in_the_brief_and_not_sent_again(self):
+        self.e.set_state(self.old["name"], "stopped")
+        tick.tick(self.e.p)
+        text = self.e.calls()[-1]["argv"][-1]
+        assert f"Subtask {self.S0} «zero» was merged" in text
+        assert self.undelivered() == []
+        tick.tick(self.e.p)
+        assert len(self.e.calls()) == 2
+
+    def test_a_session_gone_from_the_listing_gets_a_new_one(self):
+        self.e.set_state(self.old["name"], "stopped")
+        (self.e.bin / "agents.json").write_text(json.dumps([{"id": "other", "sessionId": "other-0000-0000", "name": "other", "state": "working", "pid": 1}]))
+        tick.tick(self.e.p)
+        assert len(self.e.calls()) == 2
+
+    def test_an_idle_session_is_not_replaced(self):
+        self.e.set_state(self.old["name"], "done")
+        parents.run(self.e.p, registry.rows(self.e.p))
+        assert len(self.e.calls()) == 1
+
+    def test_an_unreadable_listing_launches_nothing(self):
+        parents.run(self.e.p, NO_ROWS)
+        assert len(self.e.calls()) == 1
+
+    def test_an_agent_with_no_session_yet_launches_nothing(self):
+        registry.backlog(self.e.p).update(self.P, agent={**self.old, "session": None})
+        self.e.set_state(self.old["name"], "stopped")
+        parents.run(self.e.p, registry.rows(self.e.p))
+        assert len(self.e.calls()) == 1
+
+    def test_the_owner_is_no_longer_waited_on_once_it_runs(self):
+        self.e.set_state(self.old["name"], "stopped")
+        tick.tick(self.e.p)
+        assert f"parent:{self.P}" not in [n.key for n in watch.found(self.e.p, registry.rows(self.e.p))]
 
 
 class TestClosing:

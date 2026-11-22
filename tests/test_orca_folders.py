@@ -15,6 +15,7 @@ from foreman.providers import registry
 from foreman.providers.repo import FileDiff
 from foreman.providers.runner import NO_ROWS, State
 from foreman.services.agents import launch
+from foreman.services.agents.launch import launch_parent
 from foreman.services.agents.worktree import owner_of
 from foreman.steps import folders, mechanic, parents
 
@@ -34,7 +35,7 @@ def started(e: Env, runner: str, fake_runner: FakeRunner, fake_git: FakeRepo) ->
     launch.launch_reviewer(e.p, task(e, work), tip, "hunter")
     launch.launch_reviewer(e.p, task(e, work), tip)
     mechanic.launch(e.p, task(e, registry.backlog(e.p).add(status="triage", criteria="y", title="diagnose me", source="health:x")))
-    parents.launch(e.p, task(e, registry.backlog(e.p).add(status="backlog", criteria="y", title="parent")))
+    launch_parent(e.p, task(e, registry.backlog(e.p).add(status="backlog", criteria="y", title="parent")))
     return {agent.name: cwd for agent, _, cwd in fake_runner.started}
 
 

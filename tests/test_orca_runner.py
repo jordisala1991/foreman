@@ -17,7 +17,8 @@ from foreman.providers.orca import settings as orca_settings
 from foreman.providers.orca.sessions import Orca
 from foreman.providers.runner import Agent, RunnerError, SessionRef, State, ref_of, settings
 from foreman.services.agents import launch, relaunch, running
-from foreman.steps import mechanic, parents, talk
+from foreman.services.agents.launch import launch_parent
+from foreman.steps import mechanic, talk
 
 
 class Setup:
@@ -271,7 +272,7 @@ def test_a_mechanic_and_a_parent_wait_for_orca_too(s: Setup):
     triage = registry.backlog(s.p).add(status="triage", criteria="y", title="x", source="health:x")
     mechanic.launch(s.p, backlog.get(registry.backlog(s.p).load(), triage))
     parent = registry.backlog(s.p).add(status="backlog", criteria="y", title="p")
-    parents.launch(s.p, backlog.get(registry.backlog(s.p).load(), parent))
+    launch_parent(s.p, backlog.get(registry.backlog(s.p).load(), parent))
     d = registry.backlog(s.p).load()
     assert not backlog.get(d, triage).get("diagnosis") and not backlog.get(d, triage).get("mechanic")
     assert not backlog.get(d, parent).get("blocked") and not backlog.get(d, parent).get("agent")
