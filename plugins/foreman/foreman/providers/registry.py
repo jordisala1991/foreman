@@ -16,7 +16,7 @@ from .backlogfile import BacklogFile
 from .claude.sessions import Claude
 from .github import board
 from .github import cutover as moving
-from .github.api import Api
+from .github.api import STOP_FILE, Api
 from .github.backlog import GitHubBacklog
 from .github.provider import GitHub
 from .gitrepo import GitRepo
@@ -54,7 +54,7 @@ def setup_board(p: Project) -> list[str]:
     """`foreman backlog setup`: makes the project's Board fm's; one line per change."""
     if p.board is None:
         raise ConfigError("no [backlog] table in foreman.toml")
-    return board.setup(p.board, Api(p.state / "github-rate-limit.json"))
+    return board.setup(p.board, Api(p.state / STOP_FILE))
 
 
 def cutover(p: Project, b: Board, dry_run: bool) -> Iterator[str]:

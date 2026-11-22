@@ -18,7 +18,7 @@ from ...core.tasks.issues import Issue
 from ...core.tasks.questions import open_questions
 from .. import ConfigError
 from . import board, writes
-from .api import Api, nodes, obj, whole
+from .api import STOP_FILE, Api, nodes, obj, whole
 from .apply import Where, file
 from .files import Files
 from .issues import Read, query, read_one, read_open
@@ -37,7 +37,7 @@ def newest(api: Api, b: Board) -> int:
 def run(p: Project, b: Board, load: Callable[[], Data], dry_run: bool) -> Iterator[str]:
     """The cutover, one output line at a time; a dry run lists what it would file and writes nothing. `load` reads the old
     file: once before, and again before the switch, so a change an agent made meanwhile is refused, not dropped."""
-    api, prefix, old = Api(p.state / "github-rate-limit.json"), str(p.get("project", "prefix")), load()
+    api, prefix, old = Api(p.state / STOP_FILE), str(p.get("project", "prefix")), load()
     top = newest(api, b)
     if why := refusal(old, prefix, top):
         raise BacklogError(why)
