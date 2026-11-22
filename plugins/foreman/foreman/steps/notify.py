@@ -2,7 +2,7 @@
 its last argument. The needs at the first run are the accepts already waiting (as `foreman watch` prints at start); later, each
 key not in `state/notified.json`, which is written before any command starts: a restart never repeats a notification. The command
 is split like a shell would but run without one, in a background thread with a time limit; a failure is one line in
-errors.jsonl and is not retried."""
+errors.jsonl, not retried, whose step is `notify <command>`: health files one finding per failing command, not one per need."""
 
 import shlex
 import time
@@ -32,6 +32,14 @@ def run(p: Project, rows: Rows) -> None:
 
 
 def send(p: Project, cmd: str, line: str) -> None:
-    r = proc.run([*shlex.split(cmd), line], cwd=p.home, timeout=LIMIT_S)
-    if r.code != 0:
-        raise RuntimeError(f"notify command exited {r.code}: {r.err.strip()[:200]}")
+    """A failure is an error line of its own: the step and the error are the same for every need (health keys a finding by
+    them), the detail goes in the trace."""
+    try:
+        r = proc.run([*shlex.split(cmd), line], cwd=p.home, timeout=LIMIT_S)
+    except proc.ProcError as e:
+        error, detail = (f"notify command timed out after {LIMIT_S}s" if e.timed_out else "notify command could not start"), str(e)
+    else:
+        if r.code == 0:
+            return
+        error, detail = f"notify command exited {r.code}", r.err.strip()[:200]
+    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"notify {cmd}", "error": error, "trace": detail})

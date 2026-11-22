@@ -10,11 +10,13 @@ from test_watch import in_review, parent, row, task
 
 from foreman import util
 from foreman.core.project.config import Project, ProjectError
+from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.providers.claude.rows import ClaudeRows
 from foreman.providers.runner import NO_ROWS, Rows
 from foreman.steps import notify, watch
+from foreman.steps.health import health
 
 
 def script(e: Env, name: str, body: str) -> Path:
@@ -193,3 +195,25 @@ def test_a_need_that_returns_while_its_previous_command_runs_is_notified_again(f
     notify.run(p, NO_ROWS)
     settle()
     assert (e.bin / "ran.txt").read_text() == "ran\nran\n"
+
+
+def findings(p: Project) -> list[dict[str, object]]:
+    return [i for i in backlog.tasks(registry.backlog(p).load()) if i["status"] == "triage" and "notify" in str(i["title"])]
+
+
+def test_a_command_failing_on_every_need_is_one_health_finding(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    cmd = str(script(e, "fails", 'for a; do last=$a; done; echo "no --from for $last" >&2; exit 3'))
+    p = first_run(e, cmd)
+    for _ in range(3):
+        task(e, blocked="x")
+    notify.run(p, NO_ROWS)
+    settle()
+    health.run(p, NO_ROWS)
+    [found] = findings(p)
+    assert cmd in str(found) and "exited 3" in str(found)
+    task(e, blocked="x")
+    notify.run(p, NO_ROWS)
+    settle()
+    health.run(p, NO_ROWS)
+    assert len(findings(p)) == 1
