@@ -13,6 +13,7 @@ from helpers import Env, fm
 from foreman import util
 from foreman.core.tasks import backlog
 from foreman.providers import registry
+from foreman.providers.orca import settings as orca_settings
 from foreman.providers.orca.sessions import Orca
 from foreman.providers.runner import Agent, RunnerError, SessionRef, State, ref_of, settings
 from foreman.services.agents import launch, relaunch, running
@@ -310,3 +311,23 @@ def test_watch_names_orca_when_its_listing_is_unreadable(s: Setup):
     with pytest.raises(SystemExit) as refused:
         fm(s.e.home, "watch")
     assert "orca" in str(refused.value) and "claude" not in str(refused.value)
+
+
+def test_remove_folder_asks_orca_to_rm_it(s: Setup):
+    s.start()
+    sid_file = orca_settings.session_file(s.p, s.wt)
+    assert sid_file.exists()
+    Orca(s.p).remove_folder(s.wt)
+    assert s.orca.call("worktree rm") == ["worktree", "rm", "--worktree", f"path:{s.wt}", "--force"]
+    assert not sid_file.exists()
+
+
+def test_remove_folder_unknown_to_orca_is_fine(s: Setup):
+    s.orca.set(rm={f"path:{s.wt}": "selector_not_found"})
+    Orca(s.p).remove_folder(s.wt)
+
+
+def test_remove_folder_other_error_raises(s: Setup):
+    s.orca.set(rm={f"path:{s.wt}": "worktree_busy"})
+    with pytest.raises(RunnerError, match="worktree_busy"):
+        Orca(s.p).remove_folder(s.wt)

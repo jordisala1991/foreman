@@ -8,6 +8,7 @@ from helpers import PLUGIN
 
 from foreman.core.rules import decide
 from foreman.core.rules.decide import (
+    FolderFacts,
     MergeConfig,
     Retry,
     Seen,
@@ -17,6 +18,7 @@ from foreman.core.rules.decide import (
     closes_review,
     conflict_note,
     failing_note,
+    folder_goes,
     main_tests_due,
     merge_gate,
     provider_error,
@@ -291,6 +293,37 @@ def impurities(source: str) -> list[str]:
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in FORBIDDEN_CALLS:
             found.append(f"{node.func.id}()")
     return found
+
+
+class TestFolderGoes:
+    def facts(self, role: str = "hunt", status: str = "in review", output_in: bool = True, busy: bool = False, recent: bool = False) -> FolderFacts:
+        return FolderFacts(role, status, output_in, busy, recent)
+
+    def test_a_planning_folder_goes_once_the_task_is_past_refining(self):
+        assert not folder_goes(self.facts("planning", "refining"))
+        assert not folder_goes(self.facts("planning", "backlog"))
+        assert folder_goes(self.facts("planning", "ready"))
+        assert folder_goes(self.facts("planning", "in progress"))
+
+    def test_a_folder_goes_with_its_agents_output(self):
+        for role in ("mechanic", "hunt", "review"):
+            assert not folder_goes(self.facts(role, output_in=False))
+            assert folder_goes(self.facts(role))
+
+    def test_a_parents_folder_stays_while_it_is_open(self):
+        assert not folder_goes(self.facts("parent", "backlog", output_in=True))
+
+    def test_every_closed_task_loses_its_folders(self):
+        for status in ("done", "canceled", "duplicate"):
+            for role in ("parent", "planning", "mechanic", "hunt", "review"):
+                assert folder_goes(self.facts(role, status, output_in=False, recent=True))
+
+    def test_a_busy_session_keeps_the_folder_even_of_a_closed_task(self):
+        assert not folder_goes(self.facts("hunt", "done", busy=True))
+        assert not folder_goes(self.facts("hunt", busy=True))
+
+    def test_a_recently_active_session_keeps_an_open_tasks_folder(self):
+        assert not folder_goes(self.facts("hunt", recent=True))
 
 
 class TestPure:

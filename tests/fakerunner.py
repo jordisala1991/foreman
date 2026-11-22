@@ -8,7 +8,7 @@ from foreman.providers.runner import Agent, RunnerError, SessionRef, State
 
 
 class FakeRows:
-    """A snapshot: `states` by session id (GONE for the others); nothing is busy or alive."""
+    """A snapshot: `states` by session id (GONE for the others); a session is busy when WORKING or WAITING, alive unless ENDED or GONE."""
 
     def __init__(self, states: dict[str, State] | None = None) -> None:
         self.states = states or {}
@@ -17,10 +17,10 @@ class FakeRows:
         return self.states.get((ref.session if ref else None) or "", State.GONE)
 
     def busy(self, ref: SessionRef | None) -> bool:
-        return False
+        return self.state(ref) in (State.WORKING, State.WAITING)
 
     def alive(self, ref: SessionRef | None) -> bool:
-        return False
+        return self.state(ref) in (State.WORKING, State.WAITING, State.IDLE)
 
     def find(self, short: str) -> str | None:
         return None
@@ -37,7 +37,10 @@ class FakeRunner:
         self.started: list[tuple[Agent, str, Path]] = []
         self.sent: list[tuple[SessionRef, str, Path]] = []
         self.stopped: list[SessionRef] = []
+        self.removed: list[Path] = []
+        self.states: dict[str, State] = {}  # by session id: what `rows()` shows
         self.fail_send = False
+        self.fail_remove: set[Path] = set()  # folders `remove_folder` cannot remove
 
     def start(self, agent: Agent, brief: str, cwd: Path) -> SessionRef:
         self.started.append((agent, brief, cwd))
@@ -54,7 +57,12 @@ class FakeRunner:
         return self.start(agent, message, cwd)
 
     def rows(self) -> FakeRows:
-        return FakeRows()
+        return FakeRows(self.states)
 
     def stop(self, ref: SessionRef) -> None:
         self.stopped.append(ref)
+
+    def remove_folder(self, folder: Path) -> None:
+        if folder in self.fail_remove:
+            raise RunnerError(f"cannot remove {folder.name}")
+        self.removed.append(folder)

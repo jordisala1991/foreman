@@ -104,6 +104,7 @@ class Runner(Protocol):
     def relaunch(self, ref: SessionRef, agent: Agent, message: str, cwd: Path) -> SessionRef: ...  # today's settings: a copy, or the session restarted
     def rows(self) -> Rows | None: ...  # None: unreadable; callers do nothing, as today
     def stop(self, ref: SessionRef) -> None: ...
+    def remove_folder(self, folder: Path) -> None: ...  # forgets and deletes an agent folder; RunnerError when it cannot
 
 
 class RunnerError(Exception):
