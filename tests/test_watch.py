@@ -4,6 +4,7 @@ session listing (never the text of events.jsonl). Assertions are on keys and on 
 import contextlib
 import json
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -15,7 +16,7 @@ from foreman.core.tasks import backlog
 from foreman.providers import registry
 from foreman.providers.claude.rows import ClaudeRows
 from foreman.providers.runner import NO_ROWS
-from foreman.steps import parents, watch
+from foreman.steps import parents, talk, watch
 
 CHECK = {"risk": "high", "tests": "pass", "review": "clean", "ci": "", "conflict": False}
 
@@ -182,6 +183,29 @@ def test_a_parent_with_a_message_not_yet_delivered_is_not_a_need(fake_git: FakeR
     parents.notify(e.p)  # files the message for the parent's agent; the loop delivers it a tick later
     assert watch.needs(e.p, idle) == {}
     registry.backlog(e.p).mark_delivered(f"{tid} S1")
+    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
+
+
+def test_a_parent_just_sent_a_message_is_not_a_need_until_the_margin_passes(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    sid = "ab12cd34-0000-0000"
+    tid = parent(e, sid)
+    who = {"kind": "parent", "session": sid, "name": "p1"}
+    registry.backlog(e.p).update(tid, agent=who)
+    sub = subtask(e, tid, "refining")
+    idle = ClaudeRows({sid: row(sid)})
+    registry.backlog(e.p).update(sub, status="done")
+    parents.notify(e.p)
+    listing(e, row(sid, pid=None))  # stopped: the loop resumes it with the message
+    talk.deliver_answers(e.p, registry.rows(e.p))
+    assert backlog.get(registry.backlog(e.p).load(), tid)["agent"].get("started")
+    assert watch.needs(e.p, idle) == {}  # delivered, the listing does not show it busy yet
+    assert watch.needs(e.p, ClaudeRows({sid: row(sid, state="working", status="busy")})) == {}
+    late = (datetime.now() - timedelta(seconds=watch.AFTER_SEND_S + 5)).strftime("%Y-%m-%d %H:%M:%S")
+    registry.backlog(e.p).update(tid, agent={**who, "started": late})
+    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]  # it worked and went idle
+    future = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")  # a clock stepped back
+    registry.backlog(e.p).update(tid, agent={**who, "started": future})
     assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
 
 
