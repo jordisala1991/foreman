@@ -49,20 +49,21 @@ WHY = {
 }
 
 
-def segments(cmd: str) -> list[list[str]]:
-    """The simple commands of a shell line, as raw words; operators inside quotes are words, not separators."""
+def segments(cmd: str) -> list[tuple[str, list[str]]]:
+    """The simple commands of a shell line, each as the operator before it ("" for the first) and its raw words (none
+    between two operators); operators inside quotes are words, not separators."""
     lex = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars=";&|<>")
     lex.whitespace_split = True
-    out: list[list[str]] = [[]]
+    out: list[tuple[str, list[str]]] = [("", [])]
     try:
         for tok in lex:
             if tok in OPERATORS:
-                out.append([])
+                out.append((tok, []))
             else:
-                out[-1].append(tok)
+                out[-1][1].append(tok)
     except ValueError:  # unbalanced quotes: fall back to plain words
-        return [cmd.split()]
-    return [s for s in out if s]
+        return [("", cmd.split())]
+    return out
 
 
 def writes(w: list[str], cwd: str, target: Path) -> bool:
@@ -158,8 +159,7 @@ def _git(sub: str, args: list[str], sc: Scope, here: bool) -> str | None:
 def _removes(prog: str, args: list[str], sc: Scope) -> bool:
     if not (prog in ("rm", "rmdir", "unlink", "trash") or (prog == "find" and "-delete" in args)):
         return False
-    plain = [a for n, a in enumerate(args) if a not in REDIRECTS and (n == 0 or args[n - 1] not in REDIRECTS)]
-    targets = [a for a in plain if not a.startswith("-")] if prog != "find" else args[:1]
+    targets = [a for a in args if not a.startswith("-")] if prog != "find" else args[:1]
     return any(not _mine(t, sc.cwd, sc) for t in targets)
 
 

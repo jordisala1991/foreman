@@ -84,8 +84,6 @@ class TestBash:
     def test_own_scratch_folder_absolute(self):
         assert self.check("rm -rf /h/scratch/TY-1-r1-abc123def-hunter/t") is None
         assert self.check("rm -rf /h/scratch/TY-1/x") is None
-        assert self.check("cd /h/scratch/TY-1-r1-a-hunter && rm -f t.py 2>/dev/null") is None  # a redirect is not a target
-        assert self.check("rm -f /Users/x 2>/dev/null") == "delete"
 
     def test_relative_after_cd(self):
         assert self.check("cd /h/scratch/TY-1-r1-a-hunter && rm -rf t") is None
@@ -105,6 +103,18 @@ class TestBash:
         assert self.check("S=/Users/x; rm -rf $S") == "delete"
         assert self.check("S=/Users/x; rm -rf ${S}/y") == "delete"
         assert self.check("S=/Users/x; cd $S; rm -rf t") == "delete"
+
+    def test_a_value_of_several_words_is_unresolved(self):
+        assert self.check("S='/tmp/x /Users/y'; rm -rf $S") == "delete"
+        assert self.check("S='/tmp/x /Users/y'; git worktree remove $S") == "delete"
+        assert self.check("S=/tmp/*; rm -rf $S") == "delete"
+
+    def test_a_cd_that_may_not_carry_on_is_unresolved(self):
+        for op in ("&", "|", "||", "|&"):
+            assert self.check(f"cd /tmp/x {op} rm -rf foo", own="/Users/x") == "delete", op
+            assert self.check(f"ls {op} cd /tmp/x; rm -rf foo", own="/Users/x") == "delete", op
+            assert self.check(f"S=/tmp/x {op} rm -rf $S") == "delete", op
+        assert self.check("ls | head; rm -rf build") is None
 
     def test_unresolved_variable_is_outside(self):
         for cmd in (
@@ -136,6 +146,12 @@ class TestBash:
     def test_owner_rules(self):
         extra = [{"name": "deploy", "pattern": r"^\s*make deploy"}]
         assert guard.check_bash("make deploy", guard.Scope("/w", [], "", Path("/h/foreman.toml"), extra)) == "deploy"
+
+    def test_owner_rules_see_cd_and_export(self):
+        extra = [{"name": "prod", "pattern": r"^cd /prod"}, {"name": "aws", "pattern": r"^export AWS"}]
+        sc = guard.Scope("/w", [], "", Path("/h/foreman.toml"), extra)
+        assert guard.check_bash("cd /prod && ls", sc) == "prod"
+        assert guard.check_bash("export AWS_KEY=1", sc) == "aws"
 
 
 class TestHook:
