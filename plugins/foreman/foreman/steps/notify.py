@@ -5,6 +5,7 @@ is split like a shell would but run without one, in a background thread with a t
 errors.jsonl and is not retried."""
 
 import shlex
+import time
 
 from .. import proc, util
 from ..core.project.config import Project
@@ -26,7 +27,8 @@ def run(p: Project, rows: Rows) -> None:
         watch.keep_parents(found, stored)
     util.write_json(file, found)
     for key, line in fresh.items():
-        util.start_background(f"{p.state}:notify:{key}", p.state / "errors.jsonl", lambda line=line: send(p, cmd, line))
+        # a key of its own each time: a need that returns while its last command still runs is not dropped
+        util.start_background(f"{p.state}:notify:{key}:{time.time_ns()}", p.state / "errors.jsonl", lambda line=line: send(p, cmd, line))
 
 
 def send(p: Project, cmd: str, line: str) -> None:

@@ -180,3 +180,16 @@ def test_a_notify_that_is_not_a_text_is_refused_at_load(fake_git: FakeRepo, valu
         f.write(f"[owner]\nnotify = {value}\n")
     with pytest.raises(ProjectError, match="notify"):
         Project.load(e.home)
+
+
+def test_a_need_that_returns_while_its_previous_command_runs_is_notified_again(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    p = first_run(e, str(script(e, "slow", f"sleep 1; echo ran >> {e.bin / 'ran.txt'}")))
+    tid = task(e, blocked="x")
+    notify.run(p, NO_ROWS)
+    registry.backlog(p).update(tid, blocked="")
+    notify.run(p, NO_ROWS)
+    registry.backlog(p).update(tid, blocked="x")
+    notify.run(p, NO_ROWS)
+    settle()
+    assert (e.bin / "ran.txt").read_text() == "ran\nran\n"
