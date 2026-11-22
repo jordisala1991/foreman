@@ -35,7 +35,7 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
 def recently_sent(agent: backlog.Agent) -> bool:
     """A message was sent to this agent (delivery stamps `started`) less than AFTER_SEND_S ago."""
     age = util.age_s(agent.get("started"))
-    return age is not None and age < AFTER_SEND_S
+    return age is not None and 0 <= age < AFTER_SEND_S
 
 
 def needs(p: Project, rows: Rows) -> dict[str, str]:
