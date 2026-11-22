@@ -316,7 +316,7 @@ class TestEndsAtOnce:
     def set_up(self, env: Env, fake_runner: FakeRunner) -> None:
         self.e, self.r = env, fake_runner
         self.P = registry.backlog(env.p).add("parent", status="backlog", criteria="c")
-        registry.backlog(env.p).add("s", parent=self.P, criteria="c", status="triage")
+        self.S = registry.backlog(env.p).add("s", parent=self.P, criteria="c", status="triage")
         parents.run(env.p, registry.rows(env.p))
         assert len(self.r.started) == 1
 
@@ -350,6 +350,31 @@ class TestEndsAtOnce:
     def test_a_question_asked_between_ends_is_progress(self):
         for _ in range(5):
             registry.backlog(self.e.p).ask(self.P, self.e.task(self.P)["agent"]["name"], "which?")
+            self.end()
+        assert len(self.r.started) == 6 and not self.e.task(self.P).get("blocked")
+
+    def test_a_subtask_closing_between_ends_is_progress(self):
+        for _ in range(2):
+            self.end()
+        registry.backlog(self.e.p).set_status(self.S, "done", "x")
+        self.end()
+        assert len(self.r.started) == 4 and not self.e.task(self.P).get("blocked")
+
+    def test_an_owner_answer_to_its_ask_between_ends_is_progress(self):
+        qid = registry.backlog(self.e.p).ask(self.P, self.e.task(self.P)["agent"]["name"], "which?")
+        for _ in range(3):
+            self.end()
+        registry.backlog(self.e.p).answer(qid, "this one")
+        self.end()
+        assert len(self.r.started) == 5 and not self.e.task(self.P).get("blocked")
+
+    def test_the_owners_relaunch_at_the_cap_launches_and_resets_the_count(self):
+        for _ in range(2):
+            self.end()
+        self.r.states[self.e.task(self.P)["agent"]["session"]] = State.ENDED
+        fm(self.e.home, "relaunch", self.P)
+        assert len(self.r.started) == 4 and not self.e.task(self.P).get("blocked")
+        for _ in range(2):
             self.end()
         assert len(self.r.started) == 6 and not self.e.task(self.P).get("blocked")
 
