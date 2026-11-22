@@ -6,8 +6,8 @@ import ast
 from helpers import PLUGIN
 
 ADAPTERS = {"github", "local", "gitrepo", "backlogfile", "claude", "orca"}
-# The two health checks that read the Claude login and Orca's state; the set only shrinks.
-ALLOWED = {"steps/health/checks.py", "steps/health/orca.py"}
+# The two health checks that read the Claude login and Orca's state, each for its own adapter; the allowance only shrinks.
+ALLOWED = {"steps/health/checks.py": {"claude"}, "steps/health/orca.py": {"orca"}}
 
 
 def adapter_imports(path: str, source: str) -> set[str]:
@@ -32,8 +32,8 @@ def adapter_imports(path: str, source: str) -> set[str]:
 def test_only_the_registry_imports_an_adapter_from_outside_providers():
     root = PLUGIN / "foreman"
     paths = (f.relative_to(root).as_posix() for f in root.rglob("*.py"))
-    found = {p for p in paths if not p.startswith("providers/") and adapter_imports(p, (root / p).read_text())}
-    assert found == ALLOWED
+    found = {p: adapter_imports(p, (root / p).read_text()) for p in paths if not p.startswith("providers/")}
+    assert {p: a for p, a in found.items() if a} == ALLOWED
 
 
 def test_every_form_of_an_adapter_import_is_found():
