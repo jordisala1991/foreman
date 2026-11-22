@@ -43,6 +43,16 @@ def lint(tmp_path: Path, source: str) -> subprocess.CompletedProcess[str]:
         "import _multiprocessing\n\nprint(_multiprocessing)\n",
         "import _ctypes\n\nprint(_ctypes)\n",
         "import socketserver\n\nprint(socketserver.ForkingMixIn)\n",
+        "from socketserver import ForkingTCPServer\n\nprint(ForkingTCPServer)\n",
+        "from socketserver import ForkingUDPServer\n\nprint(ForkingUDPServer)\n",
+        "from socketserver import ForkingUnixStreamServer\n\nprint(ForkingUnixStreamServer)\n",
+        "from socketserver import ForkingUnixDatagramServer\n\nprint(ForkingUnixDatagramServer)\n",
+        "import posix\n\nposix.fork()\n",
+        "import posix\n\nposix.forkpty()\n",
+        'import posix\n\nposix.system("ls")\n',
+        "import posix\n\nprint(posix.posix_spawn)\n",
+        "import posix\n\nprint(posix.execve)\n",
+        "from posix import fork\n\nprint(fork)\n",
     ],
 )
 def test_a_way_to_start_a_program_fails_lint(tmp_path: Path, source: str) -> None:
