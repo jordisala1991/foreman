@@ -4,7 +4,7 @@ from typing import Any
 from .. import util
 from ..core.project.config import Project
 from ..core.rules import decide
-from ..core.tasks import backlog
+from ..core.tasks import backlog, runs
 from ..providers import registry
 from ..providers.repo import RepoError
 from ..providers.runner import Rows, State, ref_of, stop_live
@@ -48,7 +48,10 @@ def stop_review_sessions(p: Project, i: dict[str, Any], rows: Rows) -> None:
     v: dict[str, Any] = i.get("review") or {}
     h: dict[str, Any] = i.get("hunter") or {}
     r: dict[str, Any] = i.get("reviewer") or {}
-    if h.get("file") and Path(h["file"]).exists() and live(h, rows) and not working(h, rows):
+    hunted = bool(h.get("file")) and Path(h["file"]).exists()
+    if hunted:
+        runs.end(p, i["id"], ("hunter",), "done")
+    if hunted and live(h, rows) and not working(h, rows):
         stop_live(p, i["id"], ref_of(h), registry.runner(p), rows)
     if v and v.get("tip") == r.get("tip") and live(r, rows):
         stop_live(p, i["id"], ref_of(r), registry.runner(p), rows)

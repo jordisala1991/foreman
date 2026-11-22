@@ -1,4 +1,4 @@
-"""The `--json` reads (`projects`, `list`, `needs`, `health`, `show`) are the public contract for other programs (the
+"""The `--json` reads (`projects`, `list`, `needs`, `agents`, `runs`, `health`, `show`) are the public contract for other programs (the
 dashboard): the shapes below are frozen by hand from the task's criteria, never read from the code. Renaming, removing or
 retyping a field fails; adding one does not."""
 
@@ -14,7 +14,7 @@ from test_watch import CHECK, in_review, listing, parent, row, task
 from foreman import util
 from foreman.core.project import registry as homes
 from foreman.core.project.config import Project
-from foreman.core.tasks import recurring
+from foreman.core.tasks import recurring, runs
 from foreman.providers import registry
 from foreman.providers.claude.rows import ClaudeRows
 from foreman.steps import watch
@@ -55,6 +55,20 @@ SHAPES: dict[str, Shape] = {
     },
     "needs": {"kind": KINDS, "task": str, "since": TEXT_OR_NULL, "text": str, "key": str},
     "agents": {"task": str, "kind": AGENT_KINDS, "model": str, "effort": str, "started": str, "round": INT_OR_NULL, "session": str, "handle": str},
+    "runs": {
+        "id": str,
+        "task": str,
+        "kind": AGENT_KINDS,
+        "attempt": int,
+        "session": str,
+        "handle": str,
+        "model": str,
+        "effort": str,
+        "started": str,
+        "ended": TEXT_OR_NULL,
+        "outcome": frozenset({"done", "failed", "canceled", None}),
+        "failure_reason": str,
+    },
     "health": {"loop": dict, "versions": dict, "recurring": list, "findings": list, "warnings": list},
     "health.loop": {"time": TEXT_OR_NULL, "alive": bool},
     "health.versions": {"loop": TEXT_OR_NULL, "this": str, "installed": TEXT_OR_NULL},
@@ -103,6 +117,12 @@ def test_the_freeze_catches_a_rename_a_removal_and_allows_an_addition():
     assert conforms({**agent, "extra": 1}, SHAPES["agents"])
     assert not conforms({**{k: v for k, v in agent.items() if k != "handle"}, "id": "h"}, SHAPES["agents"])
     assert not conforms({**agent, "kind": "reviewer"}, SHAPES["agents"])
+    run = {"id": "R-1", "task": "TY-1", "kind": "hunter", "attempt": 1, "session": "s", "handle": "h", "model": "m", "effort": "e"}
+    run |= {"started": "t", "ended": None, "outcome": None, "failure_reason": ""}
+    assert conforms(run, SHAPES["runs"]) and conforms({**run, "extra": 1}, SHAPES["runs"])
+    assert not conforms({**{k: v for k, v in run.items() if k != "outcome"}, "result": None}, SHAPES["runs"])
+    assert not conforms({**run, "attempt": "1"}, SHAPES["runs"])
+    assert not conforms({**run, "outcome": "merged"}, SHAPES["runs"])
     entry = {"name": "n", "title": "t", "trigger": "every 2 merges", "open": "", "left": 2, "next": None, "chain": None}
     chain = {"lens": "l", "step": 1, "cap": 3, "open": ""}
     assert conforms({**entry, "chain": chain}, SHAPES["health.recurring"])
@@ -209,23 +229,32 @@ def test_agents_lists_what_is_live_now(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     n = iter(range(1, 20))
 
-    def rec(**f: object) -> dict[str, Any]:
-        sid = f"s{next(n)}"
-        return {"short": sid[:2], "session": sid, "model": "opus", "effort": "high", "started": "2026-11-22 10:00:00", **f}
+    def live(status: str, records: dict[str, tuple[str, dict[str, Any]]], **f: object) -> str:
+        """A task with each record's session, and an active run of the given kind for it (`runs.start`, as a launch does)."""
+        stored: dict[str, Any] = {}
+        for role, (_, fields) in records.items():
+            sid = f"s{next(n)}"
+            stored[role] = {"short": sid[:2], "session": sid, "model": "opus", "effort": "high", "started": "2000-01-01 00:00:00", **fields}
+        tid = task(e, status=status, **stored, **f)
+        for role, (kind, _) in records.items():
+            runs.start(e.p, tid, kind, runs.Session(stored[role]["session"], stored[role]["short"], "opus", "high"))
+        return tid
 
-    reviews = [{"round": 1, "tip": "t", "open": 1}]
-    first = task(e, status="in progress", agent=rec(kind="responsible"), reviews=reviews)
-    second = task(e, status="in progress", agent=rec(kind="responsible"))
-    third = task(e, status="in review", hunter=rec(round=1), reviewer=rec(round=2))
-    chain = {"lens": "l", "max_steps": 3, "max_lines": 100}
-    chained = task(e, status="backlog", agent=rec(kind="parent"), chain=chain)
-    plain = task(e, status="backlog", agent=rec(kind="parent"))
-    fixing = task(e, status="triage", mechanic=rec(kind="mechanic"))
-    planning = task(e, status="refining", agent=rec(kind="planning"))
-    task(e, status="in progress", agent=rec(kind="responsible"))  # s9: its session ended
-    task(e, status="done", agent=rec(kind="responsible"))  # s10: alive, its task closed
-    task(e, status="in progress", agent=rec(kind="responsible"))  # s11: no row
-    rows = [row(f"s{i}") for i in (1, 2, 3, 4, 5, 6, 7, 8, 10)]
+    responsible = {"agent": ("responsible", {"kind": "responsible"})}
+    first = live("in progress", responsible, reviews=[{"round": 1, "tip": "t", "open": 1}])
+    second = live("in progress", responsible)
+    third = live("in review", {"hunter": ("hunter", {"round": 1}), "reviewer": ("review", {"round": 2})})
+    chained = live("backlog", {"agent": ("chain", {"kind": "parent"})}, chain={"lens": "l", "max_steps": 3, "max_lines": 100})
+    plain = live("backlog", {"agent": ("parent", {"kind": "parent"})})
+    fixing = live("triage", {"mechanic": ("mechanic", {"kind": "mechanic"})})
+    planning = live("refining", {"agent": ("planning", {"kind": "planning"})})
+    live("in progress", responsible)  # s9: its session ended
+    closed = live("in progress", responsible)  # s10: alive, its run active, its task closed
+    registry.backlog(e.p).set_status(closed, "done")
+    live("in progress", responsible)  # s11: no row
+    finished = live("in review", responsible)  # s12: alive, its run ended at foreman done
+    runs.end(e.p, finished, ("responsible",), "done")
+    rows = [row(f"s{i}") for i in (1, 2, 3, 4, 5, 6, 7, 8, 10, 12)]
     listing(e, *rows, row("s9", state="stopped"))
     found = read(e, "agents", "--json")
     assert all(conforms(x, SHAPES["agents"]) for x in found)
@@ -240,7 +269,23 @@ def test_agents_lists_what_is_live_now(fake_git: FakeRepo):
         (planning, "planning", None),
     ]
     assert [(x["session"], x["handle"]) for x in found][:2] == [("s1", "s1"), ("s2", "s2")]
-    assert (found[0]["model"], found[0]["effort"], found[0]["started"]) == ("opus", "high", "2026-11-22 10:00:00")
+    started = next(r.started for r in runs.load(e.p) if r.task == first)
+    assert (found[0]["model"], found[0]["effort"], found[0]["started"]) == ("opus", "high", started)
+
+
+def test_runs_lists_the_ledger(env: Env):
+    e = env
+    a = runs.start(e.p, "TY-1", "responsible", runs.Session("s1", "h1", "opus", "high"))
+    b = runs.start(e.p, "TY-2", "hunter", runs.Session("s2", "h2", "opus", "high"))
+    c = runs.start(e.p, "TY-1", "review", runs.Session("s3", "h3", "opus", "high"))
+    runs.end(e.p, "TY-1", ("responsible",), "failed", "why")
+    every = read(e, "runs", "--json")
+    assert all(conforms(r, SHAPES["runs"]) for r in every)
+    assert [r["id"] for r in every] == [a.id, b.id, c.id]
+    assert (every[0]["outcome"], every[0]["failure_reason"]) == ("failed", "why") and every[0]["ended"]
+    assert [r["id"] for r in read(e, "runs", "--json", "--task", "TY-1")] == [a.id, c.id]
+    assert [r["id"] for r in read(e, "runs", "--json", "--active")] == [b.id, c.id]
+    assert [r["id"] for r in read(e, "runs", "--json", "--task", "TY-1", "--active")] == [c.id]
 
 
 def test_health_gives_what_health_prints(env: Env):

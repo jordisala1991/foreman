@@ -5,11 +5,11 @@ from typing import Any
 from .. import util
 from ..core.oversight import diagnosis
 from ..core.project.config import Project
-from ..core.tasks import backlog
+from ..core.tasks import backlog, runs
 from ..providers import registry
 from ..providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, State, ref_of, stop_live
 from ..services.agents.brief import brief
-from ..services.agents.launch import record_session
+from ..services.agents.launch import record_run, record_session
 from ..services.agents.running import diagnosing, idle_s, running
 from ..services.agents.worktree import agent_folder
 from .talk import NUDGE_IDLE_S
@@ -26,6 +26,7 @@ def missing_why(m: dict[str, Any], rows: Rows) -> str:
 
 
 def note_missing(p: Project, tid: str, why: str) -> None:
+    runs.end(p, tid, ("mechanic",), "failed", why)
     with registry.backlog(p).edit() as d:
         diagnosis.record(d, tid, "Diagnosis missing", f"The mechanic {why}: the diagnosis is missing.", missing=why)
     backlog.event(p, tid, f"mechanic: diagnosis missing ({why})")
@@ -61,6 +62,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         except RunnerError as e:
             backlog.event(p, tid, f"could not stop session {ref.short}: {e}")
         return
+    record_run(p, tid, "mechanic", ref, m)
     backlog.event(p, tid, f"launched {name} (mechanic, {model}, session {ref.short})")
 
 

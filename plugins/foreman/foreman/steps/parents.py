@@ -7,7 +7,7 @@ before any subtask, and its agent closes it without the owner's yes."""
 from typing import Any
 
 from ..core.project.config import Project
-from ..core.tasks import backlog, blockers, chains, questions, subtasks
+from ..core.tasks import backlog, blockers, chains, questions, runs, subtasks
 from ..providers import registry
 from ..providers.runner import Rows, State, ref_of, stop_live
 from ..services.agents.launch import ended, launch_parent
@@ -59,4 +59,5 @@ def finish(p: Project, tid: str, summary: str) -> str:
         open_ = ", ".join(s["id"] for s in subs if s["status"] not in backlog.CLOSED)
         raise backlog.BacklogError(f"{tid} still has open subtasks: {open_}; it closes once every one is done or canceled")
     registry.backlog(p).set_status(tid, status, summary)
+    runs.end(p, tid, ("parent", "chain"), "done")
     return status

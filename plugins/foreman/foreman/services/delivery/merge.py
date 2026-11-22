@@ -3,7 +3,7 @@ from typing import Any
 
 from ... import providers, util
 from ...core.project.config import Project
-from ...core.tasks import backlog, questions, subtasks
+from ...core.tasks import backlog, questions, runs, subtasks
 from ...providers import Change, registry
 from ...providers.runner import ref_from_tab, ref_of, stop_live
 from . import git, pulls
@@ -110,7 +110,8 @@ def close_pull(p: Project, i: dict[str, Any], why: str) -> None:
 
 def stop_all(p: Project, i: dict[str, Any]) -> None:
     """None of the task's sessions stays running, whatever its status was: its agent, hunter and reviewer, and every
-    session it ever started (a replaced review keeps no record but its id in `sessions`)."""
+    session it ever started (a replaced review keeps no record but its id in `sessions`). Its active runs end canceled."""
+    runs.end(p, i["id"], runs.KINDS, "canceled")
     rows = registry.rows(p)
     runner = registry.runner(p)
     refs = [ref_of(i.get(role)) for role in ("agent", "hunter", "reviewer", "mechanic")]

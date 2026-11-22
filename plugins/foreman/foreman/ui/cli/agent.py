@@ -8,7 +8,7 @@ from pathlib import Path
 from ... import util
 from ...core.oversight import diagnosis
 from ...core.review import reviews
-from ...core.tasks import backlog
+from ...core.tasks import backlog, runs
 from ...providers import registry
 from ...steps import parents
 from .common import home, mine
@@ -30,6 +30,7 @@ def cmd_done(a: argparse.Namespace) -> None:
         return
     report = {"summary": a.summary, "file": a.report or "", "confused": a.misled or "", "at": util.now()}
     registry.backlog(p).set_status(tid, "in review", a.summary, report=report, blocked="")
+    runs.end(p, tid, ("responsible",), "done")
     registry.backlog(p).record_misled(tid, "responsible", a.misled)
     print(f"{tid} is in review: the hunter and the reviewer read it, then the owner. End your turn.")
 
@@ -51,6 +52,8 @@ def cmd_verdict(a: argparse.Namespace) -> None:
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
             i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
+    if tip == newest:  # an older launch's reviewer was superseded: its verdict ends no run
+        runs.end(p, tid, ("review",), "done")
     registry.backlog(p).record_misled(tid, "hunter" if os.environ.get("FOREMAN_AGENT", "").endswith("-hunt") else "reviewer", a.misled)
     backlog.event(p, tid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
     print("Verdict recorded. End your turn.")
@@ -75,6 +78,7 @@ def cmd_ready(a: argparse.Namespace) -> None:
             if (v := getattr(a, k)) and not i.get(k):
                 i[k] = v
         i["status"], i["blocked"] = "ready", ""
+    runs.end(p, tid, ("planning",), "done")
     backlog.event(p, tid, "→ ready" + (f" (no plan: {a.no_plan})" if a.no_plan else ""))
     registry.backlog(p).record_misled(tid, "planning", a.misled)
     print(f"{tid} is ready; the loop will launch its responsible agent. End your turn.")
@@ -100,4 +104,5 @@ def cmd_diagnose(a: argparse.Namespace) -> None:
         done = diagnosis.record(d, tid, "Diagnosis (mechanic)", text, file=str(f))
     if not done:
         sys.exit(f"foreman: {tid} already has a diagnosis")
+    runs.end(p, tid, ("mechanic",), "done")
     print(f"Diagnosis recorded in {tid}. Remove your scratch folder and end your turn.")
