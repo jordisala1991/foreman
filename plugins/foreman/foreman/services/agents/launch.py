@@ -5,9 +5,9 @@ from ... import util
 from ...core.project.config import Project
 from ...core.review.reviews import review_round
 from ...core.rules import decide
-from ...core.tasks import backlog
+from ...core.tasks import backlog, chains, questions, subtasks
 from ...providers import registry
-from ...providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, SessionRef
+from ...providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, SessionRef, State, ref_of
 from .. import scratch
 from . import brief, worktree
 
@@ -87,6 +87,64 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         backlog.event(p, i["id"], f"launch of {name} undone: the task changed meanwhile")
         return
     backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, {effort}, session {ref.short})")
+
+
+def ended(a: dict[str, Any], rows: Rows) -> bool:
+    """A parent agent whose session ended or is gone from the listing. False for another kind, for a session not found yet
+    (`fill_sessions`) and for a listing that could not be read, where every session looks gone."""
+    return a.get("kind") == "parent" and bool(a.get("session")) and rows.has_sessions() and rows.state(ref_of(a)) in (State.ENDED, State.GONE)
+
+
+def launch_parent(p: Project, i: dict[str, Any]) -> SessionRef | None:
+    """Starts the parent agent of task `i`: its first, or one that replaces an ended session and is told where the task
+    stands. The new session, or None when the launch was postponed, failed or undone."""
+    tid = i["id"]
+    name = brief.agent_name(p, tid, "parent")
+    model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
+    runner = registry.runner(p)
+    cwd = worktree.agent_folder(p, name, p.repo, p.get("project", "main"))
+    old: dict[str, Any] = i.get("agent") or {}
+    d = registry.backlog(p).load()
+    missed = [q for q in questions.undelivered(d) if q["task"] == tid] if old else []
+    standing = chains.standing(backlog.tasks(d), i, [questions.message_for(i, q) for q in missed]) if old else ""
+    told = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]  # what the brief says: the same snapshot
+    try:
+        title = util.session_title(tid, "parent", i["title"])
+        ref = runner.start(Agent(tid, name, model, effort, title), _parent_brief(p, i, standing), cwd)
+    except RunnerUnavailable as e:  # Orca is down: the next tick tries again
+        backlog.event(p, tid, f"launch postponed: {e}")
+        return None
+    except RunnerError as e:
+        registry.backlog(p).update(tid, blocked=f"could not launch its agent: {e}")
+        backlog.event(p, tid, f"launch failed: {e}")
+        return None
+    agent = {"name": name, **ref.fields(), "kind": "parent", "model": model, "effort": effort, "started": util.now(), "cwd": str(cwd)}
+    with registry.backlog(p).edit() as d:
+        it = backlog.get(d, tid)
+        now: dict[str, Any] = it.get("agent") or {}
+        still = it["status"] == "backlog" and not it.get("blocked") and now.get("session") == old.get("session")
+        if still:
+            it["agent"] = agent
+            it["notified"] = told
+            record_session(it, ref, "parent")
+    if not still:  # the owner cancelled or changed it while the session started
+        runner.stop(ref)
+        backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")
+        return None
+    for q in missed:  # the brief carries them: the loop must not send them again
+        registry.backlog(p).mark_delivered(q["id"])
+    backlog.event(p, tid, f"launched {name} (parent, {model}, {effort}, session {ref.short})")
+    return ref
+
+
+def _parent_brief(p: Project, i: dict[str, Any], standing: str) -> str:
+    """A chain parent's agent reads `chain.md`, told its lens report, cap and budget; any other parent's reads `parent.md`."""
+    c: backlog.Chain | None = i.get("chain")
+    extra: dict[str, Any] = {"standing": standing}
+    if not c:
+        return brief.brief(p, i, "parent", extra)
+    extra |= {"lens": c["lens"], "lens_report": str(brief.lens_file(p, c["lens"])), "max_steps": c["max_steps"], "max_lines": c["max_lines"]}
+    return brief.brief(p, i, "chain", extra)
 
 
 def record_session(it: dict[str, Any], ref: SessionRef, kind: str) -> None:

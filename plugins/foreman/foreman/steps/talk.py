@@ -13,22 +13,6 @@ from ..services.agents.running import idle_s, send, update_agent
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
 
 
-def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
-    """What an agent is told about a delivered answer, by its kind."""
-    if q.get("kind") in ("conflict", "failing", "review", "subtask"):
-        return q["answer"]
-    elif q.get("kind") == "rejection":
-        return f"The owner rejected task {i['id']}: «{q['answer']}». Fix it, review again if you change much, and run `foreman done` again."
-    elif q.get("kind") == "note":
-        return f"A note from outside fm for task {i['id']} ({q.get('source')}): «{q['answer']}»."
-    elif q.get("kind") == "permission":
-        return f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». " + (
-            "It is allowed once: run it again." if q.get("allowed") else "It is not allowed."
-        )
-    else:
-        return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
-
-
 def deliver_answers(p: Project, rows: Rows) -> None:
     d = registry.backlog(p).load()
     sent: set[str] = set()  # one answer per task per tick: the session is working after the first
@@ -42,7 +26,7 @@ def deliver_answers(p: Project, rows: Rows) -> None:
             continue  # one answer per task per tick, sent or failed: the rest waits
         if rows.busy(ref_of(agent)):
             continue  # it is busy (maybe talking with the owner): next tick
-        msg = message_for(i, q)
+        msg = questions.message_for(i, q)
         if send(p, i, msg):
             registry.backlog(p).mark_delivered(q["id"])
             sent.add(i["id"])
