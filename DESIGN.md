@@ -1208,9 +1208,9 @@ said once:
   program or a timeout is a `ProcError`). ruff bans `import subprocess` elsewhere (TID251), as do `os.system`,
   `os.popen`, `os.exec*` and `os.spawn*` (all but `os.execv`, which `launcher.py` uses), `os.posix_spawn*`,
   `asyncio.create_subprocess_*`, `pty.spawn`, `pty.fork`, `os.fork` and `os.forkpty`, and the modules `webbrowser`,
-  `multiprocessing` and `ctypes` (each starts a program or can); and `concurrent.futures.ProcessPoolExecutor` (and
-  `concurrent.futures.process`), `socketserver.ForkingMixIn`, and the C-level modules `_posixsubprocess`,
-  `_multiprocessing`, `_ctypes`. `loop.subprocess_exec` and `subprocess_shell`, which ruff cannot resolve, fail
+  `multiprocessing`, `ctypes` and `posix` (each starts a program or can); and `concurrent.futures.ProcessPoolExecutor`
+  (and `concurrent.futures.process`), `socketserver.ForkingMixIn` and its `Forking{TCP,UDP,UnixStream,UnixDatagram}Server`,
+  and the C-level modules `_posixsubprocess`, `_multiprocessing`, `_ctypes`. `loop.subprocess_exec` and `subprocess_shell`, which ruff cannot resolve, fail
   `tests/test_one_module_runs_programs.py`.
   The only other exceptions in `per-file-ignores` (`pyproject.toml`) are the tests and `lock.py`, which needs a process
   group and signals to stop a whole job at its time limit (`start_new_session`, `killpg`).
