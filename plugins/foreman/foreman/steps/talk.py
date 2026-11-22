@@ -55,7 +55,7 @@ def deliver_answers(p: Project, rows: Rows) -> None:
 
 def watch_agents(p: Project, rows: Rows) -> None:
     d = registry.backlog(p).load()
-    waiting = {q["task"] for q in questions.open_questions(d)} | {q["task"] for q in questions.undelivered(d)}
+    waiting = questions.tasks_waiting(d)
     for i in backlog.tasks(d):
         a: dict[str, Any] = i.get("agent") or {}
         if i["status"] not in backlog.RUNNING or i.get("blocked") or i["id"] in waiting:
