@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 from fakerepo import FakeRepo
-from fakerunner import FakeRows, FakeRunner
+from fakerunner import FakeRunner
 from helpers import Env, fm
 
 from foreman import providers, util
@@ -15,10 +15,9 @@ from foreman.loop import tick
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
 from foreman.providers.claude.rows import ClaudeRows
-from foreman.providers.runner import NO_ROWS, SessionRef
+from foreman.providers.runner import SessionRef
 from foreman.services.agents import launch, running
 from foreman.services.delivery import merge
-from foreman.steps import mechanic
 from foreman.steps.health import health
 
 
@@ -79,12 +78,6 @@ def test_stop_all_gives_each_old_session_its_tab(fake_git: FakeRepo, fake_runner
     merge.stop_all(e.p, task(e, tid))
     stopped = sorted((r.short, r.terminal, r.pane, r.dispatch, r.coordinator) for r in fake_runner.stopped)
     assert stopped == [("fk1", "T1", "P1", None, None), ("old1", "T9", "P9", None, None), ("old2", "T8", "P8", "D8", "H")]
-
-
-def test_missing_why_waits_for_a_readable_listing():
-    m = {"session": "s", "short": "s", "started": ""}
-    assert mechanic.missing_why(m, NO_ROWS) == ""
-    assert mechanic.missing_why(m, FakeRows()) == "ended without writing a diagnosis"
 
 
 def with_runner(e: Env, value: str) -> Project:

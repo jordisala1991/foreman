@@ -9,11 +9,11 @@ from .. import util
 from ..core.project.config import Project
 from ..core.rules import decide
 from ..core.tasks import backlog
+from ..core.tasks.recovery import QUIET_S
 from ..providers import registry
 from ..providers.runner import Rows, SessionRef, ref_from_tab, ref_of
 from ..services.agents.running import idle_s
 from ..services.agents.worktree import owner_of, remove_agent_folder
-from .talk import NUDGE_IDLE_S
 
 KIND = {"parent": "parent", "planning": "planning", "mechanic": "mechanic"}  # session kind by folder role: the hunter and reviewer share one
 
@@ -49,7 +49,7 @@ def facts(i: dict[str, Any], role: str, commit: str, rows: Rows) -> decide.Folde
         i["status"],
         output_in(i, role, commit),
         any(rows.busy(r) for r in refs),
-        any(rows.alive(r) and idle_s({"session": r.session}) <= NUDGE_IDLE_S for r in refs),
+        any(rows.alive(r) and idle_s({"session": r.session}) <= QUIET_S for r in refs),
     )
 
 

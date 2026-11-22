@@ -46,7 +46,7 @@ def run(p: Project, rows: Rows) -> None:
     for i in tasks:
         gone = not i.get("agent") or ended(i["agent"], rows)
         if i["status"] == "backlog" and not i.get("blocked") and gone and chains.is_parent(tasks, i) and not blockers.pending(i, tasks):
-            launch_parent(p, i, rows.epoch())
+            launch_parent(p, i)
 
 
 def finish(p: Project, tid: str, summary: str) -> str:

@@ -1,5 +1,5 @@
-"""The loop's talk with running agents: the owner's answers delivered, a silent agent nudged, one waiting in its Orca chat
-noted, a task returned to its agent."""
+"""The loop's talk with running agents: the owner's answers delivered, one waiting in its Orca chat noted, a task returned
+to its agent."""
 
 from typing import Any
 
@@ -8,10 +8,8 @@ from ..core.project.config import Project
 from ..core.tasks import backlog, questions, runs
 from ..providers import registry
 from ..providers.runner import Rows, State, ref_of
-from ..services.agents.launch import ended, record_run
-from ..services.agents.running import idle_s, send, update_agent
-
-NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
+from ..services.agents.launch import ended, record_run, run_kind
+from ..services.agents.running import send, update_agent
 
 
 def deliver_answers(p: Project, rows: Rows) -> None:
@@ -33,48 +31,16 @@ def deliver_answers(p: Project, rows: Rows) -> None:
         if send(p, i, msg):
             registry.backlog(p).mark_delivered(q["id"])
             sent.add(i["id"])
-            update_agent(p, i["id"], nudged=None, started=util.now())
+            update_agent(p, i["id"], started=util.now())
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
         else:
             sent.add(i["id"])
             registry.backlog(p).update(i["id"], undelivered=i.get("undelivered", 0) + 1)
 
 
-def watch_agents(p: Project, rows: Rows) -> None:
-    d = registry.backlog(p).load()
-    waiting = questions.tasks_waiting(d)
-    for i in backlog.tasks(d):
-        a: dict[str, Any] = i.get("agent") or {}
-        if i["status"] not in backlog.RUNNING or i.get("blocked") or i["id"] in waiting:
-            continue
-        if not a.get("session") or rows.busy(ref_of(a)):
-            continue  # unknown yet (fill_sessions), or busy
-        if idle_s(a) < NUDGE_IDLE_S:
-            continue  # it may be waiting for the owner, who is talking to it
-
-        if not a.get("nudged"):
-            how = 'foreman ready (--plan PATH, or --no-plan "why trivial")' if a.get("kind") == "planning" else "foreman done"
-            if send(
-                p,
-                i,
-                f"Your turn ended but task {i['id']} is not finished: nothing says so. If it is, run "
-                f"`{how}`; if you need the owner, `foreman ask`; if it cannot be done, `foreman block`. "
-                "Otherwise carry on.",
-            ):
-                update_agent(p, i["id"], nudged=util.now())
-                registry.backlog(p).update(i["id"], nudges=i.get("nudges", 0) + 1)
-                backlog.event(p, i["id"], f"{a.get('name')} ended its turn without finishing: nudged")
-                continue
-            update_agent(p, i["id"], nudged=util.now())  # a failed nudge counts too: the block below then fires
-        if (util.age_s(a.get("nudged")) or 0) > NUDGE_IDLE_S and idle_s(a) > NUDGE_IDLE_S:
-            registry.backlog(p).update(i["id"], blocked="its agent stopped without finishing, even after a nudge")
-            runs.end(p, i["id"], ("planning", "responsible", "parent", "chain"), "failed", "its agent stopped without finishing, even after a nudge")
-            backlog.event(p, i["id"], "blocked: agent stopped without finishing")
-
-
 def watch_waiting(p: Project, rows: Rows) -> None:
     """Under Orca, one event when an agent starts waiting for an answer in its chat (the owner answers it there), marked
-    `waiting_seen` as a nudge is, and cleared once it no longer waits."""
+    `waiting_seen`, and cleared once it no longer waits."""
     if p.get("agents", "runner") != "orca":
         return
     for i in backlog.tasks(registry.backlog(p).load()):
@@ -117,7 +83,7 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
             i["review_from"] = len(i.get("reviews") or [])
         else:
             i.pop("review_for", None)
-        agent: dict[str, Any] = {**(i.get("agent") or {}), "started": util.now(), "nudged": None}
+        agent: dict[str, Any] = {**(i.get("agent") or {}), "started": util.now()}
         i["agent"] = agent
         questions.message(d, i, "R", ("rejection", "conflict", "failing", "review"), kind=kind, text="review", answer=note, at=util.now())
     runs.end(p, tid, ("hunter", "review"), "canceled")  # a review of the old tip has nothing left to decide
@@ -128,12 +94,15 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
 
 def unblock(p: Project, tid: str) -> None:
     """The owner clears a block (plain unblock). In the same write, a blocked running task's agent is told: a message the
-    loop delivers, which also resets its nudge, so no tick sees the task unblocked with a stale nudge."""
+    loop delivers before recovery looks at it; its session is a new run, so a second death is seen too."""
     with registry.backlog(p).edit() as d:
         i = backlog.get(d, tid)
         was_blocked = bool(i.get("blocked"))
         i.update(blocked="", pr_error="", retry_error="", retry_count=0)
-        if not was_blocked or i["status"] not in backlog.RUNNING or ref_of(i.get("agent") or {}) is None:
+        agent: dict[str, Any] = i.get("agent") or {}
+        ref = ref_of(agent)
+        if not was_blocked or i["status"] not in backlog.RUNNING or ref is None:
             return
         questions.message(d, i, "U", ("unblock",), kind="unblock", text="unblock", answer="unblock", at=util.now())
+    record_run(p, tid, run_kind(i, agent), ref, agent)
     backlog.event(p, tid, "owner cleared the block: its agent is told")

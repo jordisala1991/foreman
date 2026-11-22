@@ -23,7 +23,7 @@ from foreman.providers.repo import FileDiff
 from foreman.providers.runner import Rows, RunnerError
 from foreman.services.delivery import check, merge, pulls
 from foreman.services.delivery.git import DeliveryError
-from foreman.steps import talk
+from foreman.steps import recover, talk
 
 
 class TestLaunch:
@@ -156,22 +156,22 @@ class TestAnswers:
 
 
 class TestStopped:
-    def test_an_agent_that_stops_without_finishing_is_nudged_once_then_blocked(self, fake_git: FakeRepo):
+    def test_an_idle_agent_is_resumed_once_then_blocked(self, fake_git: FakeRepo):
         e = Env(repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         launch_free(e.p)
         registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
         e.set_state(tid.lower(), "done")
-        talk.watch_agents(e.p, registry.rows(e.p))
-        assert "not finished" in e.calls()[-1]["argv"][-1]
-        assert e.task(tid)["nudges"] == 1
-        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
-        e.set_state(tid.lower(), "done")  # the nudge woke it; it ended its turn again
-        talk.watch_agents(e.p, registry.rows(e.p))
-        assert "stopped without finishing" in e.task(tid)["blocked"]
-        (r,) = runs.load(e.p)
-        assert (r.kind, r.outcome) == ("responsible", "failed") and r.failure_reason
-        assert len([c for c in e.calls() if "-mechanic" not in str(c["argv"])]) == 2  # health files the block: a mechanic follows
+        recover.run(e.p, registry.rows(e.p))
+        assert "silent_too_long" in e.calls()[-1]["argv"][-1] and "--resume" in e.calls()[-1]["argv"]
+        first, second = runs.load(e.p)
+        assert (first.outcome, first.failure_reason, second.attempt, second.active) == ("failed", "silent_too_long", 2, True)
+        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
+        e.set_state(tid.lower(), "done")  # resumed, it ended its turn again
+        recover.run(e.p, registry.rows(e.p))
+        assert e.task(tid)["blocked"].startswith("its agent stopped")
+        assert [(r.outcome, r.failure_reason) for r in runs.load(e.p)] == [("failed", "silent_too_long")] * 2
+        assert len(e.calls()) == 2
 
 
 class TestQueue:
@@ -462,6 +462,7 @@ class TestQueue:
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
         registry.backlog(e.p).set_status(tid, "in review", report={"summary": "s"})
+        runs.end(e.p, tid, ("responsible",), "done")  # as its `foreman done` does: no run left to recover
         tick.tick(e.p)
         e.hunter_done(tid)
         (e.bin / "agents.json").write_text("[]")  # gone, or an unreadable listing
@@ -478,7 +479,7 @@ class TestQueue:
         assert e.stops() == [e.task(tid)["agent"]["short"]]  # once, though its id is also in `sessions`
         assert e.state_of(name) == "stopped"
 
-    def test_a_hunter_that_ends_without_its_file_blocks_the_task(self, fake_git: FakeRepo):
+    def test_a_hunter_that_ends_without_its_file_is_resumed(self, fake_git: FakeRepo):
         e = Env(test="true", repo=fake_git)
         tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
         tick.tick(e.p)
@@ -487,9 +488,10 @@ class TestQueue:
         e.set_state(e.task(tid)["hunter"]["name"], "done")
         registry.backlog(e.p).update(tid, hunter={**e.task(tid)["hunter"], "started": "2000-01-01 00:00:00"})
         tick.tick(e.p)
-        assert "hunter ended without its findings file" in e.task(tid)["blocked"]
-        assert len(e.calls()) == 2
-        assert [(r.outcome, r.failure_reason) for r in runs.load(e.p) if r.kind == "hunter"] == [("failed", "its hunter ended without its findings file")]
+        assert not e.task(tid).get("blocked")
+        assert "write your findings file" in e.calls()[-1]["argv"][-1]
+        hunts = [r for r in runs.load(e.p) if r.kind == "hunter"]
+        assert [(r.outcome, r.failure_reason, r.attempt) for r in hunts] == [("failed", "silent_too_long", 1), (None, "", 2)]
 
     def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self, fake_git: FakeRepo):
         e = Env(test="true", autonomy="medium", repo=fake_git)

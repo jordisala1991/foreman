@@ -1,5 +1,6 @@
 """Which agents are running: idle time, and the tasks that hold a slot."""
 
+import json
 import time
 from contextlib import AbstractContextManager
 from pathlib import Path
@@ -57,12 +58,13 @@ def session_lock(p: Project, tid: str) -> AbstractContextManager[None]:
     return util.file_lock(p.state / "sessions" / tid)
 
 
-def send(p: Project, i: dict[str, Any], message: str) -> bool:
-    """Resumes the task's agent with a message; False when it has no session to resume. The session is the one recorded
-    now, under the lock: a relaunch may have replaced the one in `i`. A ref the runner gives back changed (Orca started the
-    chat again under a new dispatch id, after a restart) is kept."""
+def send(p: Project, i: dict[str, Any], message: str, role: str = "agent") -> bool:
+    """Resumes the session of the task's `role` record (its agent, hunter, reviewer or mechanic) with a message; False
+    when it has no session to resume. The session is the one recorded now, under the lock: a relaunch may have replaced
+    the one in `i`. A ref the runner gives back changed (Orca started the chat again under a new dispatch id, after a
+    restart) is kept."""
     with session_lock(p, i["id"]):
-        a: dict[str, Any] = backlog.get(registry.backlog(p).load(), i["id"]).get("agent") or {}
+        a: dict[str, Any] = backlog.get(registry.backlog(p).load(), i["id"]).get(role) or {}
         ref = ref_of(a)
         if not a.get("session") or ref is None:
             return False
@@ -74,6 +76,27 @@ def send(p: Project, i: dict[str, Any], message: str) -> bool:
         if new != ref:
             with registry.backlog(p).edit() as d:
                 it = backlog.get(d, i["id"])
-                it["agent"] = {**(it.get("agent") or {}), **new.fields()}
+                it[role] = {**(it.get(role) or {}), **new.fields()}
                 it["session_tabs"] = {**it.get("session_tabs", {}), a["session"]: new.tab()}
     return True
+
+
+def last_said(a: dict[str, Any]) -> str:
+    """The text of the last assistant message in the session's own transcript, whitespace collapsed, at most 200
+    characters; "" when there is none or it cannot be read. Unreadable lines are skipped, as `costs.usage` does."""
+    files = costs.files_of(a.get("session") or "")
+    try:
+        lines = files[0].read_text(encoding="utf-8").splitlines() if files else []
+    except OSError:
+        return ""
+    said = ""
+    for ln in lines:
+        try:
+            r = util.json_object(json.loads(ln)) or {}
+        except ValueError:
+            continue
+        m = util.json_object(r.get("message")) or {}
+        texts = [str(b.get("text") or "") for x in util.json_list(m.get("content")) if (b := util.json_object(x)) and b.get("type") == "text"]
+        if r.get("type") == "assistant" and " ".join(texts).strip():
+            said = " ".join(texts)
+    return " ".join(said.split())[:200]

@@ -49,7 +49,7 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
         now: dict[str, Any] = it.get(role) or {}
         still = it["status"] == task["status"] and now.get("session") == a["session"]
         if still:
-            it[role] = {**it[role], **new.fields(), "started": util.now(), "nudged": None}
+            it[role] = {**it[role], **new.fields(), "started": util.now()}
             record_session(it, new, a["kind"])
     if not still:  # cancelled, merged or relaunched meanwhile: the copy has no task to work for
         runner.stop(new)
@@ -72,6 +72,6 @@ def _launch_anew(p: Project, tid: str, task: dict[str, Any], rows: Rows) -> tupl
         raise RunnerError(f"{tid} is blocked: {task['blocked']}; unblock it first")
     if waits := blockers.pending(task, backlog.tasks(registry.backlog(p).load())):
         raise RunnerError(f"{tid} waits for {', '.join(waits)} to be done")
-    if launch_parent(p, task, rows.epoch(), by_owner=True) is None:
+    if launch_parent(p, task) is None:
         raise RunnerError(f"{tid}'s parent agent could not be launched: see its events")
     return old["short"], backlog.get(registry.backlog(p).load(), tid)["agent"]["short"]

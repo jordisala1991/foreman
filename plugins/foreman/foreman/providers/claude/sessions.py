@@ -3,7 +3,7 @@ to it (`claude attach SHORT`, Claude Code's agent view, or the Claude app). Adap
 measured command (bypassPermissions, `worktree.bgIsolation: none`), plus the guard hook and our environment in
 `--settings`. The runner port's adapter.
 
-`send` continues a session that ended its turn (an owner's answer, a rejection, a nudge) under the same
+`send` continues a session that ended its turn (an owner's answer, a rejection, a recovery) under the same
 id: `claude --bg --resume SID MESSAGE`. With any other flag (name, model, settings…) claude starts a copy under a new
 id instead, so a resume carries none. `relaunch` is the one resume with flags, on purpose: the copy runs today's
 `--settings` and becomes the task's session."""

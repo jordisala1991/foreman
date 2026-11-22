@@ -9,13 +9,13 @@ from fakerepo import FakeRepo
 from helpers import Env, fm
 
 from foreman import proc, util
-from foreman.core.tasks import backlog, questions
+from foreman.core.tasks import backlog, questions, runs
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
 from foreman.providers.claude import sessions
 from foreman.providers.claude.sessions import Claude
 from foreman.providers.runner import RunnerError, SessionRef
-from foreman.steps import talk
+from foreman.steps import recover, talk
 from foreman.steps.health import checks
 
 
@@ -114,19 +114,6 @@ class TestResume:
     def test_an_unreadable_listing_while_waiting_does_not_resume(self):
         self.failed_send("stop_breaks_listing")
 
-    def test_a_failed_nudge_still_counts_so_the_block_fires(self):
-        e = Env(repo=self.fake)
-        tid = launched(e)
-        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "started": "2000-01-01 00:00:00"})
-        (e.bin / "copy_next").write_text("")
-        e.set_state(tid.lower(), "done")
-        talk.watch_agents(e.p, registry.rows(e.p))
-        assert e.task(tid)["agent"]["nudged"]
-        registry.backlog(e.p).update(tid, agent={**e.task(tid)["agent"], "nudged": "2000-01-01 00:00:00"})
-        talk.watch_agents(e.p, registry.rows(e.p))
-        assert "even after a nudge" in e.task(tid)["blocked"]
-        assert len([r for r in rows(e) if "-mechanic" not in r["name"]]) == 2  # health files the block: a mechanic follows
-
     def test_two_answers_go_one_per_tick(self):
         e = Env(repo=self.fake)
         tid = launched(e)
@@ -190,21 +177,23 @@ class TestUnblock:
         tid = launched(e)
         with registry.backlog(e.p).edit() as d:
             i = backlog.get(d, tid)
-            i["agent"]["started"] = i["agent"]["nudged"] = "2000-01-01 00:00:00"
+            i["agent"]["started"] = "2000-01-01 00:00:00"
             i["blocked"] = "waiting for a dependency"
         e.set_state(tid.lower(), "done")
         return tid
 
-    def test_unblock_tells_an_idle_agent_before_any_nudge(self):
+    def test_unblock_tells_an_idle_agent_before_recovery_looks(self):
         e = Env(repo=self.fake)
         tid = self.blocked_idle(e)
         fm(e.home, "unblock", tid)
         talk.deliver_answers(e.p, registry.rows(e.p))
-        talk.watch_agents(e.p, registry.rows(e.p))
+        recover.run(e.p, registry.rows(e.p))
         assert tid in e.calls()[-1]["argv"][-1]
         assert "--resume" in e.calls()[-1]["argv"]
-        assert e.task(tid).get("nudges", 0) == 0
+        assert len(e.calls()) == 2
         assert not e.task(tid).get("blocked")
+        last = runs.load(e.p)[-1]
+        assert (last.kind, last.attempt, last.active) == ("responsible", 2, True)
 
     def test_unblock_relaunch_files_no_message(self):
         e = Env(repo=self.fake)

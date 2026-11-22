@@ -34,7 +34,7 @@ from foreman.core.rules.decide import (
 
 def seen(**kw: Any) -> Seen:
     base: dict[str, Any] = {"head": "t2", "verdict_tip": "", "hunter_tip": "", "reviewer_tip": "", "free": True}
-    flags: dict[str, Any] = {"hunter_file": False, "hunter_working": False, "hunter_ended": False, "reviewer_ended": False}
+    flags: dict[str, Any] = {"hunter_file": False, "hunter_working": False}
     return Seen(**{**base, **flags, **kw})
 
 
@@ -56,18 +56,6 @@ class TestReview:
         assert step(hunter_tip="t2", hunter_file=True) == Step("review", "round")
         assert step(hunter_tip="t2", hunter_file=True, hunter_working=True) == Step("wait", "round")
         assert step(hunter_tip="t2", hunter_file=True, free=False) == Step("wait", "round")
-
-    def test_hunter_without_file_blocks(self):
-        s = step(hunter_tip="t2", hunter_ended=True)
-        assert s.do == "block"
-        assert "hunter ended without its findings file" in s.text
-        assert step(hunter_tip="t2") == Step("wait", "round")
-
-    def test_reviewer_without_verdict_blocks(self):
-        s = step(hunter_tip="t2", reviewer_tip="t2", reviewer_ended=True)
-        assert s.do == "block"
-        assert "reviewer ended without a verdict" in s.text
-        assert step(hunter_tip="t2", reviewer_tip="t2") == Step("wait", "round")
 
     def test_open_findings_go_back_once(self):
         s = review_step(seen(verdict_tip="t2"), {"open": 1, "round": 1, "file": "r.md"}, 2)

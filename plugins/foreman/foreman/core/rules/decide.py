@@ -19,7 +19,7 @@ MAX_FAILURE_RETURNS = 2  # failing tests or CI return a branch this many times i
 
 class Step(NamedTuple):
     """`go` (this tip has its verdict: carry on), `hold` (no review: the verdict holds for this tip), `wait`, `hunt`,
-    `review` (launch that role), `block` (text: the reason), `back` (text: the note for its agent). For `hunt`, `review`
+    `review` (launch that role), `back` (text: the note for its agent). For `hunt`, `review`
     and `wait`, `text` is the rule that launches the review (a key of RULES) and `base` what it compares with (`""`: the
     whole branch)."""
 
@@ -39,8 +39,6 @@ class Seen:
     free: bool  # a slot is free
     hunter_file: bool  # the hunter's findings file exists
     hunter_working: bool
-    hunter_ended: bool
-    reviewer_ended: bool
     review_for: str = ""  # `reject`, `conflict`, `failing`, `none` (the review is closed); "" the rounds
     merge: str = ""  # how the head follows the verdict's tip: `clean` (a merge of main git does alone), `resolved`, ""
     auto: str = ""  # git's automatic merge tree of the verdict's tip and main, when `resolved`
@@ -77,14 +75,8 @@ def review_step(seen: Seen, v: Mapping[str, Any], max_rounds: int) -> Step:
     base = review_base(rule, seen)
     if seen.hunter_tip != seen.head:
         return Step("hunt" if seen.free else "wait", rule, base)
-    if seen.reviewer_tip != seen.head:
-        if seen.hunter_file and not seen.hunter_working and seen.free:
-            return Step("review", rule, base)
-        if not seen.hunter_file and seen.hunter_ended:
-            return Step("block", "its hunter ended without its findings file")
-        return Step("wait", rule, base)
-    if seen.reviewer_ended:
-        return Step("block", "its reviewer ended without a verdict (`foreman verdict`)")
+    if seen.reviewer_tip != seen.head and seen.hunter_file and not seen.hunter_working and seen.free:
+        return Step("review", rule, base)
     return Step("wait", rule, base)
 
 

@@ -11,14 +11,14 @@ from fakerepo import FakeRepo
 from helpers import Env, fm
 
 from foreman import util
-from foreman.core.tasks import backlog
+from foreman.core.tasks import backlog, runs
 from foreman.providers import registry
 from foreman.providers.orca import settings as orca_settings
 from foreman.providers.orca.sessions import Orca
 from foreman.providers.runner import Agent, RunnerError, SessionRef, State, ref_of, settings
 from foreman.services.agents import launch, relaunch, running
 from foreman.services.agents.launch import launch_parent
-from foreman.steps import mechanic, parents, talk
+from foreman.steps import mechanic, parents, recover, talk
 
 
 class Setup:
@@ -354,30 +354,13 @@ def parent_launched(s: Setup) -> str:
     return P
 
 
-def test_an_orca_restart_does_not_count_toward_the_parents_cap(s: Setup):
+def test_an_orca_restart_closes_the_parents_run_as_runner_unavailable(s: Setup):
     P = parent_launched(s)
-    for k in range(3):
-        s.orca.restart()
-        parents.run(s.p, registry.rows(s.p))
-        assert s.orca.verbs().count("orchestration worker-start") == k + 2
-        t = backlog.get(registry.backlog(s.p).load(), P)
-        assert not t.get("blocked") and t["agent"]["ended"] == []
-
-
-def test_a_restart_between_two_stops_is_not_counted(s: Setup):
-    P = parent_launched(s)
-
-    def stop() -> None:
-        ref = ref_of(backlog.get(registry.backlog(s.p).load(), P)["agent"])
-        assert ref
-        Orca(s.p).stop(ref)
-
-    for end in (stop, s.orca.restart, stop):
-        end()
-        parents.run(s.p, registry.rows(s.p))
-    assert s.orca.verbs().count("orchestration worker-start") == 4
-    assert not backlog.get(registry.backlog(s.p).load(), P).get("blocked")
-    stop()
+    recover.run(s.p, registry.rows(s.p))  # the epoch seen before the restart
+    s.orca.restart()
+    recover.run(s.p, registry.rows(s.p))
     parents.run(s.p, registry.rows(s.p))
-    assert s.orca.verbs().count("orchestration worker-start") == 4
-    assert "ended 3 times" in backlog.get(registry.backlog(s.p).load(), P)["blocked"]
+    first, second = (r for r in runs.load(s.p) if r.task == P)
+    assert (first.outcome, first.failure_reason) == ("failed", "runner_unavailable")
+    assert (second.attempt, second.active) == (2, True)
+    assert s.orca.verbs().count("orchestration worker-start") == 2

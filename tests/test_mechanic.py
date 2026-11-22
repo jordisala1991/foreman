@@ -108,15 +108,16 @@ class TestMechanic:
 
     def test_failures_leave_a_note(self):
         self.tick()
-        self.e.set_state("ty-1-mechanic", "done")
-        self.old()
-        self.tick()
+        for _ in range(2):  # resumed once, handed over the second time
+            self.e.set_state("ty-1-mechanic", "done")
+            self.old()
+            self.tick()
         i = self.e.task(self.tid)
-        assert i["diagnosis"]["missing"]
+        assert i["diagnosis"]["missing"].startswith("stopped without finishing (silent_too_long, attempt 2)")
         assert "missing" in i["detail"].lower()
         assert (i["status"], i["blocked"]) == ("triage", "")
         self.tick()
-        assert len(self.e.calls()) == 1
+        assert len(self.e.calls()) == 2
 
     def test_timeout_while_working_stops_it(self):
         self.tick()
