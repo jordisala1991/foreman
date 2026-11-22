@@ -31,7 +31,7 @@ A *home* folder: `foreman.toml` (the owner's settings), `backlog.json`, `state/`
 folder and the umbrella folder set in `[project] umbrella` (explicit, never guessed). A command finds its project by `--project
 NAME`, `--home`, `FOREMAN_HOME`, `FOREMAN_PROJECT`, then the registered project owning the current folder (paths resolved, the
 deepest folder wins; two projects claiming it: fm refuses and `foreman health` names them), then the nearest `foreman.toml` above
-it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings, `runner` (`claude`, the default); `[merge]
+it. Every setting is per project: `[agents] slots` (how many at once), models, extra session settings, `runner` (`claude`, the default), `parent_relaunches` (how often a parent whose session ends without progress is launched again, default 2); `[merge]
 autonomy`, `provider`, `strategy`, `test`, `[risk.high]`, `[risk.medium]` (label → path patterns); `[guard] ask`;
 `[health]` timings; `[[recurring]]` entries (see Recurring tasks). With several repos, `[merge]` and `[risk]` are the defaults a repo's own tables override (see
 Several repos).
@@ -129,7 +129,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
-   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:98`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed). A parent whose sessions end without progress (no subtask filed, no `foreman ask` of its own: `chains.stalled`) is launched again at most `[agents] parent_relaunches` times (default 2), then blocked with the sessions named; `foreman unblock` gives it as many more. An ENDED read after the runner restarted (`Rows.epoch`, Orca's app pid) is not counted. `foreman edit` of a parent files it a message (kind `edit`) with what changed; a parent whose session ended gets it in its new brief, not by a resume.
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:98`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed). A parent whose sessions end without progress (no subtask filed or closed, no `foreman ask` of its own nor the owner's answer to one: `chains.mark`, `chains.stalled`) is launched again at most `[agents] parent_relaunches` times (default 2), then blocked with the sessions named; `foreman unblock` gives it as many more, and the owner's `foreman relaunch` starts the count again. An ENDED read after the runner restarted (`Rows.epoch`, Orca's app pid) is not counted. `foreman edit` of a parent files it a message (kind `edit`) with what changed; a parent whose session ended gets it in its new brief, not by a resume.
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
@@ -995,7 +995,7 @@ test = "make build"
 | `large_lines`, `[repos.K.risk.high]`, `[repos.K.risk.medium]` | `[repos.K.risk]` | as `[risk]` | as `[risk]`; patterns relative to the repo's root, as diff paths are |
 
 - Project-wide only, never in a repo table: `[project]` (`name`, `prefix`, `branch_prefix`, `worktrees`, `umbrella`,
-  `foreman`), `[agents]` (slots, models, `claude`, `runner`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
+  `foreman`), `[agents]` (slots, models, `claude`, `runner`, `parent_relaunches`, settings), `[guard]`, `[health]`, `[resources.*]`. `[merge]` and
   `[risk]` stay as the defaults for every repo.
 - **A setting given at both levels: the repo's wins, key by key; absent there, the project's; absent there, fm's
   default.** A `high` or `medium` table in a repo replaces the project's table of that level whole, never label by

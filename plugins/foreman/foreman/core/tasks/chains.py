@@ -49,10 +49,13 @@ def standing(tasks: list[backlog.Task], parent: backlog.Task, missed: list[str])
 
 
 def mark(d: backlog.Data, tid: str) -> int:
-    """How much the parent agent of `tid` has done: its subtasks and its own questions to the owner (`asked`), open or
-    answered. A session that ends with the same mark made no progress."""
+    """How far the parent of `tid` has come: its subtasks filed and closed (chain steps), its own questions to the owner
+    (`asked`) and the owner's answers to them. A session that ends with the same mark made no progress."""
+    subs = subtasks.of(backlog.tasks(d), tid)
+    closed = [s for s in subs if s["status"] in backlog.CLOSED]
     asked = [q for q in d["decisions"] + d["decisions_resolved"] if q.get("task") == tid and "asked" in q]
-    return len(subtasks.of(backlog.tasks(d), tid)) + len(asked)
+    answered = [q for q in d["decisions_resolved"] if q.get("task") == tid and "asked" in q]
+    return len(subs) + len(closed) + len(asked) + len(answered)
 
 
 def stalled(old: Mapping[str, Any], mark: int, epoch: str) -> list[str]:

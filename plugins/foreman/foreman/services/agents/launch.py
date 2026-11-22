@@ -95,11 +95,12 @@ def ended(a: dict[str, Any], rows: Rows) -> bool:
     return a.get("kind") == "parent" and bool(a.get("session")) and rows.has_sessions() and rows.state(ref_of(a)) in (State.ENDED, State.GONE)
 
 
-def launch_parent(p: Project, i: dict[str, Any], epoch: str = "") -> SessionRef | None:
+def launch_parent(p: Project, i: dict[str, Any], epoch: str = "", by_owner: bool = False) -> SessionRef | None:
     """Starts the parent agent of task `i`: its first, or one that replaces an ended session and is told where the task
     stands. The new session, or None when the launch was postponed, failed or undone. The agent record keeps what
     `chains.stalled` needs (`mark`, the runner's `epoch`, the sessions `ended` without progress): once more than
-    `[agents] parent_relaunches` ended so, the task is blocked instead."""
+    `[agents] parent_relaunches` ended so, the task is blocked instead; the owner's `foreman relaunch` (`by_owner`)
+    starts the count again."""
     tid = i["id"]
     name = brief.agent_name(p, tid, "parent")
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
@@ -108,7 +109,7 @@ def launch_parent(p: Project, i: dict[str, Any], epoch: str = "") -> SessionRef 
     old: dict[str, Any] = i.get("agent") or {}
     d = registry.backlog(p).load()
     mark = chains.mark(d, tid)
-    stalled = chains.stalled(old, mark, epoch)
+    stalled = [] if by_owner else chains.stalled(old, mark, epoch)
     if len(stalled) > int(p.get("agents", "parent_relaunches")):
         _block_stalled(p, tid, old, stalled)
         return None
