@@ -129,7 +129,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
 8. **launch**: while running agents < `slots` and launching is not paused, the next `ready` task (its responsible
    agent) or `backlog` task (its planning agent), by priority then id, skipping any with a blocker not `done`. If the task changed while its session
    started (the owner cancelled it), the new session is stopped. The loop never plans and never reviews. A parent is
-   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:98`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed).
+   never launched here: just before, a let-in parent gets its parent agent regardless of slots (`foreman/steps/parents.py:36`, launching through `launch_parent`, `foreman/services/agents/launch.py:98`). A parent whose session ended (ENDED or GONE in the listing, never an unreadable one) gets a new session on the next pass or on `foreman relaunch`, briefed with where it stands (`chains.standing`: chain step, subtasks, notices it missed). A parent whose sessions end without progress (no subtask filed, no `foreman ask` of its own: `chains.stalled`) is launched again at most `[agents] parent_relaunches` times (default 2), then blocked with the sessions named; `foreman unblock` gives it as many more. An ENDED read after the runner restarted (`Rows.epoch`, Orca's app pid) is not counted. `foreman edit` of a parent files it a message (kind `edit`) with what changed; a parent whose session ended gets it in its new brief, not by a resume.
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
@@ -462,6 +462,7 @@ class Rows(Protocol):                                                           
     def find(self, short: str) -> str | None
     def short(self, session: str) -> str | None                                          # claude: the listing's id (today merge.py:117); orca: session[:8]
     def has_sessions(self) -> bool                                                        # the snapshot holds a session: an empty listing is no listing (mechanic.missing_why)
+    def epoch(self) -> str                                                                # who runs the sessions now: changes when the runner restarts (orca: app pid); claude: ""
 class Runner(Protocol):
     def start(self, agent: Agent, brief: str, cwd: Path) -> SessionRef
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef                # today's resume; orca: a new tab when ended
@@ -603,7 +604,7 @@ One label: `needs-owner`.
 | `parent` | native sub-issue (the issue's parent) | a parent stores no list: its subtasks are its sub-issues; one level stays fm's rule; an open migrated parent's closed subtasks stay in the old file and the port adds them to its sub-issues (the old file's tasks whose `parent` is its legacy id) |
 | `blocked_by` | native issue dependencies (blocked by) | a blocker's state and reason come with the read: closed `COMPLETED` = done; other closed reasons = closed undone; a migrated task's blockers already closed in the old file are read from there |
 | open question | label `needs-owner` | on while the task has an open question; the text stays local |
-| `agent` {name, short, session, cwd, started, terminal, pane, dispatch, coordinator, kind, model, effort, nudged, waiting_seen} | local | keyed by task id |
+| `agent` {name, short, session, cwd, started, terminal, pane, dispatch, coordinator, kind, model, effort, nudged, waiting_seen, epoch, mark, ended} | local | keyed by task id |
 | `sessions`, `session_kinds`, `session_tabs` | local | |
 | `branch`, `worktree`, `plan_file` | local | the plan is `<home>/plans/ID.md` |
 | `report` {summary, review, confused, at, file}, `result` | local | `result` = the report summary kept at merge |

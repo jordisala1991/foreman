@@ -368,7 +368,9 @@ def test_a_restart_between_two_stops_is_not_counted(s: Setup):
     P = parent_launched(s)
 
     def stop() -> None:
-        Orca(s.p).stop(ref_of(backlog.get(registry.backlog(s.p).load(), P)["agent"]))
+        ref = ref_of(backlog.get(registry.backlog(s.p).load(), P)["agent"])
+        assert ref
+        Orca(s.p).stop(ref)
 
     for end in (stop, s.orca.restart, stop):
         end()

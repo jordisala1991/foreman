@@ -1,7 +1,8 @@
 """Chains (pure): a chain parent is filed by a lens entry and stores `chain`; its steps are its subtasks (DESIGN.md
 `## Improvement chains`)."""
 
-from typing import TypedDict
+from collections.abc import Mapping
+from typing import Any, TypedDict
 
 from . import backlog, subtasks
 
@@ -45,6 +46,27 @@ def standing(tasks: list[backlog.Task], parent: backlog.Task, missed: list[str])
         lines += ["Notices you missed:", *(f"- {m}" for m in missed)]
     lines.append(f"This is a snapshot: run `foreman show {parent['id']}` before you act.")
     return "\n".join(lines) + "\n\n"
+
+
+def mark(d: backlog.Data, tid: str) -> int:
+    """How much the parent agent of `tid` has done: its subtasks and its own questions to the owner (`asked`), open or
+    answered. A session that ends with the same mark made no progress."""
+    asked = [q for q in d["decisions"] + d["decisions_resolved"] if q.get("task") == tid and "asked" in q]
+    return len(subtasks.of(backlog.tasks(d), tid)) + len(asked)
+
+
+def stalled(old: Mapping[str, Any], mark: int, epoch: str) -> list[str]:
+    """The sessions of a parent that ended in a row without progress, once its session in `old` has ended: none for a
+    first launch or after progress (`mark` grew); the same as before when the runner restarted (its `epoch` changed),
+    which ends every session; else the ones before and `old`'s own."""
+    if not old:
+        return []
+    prior: list[str] = old.get("ended", [])
+    if mark > old.get("mark", mark):
+        return []
+    if old.get("epoch") and epoch != old["epoch"]:
+        return prior
+    return [*prior, old.get("short") or str(old.get("session") or "")[:8]]
 
 
 def _parent(tasks: list[backlog.Task], pid: str) -> backlog.Task | None:

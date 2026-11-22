@@ -52,7 +52,7 @@ def holds_slot(d: Data, i: Task) -> bool:
 
 def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
     """What an agent is told about a delivered answer, by its kind."""
-    if q.get("kind") in ("conflict", "failing", "review", "subtask"):
+    if q.get("kind") in ("conflict", "edit", "failing", "review", "subtask"):
         return q["answer"]
     elif q.get("kind") == "rejection":
         return f"The owner rejected task {i['id']}: «{q['answer']}». Fix it, review again if you change much, and run `foreman done` again."

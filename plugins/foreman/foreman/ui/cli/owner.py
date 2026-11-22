@@ -11,7 +11,7 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project.config import Project
 from ...core.project.registry import register
-from ...core.tasks import backlog, blockers, chains, drags, editing, subtasks, taskrepo
+from ...core.tasks import backlog, blockers, chains, drags, editing, questions, subtasks, taskrepo
 from ...providers import registry
 from ...providers.repo import RepoError
 from ...providers.runner import RunnerError
@@ -80,6 +80,8 @@ def cmd_edit(a: argparse.Namespace) -> None:
         new = editing.edited(i, fields)
         i.clear()
         i.update(new)
+        if text := editing.told(old, new, fields):
+            questions.message(d, i, "E", ("edit",), kind="edit", text="edit", answer=text)
     reset = old["status"] != new["status"] or ("plan_file" in old and "plan_file" not in new)
     backlog.event(p, a.id, "edited by the owner: " + ", ".join(fields) + ("; plan dropped, back to backlog" if reset else ""))
     after = "; it stays blocked until foreman unblock" if new.get("blocked") else "; it will be planned again"

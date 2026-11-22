@@ -51,13 +51,17 @@ def _json(out: str) -> object:
         return None
 
 
+def app() -> dict[str, Any]:
+    """The `app` object of `orca status` (`running`, `pid`); {} when it does not answer."""
+    try:
+        return util.json_object(orca(["status"]).get("app")) or {}
+    except RunnerError:
+        return {}
+
+
 def running() -> bool:
     """Orca's app is up (`orca status` answers even when it is not)."""
-    try:
-        app = util.json_object(orca(["status"]).get("app")) or {}
-    except RunnerError:
-        return False
-    return app.get("running") is True
+    return app().get("running") is True
 
 
 def ensure_running() -> None:

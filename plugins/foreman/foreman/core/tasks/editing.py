@@ -46,3 +46,25 @@ def edited(i: backlog.Task, fields: Mapping[str, Any]) -> backlog.Task:
         new.pop("plan_file", None)
         new["status"] = "backlog"
     return new
+
+
+def _value(i: backlog.Task, f: str) -> str:
+    if f in ("goal", "criteria"):
+        return str(i.get("acceptance", {}).get(f, ""))
+    if f == "max_steps":
+        return str(i["chain"]["max_steps"])
+    if f == "blocked_by":
+        return ", ".join(i.get("blocked_by", []))
+    return str(i.get(f, ""))
+
+
+def told(old: backlog.Task, new: backlog.Task, fields: Mapping[str, Any]) -> str:
+    """What a parent agent is told of the owner's edit of its task: each field, before and after; "" for a task whose
+    agent is no parent (any other agent is not running yet: its brief has the new text)."""
+    agent: backlog.Agent = old.get("agent") or {}
+    if agent.get("kind") != "parent":
+        return ""
+    lines = [f"The owner edited task {old['id']} with foreman edit:"]
+    lines += [f"- {f.replace('_', ' ')}: «{_value(old, f)}» → «{_value(new, f)}»" for f in fields]
+    lines.append(f"Run foreman show {old['id']} for the task as it is now, and carry on.")
+    return "\n".join(lines)

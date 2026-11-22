@@ -36,8 +36,9 @@ def states(ps: dict[str, Any]) -> dict[str, str]:
 
 
 class OrcaRows:
-    def __init__(self, rows: dict[str, str], pane_of: Callable[[str], str | None]) -> None:
+    def __init__(self, rows: dict[str, str], pane_of: Callable[[str], str | None], epoch: str = "") -> None:
         self.rows = rows
+        self._epoch = epoch  # Orca's app pid: a new one after a restart
         self.pane_of = pane_of  # dispatch id → its pane key, None when Orca no longer knows it
         self.panes: dict[str, str | None] = {}
 
@@ -66,3 +67,7 @@ class OrcaRows:
 
     def has_sessions(self) -> bool:
         return True
+
+    def epoch(self) -> str:
+        """Orca's app process: an ENDED read under a new one is a restart, not a chat that stopped."""
+        return self._epoch

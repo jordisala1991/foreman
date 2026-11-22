@@ -32,6 +32,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "settings": {},
         "claude": "claude",
         "runner": "claude",  # which runs the agents' sessions: claude or orca (foreman/providers/runner.py)
+        "parent_relaunches": 2,  # a parent whose new session ends without progress is launched again this often, then blocked
     },
     # autonomy: which merge risks go in without the owner's accept: manual (none), low, medium. high never does.
     "merge": {

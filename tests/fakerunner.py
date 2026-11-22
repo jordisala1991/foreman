@@ -10,8 +10,9 @@ from foreman.providers.runner import Agent, RunnerError, SessionRef, State
 class FakeRows:
     """A snapshot: `states` by session id (GONE for the others); a session is busy when WORKING or WAITING, alive unless ENDED or GONE."""
 
-    def __init__(self, states: dict[str, State] | None = None) -> None:
+    def __init__(self, states: dict[str, State] | None = None, epoch: str = "") -> None:
         self.states = states or {}
+        self._epoch = epoch
 
     def state(self, ref: SessionRef | None) -> State:
         return self.states.get((ref.session if ref else None) or "", State.GONE)
@@ -31,6 +32,9 @@ class FakeRows:
     def has_sessions(self) -> bool:
         return True
 
+    def epoch(self) -> str:
+        return self._epoch
+
 
 class FakeRunner:
     def __init__(self) -> None:
@@ -41,6 +45,7 @@ class FakeRunner:
         self.states: dict[str, State] = {}  # by session id: what `rows()` shows
         self.fail_send = False
         self.fail_remove: set[Path] = set()  # folders `remove_folder` cannot remove
+        self.epoch = ""  # what `rows()` gives as the runner's epoch
 
     def start(self, agent: Agent, brief: str, cwd: Path) -> SessionRef:
         self.started.append((agent, brief, cwd))
@@ -60,7 +65,7 @@ class FakeRunner:
         return ref.short
 
     def rows(self) -> FakeRows:
-        return FakeRows(self.states)
+        return FakeRows(self.states, self.epoch)
 
     def stop(self, ref: SessionRef) -> None:
         self.stopped.append(ref)

@@ -84,10 +84,11 @@ class Orca:
 
     def rows(self) -> OrcaRows | None:
         """None when Orca is not running or `ps` fails: the panel reads this, so it never opens Orca."""
-        if not cli.running():
+        app = cli.app()
+        if app.get("running") is not True:
             return None
         try:
-            return OrcaRows(states(orca(["worktree", "ps"])), pane)
+            return OrcaRows(states(orca(["worktree", "ps"])), pane, str(app.get("pid") or ""))
         except RunnerError:
             return None
 
