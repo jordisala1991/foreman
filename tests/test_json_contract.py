@@ -3,6 +3,7 @@ dashboard): the shapes below are frozen by hand from the task's criteria, never 
 retyping a field fails; adding one does not."""
 
 import json
+import re
 import time
 from typing import Any, NamedTuple
 
@@ -50,6 +51,7 @@ SHAPES: dict[str, Shape] = {
         "waiting": str,
         "recurring": str,
         "chain": OrNull(CHAIN),
+        "closed": TEXT_OR_NULL,
     },
     "needs": {"kind": KINDS, "task": str, "since": TEXT_OR_NULL, "text": str, "key": str},
     "agents": {"task": str, "kind": AGENT_KINDS, "model": str, "effort": str, "started": str, "round": INT_OR_NULL, "session": str, "handle": str},
@@ -133,13 +135,25 @@ def test_list_gives_every_task_with_the_fields_list_prints(env: Env):
     b.set_status(closed, "done")
     rows = {r["id"]: r for r in read(e, "list", "--json")}
     assert closed not in rows and {first, chain, step, weekly} <= set(rows)
-    assert closed in {r["id"] for r in read(e, "list", "--json", "--all")}
-    assert all(conforms(r, SHAPES["list"]) for r in rows.values())
+    every = {r["id"]: r for r in read(e, "list", "--json", "--all")}
+    assert closed in every
+    assert all(conforms(r, SHAPES["list"]) for r in every.values())
+    assert all(r["closed"] is None for r in rows.values())
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", every[closed]["closed"])
     f = rows[first]
     assert (f["priority"], f["model"], f["effort"], f["type"], f["parent"], f["chain"]) == ("high", "opus", "high", "change", "", None)
     assert rows[step]["parent"] == chain
     assert rows[weekly]["recurring"] == "weekly"
     assert rows[chain]["chain"] == {"lens": "l", "step": 1, "cap": 3, "open": step}
+
+
+def test_a_done_tasks_closed_in_list_is_the_closed_show_prints(env: Env):
+    b = registry.backlog(env.p)
+    tid = b.add("t", criteria="c")
+    b.set_status(tid, "done")
+    listed = {r["id"]: r for r in read(env, "list", "--json", "--all")}
+    assert listed[tid]["closed"] is not None
+    assert listed[tid]["closed"] == read(env, "show", tid)["closed"]
 
 
 def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
