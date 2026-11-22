@@ -76,7 +76,7 @@ A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and
   backlog; one level). A subtask is an ordinary task (own agent, branch, PR) that names its parent. A parent in triage
   closes by itself when every subtask has (done if any is done, else canceled). Once let in (backlog) it gets a parent
   agent (`agent.kind` `parent`, no worktree, status stays backlog): it is told each subtask merged or canceled and
-  nothing else (`notified` lists those told; message kind `subtask`), proposes the next Go and changes to the owner, may
+  nothing else (`notified` lists those told; message kind `subtask`), proposes the next Go and changes to the owner, asks him with `foreman ask` what only he can decide (the yes of an action stays in its conversation), may
   file (`--triage`) and edit only its own subtasks, and closes the parent with `foreman done` (refused while a subtask is
   open) after the owner's yes. `foreman cancel` of a parent cancels its open subtasks and closes their PRs. A `lens` entry files a chain: see Improvement chains.
 - A question (`foreman ask`) does not change the state: it is a decision tied to the task and its agent. Its agent ends
