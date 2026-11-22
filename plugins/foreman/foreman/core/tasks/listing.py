@@ -6,7 +6,7 @@ from . import backlog, blockers, chains, recurring, subtasks, taskrepo, tasktype
 
 
 class TaskRow(TypedDict):
-    """One task as `list` shows it; a fact the task lacks is "" (`chain` None for a task that is no chain parent)."""
+    """One task as `list` shows it; a fact the task lacks is "" (`priority` "none"; `chain` None for a task that is no chain parent)."""
 
     id: str
     status: str
