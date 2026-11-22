@@ -6,7 +6,6 @@ from ...core.project.config import Project
 from ...core.tasks import backlog, questions, subtasks
 from ...providers import Change, registry
 from ...providers.runner import ref_from_tab, ref_of, stop_live
-from ..agents import worktree
 from . import git, pulls
 
 
@@ -122,7 +121,6 @@ def stop_all(p: Project, i: dict[str, Any]) -> None:
         if ref and ref.short not in done:
             done.add(ref.short)
             stop_live(p, i["id"], ref, runner, rows)
-    worktree.remove_agent_folders(p, i["id"])
 
 
 def settle_parent(p: Project, tid: str) -> None:

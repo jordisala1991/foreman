@@ -136,6 +136,8 @@ on). The heartbeat is written before every step, so a long test run does not loo
 9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
    that ended without one or ran over 30 minutes leaves a «Diagnosis missing» note; it is never relaunched.
+10. **folders** (after mechanic): under Orca, removes an agent folder once its agent finished its part and its session is not in use,
+    and every folder of a closed task; a failure is a line in `errors.jsonl`, tried next tick (`foreman/steps/folders.py`).
 
 `foreman cancel` stops its agent, closes its open questions and removes its worktree (the branch stays).
 
@@ -204,6 +206,7 @@ merge does, otherwise each fix passing alone would reset the count. Without one,
 | No test command and the PR's CI has a result | the CI's result stands in for the tests in the check | `tests_or_ci` | `TestTestsOrCi`, `test_ci_replaces_the_local_test_without_a_test_command` |
 | `[merge]` names an unknown provider, pr or strategy, or a strategy its provider lacks | a clear config error naming the value | `provider_error` | `TestProviderError`, `test_unknown_merge_or_provider_is_a_clear_config_error` |
 | Main moved since its tests ran, or they ran over `ci_every_minutes` ago | runs main's tests again (in the background) | `main_tests_due` | `TestMainTestsDue`, `test_failing_main_is_one_task_until_it_passes` |
+| An agent folder under Orca | goes once its agent's part is over (task ready, hunter's file or verdict written, diagnosis recorded) and no session of it is busy or recently active; every folder of a closed task goes when none is busy | `folder_goes` | `TestFolderGoes`, `test_a_done_parents_folder_goes_on_the_next_tick`, `test_a_busy_or_recently_active_session_keeps_the_folder` |
 
 The decision tests are in `tests/test_decide.py` and launch no program; the loop's in `tests/test_review_rules.py`. How
 a tip follows the reviewed one is `delivery.merge_of`: a merge of the reviewed tip and a main commit whose tree equals
@@ -1103,7 +1106,7 @@ its own layer and the ones below, never above. Three leaf files stay at `foreman
 |---|---|---|---|
 | ui | `foreman/ui/` | `main.py` (starts `foreman panel`) · `cli/`: main, owner, ops, agent, view, board, plugin, init, parser, common · `panel/`: server, actions, views | the owner's and the agents' entry points; call everything below |
 | loop | `foreman/loop/` | tick, queue, launch, guarded | the process that ticks; gathers facts, acts on `decide` |
-| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, notify, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
+| steps | `foreman/steps/` | sources, release, talk, reviewing, mechanic, folders, notify, parents, metrics, schedule, `health/`: health, checks, main_tests, notes | one step of a tick, or a view over several pieces |
 | services | `foreman/services/` | `agents/`: brief, worktree, launch, running · `delivery/`: git, check, merge, pulls, mergecheck · lock, launchd, runsource, scratch | the outside world: processes, the lock, git through `Repo` and agents through `Runner`; called by steps |
 | registry | `foreman/providers/registry.py` | | picks the adapter, and hands out the repo, the runner and the backlog (`registry.repo(p)`, `registry.runner(p)`, `registry.rows(p)`, `registry.backlog(p)`; `registry.tick_scope(p)` makes a tick load the backlog once) (by convention the only caller of the adapters; not enforced by tach) |
 | adapters | `foreman/providers/` | local · `github/`: provider, types, checks, review, api, board, issues, backlog, apply, writes, files, cutover · gitrepo · backlogfile · `claude/`: sessions, rows, login · `orca/`: cli, settings, coordinator, rows, sessions | one per platform, `gitrepo` (the one module that runs git on a repo), `backlogfile` (the `Backlog`'s local adapter, the one module that names `backlog.json`), `claude` (the one that builds a claude command line) and `orca` (agents as Orca chats), the `Runner`'s adapters; they see their port, never the loop or each other |

@@ -24,7 +24,19 @@ HERE = Path(__file__).resolve()
 
 
 def fresh() -> dict[str, Any]:
-    return {"running": True, "opens": True, "mode": "structured", "repos": [], "terminals": [], "runs": [], "workers": {}, "n": 0, "fail": [], "resumes": True}
+    return {
+        "running": True,
+        "opens": True,
+        "mode": "structured",
+        "repos": [],
+        "terminals": [],
+        "runs": [],
+        "workers": {},
+        "n": 0,
+        "fail": [],
+        "resumes": True,
+        "rm": {},
+    }
 
 
 class FakeOrca:
@@ -227,6 +239,14 @@ def worker_release(s: State, a: list[str], n: int) -> dict[str, Any]:
     return {"state": "released", "processAction": "closed_agent_terminal"}
 
 
+def worktree_rm(s: State, a: list[str], n: int) -> dict[str, Any]:
+    """`worktree rm`: the error code `s["rm"]` holds for the selector (`selector_not_found` for a path Orca does not list)."""
+    code = s["rm"].get(a[a.index("--worktree") + 1])
+    if code:
+        raise KeyError(code)
+    return {}
+
+
 VERBS: dict[str, Callable[[State, list[str], int], dict[str, Any]]] = {
     "status": status,
     "open": open_,
@@ -237,6 +257,7 @@ VERBS: dict[str, Callable[[State, list[str], int], dict[str, Any]]] = {
     "terminal show": terminal_show,
     "worktree set": nothing,
     "worktree ps": worktree_ps,
+    "worktree rm": worktree_rm,
     "orchestration run-create": run_create,
     "orchestration worker-start": worker_start,
     "orchestration worker-show": worker_show,
