@@ -56,6 +56,12 @@ select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PLR0912", "PLR0913", "PLR0915
 "os.forkpty".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
 "multiprocessing".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
 "ctypes".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
+"concurrent.futures.ProcessPoolExecutor".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
+"concurrent.futures.process".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
+"_posixsubprocess".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
+"_multiprocessing".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
+"_ctypes".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
+"socketserver.ForkingMixIn".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
 
 # Only foreman/proc.py runs processes. lock.py is the one exception (process groups and signals, see DESIGN.md), and the tests.
 # Adding one here is the owner's call.
