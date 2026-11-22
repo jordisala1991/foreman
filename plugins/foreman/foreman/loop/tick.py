@@ -74,7 +74,7 @@ def tick(p: Project) -> None:
             ("queue", lambda: run_queue(p, rows)),
             ("health", lambda: health.run(p, rows)),
             ("blockers", lambda: release.run(p)),
-            ("parents", lambda: parents.run(p, registry.rows(p))),  # read again: `recover` may have resumed a parent
+            ("parents", lambda: parents.run(p, rows)),
             ("launch", lambda: launch_free(p)),
             ("mechanic", lambda: mechanic.run(p, rows)),
             ("folders", lambda: folders.run(p, rows)),
