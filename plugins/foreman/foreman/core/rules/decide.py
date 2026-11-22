@@ -262,3 +262,27 @@ def provider_error(m: MergeConfig, merges: Mapping[str, Sequence[str]], strategi
 def main_tests_due(ci_head: str | None, head: str, age_s: float | None, every_minutes: int) -> bool:
     """Main's tests run again when main moved since the last run, or that run is older than `every_minutes`."""
     return ci_head != head or (age_s or 1e9) > 60 * every_minutes
+
+
+CLOSED = ("done", "canceled", "duplicate")  # the task statuses that end a task
+
+
+class FolderFacts(NamedTuple):
+    """What the loop saw of an agent folder: its agent's `role` (parent|planning|mechanic|hunt|review), its task's `status`,
+    whether the agent's output is in (a diagnosis, the hunter's file, a verdict for its tip), and whether a session of it is
+    `busy` or `recent` (alive, its transcript changed in the last minutes: the owner may be talking to it)."""
+
+    role: str
+    status: str
+    output_in: bool
+    busy: bool
+    recent: bool
+
+
+def folder_goes(f: FolderFacts) -> bool:
+    """An agent folder goes when its agent's part is over (its task closed, or its output is in; a planning agent's when
+    the task is no longer backlog or refining; a parent's only when it closes) and no session of it is in use: a closed
+    task's folder waits only for a busy session."""
+    closed = f.status in CLOSED
+    over = closed or (f.status not in ("backlog", "refining") if f.role == "planning" else f.role != "parent" and f.output_in)
+    return over and not f.busy and (closed or not f.recent)

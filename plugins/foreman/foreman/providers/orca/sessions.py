@@ -92,3 +92,12 @@ class Orca:
             raise RunnerError(f"session {ref.short} has no Orca dispatch to stop")
         if orca(["orchestration", "worker-stop", "--dispatch", ref.dispatch]).get("alreadySettled") is True:
             orca(["orchestration", "worker-release", "--dispatch", ref.dispatch])
+
+    def remove_folder(self, folder: Path) -> None:
+        """`worktree rm`: Orca removes the git worktree, its entry and the folder's chats; a folder Orca does not list is fine."""
+        try:
+            orca(["worktree", "rm", "--worktree", f"path:{folder}", "--force"])
+        except OrcaError as e:
+            if "selector_not_found" not in str(e):
+                raise
+        settings.session_file(self.p, folder).unlink(missing_ok=True)

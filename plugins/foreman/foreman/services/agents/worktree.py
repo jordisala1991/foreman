@@ -1,6 +1,7 @@
 """A responsible agent's worktree and branch, made from the task's repo, and that repo's `post_create` run once in it; under Orca, the
 other agents' folders."""
 
+import re
 import shlex
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 from ... import proc
 from ...core.project.config import Project
 from ...providers import registry
+from ...providers.repo import Repo
 
 POST_CREATE_TIMEOUT = 300  # seconds, each step
 
@@ -58,7 +60,17 @@ def agent_folder(p: Project, name: str, default: Path, ref: str) -> Path:
     return folder
 
 
-def remove_agent_folders(p: Project, tid: str) -> None:
-    """Removes the task's agent folders once its sessions are stopped."""
-    for folder in sorted((p.state / "agent-folders").glob(f"{tid.lower()}-*")):
-        registry.repo(p).remove_worktree(folder)
+FOLDER_NAME = re.compile(r"(.+?)(?:-(planning|mechanic|hunt|review))?-([0-9a-f]{9})")
+
+
+def owner_of(folder: Path) -> tuple[str, str] | None:
+    """`(task id in lower case, role)` of an agent folder by its name (`agent_folder`): no role in it means the task's
+    parent or chain agent. None for a name that is not an agent folder's."""
+    m = FOLDER_NAME.fullmatch(folder.name)
+    return (m.group(1), m.group(2) or "parent") if m else None
+
+
+def remove_agent_folder(p: Project, repo: Repo, folder: Path) -> None:
+    """Removes an agent folder through the runner that made it, then from git (a folder the runner did not list)."""
+    registry.runner(p).remove_folder(folder)
+    repo.remove_worktree(folder)

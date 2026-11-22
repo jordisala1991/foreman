@@ -20,7 +20,9 @@ Then the steps, in this order (a broken one is logged in state/errors.jsonl and 
     the responsible agent for a `ready` one; a task whose blockers are not all done waits. The loop never plans, never
     reviews, never talks to the owner (loop/launch.py)
 13. mechanic: a diagnosing helper for each health finding in triage, in the slots launch left free (steps/mechanic.py)
-14. notify: with `[owner] notify`, the owner's command runs once for each need that starts, in the background (steps/notify.py)
+14. folders: under Orca, an agent folder goes once its agent finished its part and its session is not in use, and every folder
+    of a closed task; a failed removal is a line in errors.jsonl, tried next tick (steps/folders.py)
+15. notify: with `[owner] notify`, the owner's command runs once for each need that starts, in the background (steps/notify.py)
 """
 
 import fcntl
@@ -35,7 +37,7 @@ from ..providers import registry
 from ..providers.runner import NO_ROWS
 from ..services.agents.launch import fill_sessions
 from ..services.delivery import pulls
-from ..steps import mechanic, notify, parents, release, sources
+from ..steps import folders, mechanic, notify, parents, release, sources
 from ..steps.health import health
 from ..steps.reviewing import sweep_scratch
 from ..steps.talk import deliver_answers, watch_agents, watch_waiting
@@ -73,6 +75,7 @@ def tick(p: Project) -> None:
             ("parents", lambda: parents.run(p, rows)),
             ("launch", lambda: launch_free(p)),
             ("mechanic", lambda: mechanic.run(p, rows)),
+            ("folders", lambda: folders.run(p, rows)),
             ("notify", lambda: notify.run(p, rows)),
         ]
     with registry.tick_scope(p):  # the tick loads the backlog once

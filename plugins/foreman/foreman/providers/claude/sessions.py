@@ -130,3 +130,6 @@ class Claude:
             proc.run([self.p.get("agents", "claude"), "stop", ref.short], timeout=30, env=login.child_env())
         except proc.ProcError as e:
             raise RunnerError(str(e)) from e
+
+    def remove_folder(self, folder: Path) -> None:
+        """The claude runner makes no agent folders."""
