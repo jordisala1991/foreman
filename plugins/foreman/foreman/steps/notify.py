@@ -32,14 +32,13 @@ def run(p: Project, rows: Rows) -> None:
 
 
 def send(p: Project, cmd: str, line: str) -> None:
-    """A failure is an error line of its own: the step and the error are the same for every need (health keys a finding by
-    them), the detail goes in the trace."""
+    """A failure is an error line of its own: the step and the error are the same for every need and every kind of failure
+    (health keys a finding by them); the exit code or the cause goes in the trace."""
     try:
         r = proc.run([*shlex.split(cmd), line], cwd=p.home, timeout=LIMIT_S)
-    except proc.ProcError as e:
-        error, detail = (f"notify command timed out after {LIMIT_S}s" if e.timed_out else "notify command could not start"), str(e)
-    else:
         if r.code == 0:
             return
-        error, detail = f"notify command exited {r.code}", r.err.strip()[:200]
-    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"notify {cmd}", "error": error, "trace": detail})
+        detail = f"exited {r.code}: {r.err.strip()[:200]}"
+    except (proc.ProcError, ValueError) as e:  # ValueError: a command that cannot be split
+        detail = str(e)
+    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"notify {cmd}", "error": "notify command failed", "trace": detail})

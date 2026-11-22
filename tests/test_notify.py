@@ -217,3 +217,16 @@ def test_a_command_failing_on_every_need_is_one_health_finding(fake_git: FakeRep
     settle()
     health.run(p, NO_ROWS)
     assert len(findings(p)) == 1
+
+
+@pytest.mark.parametrize("kind", ["codes", "unsplittable"])
+def test_failures_of_another_kind_do_not_file_another_finding(fake_git: FakeRepo, kind: str):
+    e = Env(repo=fake_git)
+    cmd = str(script(e, "fails", f"echo . >> {e.bin / 'n.txt'}; exit $(wc -l < {e.bin / 'n.txt'})")) if kind == "codes" else 'say "hello'
+    p = first_run(e, cmd)
+    for _ in range(3):
+        task(e, blocked="x")
+    notify.run(p, NO_ROWS)
+    settle()
+    health.run(p, NO_ROWS)
+    assert len(findings(p)) == 1
