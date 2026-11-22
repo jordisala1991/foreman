@@ -29,7 +29,11 @@ class Setup:  # tables: foreman.toml [repos.*] tables, $T standing for the temp 
         for key in self.p.cfg["repos"]:
             (t / key).mkdir()
             self.fakes[key] = FakeRepo()
-        monkeypatch.setattr(registry, "repo", lambda p: self.fakes[p.repo.name])
+
+        def repo(p: Project) -> FakeRepo:
+            return self.fakes[p.repo.name]
+
+        monkeypatch.setattr(registry, "repo", repo)
 
     def task(self, repo: str, status: str = "ready") -> str:
         tid = registry.backlog(self.p).add("t", status=status, criteria="c")
@@ -41,7 +45,7 @@ class Setup:  # tables: foreman.toml [repos.*] tables, $T standing for the temp 
         return self.e.task(tid).get("blocked", "")
 
 
-def test_the_worktree_is_made_in_the_tasks_repo(monkeypatch, fake_git):
+def test_the_worktree_is_made_in_the_tasks_repo(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = Setup(monkeypatch, fake_git, [])
     t = s.e.tmp
     s.task("web")
@@ -54,14 +58,14 @@ def test_the_worktree_is_made_in_the_tasks_repo(monkeypatch, fake_git):
     assert [Path(c["cwd"]).resolve() for c in s.e.calls()] == [t / "webwts" / "ty-1", t / "wts" / "ty-2"]
 
 
-def test_the_planning_agent_starts_in_the_tasks_repo(monkeypatch, fake_git):
+def test_the_planning_agent_starts_in_the_tasks_repo(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = Setup(monkeypatch, fake_git, [])
     s.task("web", status="backlog")
     launch_free(s.p)
     assert Path(s.e.calls()[0]["cwd"]).resolve() == s.e.tmp / "web"
 
 
-def test_post_create_runs_once_in_the_new_worktree(monkeypatch, fake_git):
+def test_post_create_runs_once_in_the_new_worktree(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = Setup(monkeypatch, fake_git, ["echo one >> ran.txt", "echo {main} > main.txt"])
     tid = s.task("web")
     launch_free(s.p)
@@ -73,7 +77,7 @@ def test_post_create_runs_once_in_the_new_worktree(monkeypatch, fake_git):
     assert (wt / "ran.txt").read_text() == "one\n"
 
 
-def test_a_failing_post_create_step_blocks_the_task(monkeypatch, fake_git):
+def test_a_failing_post_create_step_blocks_the_task(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = Setup(monkeypatch, fake_git, ["echo ok > a.txt", "echo boom >&2; exit 3", "echo no > never.txt"])
     tid = s.task("web")
     launch_free(s.p)
@@ -85,7 +89,7 @@ def test_a_failing_post_create_step_blocks_the_task(monkeypatch, fake_git):
     assert s.e.task(tid)["status"] == "ready"
 
 
-def test_the_branch_it_did_not_make_is_kept(monkeypatch, fake_git):
+def test_the_branch_it_did_not_make_is_kept(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = Setup(monkeypatch, fake_git, ["exit 1"])
     made = s.fakes["web"].commit("foreman/ty-1", FileDiff("x", 1, 0))
     tid = s.task("web")
@@ -94,7 +98,7 @@ def test_the_branch_it_did_not_make_is_kept(monkeypatch, fake_git):
     assert s.fakes["web"].find("foreman/ty-1") == made
 
 
-def test_the_output_is_cut_to_its_last_300_chars(monkeypatch, fake_git):
+def test_the_output_is_cut_to_its_last_300_chars(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     out = "".join(str(n % 10) for n in range(400))
     s = Setup(monkeypatch, fake_git, [f"echo {out}; exit 1"])
     tid = s.task("web")
@@ -102,7 +106,7 @@ def test_the_output_is_cut_to_its_last_300_chars(monkeypatch, fake_git):
     assert s.blocked(tid) == f"post_create step failed (echo {out}; exit 1): {out[-300:]}"
 
 
-def test_a_slow_step_fails_like_a_failed_one(monkeypatch, fake_git):
+def test_a_slow_step_fails_like_a_failed_one(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     monkeypatch.setattr(worktree, "POST_CREATE_TIMEOUT", 0.2)
     s = Setup(monkeypatch, fake_git, ["sleep 5"])
     tid = s.task("web")
@@ -112,7 +116,7 @@ def test_a_slow_step_fails_like_a_failed_one(monkeypatch, fake_git):
     assert s.fakes["web"].trees == {}
 
 
-def test_one_repos_table_gives_every_task_its_repo(monkeypatch, fake_git):
+def test_one_repos_table_gives_every_task_its_repo(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = Setup(monkeypatch, fake_git, [], tables='[repos.main]\npath = "$T/main"\nworktrees = "$T/mainwts"\npost_create = ["touch built"]\n')
     s.task("")
     launch_free(s.p)
@@ -120,9 +124,13 @@ def test_one_repos_table_gives_every_task_its_repo(monkeypatch, fake_git):
     assert (s.e.tmp / "mainwts" / "ty-1" / "built").exists()
 
 
-def test_a_worktree_it_could_not_remove_is_named_in_the_block(monkeypatch, fake_git):
+def test_a_worktree_it_could_not_remove_is_named_in_the_block(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = Setup(monkeypatch, fake_git, ["exit 1"])
-    monkeypatch.setattr(s.fakes["web"], "remove_worktree", lambda path: None)  # git refuses, e.g. a locked worktree
+
+    def refuse(path: Path) -> None:  # git refuses, e.g. a locked worktree
+        return None
+
+    monkeypatch.setattr(s.fakes["web"], "remove_worktree", refuse)
     tid = s.task("web")
     launch_free(s.p)
     wt = s.e.tmp / "webwts" / "ty-1"

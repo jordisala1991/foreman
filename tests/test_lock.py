@@ -3,11 +3,12 @@ import itertools
 import os
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
+from typing import Any
 from unittest import mock
 
 import pytest
-from helpers import PLUGIN
+from helpers import PLUGIN, Env
 
 from foreman import util
 from foreman.providers import registry
@@ -19,7 +20,7 @@ FM = str(PLUGIN / "bin/foreman")
 
 class TestLock:
     @pytest.fixture(autouse=True)
-    def set_up(self, request, env):
+    def set_up(self, request: pytest.FixtureRequest, env: Env) -> Iterator[None]:
         self.request = request  # for the cleanups of helpers
         self.e = env
         os.environ["FOREMAN_LOCKS"] = str(self.e.tmp / "locks")
@@ -44,19 +45,22 @@ class TestLock:
 
         env_of_c: dict[str, str] = {}
 
-        def spawn(cmd, env, start_new_session):
+        def wait(timeout: float) -> int:
+            return 0
+
+        def spawn(cmd: list[str], env: Mapping[str, str], start_new_session: bool) -> mock.Mock:
             events.append("c runs")
             env_of_c.update(env)
-            return mock.Mock(wait=lambda timeout: 0)
+            return mock.Mock(wait=wait)
 
-        def pause(_s):
+        def pause(_s: float) -> None:
             turns.pop(0)()
 
         r = lock.Resource("gpu", hands=lock.Hands(clock=lambda: float(next(ticks)), pause=pause, spawn=spawn))
         a, b = r.enqueue("a", "job a"), r.enqueue("b", "job b")
         slots: dict[str, str | None] = {}
 
-        def take(who: str, ticket: dict) -> Callable[[], None]:
+        def take(who: str, ticket: dict[str, Any]) -> Callable[[], None]:
             def turn() -> None:
                 slots[who] = r.take(ticket)
                 events.append(f"{who} takes" if slots[who] else f"{who} waits")
