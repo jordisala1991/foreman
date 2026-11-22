@@ -10,7 +10,7 @@ import urllib.request
 from collections.abc import Callable, Iterator
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 from urllib.parse import quote
 
 import pytest
@@ -21,8 +21,9 @@ from foreman import launcher, util
 from foreman.core.project.config import Project
 from foreman.core.project.registry import register
 from foreman.core.tasks import backlog
-from foreman.providers import registry
-from foreman.providers.github.types import RateLimited
+from foreman.providers import ProviderError, registry
+from foreman.providers.backlogfile import BacklogFile
+from foreman.providers.github.types import PermanentError, RateLimited, TransientError
 from foreman.providers.runner import State
 from foreman.ui.panel import server, views
 
@@ -97,6 +98,17 @@ class TestPanel:
         monkeypatch.setitem(server.VIEWS, "/api/state", spent)
         code, body = self.call("/api/state?p=demo")
         assert (code, json.loads(body)) == (503, {"error": "GitHub's rate limit is spent: no call until 12:00:00"})
+
+    @pytest.mark.parametrize(
+        "error", [RateLimited("spent until 12:00"), TransientError("gh: network"), PermanentError("gh: closed"), ProviderError("no repo x/y")]
+    )
+    def test_a_failed_github_call_on_a_write_is_answered_as_json(self, monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+        def fail(self: BacklogFile, *args: object, **keys: object) -> NoReturn:
+            raise error
+
+        monkeypatch.setattr(BacklogFile, "set_status", fail)
+        code, body = self.call(f"/api/go?p=demo&id={self.triage}", "")
+        assert (code, json.loads(body)) == (503, {"error": str(error)})
 
     def test_task_view_carries_the_description(self) -> None:
         report = Path(self.tmp.name) / "r.md"
