@@ -12,11 +12,11 @@ from test_parents import resumes
 
 from foreman import util
 from foreman.core.project.config import Project
-from foreman.core.tasks import backlog, chains
+from foreman.core.tasks import backlog, chains, questions
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.services.delivery import merge
-from foreman.steps import schedule
+from foreman.steps import parents, schedule, watch
 from foreman.ui.panel import views
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
@@ -191,6 +191,24 @@ class TestChainParent:
         text = self.e.calls()[-1]["argv"][-1]
         for needle in ("Chain step 5 of 6", "at most 6 steps", *(s["id"] for s in self.steps(P))):
             assert needle in text
+
+    def test_an_idle_chain_parent_is_told_what_the_owner_edited(self):
+        P = self.launched()
+        self.fill(P, 5)
+        parents.notify(self.p)
+        for q in questions.undelivered(registry.backlog(self.p).load()):
+            registry.backlog(self.p).mark_delivered(q["id"])
+        old = self.e.task(P)["agent"]
+        self.e.set_state(old["name"], "done")
+        registry.backlog(self.p).update(P, agent={**old, "started": "2000-01-01 00:00:00"})
+        assert f"parent:{P}" in watch.needs(self.p, registry.rows(self.p))
+        fm(self.e.home, "edit", P, "--max-steps", "6")
+        tick.tick(self.p)
+        (call,) = resumes(self.e, old["session"])
+        for needle in ("max steps", "«5»", "«6»", f"foreman show {P}"):
+            assert needle in call["argv"][-1]
+        self.e.set_state(old["name"], "working")
+        assert [n for n in json.loads(fm(self.e.home, "needs", "--json")) if n["kind"] == "parent" and n["task"] == P] == []
 
     def test_edit_max_steps_is_refused_from_an_agent(self):
         P = self.launched()

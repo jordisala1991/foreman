@@ -96,6 +96,7 @@ class Rows(Protocol):
     def find(self, short: str) -> str | None: ...  # the full session id of a short one
     def short(self, session: str) -> str | None: ...
     def has_sessions(self) -> bool: ...
+    def epoch(self) -> str: ...  # who runs the sessions now: changes when the runner restarts; "" when it has no such thing
 
 
 class Runner(Protocol):
@@ -136,6 +137,9 @@ class _NoRows:
 
     def has_sessions(self) -> bool:
         return False
+
+    def epoch(self) -> str:
+        return ""
 
 
 NO_ROWS: Rows = _NoRows()

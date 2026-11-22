@@ -49,3 +49,7 @@ class ClaudeRows:
 
     def has_sessions(self) -> bool:
         return bool(self.rows)
+
+    def epoch(self) -> str:
+        """No epoch: a claude process that dies counts as a session's end."""
+        return ""

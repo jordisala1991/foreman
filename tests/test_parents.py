@@ -6,6 +6,7 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from fakerunner import FakeRunner
 from helpers import Env, fm
 from test_misled import run_as
 
@@ -13,9 +14,9 @@ from foreman.core.tasks import backlog, questions, subtasks
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.providers.claude.sessions import Claude
-from foreman.providers.runner import NO_ROWS
+from foreman.providers.runner import NO_ROWS, State
 from foreman.services.agents.launch import launch_parent
-from foreman.steps import parents
+from foreman.steps import parents, watch
 
 
 def resumes(e: Env, sid: str) -> list[dict[str, Any]]:
@@ -148,6 +149,16 @@ class TestRelaunched:
         assert self.undelivered() == []
         tick.tick(self.e.p)
         assert len(self.e.calls()) == 2
+
+    def test_an_edit_made_while_the_session_is_stopped_reaches_the_new_brief(self):
+        self.e.set_state(self.old["name"], "stopped")
+        fm(self.e.home, "edit", self.P, "--detail", "new detail")
+        tick.tick(self.e.p)
+        assert resumes(self.e, self.old["session"]) == []
+        text = self.e.calls()[-1]["argv"][-1]
+        notices = text.split("Notices you missed:")[1]
+        assert "The owner edited task" in notices and "«new detail»" in notices
+        assert self.undelivered() == []
 
     def test_a_session_gone_from_the_listing_gets_a_new_one(self):
         self.e.set_state(self.old["name"], "stopped")
@@ -294,3 +305,82 @@ class TestPure:
         assert "goal" not in subtasks.notice(a, [a, b], "P")
         assert "canceled" in subtasks.notice(c, [a, c], "P")
         assert "goal" in subtasks.notice(c, [a, c], "P")
+
+
+@pytest.mark.usefixtures("owner")
+class TestEndsAtOnce:
+    """A parent whose new session ends again without progress is launched again at most `[agents] parent_relaunches` times,
+    then blocked with the sessions named."""
+
+    @pytest.fixture(autouse=True)
+    def set_up(self, env: Env, fake_runner: FakeRunner) -> None:
+        self.e, self.r = env, fake_runner
+        self.P = registry.backlog(env.p).add("parent", status="backlog", criteria="c")
+        self.S = registry.backlog(env.p).add("s", parent=self.P, criteria="c", status="triage")
+        parents.run(env.p, registry.rows(env.p))
+        assert len(self.r.started) == 1
+
+    def end(self) -> None:
+        self.r.states[self.e.task(self.P)["agent"]["session"]] = State.ENDED
+        parents.run(self.e.p, registry.rows(self.e.p))
+
+    @pytest.mark.parametrize("n", [1, 2])
+    def test_it_is_blocked_after_n_relaunches_without_progress(self, n: int):
+        self.e.p.cfg["agents"]["parent_relaunches"] = n
+        for _ in range(n):
+            self.end()
+        assert len(self.r.started) == n + 1 and not self.e.task(self.P).get("blocked")
+        self.end()
+        assert len(self.r.started) == n + 1
+        blocked = self.e.task(self.P)["blocked"]
+        assert all(f"fk{k}" in blocked for k in range(1, n + 2))
+        assert f"blocked:{self.P}" in {x.key for x in watch.found(self.e.p, registry.rows(self.e.p))}
+
+    def test_the_default_is_two(self):
+        for _ in range(3):
+            self.end()
+        assert len(self.r.started) == 3 and self.e.task(self.P).get("blocked")
+
+    def test_a_subtask_filed_between_ends_is_progress(self):
+        for _ in range(5):
+            registry.backlog(self.e.p).add("s", parent=self.P, criteria="c", status="triage")
+            self.end()
+        assert len(self.r.started) == 6 and not self.e.task(self.P).get("blocked")
+
+    def test_a_question_asked_between_ends_is_progress(self):
+        for _ in range(5):
+            registry.backlog(self.e.p).ask(self.P, self.e.task(self.P)["agent"]["name"], "which?")
+            self.end()
+        assert len(self.r.started) == 6 and not self.e.task(self.P).get("blocked")
+
+    def test_a_subtask_closing_between_ends_is_progress(self):
+        for _ in range(2):
+            self.end()
+        registry.backlog(self.e.p).set_status(self.S, "done", "x")
+        self.end()
+        assert len(self.r.started) == 4 and not self.e.task(self.P).get("blocked")
+
+    def test_an_owner_answer_to_its_ask_between_ends_is_progress(self):
+        qid = registry.backlog(self.e.p).ask(self.P, self.e.task(self.P)["agent"]["name"], "which?")
+        for _ in range(3):
+            self.end()
+        registry.backlog(self.e.p).answer(qid, "this one")
+        self.end()
+        assert len(self.r.started) == 5 and not self.e.task(self.P).get("blocked")
+
+    def test_the_owners_relaunch_at_the_cap_launches_and_resets_the_count(self):
+        for _ in range(2):
+            self.end()
+        self.r.states[self.e.task(self.P)["agent"]["session"]] = State.ENDED
+        fm(self.e.home, "relaunch", self.P)
+        assert len(self.r.started) == 4 and not self.e.task(self.P).get("blocked")
+        for _ in range(2):
+            self.end()
+        assert len(self.r.started) == 6 and not self.e.task(self.P).get("blocked")
+
+    def test_an_unblock_gives_one_more_launch_at_once(self):
+        for _ in range(3):
+            self.end()
+        fm(self.e.home, "unblock", self.P)
+        parents.run(self.e.p, registry.rows(self.e.p))
+        assert len(self.r.started) == 4

@@ -18,7 +18,7 @@ from foreman.providers.orca.sessions import Orca
 from foreman.providers.runner import Agent, RunnerError, SessionRef, State, ref_of, settings
 from foreman.services.agents import launch, relaunch, running
 from foreman.services.agents.launch import launch_parent
-from foreman.steps import mechanic, talk
+from foreman.steps import mechanic, parents, talk
 
 
 class Setup:
@@ -345,3 +345,39 @@ def test_remove_folder_other_error_raises(s: Setup):
     s.orca.set(rm={f"path:{s.wt}": "worktree_busy"})
     with pytest.raises(RunnerError, match="worktree_busy"):
         Orca(s.p).remove_folder(s.wt)
+
+
+def parent_launched(s: Setup) -> str:
+    P = registry.backlog(s.p).add("parent", status="backlog", criteria="c")
+    registry.backlog(s.p).add("s", parent=P, criteria="c", status="triage")
+    parents.run(s.p, registry.rows(s.p))
+    return P
+
+
+def test_an_orca_restart_does_not_count_toward_the_parents_cap(s: Setup):
+    P = parent_launched(s)
+    for k in range(3):
+        s.orca.restart()
+        parents.run(s.p, registry.rows(s.p))
+        assert s.orca.verbs().count("orchestration worker-start") == k + 2
+        t = backlog.get(registry.backlog(s.p).load(), P)
+        assert not t.get("blocked") and t["agent"]["ended"] == []
+
+
+def test_a_restart_between_two_stops_is_not_counted(s: Setup):
+    P = parent_launched(s)
+
+    def stop() -> None:
+        ref = ref_of(backlog.get(registry.backlog(s.p).load(), P)["agent"])
+        assert ref
+        Orca(s.p).stop(ref)
+
+    for end in (stop, s.orca.restart, stop):
+        end()
+        parents.run(s.p, registry.rows(s.p))
+    assert s.orca.verbs().count("orchestration worker-start") == 4
+    assert not backlog.get(registry.backlog(s.p).load(), P).get("blocked")
+    stop()
+    parents.run(s.p, registry.rows(s.p))
+    assert s.orca.verbs().count("orchestration worker-start") == 4
+    assert "ended 3 times" in backlog.get(registry.backlog(s.p).load(), P)["blocked"]

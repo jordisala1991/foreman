@@ -8,6 +8,7 @@ from ..core.project.config import Project
 from ..core.tasks import backlog, questions
 from ..providers import registry
 from ..providers.runner import Rows, State, ref_of
+from ..services.agents.launch import ended
 from ..services.agents.running import idle_s, send, update_agent
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
@@ -26,6 +27,8 @@ def deliver_answers(p: Project, rows: Rows) -> None:
             continue  # one answer per task per tick, sent or failed: the rest waits
         if rows.busy(ref_of(agent)):
             continue  # it is busy (maybe talking with the owner): next tick
+        if ended(agent, rows):
+            continue  # a parent whose session ended: its new session's brief carries it (parents.run)
         msg = questions.message_for(i, q)
         if send(p, i, msg):
             registry.backlog(p).mark_delivered(q["id"])

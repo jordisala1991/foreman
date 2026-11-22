@@ -26,6 +26,7 @@ HERE = Path(__file__).resolve()
 def fresh() -> dict[str, Any]:
     return {
         "running": True,
+        "pid": 1000,  # the app's process: a restart gives a new one
         "opens": True,
         "mode": "structured",
         "repos": [],
@@ -83,6 +84,7 @@ class FakeOrca:
         s = self.load()
         for w in s["workers"].values():
             w["live"] = False
+        s["pid"] += 1
         self.save(s)
 
     def terminal_mode(self) -> None:
@@ -136,7 +138,7 @@ State = dict[str, Any]
 
 
 def status(s: State, a: list[str], n: int) -> dict[str, Any]:
-    return {"app": {"running": s["running"]}}
+    return {"app": {"running": s["running"], "pid": s["pid"]}}
 
 
 def open_(s: State, a: list[str], n: int) -> dict[str, Any]:
