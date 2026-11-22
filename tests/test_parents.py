@@ -10,7 +10,7 @@ from fakerunner import FakeRunner
 from helpers import Env, fm
 from test_misled import run_as
 
-from foreman.core.tasks import backlog, questions, subtasks
+from foreman.core.tasks import backlog, questions, runs, subtasks
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.providers.claude.sessions import Claude
@@ -140,6 +140,9 @@ class TestRelaunched:
         assert t["agent"]["session"] != self.old["session"]
         assert {self.old["session"], t["agent"]["session"]} <= set(t["sessions"])
         assert resumes(self.e, self.old["session"]) == []
+        first, second = (r for r in runs.load(self.e.p) if r.task == self.P)
+        assert (first.kind, first.outcome) == ("parent", "failed") and first.failure_reason
+        assert (second.kind, second.attempt, second.active, second.session) == ("parent", 2, True, t["agent"]["session"])
 
     def test_the_notices_it_missed_are_in_the_brief_and_not_sent_again(self):
         self.e.set_state(self.old["name"], "stopped")
@@ -226,6 +229,7 @@ class TestClosing:
         registry.backlog(self.e.p).set_status(self.S2, "canceled")
         self.done()
         assert self.e.task(self.P)["status"] == "done"
+        assert [r.outcome for r in runs.load(self.e.p) if r.task == self.P] == ["done"]
         tick.tick(self.e.p)
         assert self.e.task(self.P)["agent"]["short"] in self.e.stops()
 

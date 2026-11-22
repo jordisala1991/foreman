@@ -86,6 +86,9 @@ The read-only agent that diagnoses the task behind a health finding (defined by 
 _Chat_: mecánico
 _Avoid_: debugger, diagnoser
 
+**Run**
+One session the loop started for a task, from its start to its outcome (done, failed or canceled); the ledger lists them.
+
 ## Review
 
 **Review**

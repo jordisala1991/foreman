@@ -5,10 +5,10 @@ from typing import Any
 
 from .. import util
 from ..core.project.config import Project
-from ..core.tasks import backlog, questions
+from ..core.tasks import backlog, questions, runs
 from ..providers import registry
 from ..providers.runner import Rows, State, ref_of
-from ..services.agents.launch import ended
+from ..services.agents.launch import ended, record_run
 from ..services.agents.running import idle_s, send, update_agent
 
 NUDGE_IDLE_S = 600  # an agent's turn ended and its transcript is quiet this long: nudge it (then block it)
@@ -68,6 +68,7 @@ def watch_agents(p: Project, rows: Rows) -> None:
             update_agent(p, i["id"], nudged=util.now())  # a failed nudge counts too: the block below then fires
         if (util.age_s(a.get("nudged")) or 0) > NUDGE_IDLE_S and idle_s(a) > NUDGE_IDLE_S:
             registry.backlog(p).update(i["id"], blocked="its agent stopped without finishing, even after a nudge")
+            runs.end(p, i["id"], ("planning", "responsible", "parent", "chain"), "failed", "its agent stopped without finishing, even after a nudge")
             backlog.event(p, i["id"], "blocked: agent stopped without finishing")
 
 
@@ -119,6 +120,8 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
         agent: dict[str, Any] = {**(i.get("agent") or {}), "started": util.now(), "nudged": None}
         i["agent"] = agent
         questions.message(d, i, "R", ("rejection", "conflict", "failing", "review"), kind=kind, text="review", answer=note, at=util.now())
+    if ref := ref_of(agent):  # the same session works again: a new run of it (the last ended at `foreman done`)
+        record_run(p, tid, "responsible", ref, agent)
     backlog.event(p, tid, f"→ in progress: returned to its agent ({kind}): {note}")
 
 

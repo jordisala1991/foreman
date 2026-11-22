@@ -7,7 +7,7 @@ from typing import Any
 from ..core.project.config import Project
 from ..core.review import reviews
 from ..core.rules import decide
-from ..core.tasks import backlog
+from ..core.tasks import backlog, runs
 from ..providers import registry
 from ..providers.runner import Rows, ref_of
 from ..services import scratch
@@ -52,6 +52,7 @@ def apply_review(p: Project, i: dict[str, Any], head: str, step: decide.Step) ->
         backlog.event(p, i["id"], f"new tip {head[:9]} follows reviewed {v['tip'][:9]}: no review runs, its verdict holds")
     elif step.do == "block":
         block_review(p, i["id"], step.text)
+        runs.end(p, i["id"], ("hunter", "review"), "failed", step.text)
     elif step.do == "back":
         return_to_agent(p, i["id"], "review", step.text)
         registry.backlog(p).update(i["id"], review={**v, "returned": True})

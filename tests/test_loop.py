@@ -14,7 +14,7 @@ from helpers import Env, fm, git
 from foreman import providers, util
 from foreman.core.project.config import Project
 from foreman.core.rules import decide, risk
-from foreman.core.tasks import questions
+from foreman.core.tasks import questions, runs
 from foreman.loop import queue, tick
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
@@ -169,6 +169,8 @@ class TestStopped:
         e.set_state(tid.lower(), "done")  # the nudge woke it; it ended its turn again
         talk.watch_agents(e.p, registry.rows(e.p))
         assert "stopped without finishing" in e.task(tid)["blocked"]
+        (r,) = runs.load(e.p)
+        assert (r.kind, r.outcome) == ("responsible", "failed") and r.failure_reason
         assert len([c for c in e.calls() if "-mechanic" not in str(c["argv"])]) == 2  # health files the block: a mechanic follows
 
 
@@ -382,8 +384,10 @@ class TestQueue:
         assert hunter_file in hunter
         tick.tick(e.p)
         assert len(e.calls()) == 2  # no reviewer while the hunter has no file
+        assert [(r.kind, r.attempt, r.active) for r in runs.load(e.p) if r.kind == "hunter"] == [("hunter", 1, True)]
         e.hunter_done(tid)
         tick.tick(e.p)
+        assert [(r.kind, r.attempt, r.outcome) for r in runs.load(e.p) if r.kind in ("hunter", "review")] == [("hunter", 1, "done"), ("review", 1, None)]
         call = e.calls()[-1]
         assert call["argv"][call["argv"].index("-n") + 1] == "TY-1 review · x"
         reviewer = call["argv"][-1]
@@ -485,6 +489,7 @@ class TestQueue:
         tick.tick(e.p)
         assert "hunter ended without its findings file" in e.task(tid)["blocked"]
         assert len(e.calls()) == 2
+        assert [(r.outcome, r.failure_reason) for r in runs.load(e.p) if r.kind == "hunter"] == [("failed", "its hunter ended without its findings file")]
 
     def test_open_findings_go_back_to_the_agent_then_round_two_then_the_owner(self, fake_git: FakeRepo):
         e = Env(test="true", autonomy="medium", repo=fake_git)

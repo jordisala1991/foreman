@@ -131,6 +131,10 @@ def _operations(c: Command) -> None:
     _json(s)
     _json(c("needs", "what waits for the owner now, as JSON"), required=True)
     _json(c("agents", "the agents the loop has live now, as JSON"), required=True)
+    s = c("runs", "every agent session the loop started, as JSON")
+    _json(s, required=True)
+    s.add_argument("--task", metavar="ID", help="only this task's runs")
+    s.add_argument("--active", action="store_true", help="only the runs that have not ended")
     s = c(
         "backlog",
         "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows;"

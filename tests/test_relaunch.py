@@ -16,7 +16,7 @@ from helpers import Env, fm
 
 from foreman import launcher, util
 from foreman.core.oversight import diagnosis
-from foreman.core.tasks import backlog
+from foreman.core.tasks import backlog, runs
 from foreman.loop import tick
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
@@ -132,6 +132,9 @@ class TestRelaunch:
         assert json.loads(fm(e.home, "show", tid))[role]["short"] == new["id"]
         events = [ev["text"] for ev in util.read_jsonl(e.p.state / "events.jsonl") if ev.get("task") == tid]
         assert f"session {old['short']} → {new['id']}" in events[-1]
+        before_run, copy = runs.load(e.p)
+        assert before_run.kind == copy.kind == {"chain parent": "chain"}.get(kind, kind)
+        assert (before_run.outcome, copy.attempt, copy.active, copy.session) == ("canceled", 2, True, new["sessionId"])
         e.set_state(old["name"], "done")
         if role == "mechanic":
             with registry.backlog(e.p).edit() as d:

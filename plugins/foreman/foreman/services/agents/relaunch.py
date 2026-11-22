@@ -10,7 +10,7 @@ from ...core.project.config import Project
 from ...core.tasks import backlog, blockers
 from ...providers import registry
 from ...providers.runner import Agent, Rows, RunnerError, ref_of, unreadable
-from .launch import ended, launch_parent, record_session
+from .launch import ended, launch_parent, record_run, record_session, run_kind
 from .running import session_lock
 
 MESSAGE = (
@@ -55,6 +55,7 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
         runner.stop(new)
         backlog.event(p, tid, f"relaunch of {a['name']} undone: the task changed meanwhile (copy {new.short} stopped)")
         raise RunnerError(f"{tid} changed while its agent restarted: the copy {new.short} is stopped")
+    record_run(p, tid, run_kind(task, a), new, a)
     backlog.event(p, tid, f"relaunched {a['name']} on the current foreman: session {a['short']} → {new.short}")
     return a["short"], new.short
 

@@ -5,7 +5,7 @@ from ... import util
 from ...core.project.config import Project
 from ...core.review.reviews import review_round
 from ...core.rules import decide
-from ...core.tasks import backlog, chains, questions, subtasks
+from ...core.tasks import backlog, chains, questions, runs, subtasks
 from ...providers import registry
 from ...providers.runner import Agent, Rows, RunnerError, RunnerUnavailable, SessionRef, State, ref_of
 from .. import scratch
@@ -86,6 +86,7 @@ def launch(p: Project, i: dict[str, Any]) -> None:
         runner.stop(ref)
         backlog.event(p, i["id"], f"launch of {name} undone: the task changed meanwhile")
         return
+    record_run(p, i["id"], kind, ref, agent)
     backlog.event(p, i["id"], f"launched {name} ({kind}, {model}, {effort}, session {ref.short})")
 
 
@@ -140,6 +141,9 @@ def launch_parent(p: Project, i: dict[str, Any], epoch: str = "", by_owner: bool
         runner.stop(ref)
         backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")
         return None
+    if old:
+        runs.end(p, tid, ("parent", "chain"), "failed", "its session ended")
+    record_run(p, tid, run_kind(i, agent), ref, agent)
     for q in missed:  # the brief carries them: the loop must not send them again
         registry.backlog(p).mark_delivered(q["id"])
     backlog.event(p, tid, f"launched {name} (parent, {model}, {effort}, session {ref.short})")
@@ -176,6 +180,17 @@ def record_session(it: dict[str, Any], ref: SessionRef, kind: str) -> None:
         it["session_tabs"] = {**it.get("session_tabs", {}), sid: ref.tab()}
 
 
+def run_kind(task: dict[str, Any], record: dict[str, Any]) -> str:
+    """The run kind of an `agent` or `mechanic` record: its `kind`, but `chain` for the parent of a task with a chain."""
+    kind = str(record.get("kind") or "")
+    return "chain" if kind == "parent" and task.get("chain") else kind
+
+
+def record_run(p: Project, tid: str, kind: str, ref: SessionRef, record: dict[str, Any]) -> None:
+    """A new run of `kind` for the session `ref`, with the model and effort of its launch `record`."""
+    runs.start(p, tid, kind, runs.Session(ref.session or "", registry.runner(p).handle(ref), record["model"], record["effort"]))
+
+
 def fill_sessions(p: Project, rows: Rows) -> None:
     """A session not listed yet at launch: its full id from the short one, on a later tick."""
     for i in backlog.tasks(registry.backlog(p).load()):
@@ -189,6 +204,7 @@ def fill_sessions(p: Project, rows: Rows) -> None:
                         it[role] = {**it[role], "session": sid}
                         ref = SessionRef(a["short"], sid, a.get("terminal"), a.get("pane"), dispatch=a.get("dispatch"), coordinator=a.get("coordinator"))
                         record_session(it, ref, a.get("kind", "") if role in ("agent", "mechanic") else "review")
+                    runs.attach(p, i["id"], {"hunter": "hunter", "reviewer": "review"}.get(role) or run_kind(i, a), sid)
 
 
 def review_file(p: Project, i: dict[str, Any], tip: str, role: str) -> Path:
@@ -249,4 +265,5 @@ def launch_reviewer(p: Project, i: dict[str, Any], tip: str, role: str = "review
         if role == "reviewer":
             it["reviewers"] = [*it.get("reviewers", []), launch]
         record_session(it, ref, "review")
+    record_run(p, i["id"], "review" if role == "reviewer" else "hunter", ref, launch)
     backlog.event(p, i["id"], f"launched {name} ({role}, review round {rnd} of {tip[:9]}, {model}, session {ref.short}); rule: {decide.RULES[scope.rule]}")
