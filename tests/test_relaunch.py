@@ -173,6 +173,21 @@ class TestRelaunch:
         assert refused(self.e, tid) == f"foreman: {tid} is blocked: because; unblock it first"
         assert len(self.e.calls()) == 1
 
+    def test_a_stopped_parent_that_is_not_in_backlog_is_refused_with_its_state_and_starts_nothing(self) -> None:
+        tid, role = parent(self.e)
+        self.e.set_state(self.e.task(tid)[role]["name"], "stopped")
+        registry.backlog(self.e.p).update(tid, status="ready")
+        assert refused(self.e, tid) == f"foreman: {tid} is ready: only a parent in backlog is launched anew"
+        assert len(self.e.calls()) == 1
+
+    def test_a_stopped_parent_waiting_for_a_blocker_is_refused_and_starts_nothing(self) -> None:
+        tid, role = parent(self.e)
+        other = registry.backlog(self.e.p).add("other", status="backlog", criteria="c")
+        self.e.set_state(self.e.task(tid)[role]["name"], "stopped")
+        registry.backlog(self.e.p).update(tid, blocked_by=[other])
+        assert refused(self.e, tid) == f"foreman: {tid} waits for {other} to be done"
+        assert len(self.e.calls()) == 1
+
     def test_a_stopped_agent_is_refused(self) -> None:
         tid, role = responsible(self.e)
         self.e.set_state(self.e.task(tid)[role]["name"], "stopped")

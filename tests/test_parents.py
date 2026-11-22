@@ -3,6 +3,7 @@ closes the parent alone; files and edits only its own subtasks; `fm show` gives 
 
 import json
 from typing import Any
+from unittest import mock
 
 import pytest
 from helpers import Env, fm
@@ -11,6 +12,7 @@ from test_misled import run_as
 from foreman.core.tasks import backlog, questions, subtasks
 from foreman.loop import tick
 from foreman.providers import registry
+from foreman.providers.claude.sessions import Claude
 from foreman.providers.runner import NO_ROWS
 from foreman.services.agents.launch import launch_parent
 from foreman.steps import parents
@@ -174,6 +176,20 @@ class TestRelaunched:
         launch_parent(self.e.p, self.e.task(self.P))
         assert f"The owner answered your request {qid} (push)" in self.e.calls()[-1]["argv"][-1]
         assert [q for q in questions.undelivered(registry.backlog(self.e.p).load()) if q["task"] == self.P] == []
+
+    def test_a_subtask_closed_while_the_session_starts_is_still_to_be_told(self):
+        start = Claude.start
+
+        def closing(runner: Claude, *args: Any) -> Any:
+            registry.backlog(self.e.p).set_status(self.S1, "done", "x")
+            return start(runner, *args)
+
+        self.e.set_state(self.old["name"], "stopped")
+        with mock.patch.object(Claude, "start", closing):
+            parents.run(self.e.p, registry.rows(self.e.p))
+        assert self.e.task(self.P)["notified"] == [self.S0]
+        parents.notify(self.e.p)
+        assert f"Subtask {self.S1} " in [q["answer"] for q in questions.undelivered(registry.backlog(self.e.p).load())][-1]
 
 
 class TestClosing:

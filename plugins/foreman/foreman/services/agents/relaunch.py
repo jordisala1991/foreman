@@ -62,8 +62,10 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
 def _launch_anew(p: Project, tid: str, task: dict[str, Any], rows: Rows) -> tuple[str, str]:
     """A parent whose session ended has no copy to restart: a new session replaces it. Any other task has no agent to relaunch."""
     old: dict[str, Any] = task.get("agent") or {}
-    if task["status"] in backlog.CLOSED or not ended(old, rows):
+    if not ended(old, rows):
         raise RunnerError(f"{tid} has no live agent")
+    if task["status"] != "backlog":
+        raise RunnerError(f"{tid} is {task['status']}: only a parent in backlog is launched anew")
     if task.get("blocked"):
         raise RunnerError(f"{tid} is blocked: {task['blocked']}; unblock it first")
     if waits := blockers.pending(task, backlog.tasks(registry.backlog(p).load())):
