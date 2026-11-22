@@ -38,6 +38,7 @@ from .views import Obj, project, projects, state, summary, system, task
 
 DIST = Path(__file__).resolve().parents[3] / "panel" / "dist"
 STATIC = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8")}
+PLATFORM = (Transient, Permanent, ProviderError)
 COOKIE = "foreman_key"
 
 # the read-only JSON views, by path: each takes the query
@@ -116,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
             self.json(view(q))
         except (KeyError, backlog.BacklogError) as e:
             self.json({"error": str(e).strip("'\"")}, 404)
-        except (Transient, Permanent, ProviderError) as e:  # the backlog on GitHub: the rate limit's stop, a failed call
+        except PLATFORM as e:  # the backlog on GitHub: the rate limit's stop, a failed call
             self.json({"error": str(e)}, 503)
 
     def evidence(self, q: dict[str, list[str]]) -> None:
@@ -163,6 +164,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"error": "not found"}, 404)
         except Refused as e:
             return self.json({"error": str(e)}, 409)
+        except PLATFORM as e:
+            return self.json({"error": str(e)}, 503)
         except (backlog.BacklogError, ValueError) as e:
             return self.json({"error": str(e)}, 400)
 
