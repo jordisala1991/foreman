@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from helpers import ROOT
 
 MODULE = "plugins/foreman/foreman/services/agents/p.py"
