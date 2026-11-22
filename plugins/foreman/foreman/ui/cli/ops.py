@@ -1,4 +1,4 @@
-"""The operator's commands: loop, health, metrics, guard, lock, launchd."""
+"""The operator's commands: loop, health, metrics, watch, needs, guard, lock, launchd."""
 
 import argparse
 import os
@@ -8,13 +8,14 @@ from pathlib import Path
 from ... import providers
 from ...core.oversight import guard
 from ...core.project import registry
+from ...core.project.config import Project
 from ...loop import tick
 from ...providers import registry as provider_registry
-from ...providers.runner import unreadable
+from ...providers.runner import Rows, unreadable
 from ...services import lock
 from ...steps import metrics, schedule, watch
-from ...steps.health import health, notes, orca
-from .common import home
+from ...steps.health import health, notes, orca, report
+from .common import home, print_json
 
 
 def cmd_loop(a: argparse.Namespace) -> None:
@@ -22,6 +23,10 @@ def cmd_loop(a: argparse.Namespace) -> None:
 
 
 def cmd_health(a: argparse.Namespace) -> None:
+    if a.json:
+        p = home(a)
+        print_json(report.build(p, _rows(p)))
+        return
     for line in [*notes.python_note(), *notes.shared_folders(registry.loaded())]:
         print(line)
     p = home(a)
@@ -29,12 +34,15 @@ def cmd_health(a: argparse.Namespace) -> None:
         print(schedule.line(r))
     for line in [*notes.versions(p), *notes.old_links(p), *orca.warnings(p)]:
         print(line)
+    for f in health.findings(p, _rows(p), outside=True):
+        print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
+
+
+def _rows(p: Project) -> Rows:
     try:
-        rows = provider_registry.rows(p)
+        return provider_registry.rows(p)
     except providers.ConfigError as e:
         sys.exit(f"foreman: {e}")
-    for f in health.findings(p, rows, outside=True):
-        print(f"! {f['title']}: {(f['evidence'].splitlines() or [''])[0]}")
 
 
 def cmd_metrics(a: argparse.Namespace) -> None:
@@ -42,15 +50,26 @@ def cmd_metrics(a: argparse.Namespace) -> None:
     print(metrics.text(rows))
 
 
-def cmd_watch(a: argparse.Namespace) -> None:
-    p = home(a)
+def _listing(p: Project, command: str) -> Rows:
+    """The session listing, or the command exits: `watch` and `needs` decide parents from it."""
     try:
         rows = provider_registry.runner(p).rows()
     except providers.ConfigError as e:
         sys.exit(f"foreman: {e}")
     if rows is None:
-        sys.exit(f"foreman: {unreadable(p)}: foreman watch needs the session listing")
-    watch.run(p, a.once, rows)
+        sys.exit(f"foreman: {unreadable(p)}: foreman {command} needs the session listing")
+    return rows
+
+
+def cmd_watch(a: argparse.Namespace) -> None:
+    p = home(a)
+    watch.run(p, a.once, _listing(p, "watch"))
+
+
+def cmd_needs(a: argparse.Namespace) -> None:
+    """`watch`'s set of needs now, as JSON (DESIGN.md «The JSON reads»)."""
+    p = home(a)
+    print_json([{"kind": n.kind, "task": n.task, "since": n.since, "text": n.text, "key": n.key} for n in watch.found(p, _listing(p, "needs"))])
 
 
 def cmd_guard(a: argparse.Namespace) -> None:

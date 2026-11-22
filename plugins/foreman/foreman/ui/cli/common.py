@@ -1,6 +1,7 @@
 """What every `foreman` command needs: the project it works on and the task it speaks for."""
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -68,3 +69,8 @@ def mine(args: argparse.Namespace) -> str:
     if not tid:
         sys.exit("foreman: which task? (FOREMAN_TASK, set in an agent's session)")
     return tid
+
+
+def print_json(value: object) -> None:
+    """A `--json` read's output: the public contract for other programs (DESIGN.md «The JSON reads»)."""
+    print(json.dumps(value, indent=2, ensure_ascii=False))

@@ -1,39 +1,40 @@
 """foreman list and foreman show: the backlog and one task, as read."""
 
 import argparse
-import json
 
 from ...core.rules import decide
-from ...core.tasks import backlog, blockers, chains, questions, recurring, subtasks, taskrepo, tasktypes
+from ...core.tasks import backlog, blockers, chains, listing, questions, recurring, subtasks, taskrepo, tasktypes
 from ...providers import registry
-from .common import home
+from .common import home, print_json
 
 
-def _model(i: backlog.Task) -> str:
+def _model(r: listing.TaskRow) -> str:
     """`  [model: opus, effort: xhigh]`, either alone, or nothing when the task sets neither."""
-    shown = ", ".join(f"{k}: {i[k]}" for k in ("model", "effort") if i.get(k))
+    shown = ", ".join(f"{k}: {v}" for k, v in (("model", r["model"]), ("effort", r["effort"])) if v)
     return f"  [{shown}]" if shown else ""
+
+
+def _note(r: listing.TaskRow) -> str:
+    note = (f"  [priority: {r['priority']}]" if r["priority"] != "none" else "") + _model(r)
+    note += f"  [parent: {r['parent']}]" if r["parent"] else ""
+    note += (f"  [blocked: {r['blocked']}]" if r["blocked"] else "") + (f"  [{r['waiting']}]" if r["waiting"] else "")
+    note += f"  [recurring: {r['recurring']}]" if r["recurring"] else ""
+    return note + (f"  [chain: {c['lens']}, step {c['step']} of {c['cap']}]" if (c := r["chain"]) else "")
 
 
 def cmd_list(a: argparse.Namespace) -> None:
     p = home(a)
     d = registry.backlog(p).load()
-    all_ = backlog.tasks(d)
+    rows = listing.rows(backlog.tasks(d), a.all, p.several)
+    if a.json:
+        print_json(rows)
+        return
     width = max(len(k) for k in [*p.repo_keys, "-"]) if p.several else 0
-    status = {i["id"]: i["status"] for i in all_}
-    for i in subtasks.ordered(all_):
-        if i["status"] in backlog.CLOSED and not a.all:
-            continue
-        agent: backlog.Agent = i.get("agent") or {}
-        ag = agent.get("name", "")
-        title = ("  " if i.get("parent") in status and (a.all or status[i["parent"]] not in backlog.CLOSED) else "") + i["title"]
-        note = (f"  [priority: {i['priority']}]" if i.get("priority", "none") != "none" else "") + _model(i)
-        note += f"  [parent: {i['parent']}]" if i.get("parent") else ""
-        note += (f"  [blocked: {i['blocked']}]" if i.get("blocked") else "") + (f"  [{w}]" if (w := blockers.label(i, all_)) else "")
-        note += f"  [recurring: {name}]" if (name := recurring.name_of(i)) else ""
-        note += f"  [chain: {c['lens']}, step {c['step']} of {c['cap']}]" if (c := chains.progress(all_, i)) else ""
-        repo = f"{taskrepo.of(i, all_, True):{width}} " if p.several else ""
-        print(f"{i['id']:8} {i['status']:12} {repo}{tasktypes.of(i, all_):10} {ag:14} {title}{note}")
+    listed = {r["id"] for r in rows}
+    for r in rows:
+        title = ("  " if r["parent"] in listed else "") + r["title"]
+        repo = f"{r['repo']:{width}} " if p.several else ""
+        print(f"{r['id']:8} {r['status']:12} {repo}{r['type']:10} {r['agent']:14} {title}{_note(r)}")
     for q in questions.open_questions(d):
         print(f"? {q['id']} ({q.get('agent')}): {q['text']}")
 
@@ -50,4 +51,4 @@ def cmd_show(a: argparse.Namespace) -> None:
         i = {**i, "subtasks": [subtasks.summary(s, questions.open_questions(d, s["id"]), backlog.tasks(d)) for s in subs]}
     if c := chains.progress(backlog.tasks(d), i):
         i = {**i, "chain": {**i["chain"], "step": c["step"]}}
-    print(json.dumps(i, indent=2, ensure_ascii=False))
+    print_json(i)

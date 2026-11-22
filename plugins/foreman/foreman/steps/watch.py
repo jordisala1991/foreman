@@ -2,7 +2,7 @@
 (`state/ci.json`) and Claude Code's session listing, never from the text of events.jsonl."""
 
 import time
-from typing import Any
+from typing import Any, NamedTuple
 
 from .. import util
 from ..core.project.config import Project, ProjectError
@@ -38,34 +38,56 @@ def recently_sent(agent: backlog.Agent) -> bool:
     return age is not None and 0 <= age < AFTER_SEND_S
 
 
-def needs(p: Project, rows: Rows) -> dict[str, str]:
-    """What needs the owner now: key → one line, in the order questions, accepts, blocked, main, parents (not one a message
-    reached within AFTER_SEND_S)."""
+class Need(NamedTuple):
+    """One thing that waits for the owner: `key` names it across polls, `line` is what watch prints; `task` is "" for main,
+    `since` the stamp stored when it began (None for blocked and parent, which store none)."""
+
+    key: str
+    kind: str
+    task: str
+    since: str | None
+    text: str
+    line: str
+
+
+def found(p: Project, rows: Rows) -> list[Need]:
+    """What needs the owner now, in the order questions, accepts, blocked, main, parents (not one a message reached within
+    AFTER_SEND_S)."""
     with registry.view_scope(p):
         d = registry.backlog(p).load()
-    found: dict[str, str] = {}
+    out: list[Need] = []
     waiting = questions.tasks_waiting(d)
     for q in questions.open_questions(d):
-        found[f"q:{q['id']}"] = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
+        line = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
+        out.append(Need(f"q:{q['id']}", "question", q["task"], q.get("asked"), _line(q["text"]), line))
     all_tasks = backlog.tasks(d)
     open_tasks = [i for i in all_tasks if i["status"] not in backlog.CLOSED]
     for i in all_tasks:
         if _waits_for_accept(p, i):
-            found[f"accept:{i['id']}"] = _line(f"{i['id']} waits for the owner's accept: {i['title']}")
+            report: backlog.Report = i.get("report") or {}
+            summary = report.get("summary", "").splitlines()
+            line = _line(f"{i['id']} waits for the owner's accept: {i['title']}")
+            out.append(Need(f"accept:{i['id']}", "accept", i["id"], i["check"].get("at"), _line(summary[0] if summary else ""), line))
     for i in open_tasks:
         if i.get("blocked"):
-            found[f"blocked:{i['id']}"] = _line(f"{i['id']} blocked: {i['blocked']}")
+            out.append(Need(f"blocked:{i['id']}", "blocked", i["id"], None, _line(i["blocked"]), _line(f"{i['id']} blocked: {i['blocked']}")))
     ci = util.read_json(p.state / "ci.json", {})
     if ci.get("result") == "fail":
-        found[f"ci:{ci.get('since')}"] = _line(f"main: tests fail (since {ci.get('since')})")
+        out.append(Need(f"ci:{ci.get('since')}", "main", "", ci.get("since"), "tests fail on main", _line(f"main: tests fail (since {ci.get('since')})")))
     for i in open_tasks:
         agent: backlog.Agent = i.get("agent") or {}
         ref = ref_of(agent)
         waits_on_subtasks = any(s["status"] not in backlog.CLOSED for s in subtasks.of(all_tasks, i["id"]))
         idle = rows.alive(ref) and not rows.busy(ref)
         if agent.get("kind") == "parent" and i["id"] not in waiting and idle and not waits_on_subtasks and not recently_sent(agent):
-            found[f"parent:{i['id']}"] = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
-    return found
+            line = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
+            out.append(Need(f"parent:{i['id']}", "parent", i["id"], None, _line(i["title"]), line))
+    return out
+
+
+def needs(p: Project, rows: Rows) -> dict[str, str]:
+    """What needs the owner now: key → watch's line, in `found`'s order."""
+    return {n.key: n.line for n in found(p, rows)}
 
 
 def at_start(found: dict[str, str]) -> dict[str, str]:
