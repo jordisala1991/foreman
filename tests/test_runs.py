@@ -8,7 +8,7 @@ import pytest
 from fakerepo import FakeRepo
 from helpers import Env, fm
 from test_misled import run_as
-from test_relaunch import KINDS, mechanic_, planning, responsible
+from test_relaunch import KINDS, idle, mechanic_, planning, responsible
 from test_watch import listing, row, task
 
 from foreman.core.oversight import diagnosis
@@ -97,6 +97,29 @@ class TestOutcomes:
         fm(self.e.home, "reject", tid, "fix the name")
         first, again = of(self.e, tid, "responsible")
         assert (again.attempt, again.active, again.session) == (2, True, first.session)
+
+    def test_a_late_verdict_for_an_older_tip_leaves_the_newer_review_run_active(self):
+        tid, _ = responsible(self.e)
+        launch.launch_reviewer(self.e.p, self.e.task(tid), "abc123", "hunter")
+        launch.launch_reviewer(self.e.p, self.e.task(tid), "abc123")
+        launch.launch_reviewer(self.e.p, self.e.task(tid), "def456")
+        run_as(self.e, tid, "ty-1-review", "verdict", "--tip", "abc123", "--open", "0", "--file", "r")
+        assert [(r.attempt, r.outcome) for r in of(self.e, tid, "review")] == [(1, "canceled"), (2, None)]
+
+    def test_a_relaunch_in_review_starts_no_run(self):
+        tid, role = responsible(self.e)
+        run_as(self.e, tid, "ty-1", "done", "--summary", "s")
+        idle(self.e, tid, role)
+        fm(self.e.home, "relaunch", tid)
+        assert [r.outcome for r in of(self.e, tid, "responsible")] == ["done"]
+
+    def test_a_reject_cancels_the_review_runs(self):
+        tid, _ = responsible(self.e)
+        run_as(self.e, tid, "ty-1", "done", "--summary", "s")
+        launch.launch_reviewer(self.e.p, self.e.task(tid), "abc123", "hunter")
+        launch.launch_reviewer(self.e.p, self.e.task(tid), "abc123")
+        fm(self.e.home, "reject", tid, "no")
+        assert [(r.kind, r.outcome) for r in runs.load(self.e.p) if r.kind in ("hunter", "review")] == [("hunter", "canceled"), ("review", "canceled")]
 
     def test_verdict_ends_the_review_run_done(self):
         tid, _ = responsible(self.e)

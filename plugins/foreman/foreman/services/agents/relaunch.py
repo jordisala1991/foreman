@@ -55,7 +55,8 @@ def _relaunch(p: Project, tid: str) -> tuple[str, str]:
         runner.stop(new)
         backlog.event(p, tid, f"relaunch of {a['name']} undone: the task changed meanwhile (copy {new.short} stopped)")
         raise RunnerError(f"{tid} changed while its agent restarted: the copy {new.short} is stopped")
-    record_run(p, tid, run_kind(task, a), new, a)
+    if task["status"] != "in review":  # in review its agent has no work: its run ended at `foreman done`
+        record_run(p, tid, run_kind(task, a), new, a)
     backlog.event(p, tid, f"relaunched {a['name']} on the current foreman: session {a['short']} → {new.short}")
     return a["short"], new.short
 

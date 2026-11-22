@@ -52,7 +52,8 @@ def cmd_verdict(a: argparse.Namespace) -> None:
             i["review"] = v
             report: backlog.Report = i.get("report") or {}
             i["report"] = {**report, "review": "clean" if a.open == 0 else f"open: {a.open}"}
-    runs.end(p, tid, ("review",), "done")
+    if tip == newest:  # an older launch's reviewer was superseded: its verdict ends no run
+        runs.end(p, tid, ("review",), "done")
     registry.backlog(p).record_misled(tid, "hunter" if os.environ.get("FOREMAN_AGENT", "").endswith("-hunt") else "reviewer", a.misled)
     backlog.event(p, tid, f"review round {v['round']} of {tip[:9]}: {a.open} open ({a.file})")
     print("Verdict recorded. End your turn.")
