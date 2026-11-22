@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 from helpers import ROOT
 
-# A token like a/b.py or a/b/c.md, not part of a longer path, a home (~/), or a `ref:` path into another project.
-PATH = re.compile(r"(?<![\w./~:-])(?:[\w.-]+/)+[\w.-]+\.(?:py|md)\b")
+# A token like a/b.py, a/b/c.md or a/b/, not part of a longer path, a home (~/), or a `ref:` path into another project.
+PATH = re.compile(r"(?<![\w./~:-])(?:[\w.-]+/)+(?:[\w.-]+\.(?:py|md)\b)?")
 DOTTED = re.compile(r"(?<![\w./-])foreman(?:\.\w+)+")
 # The one name of that shape that is a file, not a module.
 OUTSIDE = {"foreman.toml"}
@@ -43,8 +43,22 @@ def module_exists(pkg: Path, name: str) -> bool:
             return True
         else:
             init = here / "__init__.py"
-            return init.is_file() and re.search(rf"\b{part}\b", init.read_text()) is not None
+            return init.is_file() and part in bound(init)
     return True
+
+
+def bound(init: Path) -> set[str]:
+    """The names a package's __init__ binds at its top level: imports, assignments, functions and classes."""
+    names: set[str] = set()
+    for node in ast.parse(init.read_text()).body:
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            names |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign | ast.AnnAssign):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names |= {t.id for t in targets if isinstance(t, ast.Name)}
+    return names
 
 
 def stale(root: Path) -> list[str]:
@@ -58,7 +72,7 @@ def stale(root: Path) -> list[str]:
         where = f.relative_to(root).as_posix()
         for n, line in lines:
             for path in PATH.findall(line):
-                if path.split("/")[0] in areas and not any((b / path).is_file() for b in bases):
+                if path.split("/")[0] in areas and not any((b / path).exists() for b in bases):
                     found.append(f"{where}:{n} {path}")
             for name in DOTTED.findall(line):
                 if name not in OUTSIDE and not module_exists(pkg, name):
@@ -76,7 +90,7 @@ def tree(root: Path, rel: str, text: str) -> None:
         ("DESIGN.md", ""),
         ("GLOSSARY.md", ""),
         ("plugins/foreman/foreman/__init__.py", ""),
-        ("plugins/foreman/foreman/services/__init__.py", ""),
+        ("plugins/foreman/foreman/services/__init__.py", '"""The merge."""\nfrom foreman.services.lock import acquire\n'),
         ("plugins/foreman/foreman/services/lock.py", "def acquire() -> None: ...\n"),
         ("plugins/foreman/foreman/briefs/a.md", ""),
         (rel, text),
@@ -108,6 +122,7 @@ def tree(root: Path, rel: str, text: str) -> None:
             "From `services/claude/sessions.py`.\n",
             ["plugins/foreman/foreman/briefs/b.md:1 services/claude/sessions.py"],
         ),
+        ("DESIGN.md", "`foreman/services/gone/` and `foreman.services.merge`\n", ["DESIGN.md:1 foreman/services/gone/", "DESIGN.md:1 foreman.services.merge"]),
     ],
 )
 def test_a_stale_name_is_reported(tmp_path: Path, rel: str, text: str, expected: list[str]):
@@ -117,8 +132,9 @@ def test_a_stale_name_is_reported(tmp_path: Path, rel: str, text: str, expected:
 
 def test_a_live_or_outside_name_is_not_reported(tmp_path: Path):
     text = (
-        '"""`foreman/services/lock.py`, `foreman.services.lock.acquire`, `foreman.toml`, `ref:services/orca/call.py`,\n'
-        '`.claude/settings.local.json`, `~/.config/foreman/x.md`, `state/loop.json`, `reports/FN-1.md`."""\n'
+        '"""`foreman/services/lock.py`, `foreman.services.lock.acquire`, `foreman.services.acquire`, `foreman/services/`,\n'
+        "`foreman.toml`, `ref:services/orca/call.py`, `.claude/settings.local.json`, `~/.config/foreman/x.md`,\n"
+        '`state/loop.json`, `reports/FN-1.md`."""\n'
         'MESSAGE = "see foreman/services/gone.py and foreman.services.gone"\n'
     )
     tree(tmp_path, "plugins/foreman/foreman/services/y.py", text)
