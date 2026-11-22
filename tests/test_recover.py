@@ -18,7 +18,7 @@ from foreman.loop.launch import launch_free
 from foreman.providers import registry
 from foreman.providers.runner import NO_ROWS, State
 from foreman.services.agents.launch import launch_reviewer
-from foreman.steps import parents, recover, watch
+from foreman.steps import parents, recover, talk, watch
 
 OLD = "2000-01-01 00:00:00"
 
@@ -200,3 +200,39 @@ def test_a_loop_restart_recovers_both_open_runs(e: Env, fake_runner: FakeRunner)
     tick.tick(e.p)
     for tid in (a, b):
         assert [(r.outcome, r.failure_reason, r.attempt) for r in of(e, tid)] == [("failed", "session_ended", 1), (None, "", 2)]
+
+
+def test_a_session_an_answer_resumed_in_the_same_tick_is_not_judged_on_the_old_listing(e: Env, fake_runner: FakeRunner):
+    tid = launched(e, fake_runner)
+    qid = registry.backlog(e.p).ask(tid, "x", "A or B?")
+    registry.backlog(e.p).answer(qid, "B")
+    end(fake_runner, e, tid)
+    tick.tick(e.p)
+    assert [m for _, m, _ in fake_runner.sent] == ["The owner answered your question TY-1 Q1: «B». Carry on with the task."]
+    assert [r.outcome for r in of(e, tid)] == [None]
+    assert not task(e, tid).get("blocked")
+
+
+def test_an_unblock_after_a_hand_over_lets_the_agent_run(e: Env, fake_runner: FakeRunner):
+    tid = launched(e, fake_runner)
+    for _ in range(2):
+        end(fake_runner, e, tid)
+        recover.run(e.p, fake_runner.rows())
+    assert task(e, tid)["blocked"].startswith("its agent stopped")
+    sent = len(fake_runner.sent)
+    talk.unblock(e.p, tid)
+    tick.tick(e.p)
+    assert len(fake_runner.sent) == sent + 1
+    assert [r.outcome for r in of(e, tid)] == ["failed", "failed", None]
+    assert not task(e, tid).get("blocked")
+
+
+def test_a_hunter_whose_file_is_written_is_not_judged_dead(e: Env, fake_runner: FakeRunner):
+    tid = registry.backlog(e.p).add("y", status="ready", criteria="y")
+    registry.backlog(e.p).set_status(tid, "in review", worktree=str(e.repo), branch="b")
+    launch_reviewer(e.p, task(e, tid), "tip", "hunter")
+    Path(task(e, tid)["hunter"]["file"]).write_text("findings\n")
+    end(fake_runner, e, tid, "hunter")
+    tick.tick(e.p)
+    assert [(r.outcome, r.failure_reason) for r in of(e, tid, "hunter")] == [("done", "")]
+    assert fake_runner.sent == []

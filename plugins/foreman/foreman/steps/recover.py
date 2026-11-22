@@ -3,6 +3,7 @@ reason (`core/tasks/recovery.py`), then retried, its session resumed or else sta
 path, or handed to the owner. It runs first thing after a loop restart too: the ledger and the runner's listing are all
 it reads, and `state/runner.json` keeps the runner's epoch to tell a runner restart from a session's own end."""
 
+from pathlib import Path
 from typing import Any
 
 from .. import util
@@ -55,8 +56,8 @@ def recover(p: Project, i: dict[str, Any], r: runs.Run, rows: Rows, restarted: b
     role = ROLE.get(r.kind, "agent")
     record: dict[str, Any] = i.get(role) or {}
     ref = ref_of(record)
-    if ref is None:
-        return
+    if ref is None or (r.kind == "hunter" and Path(record.get("file") or "").is_file()):
+        return  # a hunter's written file is its outcome: the queue step closes its run done
     seen = rows.state(ref)
     facts = recovery.Facts(
         known=bool(record.get("session")),

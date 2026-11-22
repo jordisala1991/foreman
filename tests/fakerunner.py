@@ -56,6 +56,8 @@ class FakeRunner:
         if self.fail_send:
             raise RunnerError("boom")
         self.sent.append((ref, message, cwd))
+        if ref.session:
+            self.states[ref.session] = State.WORKING  # resumed: it works, as a real runner's listing shows it
         return ref
 
     def relaunch(self, ref: SessionRef, agent: Agent, message: str, cwd: Path) -> SessionRef:
@@ -65,7 +67,7 @@ class FakeRunner:
         return ref.short
 
     def rows(self) -> FakeRows:
-        return FakeRows(self.states, self.epoch)
+        return FakeRows(dict(self.states), self.epoch)  # a snapshot, as a real listing is
 
     def stop(self, ref: SessionRef) -> None:
         self.stopped.append(ref)
