@@ -153,6 +153,15 @@ def test_hunter_folder_goes_with_its_file(fake_git: FakeRepo, fake_runner: FakeR
     assert not kept(fake_git, cwd, "ty-2-hunt") and kept(fake_git, cwd, "ty-2-review")
 
 
+def test_the_hunters_folder_does_not_wait_for_the_reviewers_session(fake_git: FakeRepo, fake_runner: FakeRunner):
+    e = Env(repo=fake_git)
+    cwd = started(e, "orca", fake_runner, fake_git)
+    Path(task(e, "TY-2")["hunter"]["file"]).write_text("findings")
+    fake_runner.states[sid_of(fake_runner, "ty-2-review")] = State.WORKING
+    sweep(e, fake_runner)
+    assert not kept(fake_git, cwd, "ty-2-hunt") and kept(fake_git, cwd, "ty-2-review")
+
+
 def test_reviewer_folder_goes_with_its_verdict(fake_git: FakeRepo, fake_runner: FakeRunner):
     e = Env(repo=fake_git)
     cwd = started(e, "orca", fake_runner, fake_git)
@@ -217,6 +226,22 @@ def test_a_failed_removal_is_one_line_and_tried_again(fake_git: FakeRepo, fake_r
     fake_runner.fail_remove.clear()
     sweep(e, fake_runner)
     assert not kept(fake_git, cwd, "ty-1-planning") and len(util.read_jsonl(e.p.state / "errors.jsonl")) == 1
+
+
+def test_a_removal_that_leaves_the_folder_is_a_line_in_errors(fake_git: FakeRepo, fake_runner: FakeRunner, monkeypatch: pytest.MonkeyPatch):
+    e = Env(repo=fake_git)
+    cwd = started(e, "orca", fake_runner, fake_git)
+    registry.backlog(e.p).set_status("TY-1", "done", "s")
+    folder = cwd["ty-1-planning"]
+    folder.mkdir(parents=True, exist_ok=True)
+
+    def refuses(path: Path | str) -> None:  # git refuses and the folder stays
+        return None
+
+    monkeypatch.setattr(fake_git, "remove_worktree", refuses)
+    sweep(e, fake_runner)
+    [line] = util.read_jsonl(e.p.state / "errors.jsonl")
+    assert line["step"] == "folders" and folder.name in line["error"]
 
 
 def test_no_sessions_listed_removes_nothing(fake_git: FakeRepo, fake_runner: FakeRunner):

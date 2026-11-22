@@ -9,7 +9,7 @@ from typing import Any
 from ... import proc
 from ...core.project.config import Project
 from ...providers import registry
-from ...providers.repo import Repo
+from ...providers.repo import Repo, RepoError
 
 POST_CREATE_TIMEOUT = 300  # seconds, each step
 
@@ -71,6 +71,9 @@ def owner_of(folder: Path) -> tuple[str, str] | None:
 
 
 def remove_agent_folder(p: Project, repo: Repo, folder: Path) -> None:
-    """Removes an agent folder through the runner that made it, then from git (a folder the runner did not list)."""
+    """Removes an agent folder through the runner that made it, then from git (a folder the runner did not list); raises
+    when the folder is still there."""
     registry.runner(p).remove_folder(folder)
     repo.remove_worktree(folder)
+    if folder.exists():
+        raise RepoError(f"{folder} is still there after its removal")

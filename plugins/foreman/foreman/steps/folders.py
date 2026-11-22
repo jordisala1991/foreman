@@ -10,12 +10,12 @@ from ..core.project.config import Project
 from ..core.rules import decide
 from ..core.tasks import backlog
 from ..providers import registry
-from ..providers.runner import Rows, ref_from_tab
+from ..providers.runner import Rows, SessionRef, ref_from_tab, ref_of
 from ..services.agents.running import idle_s
 from ..services.agents.worktree import owner_of, remove_agent_folder
 from .talk import NUDGE_IDLE_S
 
-KIND = {"parent": "parent", "planning": "planning", "mechanic": "mechanic", "hunt": "review", "review": "review"}  # session kind by folder role
+KIND = {"parent": "parent", "planning": "planning", "mechanic": "mechanic"}  # session kind by folder role: the hunter and reviewer share one
 
 
 def output_in(i: dict[str, Any], role: str, commit: str) -> bool:
@@ -31,10 +31,19 @@ def output_in(i: dict[str, Any], role: str, commit: str) -> bool:
     return not str(r.get("tip", "")).startswith(commit) or any(str(v.get("tip", "")).startswith(commit) for v in verdicts)
 
 
+def sessions_of(i: dict[str, Any], role: str, commit: str, rows: Rows) -> list[SessionRef]:
+    """The sessions of the folder's own agent: a hunter's or reviewer's, by its record (the two share one session kind) and the
+    tip its folder was made at; the others', by the session kind of the role."""
+    if role in KIND:
+        tabs: dict[str, list[str | None]] = i.get("session_tabs", {})
+        kinds: dict[str, str] = i.get("session_kinds", {})
+        return [ref_from_tab(rows.short(sid) or "", sid, tabs.get(sid)) for sid in i.get("sessions", []) if kinds.get(sid) == KIND[role]]
+    records = [i.get("hunter")] if role == "hunt" else [*i.get("reviewers", []), i.get("reviewer")]
+    return [r for a in records if a and str(a.get("tip", "")).startswith(commit) and (r := ref_of(a))]
+
+
 def facts(i: dict[str, Any], role: str, commit: str, rows: Rows) -> decide.FolderFacts:
-    tabs: dict[str, list[str | None]] = i.get("session_tabs", {})
-    kinds: dict[str, str] = i.get("session_kinds", {})
-    refs = [ref_from_tab(rows.short(sid) or "", sid, tabs.get(sid)) for sid in i.get("sessions", []) if kinds.get(sid) == KIND[role]]
+    refs = sessions_of(i, role, commit, rows)
     return decide.FolderFacts(
         role,
         i["status"],
