@@ -1,5 +1,5 @@
 """Shared resources: `foreman lock NAME run "what" command…` waits its turn, runs the command holding the resource, and
-always releases it. The lean version of foreman's lock (lib/foreman/lock.py + sh/lock.sh), keeping what worked:
+always releases it. The lean version of the old foreman's lock (a Python module and a shell script), keeping what worked:
 
 - a fair queue: first come, first served (a ticket per waiter, by arrival time);
 - slots: a resource may have several (`slots = ["A", "B"]`, e.g. two simulators); the command gets FOREMAN_SLOT;

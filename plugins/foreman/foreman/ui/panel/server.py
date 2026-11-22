@@ -1,7 +1,7 @@
 """The panel: a stdlib HTTP server for the owner (127.0.0.1, or the network with `--host 0.0.0.0`). It serves the page built in panel/dist (React, from
 panel/src) and a JSON API over every registered project (`p=NAME` picks one; the first by default).
 
-Adapted from foreman's lib/foreman/panel.py: the key (`?key=` or the `foreman_key` cookie the page sets), the routing by path. What only served the
+Adapted from the old foreman's panel module: the key (`?key=` or the `foreman_key` cookie the page sets), the routing by path. What only served the
 old foreman is gone. The owner's actions call what the CLI calls (foreman.ui.cli's functions, foreman.services.delivery.merge.accept,
 foreman.core.tasks.backlog.add), so the panel and `foreman` cannot disagree.
 
