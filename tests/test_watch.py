@@ -15,7 +15,7 @@ from foreman.core.tasks import backlog
 from foreman.providers import registry
 from foreman.providers.claude.rows import ClaudeRows
 from foreman.providers.runner import NO_ROWS
-from foreman.steps import watch
+from foreman.steps import parents, watch
 
 CHECK = {"risk": "high", "tests": "pass", "review": "clean", "ci": "", "conflict": False}
 
@@ -171,6 +171,18 @@ def test_a_parent_waits_for_the_owner_only_when_none_of_its_subtasks_is_open(fak
     for closed in ("done", "canceled"):
         registry.backlog(e.p).update(sub, status=closed)
         assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
+
+
+def test_a_parent_with_a_message_not_yet_delivered_is_not_a_need(fake_git: FakeRepo):
+    e = Env(repo=fake_git)
+    tid = parent(e)
+    sub = subtask(e, tid, "refining")
+    idle = ClaudeRows({"s1": row()})
+    registry.backlog(e.p).update(sub, status="done")
+    parents.notify(e.p)  # files the message for the parent's agent; the loop delivers it a tick later
+    assert watch.needs(e.p, idle) == {}
+    registry.backlog(e.p).mark_delivered(f"{tid} S1")
+    assert list(watch.needs(e.p, idle)) == [f"parent:{tid}"]
 
 
 def test_questions_blocked_and_parents_at_start_are_not_printed(fake_git: FakeRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):

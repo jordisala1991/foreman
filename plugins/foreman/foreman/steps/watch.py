@@ -36,7 +36,7 @@ def needs(p: Project, rows: Rows) -> dict[str, str]:
     with registry.view_scope(p):
         d = registry.backlog(p).load()
     found: dict[str, str] = {}
-    asked = {q["task"] for q in questions.open_questions(d)}
+    waiting = questions.tasks_waiting(d)
     for q in questions.open_questions(d):
         found[f"q:{q['id']}"] = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
     all_tasks = backlog.tasks(d)
@@ -54,7 +54,7 @@ def needs(p: Project, rows: Rows) -> dict[str, str]:
         agent: backlog.Agent = i.get("agent") or {}
         ref = ref_of(agent)
         waits_on_subtasks = any(s["status"] not in backlog.CLOSED for s in subtasks.of(all_tasks, i["id"]))
-        if agent.get("kind") == "parent" and i["id"] not in asked and rows.alive(ref) and not rows.busy(ref) and not waits_on_subtasks:
+        if agent.get("kind") == "parent" and i["id"] not in waiting and rows.alive(ref) and not rows.busy(ref) and not waits_on_subtasks:
             found[f"parent:{i['id']}"] = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
     return found
 
