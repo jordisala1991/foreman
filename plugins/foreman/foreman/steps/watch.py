@@ -39,8 +39,9 @@ def recently_sent(agent: backlog.Agent) -> bool:
 
 
 class Need(NamedTuple):
-    """One thing that waits for the owner: `key` names it across polls, `line` is what watch prints; `task` is "" for main,
-    `since` the stamp stored when it began (None for blocked and parent, which store none)."""
+    """One thing that waits for the owner: `key` names it across polls, `line` is what watch prints, `text` what the owner
+    decides on as stored (the first line of an accept's summary, as the review description shows it); `task` is "" for
+    main, `since` the stamp stored when it began (None for blocked and parent, which store none)."""
 
     key: str
     kind: str
@@ -59,18 +60,18 @@ def found(p: Project, rows: Rows) -> list[Need]:
     waiting = questions.tasks_waiting(d)
     for q in questions.open_questions(d):
         line = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
-        out.append(Need(f"q:{q['id']}", "question", q["task"], q.get("asked"), _line(q["text"]), line))
+        out.append(Need(f"q:{q['id']}", "question", q["task"], q.get("asked"), q["text"], line))
     all_tasks = backlog.tasks(d)
     open_tasks = [i for i in all_tasks if i["status"] not in backlog.CLOSED]
     for i in all_tasks:
         if _waits_for_accept(p, i):
             report: backlog.Report = i.get("report") or {}
-            summary = report.get("summary", "").splitlines()
+            summary = report.get("summary", "").strip().splitlines()
             line = _line(f"{i['id']} waits for the owner's accept: {i['title']}")
-            out.append(Need(f"accept:{i['id']}", "accept", i["id"], i["check"].get("at"), _line(summary[0] if summary else ""), line))
+            out.append(Need(f"accept:{i['id']}", "accept", i["id"], i["check"].get("at"), summary[0] if summary else "", line))
     for i in open_tasks:
         if i.get("blocked"):
-            out.append(Need(f"blocked:{i['id']}", "blocked", i["id"], None, _line(i["blocked"]), _line(f"{i['id']} blocked: {i['blocked']}")))
+            out.append(Need(f"blocked:{i['id']}", "blocked", i["id"], None, i["blocked"], _line(f"{i['id']} blocked: {i['blocked']}")))
     ci = util.read_json(p.state / "ci.json", {})
     if ci.get("result") == "fail":
         out.append(Need(f"ci:{ci.get('since')}", "main", "", ci.get("since"), "tests fail on main", _line(f"main: tests fail (since {ci.get('since')})")))
@@ -81,7 +82,7 @@ def found(p: Project, rows: Rows) -> list[Need]:
         idle = rows.alive(ref) and not rows.busy(ref)
         if agent.get("kind") == "parent" and i["id"] not in waiting and idle and not waits_on_subtasks and not recently_sent(agent):
             line = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
-            out.append(Need(f"parent:{i['id']}", "parent", i["id"], None, _line(i["title"]), line))
+            out.append(Need(f"parent:{i['id']}", "parent", i["id"], None, i["title"], line))
     return out
 
 

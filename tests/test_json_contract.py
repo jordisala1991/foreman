@@ -4,7 +4,7 @@ retyping a field fails; adding one does not."""
 
 import json
 import time
-from typing import Any
+from typing import Any, NamedTuple
 
 from fakerepo import FakeRepo
 from helpers import Env, fm
@@ -20,9 +20,17 @@ from foreman.steps import watch
 
 Shape = dict[str, Any]
 
+
+class OrNull(NamedTuple):
+    """A nested object frozen field by field, or null."""
+
+    shape: Shape
+
+
+CHAIN = {"lens": str, "step": int, "cap": int, "open": str}
+KINDS = frozenset({"question", "accept", "blocked", "main", "parent"})  # a field frozen to these values
 TEXT_OR_NULL = (str, type(None))
 INT_OR_NULL = (int, type(None))
-DICT_OR_NULL = (dict, type(None))
 
 SHAPES: dict[str, Shape] = {
     "projects": {"name": str, "prefix": str, "home": str, "repo": str, "main": str, "autonomy": str, "loop_running": bool},
@@ -40,9 +48,9 @@ SHAPES: dict[str, Shape] = {
         "blocked": str,
         "waiting": str,
         "recurring": str,
-        "chain": DICT_OR_NULL,
+        "chain": OrNull(CHAIN),
     },
-    "needs": {"kind": str, "task": str, "since": TEXT_OR_NULL, "text": str, "key": str},
+    "needs": {"kind": KINDS, "task": str, "since": TEXT_OR_NULL, "text": str, "key": str},
     "health": {"loop": dict, "versions": dict, "recurring": list, "findings": list, "warnings": list},
     "health.loop": {"time": TEXT_OR_NULL, "alive": bool},
     "health.versions": {"loop": TEXT_OR_NULL, "this": str, "installed": TEXT_OR_NULL},
@@ -53,16 +61,24 @@ SHAPES: dict[str, Shape] = {
         "open": str,
         "left": INT_OR_NULL,
         "next": TEXT_OR_NULL,
-        "chain": DICT_OR_NULL,
+        "chain": OrNull(CHAIN),
     },
     "health.findings": {"key": str, "title": str, "meaning": str, "evidence": str, "hypothesis": str, "repo": str},
     "show": {"id": str, "title": str, "status": str, "blocked": str, "priority": str},
 }
 
 
+def _fits(value: object, t: Any) -> bool:
+    if t is KINDS:
+        return value in KINDS
+    if isinstance(t, OrNull):
+        return value is None or ((obj := util.json_object(value)) is not None and conforms(obj, t.shape))
+    return isinstance(value, t) and not (isinstance(value, bool) and bool not in (t if isinstance(t, tuple) else (t,)))
+
+
 def conforms(obj: dict[str, Any], shape: Shape) -> bool:
-    """Every frozen field is present with its type; other fields are free."""
-    return all(k in obj and isinstance(obj[k], t) for k, t in shape.items())
+    """Every frozen field is present with its type (a bool is no int; a nested shape is checked field by field); other fields are free."""
+    return all(k in obj and _fits(obj[k], t) for k, t in shape.items())
 
 
 def read(e: Env, *args: str) -> Any:
@@ -77,6 +93,14 @@ def test_the_freeze_catches_a_rename_a_removal_and_allows_an_addition():
     assert not conforms(renamed, SHAPES["needs"])
     assert not conforms({k: v for k, v in good.items() if k != "kind"}, SHAPES["needs"])
     assert not conforms({**good, "since": 3}, SHAPES["needs"])
+    assert not conforms({**good, "kind": "go"}, SHAPES["needs"])
+    entry = {"name": "n", "title": "t", "trigger": "every 2 merges", "open": "", "left": 2, "next": None, "chain": None}
+    chain = {"lens": "l", "step": 1, "cap": 3, "open": ""}
+    assert conforms({**entry, "chain": chain}, SHAPES["health.recurring"])
+    assert conforms({**entry, "chain": {**chain, "extra": 1}}, SHAPES["health.recurring"])
+    renamed_cap = {**{k: v for k, v in chain.items() if k != "cap"}, "max": 3}
+    assert not conforms({**entry, "chain": renamed_cap}, SHAPES["health.recurring"])
+    assert not conforms({**entry, "left": True}, SHAPES["health.recurring"])  # a bool is no int
 
 
 def test_projects_lists_every_registered_project(env: Env):
@@ -114,10 +138,10 @@ def test_list_gives_every_task_with_the_fields_list_prints(env: Env):
 def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     asking = task(e)
-    qid = registry.backlog(e.p).ask(asking, "agent", "which   way?")
+    qid = registry.backlog(e.p).ask(asking, "agent", "which   way?\n\nthis or that")
     asked = registry.backlog(e.p).load()["decisions"][0]["asked"]
     stuck = task(e, blocked="why")
-    review = in_review(e, check={**CHECK, "at": "2026-11-22 10:00:00"}, report={"summary": "line one\nmore"})
+    review = in_review(e, check={**CHECK, "at": "2026-11-22 10:00:00"}, report={"summary": "\n\nline one\nmore"})
     util.write_json(e.p.state / "ci.json", {"result": "fail", "since": "2026-11-22 09:00:00"})
     idle = parent(e)
     listing(e, row())
@@ -125,7 +149,7 @@ def test_needs_is_watchs_set_with_its_facts(fake_git: FakeRepo):
     assert all(conforms(n, SHAPES["needs"]) for n in found)
     by_kind = {n["kind"]: n for n in found}
     assert [n["kind"] for n in found] == ["question", "accept", "blocked", "main", "parent"]
-    assert by_kind["question"] == {"kind": "question", "task": asking, "since": asked, "text": "which way?", "key": f"q:{qid}"}
+    assert by_kind["question"] == {"kind": "question", "task": asking, "since": asked, "text": "which   way?\n\nthis or that", "key": f"q:{qid}"}
     assert (by_kind["blocked"]["task"], by_kind["blocked"]["text"], by_kind["blocked"]["since"]) == (stuck, "why", None)
     assert (by_kind["accept"]["task"], by_kind["accept"]["text"], by_kind["accept"]["since"]) == (review, "line one", "2026-11-22 10:00:00")
     assert (by_kind["main"]["task"], by_kind["main"]["since"]) == ("", "2026-11-22 09:00:00")
@@ -147,6 +171,11 @@ def test_health_gives_what_health_prints(env: Env):
     assert all(isinstance(w, str) for w in h["warnings"])
     (r,) = h["recurring"]
     assert conforms(r, SHAPES["health.recurring"]) and (r["name"], r["left"], r["chain"]) == ("cleanup", 2, None)
+    b = registry.backlog(e.p)
+    parent_id = b.add("Prune", criteria="c", source=recurring.SOURCE + "cleanup", chain={"lens": "l", "max_steps": 3, "max_lines": 100})
+    step = b.add("step", criteria="c", parent=parent_id)
+    (r,) = read(e, "health", "--json")["recurring"]
+    assert conforms(r, SHAPES["health.recurring"]) and r["chain"] == {"lens": "l", "step": 1, "cap": 3, "open": step}
 
 
 def test_show_keeps_its_json(env: Env):
