@@ -65,6 +65,10 @@ class Claude:
         rows = self.rows()
         return SessionRef(short, rows.find(short) if rows else None)
 
+    def handle(self, ref: SessionRef) -> str:
+        """The short id: what `claude attach` takes."""
+        return ref.short
+
     def send(self, ref: SessionRef, message: str, cwd: Path) -> SessionRef:
         """Wakes the session with a message. claude continues a session under its id only if it is stopped (process gone)
         and no flag is given; otherwise it starts a copy. So: stop it, wait until it is gone, resume bare; a copy is an error."""
