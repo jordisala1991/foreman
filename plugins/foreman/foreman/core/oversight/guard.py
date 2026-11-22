@@ -40,6 +40,7 @@ PUBLISH = {
 MAIN = {"main", "master"}
 OPERATORS = {";", "&&", "||", "|", "&", ";;", "|&"}
 REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
+REDIRECTION = re.compile(r"[<>&|]+")  # a redirection operator as `segments` splits it: >, >>, >&, &>, <, <<
 WHY = {
     "publish": "publishing goes outside this machine",
     "push-main": "pushing to the main branch (or forcing a push) skips the owner's review and accept",
@@ -163,8 +164,25 @@ def _removes(prog: str, args: list[str], sc: Scope) -> bool:
     return any(not _mine(t, sc.cwd, sc) for t in targets)
 
 
+def _operands(args: list[str]) -> list[str]:
+    """The program's own words: `args` without its redirections (operator, target and the descriptor of `2>`), which are
+    not paths or branches."""
+    out: list[str] = []
+    target = False
+    for a in args:
+        if target:
+            target = False
+        elif REDIRECTION.fullmatch(a):
+            if out and out[-1].isdigit():
+                out.pop()
+            target = True
+        else:
+            out.append(a)
+    return out
+
+
 def _segment(w: list[str], sc: Scope) -> str | None:
-    prog, args = w[0], w[1:]
+    prog, args = w[0], _operands(w[1:])
     here = args[:1] not in (["-C"], ["-c"])  # git runs in the command's folder
     if prog == "git":
         args = _git_args(args)
