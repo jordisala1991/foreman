@@ -8,6 +8,7 @@ import pytest
 from helpers import Env, fm, git
 from test_github import GH
 
+from foreman.core.project.config import Project
 from foreman.core.tasks import backlog, subtasks
 from foreman.loop import tick
 from foreman.providers import registry
@@ -20,7 +21,7 @@ def count(e: Env) -> int:
 
 class TestFiling:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.P = registry.backlog(self.e.p).add("parent", status="triage")
 
@@ -93,7 +94,7 @@ class TestOutcome:
             (["canceled", "triage"], ""),
         ],
     )
-    def test_outcome_table(self, states, want):
+    def test_outcome_table(self, states: list[str], want: str):
         assert subtasks.outcome([{"status": s} for s in states]) == want
 
 
@@ -114,7 +115,7 @@ class TestLoop:
 
 class TestClosing:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.P = registry.backlog(self.e.p).add("parent", status="triage")
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--criteria", "c").strip()
@@ -158,7 +159,7 @@ class TestClosing:
         fm(self.e.home, "cancel", self.P)
         assert [self.status(i) for i in (self.S1, self.S2, S3, self.P)] == ["canceled", "canceled", "done", "canceled"]
 
-    def test_cancel_of_a_parent_closes_its_subtasks_pull_requests(self, request):
+    def test_cancel_of_a_parent_closes_its_subtasks_pull_requests(self, request: pytest.FixtureRequest):
         g = GH()
         request.addfinalizer(g.close)
         P = registry.backlog(g.e.p).add("parent", status="triage")
@@ -171,12 +172,12 @@ class TestClosing:
 
 
 class TestRace:
-    def test_cancel_of_a_parent_does_not_overwrite_a_subtask_that_closed_meanwhile(self, owner):
+    def test_cancel_of_a_parent_does_not_overwrite_a_subtask_that_closed_meanwhile(self, owner: None):
         e = Env()
         P = registry.backlog(e.p).add("parent", status="triage")
         S = fm(e.home, "add", "s", "--parent", P, "--criteria", "c").strip()
 
-        def merged(p, i):  # the loop merges the subtask while the cascade closes it
+        def merged(p: Project, i: str) -> None:  # the loop merges the subtask while the cascade closes it
             registry.backlog(p).set_status(S, "done")
 
         with mock.patch.object(merge, "stop_all", side_effect=merged):
