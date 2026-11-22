@@ -25,6 +25,8 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
         return f"The owner answered your request {q['id']} ({q.get('action')}): «{q['answer']}». " + (
             "It is allowed once: run it again." if q.get("allowed") else "It is not allowed."
         )
+    elif q.get("kind") == "unblock":
+        return f"The owner cleared the block on task {i['id']}: carry on with the task."
     else:
         return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
 
@@ -133,3 +135,13 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
         i["agent"] = agent
         questions.message(d, i, "R", ("rejection", "conflict", "failing", "review"), kind=kind, text="review", answer=note, at=util.now())
     backlog.event(p, tid, f"→ in progress: returned to its agent ({kind}): {note}")
+
+
+def tell_unblocked(p: Project, tid: str) -> None:
+    """The owner cleared a block: the task's idle agent is told (a message the loop delivers, which also resets its nudge)."""
+    with registry.backlog(p).edit() as d:
+        i = backlog.get(d, tid)
+        if i["status"] not in backlog.RUNNING or ref_of(i.get("agent") or {}) is None:
+            return
+        questions.message(d, i, "U", ("unblock",), kind="unblock", text="unblock", answer="unblock", at=util.now())
+    backlog.event(p, tid, "owner cleared the block: its agent is told")

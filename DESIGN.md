@@ -64,7 +64,8 @@ A project's repo is its own clone, beside its home: `~/Projects/<name>/repo` and
 - `ready`: has acceptance criteria and a plan (or none, if trivial). `in progress`: its responsible agent works, in its own worktree and branch.
 - `in review`: delivered. The loop checks and reviews the branch; the owner accepts it or rejects it with a note.
 - `blocked`: a reason set by an agent (`foreman block`), by the loop (could not launch; stopped without finishing after a
-  nudge). The owner clears it (`foreman unblock [--relaunch]`).
+  nudge). The owner clears it (`foreman unblock [--relaunch]`); a plain unblock of a running task with an agent also tells the agent
+  the block is cleared (a message the loop delivers, resetting its nudge).
 - `blocked_by` (`foreman add/edit --blocked-by FN-n …`; `none` clears): the task is never planned or launched until every
   blocker is `done`, then the loop marks it unblocked in the history. A canceled or duplicate blocker blocks the task
   with a reason: the owner edits `--blocked-by` or cancels, then `foreman unblock`.
