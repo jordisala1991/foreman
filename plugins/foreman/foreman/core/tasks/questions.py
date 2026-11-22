@@ -38,6 +38,11 @@ def undelivered(d: Data) -> list[dict[str, Any]]:
     return [q for q in d["decisions_resolved"] if q.get("delivered") is False]
 
 
+def tasks_waiting(d: Data) -> set[str]:
+    """Tasks whose agent is not waiting for the owner but for the loop: an open question or a message not yet delivered."""
+    return {q["task"] for q in open_questions(d)} | {q["task"] for q in undelivered(d)}
+
+
 def holds_slot(d: Data, i: Task) -> bool:
     """A task whose planning or responsible agent counts against the slots: in `RUNNING`, not blocked, and not waiting
     for the owner (an open question or permission with no answer on its way)."""
