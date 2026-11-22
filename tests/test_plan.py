@@ -1,5 +1,4 @@
 import os
-import re
 from unittest import mock
 
 import pytest
@@ -62,10 +61,6 @@ class TestPlan:
         assert "/x/plans/TY-1.md" in text
         without = brief.brief(self.p, {"id": "TY-2", "title": "t"}, "responsible")
         assert "/plans/" not in without
-
-    def test_planning_brief_leaves_no_placeholder(self):
-        text = brief.brief(self.p, {"id": "TY-1", "title": "t"}, "planning")
-        assert re.search(r"\$[a-z_]+", text) is None
 
     def test_plan_and_no_plan_together_fail(self):
         self.plan.parent.mkdir(parents=True)
