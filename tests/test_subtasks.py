@@ -183,3 +183,15 @@ class TestRace:
         with mock.patch.object(merge, "stop_all", side_effect=merged):
             merge.close(e.p, P, "canceled", "x")
         assert (e.task(S)["status"], e.task(P)["status"]) == ("done", "canceled")
+
+
+def test_unwoken_is_each_closed_subtask_no_subtask_message_names():
+    tasks: list[backlog.Task] = [
+        {"id": "P", "status": "backlog"},
+        {"id": "S1", "status": "done", "parent": "P"},
+        {"id": "S2", "status": "canceled", "parent": "P"},
+        {"id": "S3", "status": "in progress", "parent": "P"},
+        {"id": "T", "status": "done", "parent": "Q"},
+    ]
+    named = [{"task": "P", "kind": "subtask", "subtask": "S2"}, {"task": "P", "kind": "edit"}, {"task": "Q", "kind": "subtask", "subtask": "S1"}]
+    assert [s["id"] for s in subtasks.unwoken(tasks, "P", named)] == ["S1"]
