@@ -1,5 +1,8 @@
 """A delivered tip's verdict is one GitHub PR review with its findings on their lines, against the fake gh."""
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 from helpers import Env, fm, git
 from test_github import GH
@@ -32,7 +35,7 @@ def commit(g: GH, iid: str) -> str:
 
 class TestReview_:
     @pytest.fixture(autouse=True)
-    def keep_request(self, request):
+    def keep_request(self, request: pytest.FixtureRequest) -> None:
         self.request = request  # for the cleanups of helpers
 
     def make(self) -> tuple[GH, str]:
@@ -41,10 +44,10 @@ class TestReview_:
         g.set(diff=DIFF)
         return g, g.work()
 
-    def pr(self, g: GH) -> dict:
+    def pr(self, g: GH) -> dict[str, Any]:
         return g.state["prs"]["1"]
 
-    def test_a_delivered_tip_posts_one_review_and_no_comment(self):
+    def test_a_delivered_tip_posts_one_review_and_no_comment(self) -> None:
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", 1)
         tick.tick(g.e.p)
@@ -64,7 +67,7 @@ class TestReview_:
         tick.tick(g.e.p)
         assert len(self.pr(g)["reviews"]) == 1
 
-    def test_findings_outside_the_diff_are_listed_in_the_body(self):
+    def test_findings_outside_the_diff_are_listed_in_the_body(self) -> None:
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | L | - | nit\n", 1)
         (r,) = self.pr(g)["reviews"]
@@ -73,7 +76,7 @@ class TestReview_:
         assert r["body"].index("boom") < r["body"].index("<details")
         assert r["body"].index("nit") > r["body"].index("<details")
 
-    def test_a_finding_already_commented_is_not_posted_again(self):
+    def test_a_finding_already_commented_is_not_posted_again(self) -> None:
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | the what | the why\n", 1)
         commit(g, iid)
@@ -85,7 +88,7 @@ class TestReview_:
         tip(g, iid, "Findings:\nF2 | M | app.py:4 | another what\n", 1)
         assert len(self.pr(g)["review_comments"]) == 2
 
-    def test_a_failed_diff_read_posts_the_review_without_inline_comments(self):
+    def test_a_failed_diff_read_posts_the_review_without_inline_comments(self) -> None:
         g, iid = self.make()
         g.set(fail_always=["pr", "diff"])
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
@@ -93,7 +96,7 @@ class TestReview_:
         (r,) = self.pr(g)["reviews"]
         assert r["comments"] == []
 
-    def test_rejected_inline_comments_still_post_the_review(self):
+    def test_rejected_inline_comments_still_post_the_review(self) -> None:
         g, iid = self.make()
         g.set(reject_inline=True)
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
@@ -101,14 +104,14 @@ class TestReview_:
         (r,) = self.pr(g)["reviews"]
         assert r["comments"] == []
 
-    def test_unlisted_findings_are_never_read_as_ready(self):
+    def test_unlisted_findings_are_never_read_as_ready(self) -> None:
         g, iid = self.make()
         tip(g, iid, "no findings line here\n", 1)
         (r,) = self.pr(g)["reviews"]
         assert "Ready" not in r["body"]
         assert g.calls("pr", "diff") == []
 
-    def test_a_verdict_of_another_tip_adds_no_findings(self, tmp_path):
+    def test_a_verdict_of_another_tip_adds_no_findings(self, tmp_path: Path) -> None:
         f = tmp_path / "x.md"
         f.write_text("Findings:\nF1 | M | app.py:3 | w\n")
         i = {"id": "TY-1", "title": "t", "review": {"tip": "aaa", "file": str(f), "open": 1}}
@@ -117,7 +120,7 @@ class TestReview_:
         assert len(pulls.findings_of(i, "aaa")) == 1
         assert pulls.case_of(i, c).open is None
 
-    def test_a_review_with_a_null_body_does_not_stop_the_review(self):
+    def test_a_review_with_a_null_body_does_not_stop_the_review(self) -> None:
         g, iid = self.make()
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         prs = g.state["prs"]
@@ -127,7 +130,7 @@ class TestReview_:
         tip(g, iid, "Findings:\nF1 | M | app.py:3 | w\n", 1)
         assert len(self.pr(g)["reviews"]) == 3
 
-    def test_body_links_point_at_the_comment_or_the_reviewed_commit_and_line(self):
+    def test_body_links_point_at_the_comment_or_the_reviewed_commit_and_line(self) -> None:
         g, iid = self.make()
         head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
         tip(g, iid, "Findings:\nF1 | H | app.py:99 | boom | w\nF2 | M | app.py:3 | mid | why: because\n", 2)
@@ -138,7 +141,7 @@ class TestReview_:
         assert "why: because" not in r["comments"][0]["body"]
         assert "because" in r["comments"][0]["body"]
 
-    def test_a_failed_comment_link_edit_keeps_the_file_links(self):
+    def test_a_failed_comment_link_edit_keeps_the_file_links(self) -> None:
         g, iid = self.make()
         g.set(fail_put=True)
         head = git(g.e.repo, "rev-parse", g.e.task(iid)["branch"]).strip()
@@ -146,7 +149,7 @@ class TestReview_:
         (r,) = self.pr(g)["reviews"]
         assert f"/blob/{head}/app.py#L3" in r["body"]
 
-    def test_local_provider_reviews_nothing(self):
+    def test_local_provider_reviews_nothing(self) -> None:
         e = Env()
         provider = registry.get(e.p)
         assert provider.name == "local"

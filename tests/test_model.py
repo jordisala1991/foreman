@@ -2,6 +2,7 @@
 
 import json
 import os
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -16,17 +17,17 @@ from foreman.services.agents import brief
 from foreman.steps import metrics
 
 
-def flags(c: dict) -> tuple[str, str]:
+def flags(c: dict[str, Any]) -> tuple[str, str]:
     a = c["argv"]
     return a[a.index("--model") + 1], a[a.index("--effort") + 1]
 
 
 class TestChoice:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner):
+    def set_up(self, owner: None) -> None:
         self.e = Env(slots=3)
 
-    def shown(self, tid: str) -> dict:
+    def shown(self, tid: str) -> dict[str, Any]:
         return json.loads(fm(self.e.home, "show", tid))
 
     def test_add_and_edit_take_every_model_and_effort(self):
@@ -76,7 +77,7 @@ class TestChoice:
         with mock.patch.dict(os.environ, {"FOREMAN_TASK": tid}):
             fm(self.e.home, "ready", "--no-plan", "x", *flags)
 
-    def launched_with(self, tid: str) -> tuple:
+    def launched_with(self, tid: str) -> tuple[str, str]:
         tick.tick(self.e.p)
         got = {tuple(x["argv"][-1].split("\n")[0].strip("[]").split(" ")[1:]): flags(x) for x in self.e.calls()}
         return got[("responsible", tid)]
@@ -130,7 +131,7 @@ class TestChoice:
 
 class TestMeasured:
     @pytest.fixture(autouse=True)
-    def set_up(self, env):
+    def set_up(self, env: Env) -> None:
         self.e = env
 
     def test_metrics_row_and_line_show_model_and_effort(self):
@@ -138,7 +139,11 @@ class TestMeasured:
         registry.backlog(self.e.p).update(a, agent={"kind": "responsible", "model": "opus", "effort": "high"})
         b = registry.backlog(self.e.p).add("b", criteria="c", model="haiku")
         c = registry.backlog(self.e.p).add("c", criteria="c")
-        with mock.patch("foreman.core.oversight.costs.of_sessions", lambda s, seen=None: {"usd": 3.0, "minutes": 0}):
+
+        def of_sessions(s: list[str], seen: set[str] | None = None) -> dict[str, Any]:
+            return {"usd": 3.0, "minutes": 0}
+
+        with mock.patch("foreman.core.oversight.costs.of_sessions", of_sessions):
             rows = {r["id"]: r for r in metrics.per_task(self.e.p)}
         assert (rows[a]["model"], rows[a]["effort"]) == ("opus", "high")
         assert rows[b]["model"] == "haiku"

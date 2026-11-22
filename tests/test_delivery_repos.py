@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fakerepo import FakeRepo
@@ -56,7 +57,7 @@ def deliver(s: Setup, key: str) -> str:
     return tid
 
 
-def test_check_runs_the_tasks_repos_command(monkeypatch, fake_git):
+def test_check_runs_the_tasks_repos_command(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git)
     web = deliver(s, "web")
     assert ran(s) == "web\n"
@@ -65,7 +66,7 @@ def test_check_runs_the_tasks_repos_command(monkeypatch, fake_git):
     assert ran(s) == "web\napi\n"
 
 
-def test_accepted_task_merges_into_its_repos_main(monkeypatch, fake_git):
+def test_accepted_task_merges_into_its_repos_main(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git)
     tid = deliver(s, "web")
     s.fakes["web"].commit("main", FileDiff("m.py", 1, 0))
@@ -83,7 +84,7 @@ def test_accepted_task_merges_into_its_repos_main(monkeypatch, fake_git):
     assert not any(m.startswith("Merge") for m in s.fakes["api"].messages())
 
 
-def test_remote_picks_the_provider(monkeypatch, fake_git):
+def test_remote_picks_the_provider(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git)
     for key in ("api", "web"):
         s.fakes[key].remotes = {"origin": "git@github.com:o/r.git"}
@@ -121,7 +122,7 @@ def test_github_pushes_to_the_repos_remote():
     assert "refs/heads/foreman/ty-1" in git(app, "ls-remote", "up")
 
 
-def test_github_evidence_and_catch_up_use_the_repos_remote(monkeypatch):
+def test_github_evidence_and_catch_up_use_the_repos_remote(monkeypatch: pytest.MonkeyPatch):
     app, gh = github_app()
     bin_ = app.parent / "bin"
     bin_.mkdir()
@@ -141,18 +142,25 @@ def test_github_evidence_and_catch_up_use_the_repos_remote(monkeypatch):
     assert git(app, "rev-parse", "main") == git(other, "rev-parse", "HEAD")
 
 
-def test_run_pulls_syncs_each_task_in_its_repo(monkeypatch, fake_git):
+def test_run_pulls_syncs_each_task_in_its_repo(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git)
     tid = s.task("web")
     tick.tick(s.p)
     seen: list[Path] = []
-    monkeypatch.setattr(pulls, "running", lambda p: [s.e.task(tid)])
-    monkeypatch.setattr(pulls, "sync", lambda p, i: seen.append(p.repo))
+
+    def running(p: Project) -> list[dict[str, Any]]:
+        return [s.e.task(tid)]
+
+    def sync(p: Project, i: dict[str, Any]) -> None:
+        seen.append(p.repo)
+
+    monkeypatch.setattr(pulls, "running", running)
+    monkeypatch.setattr(pulls, "sync", sync)
     tick.run_pulls(s.p)
     assert seen == [s.e.tmp / "web"]
 
 
-def test_no_merged_check_starts_while_another_runs(monkeypatch, fake_git):
+def test_no_merged_check_starts_while_another_runs(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git)
     tids = [deliver(s, "web"), deliver(s, "api")]
     for key in ("web", "api"):
@@ -173,7 +181,7 @@ def test_no_merged_check_starts_while_another_runs(monkeypatch, fake_git):
     assert [s.e.task(t)["status"] for t in tids] == ["done", "done"]
 
 
-def test_cancel_removes_the_worktree_in_the_tasks_repo(monkeypatch, fake_git):
+def test_cancel_removes_the_worktree_in_the_tasks_repo(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git)
     tid = s.task("web")
     tick.tick(s.p)
@@ -182,7 +190,7 @@ def test_cancel_removes_the_worktree_in_the_tasks_repo(monkeypatch, fake_git):
     assert s.fakes["web"].trees == {}
 
 
-def test_autonomy_is_the_repos(monkeypatch, fake_git):
+def test_autonomy_is_the_repos(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git, TABLES.replace("[repos.api.merge]\n", '[repos.api.merge]\nautonomy = "low"\n'))
     api, web = deliver(s, "api"), deliver(s, "web")
     tick.tick(s.p)
@@ -200,7 +208,7 @@ PUBLISHING = (
 WHY = "merging publishes this repo (site)"
 
 
-def test_publishing_repo_waits_for_the_owner(monkeypatch, fake_git):
+def test_publishing_repo_waits_for_the_owner(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git, PUBLISHING)
     site, api = deliver(s, "site"), deliver(s, "api")
     tick.tick(s.p)
@@ -213,7 +221,7 @@ def test_publishing_repo_waits_for_the_owner(monkeypatch, fake_git):
     assert s.e.task(site)["status"] == "done"
 
 
-def test_the_reason_reaches_show_panel_and_pr(monkeypatch, fake_git):
+def test_the_reason_reaches_show_panel_and_pr(monkeypatch: pytest.MonkeyPatch, fake_git: FakeRepo):
     s = setup(monkeypatch, fake_git, PUBLISHING)
     site = deliver(s, "site")
     i = backlog.get(registry.backlog(s.p).load(), site)  # what `fm show` prints whole
