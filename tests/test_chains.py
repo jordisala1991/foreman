@@ -176,6 +176,22 @@ class TestChainParent:
         self.step(P)
         assert len(self.steps(P)) == 6
 
+    def test_a_chain_parent_whose_session_ended_is_launched_again_once_the_cap_is_renewed(self):
+        P = self.launched()
+        self.fill(P, 5)
+        old = self.e.task(P)["agent"]
+        fm(self.e.home, "edit", P, "--max-steps", "6")
+        self.e.set_state(old["name"], "stopped")
+        before = len(self.e.calls())
+        tick.tick(self.p)
+        assert len(self.e.calls()) == before + 1
+        new = self.e.task(P)["agent"]
+        assert new["session"] != old["session"]
+        assert new["session"] in self.e.task(P)["sessions"]
+        text = self.e.calls()[-1]["argv"][-1]
+        for needle in ("Chain step 5 of 6", "at most 6 steps", *(s["id"] for s in self.steps(P))):
+            assert needle in text
+
     def test_edit_max_steps_is_refused_from_an_agent(self):
         P = self.launched()
         with pytest.raises(SystemExit):
