@@ -6,10 +6,10 @@ from unittest import mock
 
 import pytest
 from fakerepo import FakeRepo
-from helpers import Env
+from helpers import Env, fm
 
 from foreman import proc, util
-from foreman.core.tasks import questions
+from foreman.core.tasks import backlog, questions
 from foreman.loop.launch import launch_free
 from foreman.providers import registry
 from foreman.providers.claude import sessions
@@ -179,3 +179,49 @@ class TestResume:
         with registry.backlog(e.p).edit() as d:
             d["decisions_resolved"][0]["answered_at"] = "2020-01-01 00:00:00"
         assert len(checks.answers_undelivered(e.p)) == 1
+
+
+class TestUnblock:
+    @pytest.fixture(autouse=True)
+    def set_up(self, fake_git: FakeRepo) -> None:
+        self.fake = fake_git
+
+    def blocked_idle(self, e: Env) -> str:
+        tid = launched(e)
+        with registry.backlog(e.p).edit() as d:
+            i = backlog.get(d, tid)
+            i["agent"]["started"] = i["agent"]["nudged"] = "2000-01-01 00:00:00"
+            i["blocked"] = "waiting for a dependency"
+        e.set_state(tid.lower(), "done")
+        return tid
+
+    def test_unblock_tells_an_idle_agent_before_any_nudge(self):
+        e = Env(repo=self.fake)
+        tid = self.blocked_idle(e)
+        fm(e.home, "unblock", tid)
+        talk.deliver_answers(e.p, registry.rows(e.p))
+        talk.watch_agents(e.p, registry.rows(e.p))
+        assert tid in e.calls()[-1]["argv"][-1]
+        assert "--resume" in e.calls()[-1]["argv"]
+        assert e.task(tid).get("nudges", 0) == 0
+        assert not e.task(tid).get("blocked")
+
+    def test_unblock_relaunch_files_no_message(self):
+        e = Env(repo=self.fake)
+        tid = self.blocked_idle(e)
+        fm(e.home, "unblock", tid, "--relaunch")
+        assert e.task(tid)["status"] == "ready"
+        assert questions.undelivered(registry.backlog(e.p).load()) == []
+
+    def test_unblock_of_a_task_without_a_session_files_no_message(self):
+        e = Env(repo=self.fake)
+        tid = registry.backlog(e.p).add("x", status="ready", criteria="y")
+        registry.backlog(e.p).update(tid, blocked="x")
+        fm(e.home, "unblock", tid)
+        assert questions.undelivered(registry.backlog(e.p).load()) == []
+
+    def test_unblock_of_a_task_that_is_not_blocked_files_no_message(self):
+        e = Env(repo=self.fake)
+        tid = launched(e)
+        fm(e.home, "unblock", tid)
+        assert questions.undelivered(registry.backlog(e.p).load()) == []

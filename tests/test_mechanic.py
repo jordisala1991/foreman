@@ -24,17 +24,17 @@ class TestSections:
 
 class TestMechanic:
     @pytest.fixture(autouse=True)
-    def set_up(self, request, env):
+    def set_up(self, request: pytest.FixtureRequest, env: Env):
         self.e = env
         self.tid = registry.backlog(self.e.p).add("t", detail="evidence", status="triage", source="health:k")
         self.env = mock.patch.dict(os.environ, {"FOREMAN_TASK": self.tid})
         self.env.start()
         request.addfinalizer(self.env.stop)
 
-    def tick(self):
+    def tick(self) -> None:
         tick.tick(self.e.p)
 
-    def diagnose(self, text=FULL, tid=None):
+    def diagnose(self, text: str = FULL, tid: str | None = None) -> str:
         f = self.e.tmp / "d.md"
         f.write_text(text)
         os.environ["FOREMAN_TASK"] = tid or self.tid

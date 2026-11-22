@@ -3,7 +3,7 @@ import stat
 from pathlib import Path
 
 import pytest
-from helpers import git
+from helpers import Env, git
 
 from foreman import util
 from foreman.core.tasks import backlog
@@ -17,12 +17,12 @@ from foreman.steps import sources
 
 class TestSignals:
     @pytest.fixture(autouse=True)
-    def set_up(self, env):
+    def set_up(self, env: Env):
         self.e = env
         self.p = self.e.p
         (self.e.home / "sources").mkdir()
 
-    def emit(self, *lines):
+    def emit(self, *lines: object) -> None:
         f = self.e.home / "sources" / "src"
         f.write_text("#!/bin/sh\n" + "".join(f"echo '{json.dumps(x)}'\n" for x in lines))
         f.chmod(f.stat().st_mode | stat.S_IXUSR)
@@ -74,7 +74,7 @@ class TestSignals:
         assert registry.backlog(self.p).load()["decisions_resolved"][-1]["answer"] == "change X"
 
     def test_accept_is_fm_accept(self):
-        tid, branch = self.queued()
+        tid, _ = self.queued()
 
         check.check(self.p, tid)
         self.emit({"key": "a1", "task": tid, "action": "accept"})

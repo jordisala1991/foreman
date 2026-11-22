@@ -81,6 +81,27 @@ class TestBash:
         assert self.check("git branch -D foreman/ty-1") is None
         assert self.check("git worktree remove /w/ty-2") == "delete"
 
+    def test_a_redirection_is_not_a_path(self):
+        for cmd in (
+            "rm -f build 2>/dev/null",
+            "rm -rf build >/dev/null 2>&1",
+            "rm -rf /h/scratch/TY-1-r1-a-hunter/t &>/dev/null",
+            "cd /Users/x && rm -f /tmp/x 2>/dev/null",
+            "git worktree remove --force /tmp/x 2>/dev/null",
+            "git branch -D foreman/ty-1 2>/dev/null",
+            "rm '>' ../other",  # a quoted operator reads as a redirection, as a quoted ; reads as a separator: it now passes
+        ):
+            assert self.check(cmd) is None, cmd
+        for cmd in (
+            "rm -rf ../other 2>/dev/null",
+            "rm -rf ../other >/dev/null 2>&1",
+            "cd /Users/x && rm -rf t >/dev/null 2>&1",
+            "rm -rf ../other &>/dev/null",
+            "git branch -D foreman/ty-2 2>/dev/null",
+            "git worktree remove /w/ty-2 2>/dev/null",
+        ):
+            assert self.check(cmd) == "delete", cmd
+
     def test_own_scratch_folder_absolute(self):
         assert self.check("rm -rf /h/scratch/TY-1-r1-abc123def-hunter/t") is None
         assert self.check("rm -rf /h/scratch/TY-1/x") is None
