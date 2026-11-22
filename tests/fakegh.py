@@ -103,7 +103,8 @@ class FakeGh:
         if a[:2] == ["api", "graphql"]:
             self.graphql += 1
         if a[:2] == ["api", "rate_limit"]:
-            return proc.Result(0, f"{self.reset}\n", "")
+            resources = {"core": {"remaining": 5000, "reset": self.reset + 1800}, "graphql": {"remaining": 0, "reset": self.reset}}
+            return proc.Result(0, json.dumps({"resources": resources}), "")
         if self.limited:
             body = {"errors": [{"type": "RATE_LIMITED", "message": "API rate limit already exceeded for user ID 1."}]}
             return proc.Result(1, json.dumps(body), "gh: API rate limit already exceeded for user ID 1.\n")

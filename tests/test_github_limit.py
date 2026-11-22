@@ -1,6 +1,7 @@
 """One `gh` runner for the GitHub adapter: a provider call obeys and records the rate limit's stop file, and maps gh's
 failures as the backlog's calls do. `proc.run` is replaced by a stand-in that answers for gh and logs each argv."""
 
+import json
 import time
 
 import pytest
@@ -17,17 +18,20 @@ SPENT = "gh: API rate limit already exceeded for user ID 1.\n"
 
 
 class Gh:
-    """Stands in for `proc.run`: `gh api rate_limit` gives the reset; any other gh call fails with `err` or raises `boom`."""
+    """Stands in for `proc.run`: `gh api rate_limit` gives `resources` as GitHub's JSON; any other gh call fails with `err` or raises `boom`."""
 
     def __init__(self) -> None:
-        self.reset = int(time.time()) + 3600
+        self.reset = int(time.time()) + 1800  # not the fallback's hour, so a fallback shows
+        self.resources = {"core": (0, self.reset), "graphql": (5000, self.reset + 1800)}  # name: (remaining, reset)
+        self.rate_limit_calls = 0
         self.err = SPENT
         self.boom: proc.ProcError | None = None
         self.calls: list[list[str]] = []
 
     def __call__(self, argv: list[str], **_: object) -> proc.Result:
         if argv[:3] == ["gh", "api", "rate_limit"]:
-            return proc.Result(0, f"{self.reset}\n", "")
+            self.rate_limit_calls += 1
+            return proc.Result(0, json.dumps({"resources": {k: {"remaining": n, "reset": at} for k, (n, at) in self.resources.items()}}), "")
         self.calls.append(argv)
         if self.boom:
             raise self.boom
@@ -77,3 +81,55 @@ def test_provider_gh_failures_are_mapped_by_the_one_runner(gh: Gh) -> None:
     gh.boom = proc.ProcError("x")
     with pytest.raises(PermanentError):
         provider.view(CHANGE)
+
+
+def assert_fallback_hour(e: Env, before: int) -> None:
+    with pytest.raises(RateLimited):
+        GitHub(e.p, registry.repo(e.p)).ready(CHANGE)
+    stop = util.json_object(util.read_json(e.p.state / STOP_FILE, None)) or {}
+    assert before + 3600 <= stop["reset"] <= int(time.time()) + 3600
+
+
+def test_a_core_limit_records_the_core_reset(gh: Gh) -> None:
+    e = Env()
+    with pytest.raises(RateLimited):
+        GitHub(e.p, registry.repo(e.p)).ready(CHANGE)
+    assert util.read_json(e.p.state / STOP_FILE, None) == {"reset": gh.reset}
+
+
+def test_a_graphql_limit_records_the_graphql_reset(gh: Gh) -> None:
+    e = Env()
+    gh.resources = {"core": (5000, gh.reset), "graphql": (0, gh.reset + 900)}
+    with pytest.raises(RateLimited):
+        GitHub(e.p, registry.repo(e.p)).ready(CHANGE)
+    assert util.read_json(e.p.state / STOP_FILE, None) == {"reset": gh.reset + 900}
+
+
+def test_with_two_spent_resources_the_earliest_reset_is_kept(gh: Gh) -> None:
+    e = Env()
+    gh.resources = {"core": (0, gh.reset + 600), "graphql": (0, gh.reset + 1800)}
+    with pytest.raises(RateLimited):
+        GitHub(e.p, registry.repo(e.p)).ready(CHANGE)
+    assert util.read_json(e.p.state / STOP_FILE, None) == {"reset": gh.reset + 600}
+
+
+def test_a_secondary_limit_stops_for_the_fallback_hour(gh: Gh) -> None:
+    """gh's stderr carries no Retry-After: a secondary limit stops for one hour, and no resource is read."""
+    gh.err = "You have exceeded a secondary rate limit. (HTTP 403)\n"
+    assert_fallback_hour(Env(), int(time.time()))
+    assert gh.rate_limit_calls == 0
+
+
+def test_no_spent_resource_stops_for_the_fallback_hour(gh: Gh) -> None:
+    gh.resources = {"core": (5000, gh.reset), "graphql": (5000, gh.reset + 1800)}
+    assert_fallback_hour(Env(), int(time.time()))
+    assert gh.rate_limit_calls == 1
+
+
+def test_a_permanent_failure_that_mentions_the_limit_is_not_a_stop(gh: Gh) -> None:
+    e = Env()
+    gh.err = "pull request is closed: title says rate limit"
+    with pytest.raises(PermanentError):
+        GitHub(e.p, registry.repo(e.p)).view(CHANGE)
+    assert not (e.p.state / STOP_FILE).exists()
+    assert gh.rate_limit_calls == 0

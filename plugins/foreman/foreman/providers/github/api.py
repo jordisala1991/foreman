@@ -1,8 +1,10 @@
 """`gh` for the GitHub adapter, the one place it runs: the backlog's GraphQL requests and the provider's commands, and
 the rate limit's stop. When GitHub says the limit is spent, the reset is kept in the stop file and every call until then
 raises `RateLimited` without running gh: each foreman process obeys it, and nothing here waits or tries again (retrying
-is `loop.guarded`'s)."""
+is `loop.guarded`'s). The reset kept is the earliest of the resources whose remaining is 0 (what was spent). A secondary limit
+shows no spent resource and gh's stderr carries no Retry-After, so it, like an unreadable answer, stops for FALLBACK."""
 
+import contextlib
 import json
 import time
 from pathlib import Path
@@ -14,6 +16,21 @@ from .types import PermanentError, RateLimited, TransientError, failure
 
 STOP_FILE = "github-rate-limit.json"
 GRAPHQL = ("api", "graphql", "--input", "-")
+FALLBACK = 3600  # seconds a stop lasts when no reset is known
+
+
+def _secondary(text: str) -> bool:
+    return "secondary rate limit" in text.lower()
+
+
+def _reset(out: str) -> int | None:
+    """The earliest reset among the resources of `gh api rate_limit` with none remaining; None if there is none."""
+    try:
+        resources = util.json_object((util.json_object(json.loads(out)) or {}).get("resources")) or {}
+    except ValueError:
+        return None
+    spent = [r for v in resources.values() if (r := util.json_object(v)) and r.get("remaining") == 0 and isinstance(r.get("reset"), int)]
+    return min((r["reset"] for r in spent), default=None)
 
 
 def _spent(text: str) -> bool:
@@ -33,9 +50,10 @@ class Api:
         """`gh <args>`; a non-zero exit is a failure with gh's error."""
         r = self._gh(args, input)
         if r.code != 0:
-            if _spent(r.err):
-                raise self._limited()
-            raise failure(f"gh {' '.join(args[:3])}", r.err or r.out)
+            f = failure(f"gh {' '.join(args[:3])}", r.err or r.out)
+            if not isinstance(f, PermanentError) and _spent(r.err):
+                raise self._limited(_secondary(r.err))
+            raise f
         return r
 
     def query(self, text: str, **variables: object) -> dict[str, Any]:
@@ -47,7 +65,7 @@ class Api:
             body = None
         errors = [o for e in util.json_list((body or {}).get("errors")) if (o := util.json_object(e)) is not None]
         if _spent(r.err) or any(_spent(str(e.get("message", ""))) or e.get("type") == "RATE_LIMITED" for e in errors):
-            raise self._limited()
+            raise self._limited(_secondary(r.err))
         if body is None:
             raise failure("gh api graphql", r.err or r.out)
         if any(e.get("type") != "NOT_FOUND" for e in errors):
@@ -66,13 +84,13 @@ class Api:
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
 
-    def _limited(self) -> RateLimited:
-        """Reads the reset once and keeps it in the stop file."""
-        try:
-            r = proc.run(["gh", "api", "rate_limit", "--jq", ".resources.graphql.reset"])
-            at = int(r.out.strip())
-        except (proc.ProcError, ValueError):
-            at = int(time.time()) + 3600
+    def _limited(self, secondary: bool = False) -> RateLimited:
+        """Reads the reset of what was spent once and keeps it in the stop file."""
+        at = None
+        if not secondary:
+            with contextlib.suppress(proc.ProcError):
+                at = _reset(proc.run(["gh", "api", "rate_limit"]).out)
+        at = at or int(time.time()) + FALLBACK
         util.write_json(self.stop, {"reset": at})
         return _until(at)
 
