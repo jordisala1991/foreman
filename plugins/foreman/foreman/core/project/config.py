@@ -49,6 +49,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "medium": {"dependencies": ["requirements*.txt", "pyproject.toml", "package.json", "package-lock.json", "*.lock", "go.mod", "Cargo.toml"]},
     },
     "guard": {"ask": []},  # extra rules: [{"name": "deploy", "pattern": "regex on a Bash command"}]
+    "owner": {"notify": ""},  # a command the loop runs, with the line as its last argument, for each need that starts (steps/notify.py)
     "health": {"stuck_minutes": 60, "loop_seconds": 30, "ci_every_minutes": 30},
 }
 
@@ -71,6 +72,8 @@ class Project:
         if f.exists():
             raw = tomllib.loads(f.read_text(encoding="utf-8"))
         cfg: dict[str, dict[str, Any]] = {k: {**v, **raw.get(k, {})} for k, v in DEFAULTS.items()}
+        if not isinstance(cfg["owner"]["notify"], str):
+            raise ProjectError("[owner] notify is a text: the command to run")
         cfg["resources"] = raw.get("resources", {})  # [resources.NAME]: foreman/services/lock.py
         try:
             cfg["repos"] = repos.parse(raw, cfg)

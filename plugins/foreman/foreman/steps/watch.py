@@ -57,6 +57,16 @@ def needs(p: Project, rows: Rows) -> dict[str, str]:
     return found
 
 
+def at_start(found: dict[str, str]) -> dict[str, str]:
+    """The needs shown at start: the accepts already waiting."""
+    return {k: v for k, v in found.items() if k.startswith("accept:")}
+
+
+def keep_parents(now: dict[str, str], seen: dict[str, str]) -> None:
+    """A listing that could not be read says nothing of the parents: `now` keeps the ones `seen` had."""
+    now.update({k: v for k, v in seen.items() if k.startswith("parent:")})
+
+
 def run(p: Project, once: bool, rows: Rows) -> None:
     """Prints the accepts already waiting at start, then each need that appears after it; `rows` is the listing the caller
     read (the other needs at start are `foreman list`'s). A poll that cannot read the listing keeps the parents' entries as they were; one that cannot
@@ -64,9 +74,8 @@ def run(p: Project, once: bool, rows: Rows) -> None:
     (`registry.view_scope`), and without one it stops with `the loop has not read the Board yet`. Under `once`,
     returns after the first line printed after the start."""
     seen = needs(p, rows)
-    for key, line in seen.items():
-        if key.startswith("accept:"):
-            print(line, flush=True)
+    for line in at_start(seen).values():
+        print(line, flush=True)
     while True:
         pause()
         polled = registry.runner(p).rows()
@@ -75,7 +84,7 @@ def run(p: Project, once: bool, rows: Rows) -> None:
         except (backlog.BacklogError, ProjectError, OSError, ValueError):  # foreman's own state unreadable this poll
             continue
         if polled is None:
-            now.update({k: v for k, v in seen.items() if k.startswith("parent:")})
+            keep_parents(now, seen)
         for key, line in now.items():
             if key not in seen:
                 print(line, flush=True)
