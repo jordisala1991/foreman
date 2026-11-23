@@ -29,13 +29,10 @@ lint:
 format:
 	uv run ruff format --check .
 
-# plugins/foreman/foreman/ strict (see [tool.pyright] in pyproject.toml); tests/ standard, strict for every test file not in
-# tests/standard-only.txt (the ratchet: it only shrinks).
+# plugins/foreman/foreman/ and tests/ are both strict (see [tool.pyright] in pyproject.toml and tests/pyright-strict.json).
 types:
 	uv run pyright
-	uv run pyright -p tests/pyright-standard.json
-	@files=$$(find tests -name '*.py' | sort | grep -vxFf tests/standard-only.txt; [ $$? -le 1 ]) || exit 1; \
-	[ -z "$$files" ] || uv run pyright -p tests/pyright-strict.json $$files
+	uv run pyright -p tests/pyright-strict.json
 
 # Architecture: layers and adapters (tach.toml, DESIGN.md "Architecture"). Process-running (subprocess, os.system…) is
 # banned outside the allowed modules by ruff, in `make lint`.

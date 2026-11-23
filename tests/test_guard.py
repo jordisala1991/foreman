@@ -3,9 +3,11 @@ import io
 import json
 import os
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
+from helpers import Env
 
 from foreman.core.oversight import guard
 from foreman.core.project.config import Project
@@ -177,7 +179,7 @@ class TestBash:
 
 class TestHook:
     @pytest.fixture(autouse=True)
-    def set_up(self, env):
+    def set_up(self, env: Env):
         self.e = env
         self.tid = registry.backlog(self.e.p).add("t", status="ready", criteria="c")
         registry.backlog(self.e.p).update(self.tid, worktree=str(self.e.tmp / "wt"), branch="foreman/ty-1")
@@ -186,7 +188,7 @@ class TestHook:
         os.environ.pop("FOREMAN_HOME")
         os.environ.pop("FOREMAN_TASK")
 
-    def call(self, tool: str, inp: dict) -> str:
+    def call(self, tool: str, inp: dict[str, Any]) -> str:
         return guard.hook(json.dumps({"tool_name": tool, "tool_input": inp, "cwd": str(self.e.tmp / "wt")}), LOCAL)
 
     def test_denies_with_a_reason_and_logs(self):
@@ -214,7 +216,12 @@ class TestHook:
     def test_scratch_of_the_task(self):  # the hook gives the guard the project's scratch root and the task
         seen: list[guard.Scope] = []
         real = guard.check_bash
-        with mock.patch.object(guard, "check_bash", lambda cmd, sc: seen.append(sc) or real(cmd, sc)):
+
+        def spy(cmd: str, sc: guard.Scope) -> str | None:
+            seen.append(sc)
+            return real(cmd, sc)
+
+        with mock.patch.object(guard, "check_bash", spy):
             own = self.e.home / "scratch" / f"{self.tid}-r1-abc123def-hunter" / "x"
             assert self.call("Bash", {"command": f"rm -rf {own}"}) == ""
         assert (seen[0].scratch, seen[0].task) == ((self.e.home / "scratch").resolve(), self.tid)

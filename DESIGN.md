@@ -1267,8 +1267,8 @@ said once:
   any other import and any `open`/`exec`/`eval` in it. New decisions go in the core, not in `delivery` or the loop.
 - **Suppressions do not work**: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments =
   false`, and `make suppressions` fails on any `pyright:` or `pylint:` directive comment.
-- **Tests are type-checked**: standard on all of `tests/`; every test file not in `tests/standard-only.txt` is strict, so a
-  new test file is strict. The list only shrinks (`tests/pyright-*.json`, `make types`).
+- **Tests are type-checked**: all of `tests/` is strict, so a new test file is strict (`tests/pyright-strict.json`,
+  `make types`).
 - The panel's TypeScript is outside these rules.
 
 ### Size
