@@ -14,7 +14,6 @@ and prints JSON lines. `{"cursor": "..."}` moves its cursor. A signal always has
 
 import json
 import os
-import traceback
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +43,7 @@ def _recurring(p: Project) -> list[str]:
     try:
         return schedule.run(p)
     except Exception as e:
-        util.log_error(p.state / "errors.jsonl", "recurring", repr(e), trace=traceback.format_exc()[-2000:])
+        util.log_exception(p.state / "errors.jsonl", "recurring", e)
         return []
 
 

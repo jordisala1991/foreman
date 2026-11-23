@@ -89,6 +89,12 @@ def log_error(file: Path, step: str, error: str, **extra: object) -> None:
     append_jsonl(file, {"time": now(), "step": step, "error": error, **extra})
 
 
+def log_exception(file: Path, step: str, e: Exception) -> None:
+    """log_error for the exception being handled: its repr, and the last 2000 characters of its traceback as `trace`.
+    Call it inside the `except`."""
+    log_error(file, step, repr(e), trace=traceback.format_exc()[-2000:])
+
+
 def json_object(v: object) -> dict[str, Any] | None:
     """The JSON value as an object, or None when it is anything else: the one place untyped JSON gets its type."""
     return cast(dict[str, Any], v) if isinstance(v, dict) else None
@@ -116,7 +122,7 @@ def start_background(key: str, errors: Path, fn: Callable[[], object], *, forget
         try:
             fn()
         except Exception as e:
-            log_error(errors, key, repr(e), trace=traceback.format_exc()[-2000:])
+            log_exception(errors, key, e)
         finally:
             if forget:
                 BACKGROUND.pop(key, None)

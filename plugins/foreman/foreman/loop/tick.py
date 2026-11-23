@@ -30,7 +30,6 @@ Then the steps, in this order (a broken one is logged in state/errors.jsonl and 
 import fcntl
 import os
 import time
-import traceback
 
 from .. import launcher, providers, util
 from ..core.project.config import Project
@@ -86,7 +85,7 @@ def tick(p: Project) -> None:
             try:
                 step()
             except Exception as e:  # one broken step must not stop the others, health files it
-                util.log_error(p.state / "errors.jsonl", name, repr(e), trace=traceback.format_exc()[-2000:])
+                util.log_exception(p.state / "errors.jsonl", name, e)
 
 
 def run_pulls(p: Project) -> None:
