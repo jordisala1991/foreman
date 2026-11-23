@@ -1261,6 +1261,10 @@ said once:
   `tests/test_one_module_runs_programs.py`.
   The only other exceptions in `per-file-ignores` (`pyproject.toml`) are the tests and `lock.py`, which needs a process
   group and signals to stop a whole job at its time limit (`start_new_session`, `killpg`).
+- **Only adapters talk to the platform**: ruff bans `urllib.request`, `http.client`, `ssl`, `ftplib`, `smtplib`,
+  `imaplib`, `poplib` and `telnetlib` (TID251, same exceptions as above), so an HTTP or mail client lives in a
+  `providers/` adapter or nowhere (`tests/test_only_adapters_talk_to_the_platform.py`); a client that needs no import of
+  them (`asyncio.open_connection(..., ssl=True)`, `socket`) stays the reviewer's.
 - **Typed at the border**: the github adapter turns `gh`'s JSON into its own types (`PullRequest`, the check buckets)
   with a small converter per shape; a shape that does not fit is a `ProviderError`. The port's operations take a
   `Change` and return `Published` / `ChangeState`: no dict crosses it.

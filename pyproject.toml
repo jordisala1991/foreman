@@ -67,6 +67,14 @@ select = ["E", "F", "I", "B", "UP", "SIM", "C90", "PLR0912", "PLR0913", "PLR0915
 "socketserver.ForkingUnixStreamServer".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
 "socketserver.ForkingUnixDatagramServer".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
 "posix".msg = "run programs through foreman/proc.py: see DESIGN.md, Architecture"
+"urllib.request".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
+"http.client".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
+"ssl".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
+"ftplib".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
+"smtplib".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
+"imaplib".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
+"poplib".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
+"telnetlib".msg = "talk to the platform through a provider adapter: see DESIGN.md, Architecture"
 
 # Only foreman/proc.py runs processes. lock.py is the one exception (process groups and signals, see DESIGN.md), and the tests.
 # Adding one here is the owner's call.

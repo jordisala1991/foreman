@@ -30,6 +30,7 @@ from foreman.providers.repo import FileDiff
 sessions.STOP_SETTLE_S = 0.0  # the fake stops at once
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugins/foreman"  # the folder the marketplace installs
+MODULE = "plugins/foreman/foreman/services/agents/p.py"  # where `lint` writes its source
 
 # A test run must not write the owner's real ~/.config/foreman (registry, panel token, locks): HOME and FOREMAN_REGISTRY point
 # at a temp dir for the whole run. The real HOME comes from the user database, as $HOME may already be redirected.
@@ -291,3 +292,14 @@ def names_program(source: str, *names: str) -> bool:
     """A string constant of `source` names one of the programs: by its bare name or by its path (`/usr/bin/git`)."""
     strings = (n.value for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Constant) and isinstance(n.value, str))
     return any(s.rsplit("/", 1)[-1] in names for s in strings)
+
+
+def lint(tmp_path: Path, source: str) -> subprocess.CompletedProcess[str]:
+    """The real `make lint`, run in `tmp_path` with `source` as a service module and the repo's ruff settings."""
+    (tmp_path / MODULE).parent.mkdir(parents=True)
+    (tmp_path / MODULE).write_text(source)
+    shutil.copy(ROOT / "pyproject.toml", tmp_path)
+    shutil.copy(ROOT / "uv.lock", tmp_path)
+    env = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MAKELEVEL", "MFLAGS")}
+    env["UV_PROJECT_ENVIRONMENT"] = sys.prefix
+    return subprocess.run(["make", "-f", str(ROOT / "Makefile"), "lint"], cwd=tmp_path, capture_output=True, text=True, env=env)

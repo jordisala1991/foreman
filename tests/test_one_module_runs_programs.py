@@ -3,27 +3,12 @@
 `test_no_module_uses_a_loop_method_that_runs_a_program`."""
 
 import ast
-import os
-import shutil
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-from helpers import PLUGIN, ROOT
+from helpers import PLUGIN, lint
 
-MODULE = "plugins/foreman/foreman/services/agents/p.py"
 LOOP_METHODS = {"subprocess_exec", "subprocess_shell"}
-
-
-def lint(tmp_path: Path, source: str) -> subprocess.CompletedProcess[str]:
-    (tmp_path / MODULE).parent.mkdir(parents=True)
-    (tmp_path / MODULE).write_text(source)
-    shutil.copy(ROOT / "pyproject.toml", tmp_path)
-    shutil.copy(ROOT / "uv.lock", tmp_path)
-    env = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MAKELEVEL", "MFLAGS")}
-    env["UV_PROJECT_ENVIRONMENT"] = sys.prefix
-    return subprocess.run(["make", "-f", str(ROOT / "Makefile"), "lint"], cwd=tmp_path, capture_output=True, text=True, env=env)
 
 
 @pytest.mark.parametrize(
