@@ -7,15 +7,14 @@ from pathlib import Path
 import pytest
 from fakerepo import FakeRepo
 from helpers import Env
-from test_watch import in_review, parent, row, task
+from test_watch import in_review, task
 
 from foreman import util
 from foreman.core.project.config import Project, ProjectError
 from foreman.core.tasks import backlog
 from foreman.loop import tick
 from foreman.providers import registry
-from foreman.providers.claude.rows import ClaudeRows
-from foreman.providers.runner import NO_ROWS, Rows
+from foreman.providers.runner import NO_ROWS
 from foreman.steps import notify, watch
 from foreman.steps.health import health
 
@@ -51,7 +50,7 @@ def settle() -> None:
 def first_run(e: Env, command: str | None = None) -> Project:
     """A project with the command, and the baseline run on an empty backlog."""
     p = notifying(e, command or str(recorder(e)))
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     return p
 
 
@@ -63,9 +62,9 @@ def test_a_new_need_runs_the_command_once_with_its_line_last(fake_git: FakeRepo)
     e = Env(repo=fake_git)
     p = first_run(e, f"{recorder(e)} --to bot")
     tid = task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
-    assert notes(e) == [["--to", "bot", watch.needs(p, NO_ROWS)[f"blocked:{tid}"]]]
+    assert notes(e) == [["--to", "bot", watch.needs(p)[f"blocked:{tid}"]]]
 
 
 def test_every_kind_of_need_is_notified(fake_git: FakeRepo):
@@ -76,30 +75,28 @@ def test_every_kind_of_need_is_notified(fake_git: FakeRepo):
     in_review(e)
     task(e, blocked="x")
     util.write_json(p.state / "ci.json", {"result": "fail", "since": "t1"})
-    parent(e)
-    rows = ClaudeRows({"s1": row()})
-    found = watch.needs(p, rows)
-    assert len(found) == 5
-    notify.run(p, rows)
+    found = watch.needs(p)
+    assert len(found) == 4
+    notify.run(p)
     settle()
-    assert {n[-1] for n in notes(e)} == set(found.values()) and len(notes(e)) == 5
+    assert {n[-1] for n in notes(e)} == set(found.values()) and len(notes(e)) == 4
 
 
 def test_each_need_is_notified_once_across_restarts(fake_git: FakeRepo):
     e = Env(repo=fake_git)
     p = first_run(e)
     tid = task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     p = Project.load(e.home)  # a restart
-    notify.run(p, NO_ROWS)
-    notify.run(p, NO_ROWS)
+    notify.run(p)
+    notify.run(p)
     settle()
     assert len(notes(e)) == 1
     registry.backlog(p).update(tid, blocked="")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     registry.backlog(p).update(tid, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     assert len(notes(e)) == 2
 
@@ -109,20 +106,9 @@ def test_only_the_accepts_waiting_at_first_start_are_notified(fake_git: FakeRepo
     tid = in_review(e)
     task(e, blocked="x")
     p = notifying(e, str(recorder(e)))
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
-    assert [n[-1] for n in notes(e)] == [watch.needs(p, NO_ROWS)[f"accept:{tid}"]]
-
-
-def test_an_unreadable_listing_does_not_notify_a_parent_again(fake_git: FakeRepo):
-    e = Env(repo=fake_git)
-    p = first_run(e)
-    parent(e)
-    idle: Rows = ClaudeRows({"s1": row()})
-    for rows in (idle, NO_ROWS, idle):
-        notify.run(p, rows)
-        settle()
-        assert len(notes(e)) == 1
+    assert [n[-1] for n in notes(e)] == [watch.needs(p)[f"accept:{tid}"]]
 
 
 @pytest.mark.parametrize("failing", ["exit 3", None])
@@ -131,10 +117,10 @@ def test_a_failing_or_missing_command_is_one_error_line_and_not_retried(fake_git
     cmd = str(script(e, "fails", f"echo x >> {e.bin / 'ran.txt'}; {failing}")) if failing else str(e.bin / "nope")
     p = first_run(e, cmd)
     task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     assert len(errors(p)) == 1
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     assert len(errors(p)) == 1
     if failing:
@@ -146,7 +132,7 @@ def test_a_slow_command_is_cut_at_the_limit_and_does_not_hold_the_step(fake_git:
     monkeypatch.setattr(notify, "LIMIT_S", 1)
     p = first_run(e, str(script(e, "slow", "sleep 5")))
     task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     t = next(t for k, t in util.BACKGROUND.items() if k.startswith(f"{p.state}:notify:"))
     assert t.is_alive()
     settle()
@@ -170,8 +156,8 @@ def test_without_the_key_no_command_runs(fake_git: FakeRepo, owner: str):
         f.write(owner)
     p = Project.load(e.home)
     task(e, blocked="x")
-    notify.run(p, NO_ROWS)
-    notify.run(p, NO_ROWS)
+    notify.run(p)
+    notify.run(p)
     settle()
     assert notes(e) == [] and not (p.state / "notified.json").exists()
 
@@ -189,11 +175,11 @@ def test_a_need_that_returns_while_its_previous_command_runs_is_notified_again(f
     e = Env(repo=fake_git)
     p = first_run(e, str(script(e, "slow", f"sleep 1; echo ran >> {e.bin / 'ran.txt'}")))
     tid = task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     registry.backlog(p).update(tid, blocked="")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     registry.backlog(p).update(tid, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     assert (e.bin / "ran.txt").read_text() == "ran\nran\n"
 
@@ -208,13 +194,13 @@ def test_a_command_failing_on_every_need_is_one_health_finding(fake_git: FakeRep
     p = first_run(e, cmd)
     for _ in range(3):
         task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     health.run(p, NO_ROWS)
     [found] = findings(p)
     assert cmd in str(found) and "exited 3" in str(found)
     task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     health.run(p, NO_ROWS)
     assert len(findings(p)) == 1
@@ -228,7 +214,7 @@ def test_a_command_exiting_with_other_codes_is_one_health_finding(fake_git: Fake
     task(e, blocked="x")
     task(e, blocked="x")
     script(e, "fails", f'for a; do last=$a; done; case "$last" in *{first}*) exit 3;; *) exit 4;; esac')  # the code depends on the need
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     assert {str(ln["trace"]) for ln in errors(p)} == {"exited 3: ", "exited 4: "}
     health.run(p, NO_ROWS)
@@ -240,7 +226,7 @@ def test_a_command_that_cannot_be_split_is_one_health_finding(fake_git: FakeRepo
     p = first_run(e, 'say "hello')
     for _ in range(3):
         task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     health.run(p, NO_ROWS)
     assert len(findings(p)) == 1
@@ -255,7 +241,7 @@ def test_finished_commands_leave_no_entry(fake_git: FakeRepo):
     p = first_run(e)
     for _ in range(3):
         task(e, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     settle()
     assert len(notes(e)) == 3
     assert leftovers(p) == []
@@ -275,12 +261,12 @@ def test_a_need_that_returns_while_its_last_command_runs_starts_its_own(fake_git
             time.sleep(0.05)
         raise AssertionError(f"command {n} never started")
 
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     started(1)
     registry.backlog(p).update(tid, blocked="")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     registry.backlog(p).update(tid, blocked="x")
-    notify.run(p, NO_ROWS)
+    notify.run(p)
     started(2)
     go.touch()
     settle()

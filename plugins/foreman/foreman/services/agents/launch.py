@@ -98,8 +98,7 @@ def ended(a: dict[str, Any], rows: Rows) -> bool:
 
 def launch_parent(p: Project, i: dict[str, Any]) -> SessionRef | None:
     """Starts the parent agent of task `i`: its first, or one that replaces an ended session and is told where the task
-    stands. The new session, or None when the launch was postponed, failed or undone. How often an ended parent is
-    launched again is the recover step's (steps/recover.py)."""
+    stands, the wakeups it missed included. The new session, or None when the launch was postponed, failed or undone."""
     tid = i["id"]
     name = brief.agent_name(p, tid, "parent")
     model, effort = p.get("agents", "planning_model"), p.get("agents", "planning_effort")
@@ -109,7 +108,7 @@ def launch_parent(p: Project, i: dict[str, Any]) -> SessionRef | None:
     d = registry.backlog(p).load()
     missed = [q for q in questions.undelivered(d) if q["task"] == tid] if old else []
     standing = chains.standing(backlog.tasks(d), i, [questions.message_for(i, q) for q in missed]) if old else ""
-    told = [s["id"] for s in subtasks.of(backlog.tasks(d), tid) if s["status"] in backlog.CLOSED]  # what the brief says: the same snapshot
+    told = subtasks.unwoken(backlog.tasks(d), tid, d["decisions_resolved"])  # closed subtasks its brief shows: the same snapshot
     try:
         title = util.session_title(tid, "parent", i["title"])
         ref = runner.start(Agent(tid, name, model, effort, title), _parent_brief(p, i, standing), cwd)
@@ -127,8 +126,9 @@ def launch_parent(p: Project, i: dict[str, Any]) -> SessionRef | None:
         still = it["status"] == "backlog" and not it.get("blocked") and now.get("session") == old.get("session")
         if still:
             it["agent"] = agent
-            it["notified"] = told
             record_session(it, ref, "parent")
+            for s in told:  # the brief shows them: no wakeup for them
+                questions.message(d, it, "S", ("subtask",), kind="subtask", text="subtask", answer="in its brief", subtask=s["id"], delivered=True)
     if not still:  # the owner cancelled or changed it while the session started
         runner.stop(ref)
         backlog.event(p, tid, f"launch of {name} undone: the task changed meanwhile")

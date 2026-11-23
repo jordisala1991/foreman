@@ -52,7 +52,7 @@ def cmd_metrics(a: argparse.Namespace) -> None:
 
 
 def _listing(p: Project, command: str) -> Rows:
-    """The session listing, or the command exits: `watch` and `needs` decide parents from it."""
+    """The session listing, or the command exits: `agents` decides from it."""
     try:
         rows = provider_registry.runner(p).rows()
     except providers.ConfigError as e:
@@ -64,13 +64,13 @@ def _listing(p: Project, command: str) -> Rows:
 
 def cmd_watch(a: argparse.Namespace) -> None:
     p = home(a)
-    watch.run(p, a.once, _listing(p, "watch"))
+    watch.run(p, a.once)
 
 
 def cmd_needs(a: argparse.Namespace) -> None:
     """`watch`'s set of needs now, as JSON (DESIGN.md «The JSON reads»)."""
     p = home(a)
-    print_json([{"kind": n.kind, "task": n.task, "since": n.since, "text": n.text, "key": n.key} for n in watch.found(p, _listing(p, "needs"))])
+    print_json([{"kind": n.kind, "task": n.task, "since": n.since, "text": n.text, "key": n.key} for n in watch.found(p)])
 
 
 def cmd_agents(a: argparse.Namespace) -> None:

@@ -1,5 +1,5 @@
-"""`foreman watch`: one line each time something starts needing the owner. It decides from the backlog, main's CI result
-(`state/ci.json`) and Claude Code's session listing, never from the text of events.jsonl."""
+"""`foreman watch`: one line each time something starts needing the owner. It decides from the backlog and main's CI
+result (`state/ci.json`), never from the text of events.jsonl."""
 
 import time
 from typing import Any, NamedTuple
@@ -8,12 +8,10 @@ from .. import util
 from ..core.project.config import Project, ProjectError
 from ..core.review import reviews
 from ..core.rules import decide
-from ..core.tasks import backlog, questions, subtasks
+from ..core.tasks import backlog, questions
 from ..providers import registry
-from ..providers.runner import NO_ROWS, Rows, ref_of
 
 EVERY_S = 10
-AFTER_SEND_S = 60  # the listing may still show an agent idle this long after a message was sent to it
 
 
 def pause() -> None:
@@ -32,16 +30,10 @@ def _waits_for_accept(p: Project, i: dict[str, Any]) -> bool:
     return decide.after_check(c, p.for_task(i).get("merge", "autonomy"), has_ci, i.get("resolving", ""), int(i.get("failure_streak") or 0)) == "owner"
 
 
-def recently_sent(agent: backlog.Agent) -> bool:
-    """A message was sent to this agent (delivery stamps `started`) less than AFTER_SEND_S ago."""
-    age = util.age_s(agent.get("started"))
-    return age is not None and 0 <= age < AFTER_SEND_S
-
-
 class Need(NamedTuple):
     """One thing that waits for the owner: `key` names it across polls, `line` is what watch prints, `text` what the owner
     decides on as stored (the first line of an accept's summary, as the review description shows it); `task` is "" for
-    main, `since` the stamp stored when it began (None for blocked and parent, which store none)."""
+    main, `since` the stamp stored when it began (None for blocked, which stores none)."""
 
     key: str
     kind: str
@@ -51,13 +43,12 @@ class Need(NamedTuple):
     line: str
 
 
-def found(p: Project, rows: Rows) -> list[Need]:
-    """What needs the owner now, in the order questions, accepts, blocked, main, parents (not one a message reached within
-    AFTER_SEND_S)."""
+def found(p: Project) -> list[Need]:
+    """What needs the owner now, in the order questions, accepts, blocked, main. A parent agent needs him only through its
+    open question: between wakeups it has no session expected alive."""
     with registry.view_scope(p):
         d = registry.backlog(p).load()
     out: list[Need] = []
-    waiting = questions.tasks_waiting(d)
     for q in questions.open_questions(d):
         line = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
         out.append(Need(f"q:{q['id']}", "question", q["task"], q.get("asked"), q["text"], line))
@@ -75,20 +66,12 @@ def found(p: Project, rows: Rows) -> list[Need]:
     ci = util.read_json(p.state / "ci.json", {})
     if ci.get("result") == "fail":
         out.append(Need(f"ci:{ci.get('since')}", "main", "", ci.get("since"), "tests fail on main", _line(f"main: tests fail (since {ci.get('since')})")))
-    for i in open_tasks:
-        agent: backlog.Agent = i.get("agent") or {}
-        ref = ref_of(agent)
-        waits_on_subtasks = any(s["status"] not in backlog.CLOSED for s in subtasks.of(all_tasks, i["id"]))
-        idle = rows.alive(ref) and not rows.busy(ref)
-        if agent.get("kind") == "parent" and i["id"] not in waiting and idle and not waits_on_subtasks and not recently_sent(agent):
-            line = _line(f"{i['id']} parent agent waits for the owner in its chat: {i['title']}")
-            out.append(Need(f"parent:{i['id']}", "parent", i["id"], None, i["title"], line))
     return out
 
 
-def needs(p: Project, rows: Rows) -> dict[str, str]:
+def needs(p: Project) -> dict[str, str]:
     """What needs the owner now: key → watch's line, in `found`'s order."""
-    return {n.key: n.line for n in found(p, rows)}
+    return {n.key: n.line for n in found(p)}
 
 
 def at_start(found: dict[str, str]) -> dict[str, str]:
@@ -96,29 +79,20 @@ def at_start(found: dict[str, str]) -> dict[str, str]:
     return {k: v for k, v in found.items() if k.startswith("accept:")}
 
 
-def keep_parents(now: dict[str, str], seen: dict[str, str]) -> None:
-    """A listing that could not be read says nothing of the parents: `now` keeps the ones `seen` had."""
-    now.update({k: v for k, v in seen.items() if k.startswith("parent:")})
-
-
-def run(p: Project, once: bool, rows: Rows) -> None:
-    """Prints the accepts already waiting at start, then each need that appears after it; `rows` is the listing the caller
-    read (the other needs at start are `foreman list`'s). A poll that cannot read the listing keeps the parents' entries as they were; one that cannot
-    read foreman's own state is skipped. It makes no platform call, nor reads the Board: it shows the snapshot the loop wrote
-    (`registry.view_scope`), and without one it stops with `the loop has not read the Board yet`. Under `once`,
-    returns after the first line printed after the start."""
-    seen = needs(p, rows)
+def run(p: Project, once: bool) -> None:
+    """Prints the accepts already waiting at start, then each need that appears after it (the other needs at start are
+    `foreman list`'s). A poll that cannot read foreman's own state is skipped. It makes no platform call, nor reads the
+    Board: it shows the snapshot the loop wrote (`registry.view_scope`), and without one it stops with `the loop has not
+    read the Board yet`. Under `once`, returns after the first line printed after the start."""
+    seen = needs(p)
     for line in at_start(seen).values():
         print(line, flush=True)
     while True:
         pause()
-        polled = registry.runner(p).rows()
         try:
-            now = needs(p, polled or NO_ROWS)
+            now = needs(p)
         except (backlog.BacklogError, ProjectError, OSError, ValueError):  # foreman's own state unreadable this poll
             continue
-        if polled is None:
-            keep_parents(now, seen)
         for key, line in now.items():
             if key not in seen:
                 print(line, flush=True)

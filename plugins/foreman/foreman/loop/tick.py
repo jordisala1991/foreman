@@ -78,7 +78,7 @@ def tick(p: Project) -> None:
             ("launch", lambda: launch_free(p)),
             ("mechanic", lambda: mechanic.run(p, rows)),
             ("folders", lambda: folders.run(p, rows)),
-            ("notify", lambda: notify.run(p, rows)),
+            ("notify", lambda: notify.run(p)),
         ]
     with registry.tick_scope(p):  # the tick loads the backlog once
         for name, step in steps:

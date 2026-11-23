@@ -5,7 +5,7 @@ from typing import Any
 
 from .. import util
 from ..core.project.config import Project
-from ..core.tasks import backlog, questions, runs
+from ..core.tasks import backlog, questions, recovery, runs
 from ..providers import registry
 from ..providers.runner import Rows, State, ref_of
 from ..services.agents.launch import ended, record_run, run_kind
@@ -28,16 +28,27 @@ def deliver_answers(p: Project, rows: Rows) -> None:
         if rows.busy(ref_of(agent)):
             continue  # it is busy (maybe talking with the owner): next tick
         if ended(agent, rows):
-            continue  # a parent whose session ended: its new session's brief carries it (parents.run)
+            continue  # a parent whose session ended: `parents.run` starts a new session for it
         msg = questions.message_for(i, q)
         if send(p, i, msg):
             registry.backlog(p).mark_delivered(q["id"])
             sent.add(i["id"])
             update_agent(p, i["id"], started=util.now())
+            if (kind := run_kind(i, agent)) in recovery.IDLE_KINDS:  # a wakeup: a new turn, a new run
+                wake_run(p, i["id"], kind)
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
         else:
             sent.add(i["id"])
             registry.backlog(p).update(i["id"], undelivered=i.get("undelivered", 0) + 1)
+
+
+def wake_run(p: Project, tid: str, kind: str) -> None:
+    """A parent or chain resumed with a wakeup: its run so far ends done (it was idle, its turn was over) and a new run of
+    its session, as recorded after the send, starts."""
+    agent: dict[str, Any] = backlog.get(registry.backlog(p).load(), tid).get("agent") or {}
+    if ref := ref_of(agent):
+        runs.end(p, tid, (kind,), "done")
+        record_run(p, tid, kind, ref, agent)
 
 
 def watch_waiting(p: Project, rows: Rows) -> None:

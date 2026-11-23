@@ -11,7 +11,6 @@ from helpers import Env, fm
 from foreman import proc, util
 from foreman.core.tasks.backlog import BacklogError, NoSnapshot
 from foreman.providers import registry
-from foreman.providers.runner import NO_ROWS
 from foreman.steps import watch
 from foreman.ui.panel import views
 
@@ -53,7 +52,7 @@ def scene(e: Env) -> tuple[dict[str, str], str]:
     three = b.add("three", status="ready", criteria="c")
     review: dict[str, Any] = {"round": 1, "tip": "h1", "open": 0}
     b.update(three, status="in review", branch="b", check=CHECK, review=review)
-    return watch.needs(e.p, NO_ROWS), q
+    return watch.needs(e.p), q
 
 
 def test_watch_prints_the_same_lines_on_github_as_on_the_file(fake: FakeGh):
@@ -84,7 +83,7 @@ def test_panel_and_watch_make_no_github_call(fake: FakeGh):
         assert len(views.state(e.p)["tasks"]) == 3
         assert views.task(e.p, "TY-1")["task"]["title"] == "t1"
         views.system(e.p)
-        watch.needs(e.p, NO_ROWS)
+        watch.needs(e.p)
     assert len(fake.calls) == n
 
 
@@ -109,7 +108,7 @@ def test_without_a_snapshot_they_say_so(fake: FakeGh):
     assert (state["tasks"], state["notice"]) == ([], "no_snapshot")
     assert "broken" not in views.summary(e.p)
     with pytest.raises(NoSnapshot, match="the loop has not read the Board yet"):
-        watch.run(e.p, True, NO_ROWS)
+        watch.run(e.p, True)
     assert fake.calls == []
     util.write_json(e.p.state / "backlog-cards.json", [1])
     with pytest.raises(BacklogError) as err:
@@ -134,4 +133,4 @@ def test_a_project_without_backlog_is_unchanged():
     e = Env()
     tid = registry.backlog(e.p).add("t", criteria="c")
     assert [t["id"] for t in views.state(e.p)["tasks"]] == [tid]
-    assert watch.needs(e.p, NO_ROWS) == {}
+    assert watch.needs(e.p) == {}

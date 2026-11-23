@@ -8,15 +8,15 @@ from datetime import datetime
 import pytest
 from helpers import Env, fm
 from test_misled import run_as
-from test_parents import resumes
+from test_parents import resumes, settle
 
 from foreman import util
 from foreman.core.project.config import Project
-from foreman.core.tasks import backlog, chains, questions
+from foreman.core.tasks import backlog, chains, questions, runs
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.services.delivery import merge
-from foreman.steps import parents, schedule, watch
+from foreman.steps import parents, schedule
 from foreman.ui.panel import views
 
 T0 = datetime(2026, 11, 15, 0, 0, 0)
@@ -176,39 +176,51 @@ class TestChainParent:
         self.step(P)
         assert len(self.steps(P)) == 6
 
-    def test_a_chain_parent_whose_session_ended_is_launched_again_once_the_cap_is_renewed(self):
+    def test_fn339_a_chain_parent_that_ended_after_asking_for_max_steps_wakes_on_the_edit(self):
+        """FN-339: the chain's agent fills its 5 steps, asks for more, gets the owner's answer and its session ends; the
+        owner raising max_steps wakes a run: a new session told the chain stands at step 5 of 6."""
         P = self.launched()
         self.fill(P, 5)
         old = self.e.task(P)["agent"]
-        fm(self.e.home, "edit", P, "--max-steps", "6")
+        run_as(self.e, P, old["name"], "ask", "Raise max_steps to 6?")
+        (q,) = questions.open_questions(registry.backlog(self.p).load(), P)
+        assert [n["kind"] for n in json.loads(fm(self.e.home, "needs", "--json")) if n["task"] == P] == ["question"]
+        fm(self.e.home, "answer", q["id"], "yes")
+        self.e.set_state(old["name"], "done")
+        tick.tick(self.p)  # the answer and the closed steps' notices are delivered, one per tick
+        for _ in range(6):
+            self.e.set_state(old["name"], "done")
+            tick.tick(self.p)
+        assert questions.undelivered(registry.backlog(self.p).load()) == []
+        settle(self.e, P)  # it ends its turn
         self.e.set_state(old["name"], "stopped")
+        tick.tick(self.p)
         before = len(self.e.calls())
+        fm(self.e.home, "edit", P, "--max-steps", "6")
         tick.tick(self.p)
         assert len(self.e.calls()) == before + 1
         new = self.e.task(P)["agent"]
         assert new["session"] != old["session"]
-        assert new["session"] in self.e.task(P)["sessions"]
+        last = [r for r in runs.load(self.p) if r.task == P][-1]
+        assert (last.kind, last.active, last.session) == ("chain", True, new["session"])
         text = self.e.calls()[-1]["argv"][-1]
-        for needle in ("Chain step 5 of 6", "at most 6 steps", *(s["id"] for s in self.steps(P))):
+        for needle in ("Chain step 5 of 6", "at most 6 steps", "max steps", "«6»", *(s["id"] for s in self.steps(P))):
             assert needle in text
+        assert [n for n in json.loads(fm(self.e.home, "needs", "--json")) if n["kind"] == "parent"] == []
 
-    def test_an_idle_chain_parent_is_told_what_the_owner_edited(self):
+    def test_an_idle_chain_parent_is_resumed_with_what_the_owner_edited(self):
         P = self.launched()
         self.fill(P, 5)
-        parents.notify(self.p)
+        parents.wake(self.p)
         for q in questions.undelivered(registry.backlog(self.p).load()):
             registry.backlog(self.p).mark_delivered(q["id"])
         old = self.e.task(P)["agent"]
         self.e.set_state(old["name"], "done")
-        registry.backlog(self.p).update(P, agent={**old, "started": "2000-01-01 00:00:00"})
-        assert f"parent:{P}" in watch.needs(self.p, registry.rows(self.p))
         fm(self.e.home, "edit", P, "--max-steps", "6")
         tick.tick(self.p)
         (call,) = resumes(self.e, old["session"])
         for needle in ("max steps", "«5»", "«6»", f"foreman show {P}"):
             assert needle in call["argv"][-1]
-        self.e.set_state(old["name"], "working")
-        assert [n for n in json.loads(fm(self.e.home, "needs", "--json")) if n["kind"] == "parent" and n["task"] == P] == []
 
     def test_edit_max_steps_is_refused_from_an_agent(self):
         P = self.launched()

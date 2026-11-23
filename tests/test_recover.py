@@ -145,16 +145,69 @@ def test_a_launch_that_never_listed_goes_to_the_owner_at_once(e: Env, fake_runne
     assert fake_runner.sent == []
 
 
-def test_a_dead_parent_is_not_resumed(e: Env, fake_runner: FakeRunner):
+def test_turn_over_table():
+    idle = WORKING._replace(idle=True)
+    assert not recovery.turn_over(idle._replace(quiet_s=59))
+    assert recovery.turn_over(idle._replace(quiet_s=60))
+    assert not recovery.turn_over(idle._replace(quiet_s=60, ended=True))
+    assert not recovery.turn_over(idle._replace(quiet_s=60, known=False))
+
+
+def a_parent(e: Env, r: FakeRunner) -> str:
+    """A parent whose agent runs its first turn (WORKING)."""
     P = registry.backlog(e.p).add("parent", status="backlog", criteria="c")
     registry.backlog(e.p).add("s", parent=P, criteria="c", status="triage")
-    parents.run(e.p, fake_runner.rows())
+    parents.run(e.p, r.rows())
+    r.states[str(task(e, P)["agent"]["session"])] = State.WORKING
+    return P
+
+
+def idles(r: FakeRunner, e: Env, P: str) -> None:
+    """Its session idles, started long ago and with an old transcript."""
+    a = task(e, P)["agent"]
+    r.states[str(a["session"])] = State.IDLE
+    registry.backlog(e.p).update(P, agent={**a, "started": OLD})
+
+
+def test_a_parent_whose_session_idles_ends_its_run_done(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner)
+    idles(fake_runner, e, P)
+    transcript(e, str(task(e, P)["agent"]["session"]), "done for now")
+    os.utime(next(Path(os.environ["FOREMAN_CLAUDE_PROJECTS"]).rglob("*.jsonl")), (0, 0))
+    for _ in range(2):
+        recover.run(e.p, fake_runner.rows())
+    assert [(r.outcome, r.failure_reason) for r in of(e, P, "parent")] == [("done", "")]
+    assert fake_runner.sent == [] and not task(e, P).get("blocked")
+
+
+def test_a_parent_waiting_for_the_owner_ends_its_run_done_once_idle(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner)
+    registry.backlog(e.p).ask(P, "agent", "which first?")
+    idles(fake_runner, e, P)
+    recover.run(e.p, fake_runner.rows())
+    assert [r.outcome for r in of(e, P, "parent")] == ["done"]
+
+
+def test_a_parent_whose_session_ended_mid_turn_is_resumed(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner)
     end(fake_runner, e, P)
     recover.run(e.p, fake_runner.rows())
-    assert (of(e, P, "parent")[0].failure_reason, fake_runner.sent) == ("session_ended", [])
-    parents.run(e.p, fake_runner.rows())
-    assert len(fake_runner.started) == 2
-    assert [(r.attempt, r.active) for r in of(e, P, "parent")] == [(1, False), (2, True)]
+    first, second = of(e, P, "parent")
+    assert (first.outcome, first.failure_reason, second.active) == ("failed", "session_ended", True)
+    [(_, message, _)] = fake_runner.sent
+    assert "session_ended" in message and "end your turn" in message
+    assert len(fake_runner.started) == 1
+
+
+def test_a_parent_that_cannot_be_resumed_gets_a_new_session_and_stays_in_backlog(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner)
+    old = task(e, P)["agent"]["session"]
+    end(fake_runner, e, P)
+    fake_runner.fail_send = True
+    recover.run(e.p, fake_runner.rows())
+    assert len(fake_runner.started) == 2 and task(e, P)["agent"]["session"] != old
+    assert task(e, P)["status"] == "backlog"
+    assert [(r.outcome, r.active) for r in of(e, P, "parent")] == [("failed", False), (None, True)]
 
 
 def transcript(e: Env, sid: str, said: str) -> None:
@@ -186,7 +239,7 @@ def test_a_killed_responsible_session_is_retried_once_then_handed_to_the_owner(e
     assert [(r.outcome, r.failure_reason) for r in of(e, tid)] == [("failed", "session_ended")] * 2
     blocked = task(e, tid)["blocked"]
     assert blocked.startswith("its agent stopped") and "session_ended" in blocked and "I was halfway through the tests" in blocked
-    assert [n.key for n in watch.found(e.p, fake_runner.rows()) if n.key.startswith("blocked:")] == [f"blocked:{tid}"]
+    assert [n.key for n in watch.found(e.p) if n.key.startswith("blocked:")] == [f"blocked:{tid}"]
     events = len(util.read_jsonl(e.p.state / "events.jsonl"))
     for _ in range(2):
         recover.run(e.p, fake_runner.rows())

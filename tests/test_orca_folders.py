@@ -9,7 +9,7 @@ from fakerunner import FakeRunner
 from helpers import Env
 
 from foreman import util
-from foreman.core.tasks import backlog
+from foreman.core.tasks import backlog, runs
 from foreman.loop import tick
 from foreman.providers import registry
 from foreman.providers.repo import FileDiff
@@ -66,6 +66,7 @@ def test_a_done_parents_folder_goes_on_the_next_tick(fake_git: FakeRepo, fake_ru
     e = Env(repo=fake_git)
     cwd = started(e, "orca", fake_runner, fake_git)
     assert cwd["ty-4"] in fake_git.worktrees()  # open: kept
+    runs.end(e.p, "TY-4", ("parent",), "done")  # its turn is over: its session gone, recover leaves it
     tick.tick(e.p)
     assert cwd["ty-4"] in fake_git.worktrees()
     sub = registry.backlog(e.p).add("sub", status="triage", criteria="y", parent="TY-4")

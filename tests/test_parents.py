@@ -1,5 +1,6 @@
-"""A parent task's own agent: launched on its Go, outside the slots; told only of subtasks merged or canceled; never
-closes the parent alone; files and edits only its own subtasks; `fm show` gives it real data per subtask."""
+"""A parent task's own agent: launched on its Go, outside the slots; woken by a subtask merged or canceled, the owner's
+answer or edit, one run per wakeup; never closes the parent alone; files and edits only its own subtasks; `fm show` gives it
+real data per subtask."""
 
 import json
 from typing import Any
@@ -17,9 +18,27 @@ from foreman.providers.runner import NO_ROWS
 from foreman.services.agents.launch import launch_parent
 from foreman.steps import parents
 
+OLD = "2000-01-01 00:00:00"
+
 
 def resumes(e: Env, sid: str) -> list[dict[str, Any]]:
     return [c for c in e.calls() if c["argv"][:3] == ["--bg", "--resume", sid]]
+
+
+def of(e: Env, tid: str) -> list[runs.Run]:
+    return [r for r in runs.load(e.p) if r.task == tid]
+
+
+def settle(e: Env, tid: str) -> None:
+    """Its session idles past the settle time; a tick ends its turn (run done)."""
+    a = e.task(tid)["agent"]
+    e.set_state(a["name"], "done")
+    registry.backlog(e.p).update(tid, agent={**a, "started": OLD})
+    tick.tick(e.p)
+
+
+def parent_needs(e: Env) -> list[dict[str, Any]]:
+    return [n for n in json.loads(fm(e.home, "needs", "--json")) if n["kind"] == "parent"]
 
 
 @pytest.mark.usefixtures("owner")
@@ -108,9 +127,9 @@ class TestNotices:
         assert "zero-two" in resumes(self.e, self.sid)[-1]["argv"][3]
 
 
-@pytest.mark.usefixtures("owner")
-class TestRelaunched:
-    """A parent whose session ended or is gone gets a new one on the next pass, told where it stands."""
+class TestWakeups:
+    """A wakeup is a message of the parent not yet delivered: a subtask closing, the owner's answer, an owner edit. The loop
+    resumes the idle session with it, or starts a new session told where it stands when the old one ended."""
 
     @pytest.fixture(autouse=True)
     def set_up(self, owner, env):
@@ -120,66 +139,89 @@ class TestRelaunched:
         self.S1 = fm(env.home, "add", "one", "--parent", self.P, "--triage", "--criteria", "c").strip()
         tick.tick(env.p)
         self.old = env.task(self.P)["agent"]
-        registry.backlog(env.p).set_status(self.S0, "done", "x")
+        settle(env, self.P)
 
-    def undelivered(self) -> list[str]:
-        return [q["answer"] for q in questions.undelivered(registry.backlog(self.e.p).load())]
+    def pending(self) -> list[dict[str, Any]]:
+        return [q for q in questions.undelivered(registry.backlog(self.e.p).load()) if q["task"] == self.P]
 
-    def test_an_ended_session_gets_a_new_one_told_where_it_stands(self):
-        self.e.set_state(self.old["name"], "stopped")
-        tick.tick(self.e.p)
-        assert len(self.e.calls()) == 2
-        text = self.e.calls()[-1]["argv"][-1]
-        assert f"- {self.S0} done: zero" in text
-        assert f"- {self.S1} " in text
-        assert "Notices you missed:" in text
-        assert f"Subtask {self.S0} «zero» was merged" in text
-        assert "$standing" not in text
-        t = self.e.task(self.P)
-        assert t["agent"]["session"] != self.old["session"]
-        assert {self.old["session"], t["agent"]["session"]} <= set(t["sessions"])
-        assert resumes(self.e, self.old["session"]) == []
-        first, second = (r for r in runs.load(self.e.p) if r.task == self.P)
-        assert (first.kind, first.outcome) == ("parent", "failed") and first.failure_reason
-        assert (second.kind, second.attempt, second.active, second.session) == ("parent", 2, True, t["agent"]["session"])
+    def subtask_closes(self) -> str:
+        registry.backlog(self.e.p).set_status(self.S0, "done", "x")
+        parents.wake(self.e.p)
+        return f"Subtask {self.S0} «zero» was merged"
 
-    def test_the_notices_it_missed_are_in_the_brief_and_not_sent_again(self):
-        self.e.set_state(self.old["name"], "stopped")
-        tick.tick(self.e.p)
-        text = self.e.calls()[-1]["argv"][-1]
-        assert f"Subtask {self.S0} «zero» was merged" in text
-        assert self.undelivered() == []
-        tick.tick(self.e.p)
-        assert len(self.e.calls()) == 2
+    def owner_answers(self) -> str:
+        run_as(self.e, self.P, self.old["name"], "ask", "Which first?")
+        (q,) = questions.open_questions(registry.backlog(self.e.p).load(), self.P)
+        fm(self.e.home, "answer", q["id"], "zero first")
+        return "zero first"
 
-    def test_an_edit_made_while_the_session_is_stopped_reaches_the_new_brief(self):
-        self.e.set_state(self.old["name"], "stopped")
+    def owner_edits(self) -> str:
         fm(self.e.home, "edit", self.P, "--detail", "new detail")
+        return "«new detail»"
+
+    def test_a_subtask_closing_is_one_wakeup_named_by_its_subtask(self):
+        registry.backlog(self.e.p).set_status(self.S0, "done", "x")
+        for _ in range(2):
+            parents.wake(self.e.p)
+            assert [(q["kind"], q["subtask"]) for q in self.pending()] == [("subtask", self.S0)]
+        registry.backlog(self.e.p).mark_delivered(self.pending()[0]["id"])
+        parents.wake(self.e.p)
+        assert self.pending() == []
+        assert "notified" not in self.e.task(self.P)
+
+    def test_the_owners_answer_and_edit_are_wakeups(self):
+        self.owner_answers()
+        assert len(self.pending()) == 1
+        self.owner_edits()
+        assert [q["kind"] for q in self.pending()][-1] == "edit"
+
+    @pytest.mark.parametrize("event", ["subtask_closes", "owner_answers", "owner_edits"])
+    def test_an_idle_session_is_resumed_with_it_as_a_new_run(self, event: str):
+        text = getattr(self, event)()
+        tick.tick(self.e.p)
+        (call,) = resumes(self.e, self.old["session"])
+        assert text in call["argv"][3]
+        first, second = of(self.e, self.P)
+        assert (first.kind, first.outcome) == ("parent", "done")
+        assert (second.kind, second.active, second.session) == ("parent", True, self.old["session"])
+        assert self.pending() == []
+
+    @pytest.mark.parametrize("event", ["subtask_closes", "owner_answers", "owner_edits"])
+    def test_an_ended_session_is_replaced_by_one_told_where_it_stands(self, event: str):
+        self.e.set_state(self.old["name"], "stopped")
+        text = getattr(self, event)()
         tick.tick(self.e.p)
         assert resumes(self.e, self.old["session"]) == []
-        text = self.e.calls()[-1]["argv"][-1]
-        notices = text.split("Notices you missed:")[1]
-        assert "The owner edited task" in notices and "«new detail»" in notices
-        assert self.undelivered() == []
-
-    def test_a_session_gone_from_the_listing_gets_a_new_one(self):
-        self.e.set_state(self.old["name"], "stopped")
-        (self.e.bin / "agents.json").write_text(json.dumps([{"id": "other", "sessionId": "other-0000-0000", "name": "other", "state": "working", "pid": 1}]))
+        brief = self.e.calls()[-1]["argv"][-1]
+        assert "Notices you missed:" in brief and text in brief
+        new = self.e.task(self.P)["agent"]
+        assert new["session"] != self.old["session"]
+        first, second = of(self.e, self.P)
+        assert (first.outcome, second.attempt, second.active, second.session) == ("done", 2, True, new["session"])
+        assert self.pending() == []
         tick.tick(self.e.p)
         assert len(self.e.calls()) == 2
+
+    def test_an_ended_session_with_nothing_pending_is_not_replaced(self):
+        self.e.set_state(self.old["name"], "stopped")
+        for _ in range(2):
+            tick.tick(self.e.p)
+        assert len(self.e.calls()) == 1 and parent_needs(self.e) == []
 
     def test_an_idle_session_is_not_replaced(self):
-        self.e.set_state(self.old["name"], "done")
         parents.run(self.e.p, registry.rows(self.e.p))
         assert len(self.e.calls()) == 1
 
     def test_an_unreadable_listing_launches_nothing(self):
+        self.e.set_state(self.old["name"], "stopped")
+        self.owner_edits()
         parents.run(self.e.p, NO_ROWS)
         assert len(self.e.calls()) == 1
 
     def test_an_agent_with_no_session_yet_launches_nothing(self):
         registry.backlog(self.e.p).update(self.P, agent={**self.old, "session": None})
         self.e.set_state(self.old["name"], "stopped")
+        self.owner_edits()
         parents.run(self.e.p, registry.rows(self.e.p))
         assert len(self.e.calls()) == 1
 
@@ -188,9 +230,9 @@ class TestRelaunched:
         registry.backlog(self.e.p).answer(qid, "go on")
         launch_parent(self.e.p, self.e.task(self.P))
         assert f"The owner answered your request {qid} (push)" in self.e.calls()[-1]["argv"][-1]
-        assert [q for q in questions.undelivered(registry.backlog(self.e.p).load()) if q["task"] == self.P] == []
+        assert self.pending() == []
 
-    def test_a_subtask_closed_while_the_session_starts_is_still_to_be_told(self):
+    def test_a_subtask_closed_while_the_session_starts_is_still_a_wakeup(self):
         start = Claude.start
 
         def closing(runner: Claude, *args: Any) -> Any:
@@ -198,11 +240,30 @@ class TestRelaunched:
             return start(runner, *args)
 
         self.e.set_state(self.old["name"], "stopped")
+        self.subtask_closes()
         with mock.patch.object(Claude, "start", closing):
             parents.run(self.e.p, registry.rows(self.e.p))
-        assert self.e.task(self.P)["notified"] == [self.S0]
-        parents.notify(self.e.p)
-        assert f"Subtask {self.S1} " in [q["answer"] for q in questions.undelivered(registry.backlog(self.e.p).load())][-1]
+        assert self.pending() == []
+        parents.wake(self.e.p)
+        assert [q["subtask"] for q in self.pending()] == [self.S1]
+
+    def test_ds14_a_subtask_closed_while_a_notice_is_in_flight_raises_no_alarm(self):
+        """DS-14: S1 closes and its notice resumes the parent; S2 closes before it idles. Both reach it, no run fails."""
+        registry.backlog(self.e.p).set_status(self.S0, "done", "x")
+        tick.tick(self.e.p)  # the wakeup is recorded
+        tick.tick(self.e.p)  # and resumes the idle session: it works
+        assert parent_needs(self.e) == []
+        registry.backlog(self.e.p).set_status(self.S1, "done", "x")
+        tick.tick(self.e.p)  # busy: the second wakeup waits
+        assert parent_needs(self.e) == []
+        self.e.set_state(self.old["name"], "done")
+        tick.tick(self.e.p)  # idle: resumed with the second notice
+        assert parent_needs(self.e) == []
+        settle(self.e, self.P)
+        assert parent_needs(self.e) == []
+        assert len(resumes(self.e, self.old["session"])) == 2
+        assert [r.outcome for r in of(self.e, self.P)] == ["done", "done", "done"]
+        assert not self.e.task(self.P).get("blocked")
 
 
 class TestClosing:
