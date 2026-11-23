@@ -138,6 +138,9 @@ def _operations(c: Command) -> None:
     s = c("events", "a task's events in time order, as JSON")
     _json(s, required=True)
     s.add_argument("--task", metavar="ID", required=True)
+    s = c("reviews", "a task's review rounds with their text, as JSON")
+    _json(s, required=True)
+    s.add_argument("--task", metavar="ID", required=True)
     s = c(
         "backlog",
         "the project's Board on GitHub: `setup` makes its fields and the label and deletes its workflows;"
