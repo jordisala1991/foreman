@@ -2,11 +2,10 @@
 as issues and in what order, what refuses the move before anything is written, and what each task keeps locally. Pure: the
 GitHub adapter (`providers/github/cutover.py`) files them."""
 
-import re
 from collections.abc import Mapping
 from typing import Any
 
-from .backlog import CLOSED, Acceptance, BacklogError, Data, Task
+from .backlog import CLOSED, Acceptance, BacklogError, Data, Task, id_number
 from .issues import body_of, body_parts, fields_of, split
 
 NOT_CARRIED = ("plan", "subs", "defined_by", "undelivered")  # no code reads them; they stay in the old file
@@ -23,7 +22,7 @@ def _open(d: Data) -> list[Task]:
 
 def highest(d: Data, prefix: str) -> int:
     """The largest number among the ids `<prefix>-<n>`, open or closed (0 for none)."""
-    return max((int(m[1]) for t in d["tasks"] if (m := re.fullmatch(rf"{re.escape(prefix)}-(\d+)", t["id"]))), default=0)
+    return max((n for t in d["tasks"] if (n := id_number(prefix, t["id"])) is not None), default=0)
 
 
 def _texts(t: Task) -> tuple[str, str, str]:

@@ -1,11 +1,10 @@
 """A task's id on GitHub (DESIGN.md «Ids»): `PREFIX-<issue number>`, or the old id a migrated task keeps through
 `<home>/legacy-ids.json` ({"FN-140": 272, …})."""
 
-import re
 from collections.abc import Mapping
 
 from ... import util
-from .backlog import BacklogError
+from .backlog import BacklogError, id_number
 
 
 def task_id(prefix: str, number: int, legacy: Mapping[str, int]) -> str:
@@ -17,8 +16,7 @@ def number(prefix: str, tid: str, legacy: Mapping[str, int]) -> int | None:
     """The issue number of a task id (the inverse of `task_id`): the legacy map's value, else PREFIX-<digits>; None for neither."""
     if tid in legacy:
         return legacy[tid]
-    m = re.fullmatch(rf"{re.escape(prefix)}-(\d+)", tid)
-    return int(m[1]) if m else None
+    return id_number(prefix, tid)
 
 
 def legacy_ids(raw: object) -> dict[str, int]:
