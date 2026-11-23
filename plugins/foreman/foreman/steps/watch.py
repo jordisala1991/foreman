@@ -45,13 +45,14 @@ class Need(NamedTuple):
 
 def found(p: Project) -> list[Need]:
     """What needs the owner now, in the order questions, accepts, blocked, main. A parent agent needs him only through its
-    open question: between wakeups it has no session expected alive."""
+    open question, which a silent end of its run files (kind `stopped`): between wakeups it has no session expected alive."""
     with registry.view_scope(p):
         d = registry.backlog(p).load()
     out: list[Need] = []
     for q in questions.open_questions(d):
-        line = _line(f"{q['task']} asks the owner ({q['id']}): {q['text']}")
-        out.append(Need(f"q:{q['id']}", "question", q["task"], q.get("asked"), q["text"], line))
+        stopped = q.get("kind") == "stopped"
+        line = _line(f"{q['task']} {'stopped without asking the owner' if stopped else 'asks the owner'} ({q['id']}): {q['text']}")
+        out.append(Need(f"q:{q['id']}", "stopped" if stopped else "question", q["task"], q.get("asked"), q["text"], line))
     all_tasks = backlog.tasks(d)
     open_tasks = [i for i in all_tasks if i["status"] not in backlog.CLOSED]
     for i in all_tasks:

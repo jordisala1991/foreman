@@ -153,10 +153,12 @@ def test_turn_over_table():
     assert not recovery.turn_over(idle._replace(quiet_s=60, known=False))
 
 
-def a_parent(e: Env, r: FakeRunner) -> str:
-    """A parent whose agent runs its first turn (WORKING)."""
+def a_parent(e: Env, r: FakeRunner, sub: str = "triage") -> str:
+    """A parent whose agent runs its first turn (WORKING), with one subtask in the status `sub`."""
     P = registry.backlog(e.p).add("parent", status="backlog", criteria="c")
-    registry.backlog(e.p).add("s", parent=P, criteria="c", status="triage")
+    S = registry.backlog(e.p).add("s", parent=P, criteria="c", status="triage")
+    if sub != "triage":
+        registry.backlog(e.p).update(S, status=sub)  # closed before the agent: no wakeup owed
     parents.run(e.p, r.rows())
     r.states[str(task(e, P)["agent"]["session"])] = State.WORKING
     return P
@@ -289,3 +291,41 @@ def test_a_hunter_whose_file_is_written_is_not_judged_dead(e: Env, fake_runner: 
     tick.tick(e.p)
     assert [(r.outcome, r.failure_reason) for r in of(e, tid, "hunter")] == [("done", "")]
     assert fake_runner.sent == []
+
+
+def ended_idle(e: Env, r: FakeRunner, P: str, said: str) -> None:
+    """The parent's session idles after its last words, and the loop recovers it twice."""
+    idles(r, e, P)
+    transcript(e, str(task(e, P)["agent"]["session"]), said)
+    os.utime(next(Path(os.environ["FOREMAN_CLAUDE_PROJECTS"]).rglob("*.jsonl")), (0, 0))
+    for _ in range(2):
+        recover.run(e.p, r.rows())
+
+
+def test_a_parent_that_ends_with_every_subtask_done_and_no_ask_is_a_need(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner, sub="done")
+    ended_idle(e, fake_runner, P, "all subtasks done, waiting for your yes  ")
+    [need] = watch.found(e.p)
+    assert (need.kind, need.task, need.text) == ("stopped", P, "all subtasks done, waiting for your yes")
+
+
+def test_a_parent_that_asked_leaves_only_its_question(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner, sub="done")
+    registry.backlog(e.p).ask(P, "agent", "which first?")
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    assert [n.kind for n in watch.found(e.p)] == ["question"]
+
+
+def test_a_parent_with_an_open_subtask_leaves_no_need(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner)
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    assert watch.found(e.p) == []
+
+
+def test_answering_the_stopped_need_wakes_the_parent(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner, sub="done")
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    [need] = watch.found(e.p)
+    registry.backlog(e.p).answer(need.key.removeprefix("q:"), "carry on with the report")
+    tick.tick(e.p)
+    assert any("carry on with the report" in m for _, m, _ in fake_runner.sent)
