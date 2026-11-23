@@ -67,6 +67,17 @@ class TestTip:
         assert "Round: 2" in last
         assert f"Tip: {b}" in last
 
+    def test_the_round_two_hunter_repeats_only_the_session_steps_the_fixes_touch(self):
+        e = Env(test="true")
+        tid, a = start(e)
+        verdict(e, tid, a)
+        commit(e, tid)
+        tick.tick(e.p)
+        text = e.calls()[-1]["argv"][-1]
+        assert "[fm hunter" in text
+        assert "Round 2 looks at the fixes" in text
+        assert "rerun only the steps the fixes touch" in text
+
     def test_two_reviewers_each_verdict_lands_on_its_own_tip(self):
         for order in ("ba", "ab"):
             e = Env(test="true")

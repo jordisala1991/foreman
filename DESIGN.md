@@ -260,14 +260,14 @@ inside `<!-- foreman:description -->` markers, adds a footer with the commit and
 section in `<details>`, and the panel shows it; the loop seeds the file from `foreman/briefs/report.md`, or from the repo's
 `.github/pull_request_template.md` plus a Review rounds section, when it launches) and ends with
 `foreman done --summary --report --misled`. If the review returns it or the owner rejects it, the note arrives in the same
-conversation: each finding gets the smallest change that settles it, or a one-line answer if it thinks the finding is wrong; add a `### Round N` to the report's «Review rounds» section, `foreman done` again.
+conversation: each finding gets the smallest change that settles it, or a one-line answer if it thinks the finding is wrong; add a `### Round N` to the report's «Review rounds» section, `foreman done` again; a fix that changes behaviour a session step shows has that step rerun and `session.md` updated first, and the Round N section says which steps were rerun.
 A project's home may hold `verify.md`, its recipe for using the product live in a throwaway setup; the responsible, hunter and
 reviewer briefs carry its path when it exists (`brief.verify_section`). Before the report, the responsible agent of a change or bug
 task uses the feature through it (or the product's own commands without one) and saves `<home>/reports/ID/session.md`, each
 command with its real output and each screenshot with what it shows; the report's Proof table has an «In use» column pointing
 to the session step that shows each criterion line. The hunter of a change or bug task repeats that session in a fresh setup on the
 tip and reports as Wrong each step whose output or screenshot differs, a missing session, or an «In use» step the session lacks;
-the reviewer confirms such a finding by rerunning the step.
+the reviewer confirms such a finding by rerunning the step. In round 2 or a scoped review the hunter repeats only the steps the fixes touch, plus any step a still-open finding names.
 
 **Review: hunter, then reviewer** (`foreman/briefs/hunter.md`, `foreman/briefs/reviewer.md`): launched by the loop, not by the responsible agent, each as
 its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail
