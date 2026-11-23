@@ -21,7 +21,7 @@ A question to the owner is a decision tied to its task and agent: {id: "XX-1 Q1"
 """
 
 import re
-from typing import Any, NamedTuple, TypedDict
+from typing import Any, Literal, NamedTuple, TypedDict, get_args
 
 from ... import util
 from ..project.config import Project
@@ -32,6 +32,13 @@ RUNNING = ("refining", "in progress")
 PRIORITIES = ("urgent", "high", "medium", "low", "none")
 Task = dict[str, Any]
 Data = dict[str, Any]
+RetryField = Literal["retry", "pr", "check_retry"]  # the prefixes of the `<prefix>_error` and `<prefix>_count` keys `loop.guarded` keeps
+RETRY_FIELDS: tuple[RetryField, ...] = get_args(RetryField)
+
+
+def unblocked() -> dict[str, Any]:
+    """The keys an unblock sets: the block gone and every `loop.guarded` failure count back to nothing."""
+    return {"blocked": "", **{f"{f}_error": "" for f in RETRY_FIELDS}, **{f"{f}_count": 0 for f in RETRY_FIELDS}}
 
 
 class BacklogError(Exception):

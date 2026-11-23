@@ -650,7 +650,7 @@ One label: `needs-owner`.
 | `mechanic` {name, short, session, kind, model, effort, started, …}, `diagnosis` {at, file, missing} | local | `<home>/diagnoses/` |
 | `pr` {number, url, draft, described, commented, …}, `pr_error` | local | the PR is found by its branch; its text says `Task: #<issue>` (never `Closes`) |
 | `accepted` {by, head, at}, `merging`, `merge`, `commit`, `acceptance.verdict` | local | the owner's accept and the merge record, tied to a branch tip |
-| `retry_count`, `retry_error`, `check_retry_count`, `check_retry_error`, `released` | local | the loop's counters and once-flags |
+| `retry_count`, `retry_error`, `pr_count`, `check_retry_count`, `check_retry_error`, `released` | local | the loop's counters and once-flags |
 | `plan`, `subs`, `defined_by`, `undelivered` (as a task key) | not carried | no code reads them; `plan` and `subs` are always `[]`; they stay in the read-only old file |
 | file keys `schema_version`, `updated`, `projects`, `archive` | not carried | bookkeeping of the old file; `projects` and `archive` are empty in fm's `backlog.json` |
 | `decisions`, `decisions_resolved` | local, `<home>/state/questions.json` | open questions; answered ones and the messages for an agent (kinds `note`, `subtask`, …); ids `FN-n Qk` unchanged |
@@ -826,7 +826,7 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). O
 3. **merged**: the task closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
 
-Retry policy, one place (`loop.guarded`, deciding with `decide.retry_step`; every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both.
+Retry policy, one place (`loop.guarded`, deciding with `decide.retry_step`; every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both; `foreman unblock` sets every count back to nothing, the PR step's and the check's too (`backlog.unblocked`).
 
 Config: `[merge] provider = "auto"` (default: `github` if the repo's `remote` is on github.com (always `local` with `remote = "none"`), else `local`; or force
 `local` | `github`) and `strategy = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An
