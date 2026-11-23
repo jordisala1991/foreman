@@ -265,7 +265,9 @@ A project's home may hold `verify.md`, its recipe for using the product live in 
 reviewer briefs carry its path when it exists (`brief.verify_section`). Before the report, the responsible agent of a change or bug
 task uses the feature through it (or the product's own commands without one) and saves `<home>/reports/ID/session.md`, each
 command with its real output and each screenshot with what it shows; the report's Proof table has an «In use» column pointing
-to the session step that shows each criterion line.
+to the session step that shows each criterion line. The hunter of a change or bug task repeats that session in a fresh setup on the
+tip and reports as Wrong each step whose output or screenshot differs, a missing session, or an «In use» step the session lacks;
+the reviewer confirms such a finding by rerunning the step.
 
 **Review: hunter, then reviewer** (`foreman/briefs/hunter.md`, `foreman/briefs/reviewer.md`): launched by the loop, not by the responsible agent, each as
 its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail
