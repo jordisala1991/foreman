@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Iterator
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -10,6 +11,7 @@ from fakerunner import FakeRunner
 from helpers import Env
 
 from foreman.core.project.config import Project
+from foreman.loop import queue
 from foreman.providers import registry
 
 
@@ -49,3 +51,18 @@ def owner() -> Iterator[None]:
     with mock.patch.dict(os.environ):
         os.environ.pop("FOREMAN_TASK", None)
         yield
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "real_session_check: the loop checks the session of a delivered change or bug task")
+
+
+def not_returned(p: Project, i: dict[str, Any]) -> bool:
+    return False
+
+
+@pytest.fixture(autouse=True)
+def no_session_check(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The deliveries of the other tests have no session: the loop sends none back, unless the test is marked `real_session_check`."""
+    if request.node.get_closest_marker("real_session_check") is None:
+        monkeypatch.setattr(queue, "session_returned", not_returned)

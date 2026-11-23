@@ -94,7 +94,7 @@ SHAPES: dict[str, Shape] = {
     "health.findings": {"key": str, "title": str, "meaning": str, "evidence": str, "hypothesis": str, "repo": str},
     "events": {
         "at": str,
-        "kind": frozenset({"planned", "built", "rejected", "conflict", "failing", "review", "accepted", "merged", "other"}),
+        "kind": frozenset({"planned", "built", "rejected", "conflict", "failing", "review", "session", "accepted", "merged", "other"}),
         "text": str,
     },
     "reviews": {"round": int, "tip": str, "at": str, "open": int, "text": str},

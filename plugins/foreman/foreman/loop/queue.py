@@ -10,7 +10,7 @@ from ..providers.repo import RepoError
 from ..providers.runner import Rows, State, ref_of, stop_live
 from ..services.delivery import git, merge, pulls
 from ..services.delivery.git import DeliveryError, MergeConflict
-from ..steps.reviewing import apply_review, seen_of, working
+from ..steps.reviewing import apply_review, seen_of, session_returned, working
 from ..steps.talk import return_to_agent
 from .guarded import check_guarded, guarded, merged_guarded
 
@@ -110,6 +110,8 @@ def queue_one(p: Project, i: dict[str, Any], rows: Rows) -> None:
     head = r.head(i.get("branch", "HEAD"))
     main_head = r.find(main)
     step = decide.review_step(seen_of(p, i, head, rows), i.get("review") or {}, MAX_ROUNDS)
+    if step.do in ("hunt", "wait") and session_returned(p, i):
+        return
     if step.do != "go":  # no verdict on this tip yet (a review first, or the last one holds), or its findings go back
         apply_review(p, i, head, step)
         return
