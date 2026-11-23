@@ -6,7 +6,7 @@ from ... import proc, util
 from ...core.project.config import Project
 from ...core.review import reviews
 from ...core.rules import decide
-from ...core.rules.risk import Facts, score
+from ...core.rules.risk import Facts, Plan, parse_plan, score
 from ...core.tasks import backlog
 from ...providers import registry
 from ...providers.repo import RepoError
@@ -72,7 +72,8 @@ def check(p: Project, tid: str, ci: str | None = None) -> dict[str, Any]:
     v: reviews.Review | None = i.get("review")
     review = "" if not v else "clean" if v["open"] == 0 else f"open after round {v['round']}: {v['open']}"
     conflict = git.conflicts(p, branch)
-    risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci, p.publishes))
+    plan = parse_plan(Path(i["plan_file"]).read_text(encoding="utf-8")) if i.get("plan_file") else Plan()
+    risk, reasons = score(p, Facts(tests, review, files, deleted, conflict, commits, ci, p.publishes, plan))
     c = {
         "tests": tests,
         "tests_output": out,

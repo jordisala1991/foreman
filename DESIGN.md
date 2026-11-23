@@ -789,8 +789,13 @@ Every delivered branch gets a risk score:
 - **impact**, from what the change touches: high = paths in `[risk.high]`; medium = paths in `[risk.medium]` and deleted
   files; low = the rest. A review never lowers it.
 - **doubt**, from the evidence: high = no changes, tests fail, CI fails; medium = no test command, or a large change: over `[risk] large_lines` (400) changed lines, not counting tests, generated and lock files; size never makes a change high by itself.
-- Risk is the higher of the two. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
-  `[ci]`, `[git]`, `[review]`). Size is only the large-change reason; file counts are not a reason.
+- **plan** (FN-115), from the plan's three lines (`Declared risk:`, `Areas:`, `Expected size:`, parsed by
+  `risk.parse_plan` from the task's `plan_file` in `check`): a declared medium or high is that level, `declared <level> by
+  the plan: <why> [plan]`, never lowered (a declared low adds nothing); a counted file outside Areas (`touches <paths> the
+  plan did not announce [plan+diff]`) or counted lines over 3 times the Expected size (`<n> lines, the plan expected <m>
+  [plan+diff]`) is medium. A plan without the lines adds nothing.
+- Risk is the higher of the three. It shows up to 3 reasons, high ones first, each with its source (`[diff]`, `[tests]`,
+  `[ci]`, `[git]`, `[review]`, `[plan]`, `[plan+diff]`). Size is only the large-change reason; file counts are not a reason.
   With several repos a path or size reason ends `[diff, repo KEY]`, and a `publish_on_merge` repo's branch has first the reason `merging publishes this repo (KEY)`.
 - Open review findings are a gate, not a level: they go back to the responsible agent and add a `[review]` reason, but never change the risk.
   After the last round, an open finding never merges alone, at any autonomy or risk (`decide.after_check`).
