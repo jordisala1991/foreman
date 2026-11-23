@@ -35,6 +35,11 @@ Read the code the task touches (really read it), then write `$plan` for a respon
 - **Out of scope:** what must not be touched, even if it looks wrong.
 - **Risks:** what could break elsewhere, and which test above catches it (or that none does).
 - **Declared risk:** low, medium or high, and why (sensitive paths or architecture; new dependency or data-format change; open decision; size). When unsure between two levels, declare the higher. Never route around a sensitive path, test or format change the task needs to land in a lower band.
+  End the plan with three lines, each alone at the start of its line, plain text (no bold, no bullet):
+  `Declared risk: <low|medium|high> — <why, one sentence>`
+  `Areas: <comma-separated paths or globs the change touches; a trailing / is a folder; tests need not be listed>`
+  `Expected size: <n> lines (counted as fm counts: tests, generated and lock files left out)`
+  fm reads them when it scores the merge risk: it never lowers the declared risk, and raises it to at least medium when the diff touches a counted file outside Areas or its counted lines pass 3 times the Expected size.
 Keep it short: about as long as the change you expect, never more than twice it (a small task fits in 40 lines); say each thing once, do not restate the task, and in Start list only what the change touches; «Where it fits» counts in the length and lists places, not code. Whatever you dictate (names, signatures, text, test data) must already pass the project's checks (line length, types) and give each test fixture every field the code under test reads.
 
 Before `foreman ready`, reread it as the responsible agent: «Where it fits» is there, before Changes, with its four answers and every file as file:line; every acceptance criteria line has its test; every name is defined once and spelled the same everywhere; no line says «handle», «as needed», «appropriate» or «TBD». Fix it, do not list it.

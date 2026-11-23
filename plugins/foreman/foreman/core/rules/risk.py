@@ -3,8 +3,9 @@ the merge is (low, medium, high, with the reasons) and `allows` says whether the
 merge without the owner. High never merges alone. The checks that find the facts, and the merge itself, are in foreman/services/delivery/."""
 
 import fnmatch
+import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,31 @@ def path_matches(path: str, patterns: list[str]) -> bool:
 
 
 @dataclass
+class Plan:
+    """What the plan declares in its three lines: its risk and why, the paths it will touch, its expected counted lines.
+    A missing line leaves its field empty and its rule off."""
+
+    risk: str = ""  # low | medium | high
+    why: str = ""
+    areas: list[str] = field(default_factory=list[str])
+    size: int | None = None
+
+
+def parse_plan(text: str) -> Plan:
+    """The plan's `Declared risk:`, `Areas:` and `Expected size:` lines, each at the start of its line; the first wins."""
+    flags = re.MULTILINE | re.IGNORECASE
+    declared = re.search(r"^Declared risk:\s*(low|medium|high)\b\W*(.*)$", text, flags)
+    areas = re.search(r"^Areas:\s*(.+)$", text, flags)
+    size = re.search(r"^Expected size:\s*(\d+)", text, flags)
+    return Plan(
+        declared.group(1).lower() if declared else "",
+        declared.group(2).strip() if declared else "",
+        [a for x in areas.group(1).split(",") if (a := x.strip(" `"))] if areas else [],
+        int(size.group(1)) if size else None,
+    )
+
+
+@dataclass
 class Facts:
     """What the checks found about a branch: the input of its risk score."""
 
@@ -35,6 +61,7 @@ class Facts:
     commits: int
     ci: str = ""
     publishes: str = ""  # the repo's key when merging publishes it (`Project.publishes`)
+    plan: Plan = field(default_factory=Plan)
 
 
 UNCOUNTED = ["tests/", "test/", "test_*", "*_test.*", "*.lock", "package-lock.json", "*.min.js", "*_pb2.py", "*.generated.*", "generated/"]
@@ -78,10 +105,24 @@ def score(p: Project, f: Facts) -> tuple[str, list[str]]:
         (lines > limit, f"large change, reviews miss more past ~{limit} lines ({lines} lines) {tag}"),
     ]
     medium += [why for hit, why in doubt if hit]
+    plan_high, plan_medium = _plan_reasons(f, lines)
+    high, medium = high + plan_high, medium + plan_medium
     risk = "high" if high else "medium" if medium else "low"
     conflict = ["conflicts with main: it goes back to its agent when accepted [git]"] if f.conflict else []
     shown = conflict + high + medium + ([] if f.review.strip().lower().startswith("clean") else [_review_reason(f.review)])
     return risk, shown[:3] or ["nothing sensitive touched, tests green, no open findings [diff]"]
+
+
+def _plan_reasons(f: Facts, lines: int) -> tuple[list[str], list[str]]:
+    """(high, medium) reasons from the plan: its declared level (low adds none), the counted files it did not announce,
+    counted lines over 3 times its expected size."""
+    declared = [f"declared {f.plan.risk} by the plan: {f.plan.why} [plan]"] if f.plan.risk in ("medium", "high") else []
+    counted = [x["path"] for x in f.files if not path_matches(x["path"], UNCOUNTED)]
+    unannounced = [x for x in counted if not path_matches(x, f.plan.areas)] if f.plan.areas else []
+    medium = [f"touches {', '.join(unannounced[:3])} the plan did not announce [plan+diff]"] if unannounced else []
+    if f.plan.size is not None and lines > 3 * f.plan.size:
+        medium.append(f"{lines} lines, the plan expected {f.plan.size} [plan+diff]")
+    return (declared, medium) if f.plan.risk == "high" else ([], declared + medium)
 
 
 def _review_reason(review: str) -> str:
