@@ -42,6 +42,13 @@ def turn_over(f: Facts) -> bool:
     return f.known and not f.ended and f.idle and f.quiet_s >= SETTLE_S
 
 
+def silent_end(waiting: bool, open_subtasks: bool) -> bool:
+    """A parent's or chain's run ended with neither an open question or undelivered message (`waiting`) nor an open
+    subtask. Every parent run ends in a delivery, a question, a block or an open subtask; anything else is a need. A task
+    closed by `foreman done` or blocked is not asked about: the recover step skips it."""
+    return not waiting and not open_subtasks
+
+
 def streak(of_kind: list[Run]) -> int:
     """The failed runs at the end of a task's runs of one kind: a done or canceled run ends the count."""
     n = 0

@@ -9,7 +9,7 @@ from typing import Any
 
 from .. import util
 from ..core.project.config import Project
-from ..core.tasks import backlog, questions, recovery, runs
+from ..core.tasks import backlog, questions, recovery, runs, subtasks
 from ..providers import registry
 from ..providers.runner import Rows, State, ref_of
 from ..services.agents.launch import launch_parent, record_run
@@ -26,6 +26,7 @@ FINISH = {
     "parent": "end your turn once you have done what was asked (`foreman done` only on the owner's yes)",
 }
 FINISH["chain"] = FINISH["parent"]
+SAID_CHARS = 1000  # of a stopped parent's last words kept in its need: the owner's yes is asked at the end
 DROPPED = ("hunter", "review", "mechanic")  # a dropped record is launched again by the review step or the mechanic step
 
 
@@ -46,11 +47,17 @@ def run(p: Project, rows: Rows) -> None:
     d = registry.backlog(p).load()
     waiting = questions.tasks_waiting(d)
     active = [r for r in runs.load(p) if r.active]
-    for i in backlog.tasks(d):
+    tasks = backlog.tasks(d)
+    for i in tasks:
         if i["status"] in backlog.CLOSED or i.get("blocked"):
             continue
         for r in (r for r in active if r.task == i["id"]):
-            if facts := facts_of(i, r, rows, restarted):
+            if not (facts := facts_of(i, r, rows, restarted)):
+                continue
+            if r.kind in recovery.IDLE_KINDS and recovery.turn_over(facts):
+                open_subtasks = any(s["status"] not in backlog.CLOSED for s in subtasks.of(tasks, i["id"]))
+                turn_end(p, i, r, recovery.silent_end(i["id"] in waiting, open_subtasks))
+            else:
                 recover(p, i, r, facts, i["id"] in waiting)
     if rows.epoch():
         util.write_json(state, {"epoch": rows.epoch()})
@@ -74,13 +81,17 @@ def facts_of(i: dict[str, Any], r: runs.Run, rows: Rows, restarted: bool) -> rec
     )
 
 
+def turn_end(p: Project, i: dict[str, Any], r: runs.Run, silent: bool) -> None:
+    """A parent's or chain's run whose turn is over ends done; a `silent` end is a need for the owner (`stopped`)."""
+    runs.end(p, i["id"], (r.kind,), "done")
+    if silent:
+        stopped(p, i)
+
+
 def recover(p: Project, i: dict[str, Any], r: runs.Run, facts: recovery.Facts, waiting: bool) -> None:
-    """A parent's or chain's run whose turn is over ends done; else a run of a task not waiting for the loop (an open
-    question or a message not yet delivered) that ended without an outcome fails, then is retried or handed to the owner."""
+    """A run of a task not waiting for the loop (an open question or a message not yet delivered) that ended without an
+    outcome fails, then is retried or handed to the owner."""
     tid = i["id"]
-    if r.kind in recovery.IDLE_KINDS and recovery.turn_over(facts):
-        runs.end(p, tid, (r.kind,), "done")
-        return
     if waiting:
         return
     why = recovery.reason(r.kind, facts)
@@ -92,6 +103,12 @@ def recover(p: Project, i: dict[str, Any], r: runs.Run, facts: recovery.Facts, w
         to_owner(p, i, r.kind, why, n)
     else:
         retry(p, i, r.kind, why, n)
+
+
+def stopped(p: Project, i: dict[str, Any]) -> None:
+    """The owner's need for a parent that ended its turn silent: an open question of kind `stopped` with its last words."""
+    a: dict[str, Any] = i.get("agent") or {}
+    registry.backlog(p).ask(i["id"], a.get("name", "?"), last_said(a, SAID_CHARS) or "nothing", kind="stopped")
 
 
 def retry(p: Project, i: dict[str, Any], kind: str, why: str, n: int) -> None:

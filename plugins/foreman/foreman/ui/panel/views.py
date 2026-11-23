@@ -108,7 +108,7 @@ def task(p: Project, tid: str) -> Obj:
     return {
         "task": shown,
         "events": [e for e in util.read_jsonl(p.state / "events.jsonl") if e.get("task") == tid][::-1],
-        "questions": [q for q in d["decisions"] + d["decisions_resolved"] if q.get("task") == tid],
+        "questions": [q for q in d["decisions"] + [r for r in d["decisions_resolved"] if "answer" in r] if q.get("task") == tid],
         "cost": {"usd": c["usd"], "minutes": c["minutes"]},
     }
 

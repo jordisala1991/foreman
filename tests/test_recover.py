@@ -11,7 +11,7 @@ from fakerunner import FakeRunner
 from helpers import Env
 
 from foreman import util
-from foreman.core.tasks import backlog, recovery, runs
+from foreman.core.tasks import backlog, questions, recovery, runs
 from foreman.core.tasks.recovery import Facts
 from foreman.loop import tick
 from foreman.loop.launch import launch_free
@@ -19,6 +19,7 @@ from foreman.providers import registry
 from foreman.providers.runner import NO_ROWS, State
 from foreman.services.agents.launch import launch_reviewer
 from foreman.steps import parents, recover, talk, watch
+from foreman.ui.panel import views
 
 OLD = "2000-01-01 00:00:00"
 
@@ -153,10 +154,12 @@ def test_turn_over_table():
     assert not recovery.turn_over(idle._replace(quiet_s=60, known=False))
 
 
-def a_parent(e: Env, r: FakeRunner) -> str:
-    """A parent whose agent runs its first turn (WORKING)."""
+def a_parent(e: Env, r: FakeRunner, sub: str = "triage") -> str:
+    """A parent whose agent runs its first turn (WORKING), with one subtask in the status `sub`."""
     P = registry.backlog(e.p).add("parent", status="backlog", criteria="c")
-    registry.backlog(e.p).add("s", parent=P, criteria="c", status="triage")
+    S = registry.backlog(e.p).add("s", parent=P, criteria="c", status="triage")
+    if sub != "triage":
+        registry.backlog(e.p).update(S, status=sub)  # closed before the agent: no wakeup owed
     parents.run(e.p, r.rows())
     r.states[str(task(e, P)["agent"]["session"])] = State.WORKING
     return P
@@ -289,3 +292,56 @@ def test_a_hunter_whose_file_is_written_is_not_judged_dead(e: Env, fake_runner: 
     tick.tick(e.p)
     assert [(r.outcome, r.failure_reason) for r in of(e, tid, "hunter")] == [("done", "")]
     assert fake_runner.sent == []
+
+
+def ended_idle(e: Env, r: FakeRunner, P: str, said: str) -> None:
+    """The parent's session idles after its last words, and the loop recovers it twice."""
+    idles(r, e, P)
+    transcript(e, str(task(e, P)["agent"]["session"]), said)
+    os.utime(next(Path(os.environ["FOREMAN_CLAUDE_PROJECTS"]).rglob("*.jsonl")), (0, 0))
+    for _ in range(2):
+        recover.run(e.p, r.rows())
+
+
+def test_a_parent_that_ends_with_every_subtask_done_and_no_ask_is_a_need(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner, sub="done")
+    ended_idle(e, fake_runner, P, "all subtasks done, waiting for your yes  ")
+    [need] = watch.found(e.p)
+    assert (need.kind, need.task, need.text) == ("stopped", P, "all subtasks done, waiting for your yes")
+
+
+def test_a_parent_that_asked_leaves_only_its_question(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner, sub="done")
+    registry.backlog(e.p).ask(P, "agent", "which first?")
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    assert [n.kind for n in watch.found(e.p)] == ["question"]
+
+
+def test_a_parent_with_an_open_subtask_leaves_no_need(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner)
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    assert watch.found(e.p) == []
+
+
+def test_answering_the_stopped_need_wakes_the_parent(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner, sub="done")
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    [need] = watch.found(e.p)
+    registry.backlog(e.p).answer(need.key.removeprefix("q:"), "carry on with the report")
+    tick.tick(e.p)
+    assert any("carry on with the report" in m for _, m, _ in fake_runner.sent)
+
+
+@pytest.mark.parametrize("session", [State.IDLE, State.ENDED])
+def test_waking_the_parent_by_an_edit_closes_the_stopped_need(e: Env, fake_runner: FakeRunner, session: State):
+    P = a_parent(e, fake_runner, sub="done")
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    fake_runner.states[str(task(e, P)["agent"]["session"])] = session  # ENDED: a new session is launched for the wakeup
+    with registry.backlog(e.p).edit() as d:
+        questions.message(d, backlog.get(d, P), "E", ("edit",), kind="edit", text="edit", answer="do the report")
+    tick.tick(e.p)
+    assert watch.found(e.p) == []
+    assert [x for x in registry.backlog(e.p).load()["decisions_resolved"] if x.get("kind") == "stopped"][0]["by"].startswith("loop")
+    assert "stopped" not in [q["kind"] for q in views.task(e.p, P)["questions"]]  # no card to answer in the panel for the closed need
+    events = [x["text"] for x in util.read_jsonl(e.p.state / "events.jsonl") if x["task"] == P]
+    assert "closed: parent woken" in " ".join(events) and not any("owner answered" in t for t in events)

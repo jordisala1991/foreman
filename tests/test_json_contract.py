@@ -28,7 +28,7 @@ class OrNull(NamedTuple):
 
 
 CHAIN = {"lens": str, "step": int, "cap": int, "open": str}
-KINDS = frozenset({"question", "accept", "blocked", "main"})  # a field frozen to these values
+KINDS = frozenset({"question", "stopped", "accept", "blocked", "main"})  # a field frozen to these values
 AGENT_KINDS = frozenset({"planning", "responsible", "review", "hunter", "parent", "chain", "mechanic"})
 TEXT_OR_NULL = (str, type(None))
 INT_OR_NULL = (int, type(None))

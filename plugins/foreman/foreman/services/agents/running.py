@@ -81,9 +81,9 @@ def send(p: Project, i: dict[str, Any], message: str, role: str = "agent") -> bo
     return True
 
 
-def last_said(a: dict[str, Any]) -> str:
-    """The text of the last assistant message in the session's own transcript, whitespace collapsed, at most 200
-    characters; "" when there is none or it cannot be read. Unreadable lines are skipped, as `costs.usage` does."""
+def last_said(a: dict[str, Any], limit: int = 200) -> str:
+    """The text of the last assistant message in the session's own transcript, whitespace collapsed, at most `limit`
+    characters (200 by default); "" when there is none or it cannot be read. Unreadable lines are skipped, as `costs.usage` does."""
     files = costs.files_of(a.get("session") or "")
     try:
         lines = files[0].read_text(encoding="utf-8").splitlines() if files else []
@@ -99,4 +99,4 @@ def last_said(a: dict[str, Any]) -> str:
         texts = [str(b.get("text") or "") for x in util.json_list(m.get("content")) if (b := util.json_object(x)) and b.get("type") == "text"]
         if r.get("type") == "assistant" and " ".join(texts).strip():
             said = " ".join(texts)
-    return " ".join(said.split())[:200]
+    return " ".join(said.split())[:limit]

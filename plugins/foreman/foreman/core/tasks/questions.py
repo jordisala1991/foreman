@@ -70,6 +70,11 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
         )
     elif q.get("kind") == "unblock":
         return f"The owner cleared the block on task {i['id']}: carry on with the task."
+    elif q.get("kind") == "stopped":
+        return (
+            f"The owner answered about task {i['id']}, where you ended your turn with no question, no block and no open subtask: "
+            f"«{q['answer']}». Carry on with it, then end with a foreman ask, a foreman block, an open subtask or, only on his yes, foreman done."
+        )
     elif agent.get("kind") == "parent":
         if is_yes(q["answer"]):
             return (
