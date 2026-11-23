@@ -36,6 +36,7 @@ def deliver_answers(p: Project, rows: Rows) -> None:
             update_agent(p, i["id"], started=util.now())
             if (kind := run_kind(i, agent)) in recovery.IDLE_KINDS:  # a wakeup: a new turn, a new run
                 wake_run(p, i["id"], kind)
+                settle_stopped(p, i["id"])
             backlog.event(p, i["id"], f"answer {q['id']} delivered to {i['agent']['name']}")
         else:
             sent.add(i["id"])
@@ -49,6 +50,15 @@ def wake_run(p: Project, tid: str, kind: str) -> None:
     if ref := ref_of(agent):
         runs.end(p, tid, (kind,), "done")
         record_run(p, tid, kind, ref, agent)
+
+
+def settle_stopped(p: Project, tid: str) -> None:
+    """A parent woken: its open `stopped` need (a wakeup other than the owner's answer to it, as `foreman edit`) is answered
+    and delivered, so the owner is not shown a need he acted on and recover judges the new run."""
+    for q in questions.open_questions(registry.backlog(p).load(), tid):
+        if q.get("kind") == "stopped":
+            registry.backlog(p).answer(q["id"], "the parent was woken", by="loop")
+            registry.backlog(p).mark_delivered(q["id"])
 
 
 def watch_waiting(p: Project, rows: Rows) -> None:

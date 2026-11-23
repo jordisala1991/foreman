@@ -11,7 +11,7 @@ from fakerunner import FakeRunner
 from helpers import Env
 
 from foreman import util
-from foreman.core.tasks import backlog, recovery, runs
+from foreman.core.tasks import backlog, questions, recovery, runs
 from foreman.core.tasks.recovery import Facts
 from foreman.loop import tick
 from foreman.loop.launch import launch_free
@@ -329,3 +329,13 @@ def test_answering_the_stopped_need_wakes_the_parent(e: Env, fake_runner: FakeRu
     registry.backlog(e.p).answer(need.key.removeprefix("q:"), "carry on with the report")
     tick.tick(e.p)
     assert any("carry on with the report" in m for _, m, _ in fake_runner.sent)
+
+
+def test_waking_the_parent_by_an_edit_closes_the_stopped_need(e: Env, fake_runner: FakeRunner):
+    P = a_parent(e, fake_runner, sub="done")
+    ended_idle(e, fake_runner, P, "waiting for your yes")
+    with registry.backlog(e.p).edit() as d:
+        questions.message(d, backlog.get(d, P), "E", ("edit",), kind="edit", text="edit", answer="do the report")
+    tick.tick(e.p)
+    assert any("do the report" in m for _, m, _ in fake_runner.sent)
+    assert watch.found(e.p) == []
