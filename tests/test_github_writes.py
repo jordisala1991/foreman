@@ -287,6 +287,16 @@ def test_a_drag_triage_to_backlog_is_a_go(fake: FakeGh, e: Env):
     assert state(e, "backlog-snapshot.json") == {"statuses": {"TY-1": "backlog", "TY-2": "triage"}}
 
 
+def test_a_drag_to_backlog_forgets_the_counts(fake: FakeGh, e: Env):
+    fake.add(1, body=CRITERIA, fields={"Status": "Triage", "Blocked": "x"})
+    tick(e)
+    registry.backlog(e.p).update("TY-1", retry_count=2, pr_count=2, check_retry_count=2)
+    fake.issues[1].fields["Status"] = "Backlog"
+    tick(e)
+    i = get(registry.backlog(e.p).load(), "TY-1")
+    assert [i.get(k) for k in ("retry_count", "pr_count", "check_retry_count")] == [0, 0, 0]
+
+
 def test_any_other_drag_is_an_error_and_moved_back(fake: FakeGh, e: Env):
     fake.add(3, fields={"Status": "Ready"})
     fake.add(4, fields={"Status": "Ready"})

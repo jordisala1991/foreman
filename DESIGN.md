@@ -826,7 +826,7 @@ in fm: a future queue is just another strategy) and `state` (merged? closed?). O
 3. **merged**: the task closes (`done`), and its worktree and branch go, only when `state` shows the merge in main,
    not when the command ran.
 
-Retry policy, one place (`loop.guarded`, deciding with `decide.retry_step`; every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both; `foreman unblock` sets every count back to nothing, the PR step's and the check's too (`backlog.unblocked`).
+Retry policy, one place (`loop.guarded`, deciding with `decide.retry_step`; every provider call: push, PR, CI, merge): a `Transient` failure is retried next tick and counted per task (`retry_count`, next to `retry_error`); the 3rd in a row blocks the task with the last error; a success resets both; any command that clears a block (`foreman unblock`, `review`, `go`, `done`, a Board drag to Backlog) sets every count back to nothing, the PR step's and the check's too (`backlog.unblocked`).
 
 Config: `[merge] provider = "auto"` (default: `github` if the repo's `remote` is on github.com (always `local` with `remote = "none"`), else `local`; or force
 `local` | `github`) and `strategy = "squash"` (default), `"merge"` (`--no-ff` locally) or `"rebase"` (github only). An
