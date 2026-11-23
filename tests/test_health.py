@@ -142,6 +142,21 @@ class TestMetrics:
         u = costs.usage([f])
         assert u["tokens"] == 1000
 
+    def test_last_said_skips_bad_lines_and_reads_the_last_text(self):
+        from foreman.services.agents import running
+
+        e = Env()
+        d = e.tmp / "transcripts/proj"
+        d.mkdir(parents=True)
+
+        def said(text: str) -> str:
+            return json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}})
+
+        user = json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": "a question"}]}})
+        (d / "s1.jsonl").write_text("\n".join(["not json", "[1, 2]", said("first"), said("last  one"), user]) + "\n")
+        assert running.last_said({"session": "s1"}) == "last one"
+        assert running.last_said({"session": "none"}) == ""
+
 
 class TestEvidence:
     def commit(self, e: Env, name: str, text: str = "x") -> None:
