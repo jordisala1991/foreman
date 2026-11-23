@@ -134,7 +134,7 @@ def cmd_review(a: argparse.Namespace) -> None:
             sys.exit(f"foreman: {a.id} has a review running: wait for its verdict")
         for k in ("review", "hunter", "reviewer", "check", "review_for"):
             i.pop(k, None)
-        i["blocked"] = ""
+        i.update(backlog.unblocked())
         i["review_from"] = len(i.get("reviews", []))
     backlog.event(p, a.id, "owner asked for a fresh review from round 1")
     print(f"{a.id}: the loop reviews it again from scratch")
@@ -145,7 +145,7 @@ def cmd_go(a: argparse.Namespace) -> None:
     d = registry.backlog(p).load()
     if why := drags.go_checks(backlog.get(d, a.id), backlog.tasks(d), p.repo_keys):
         sys.exit(f"foreman: {why}")
-    registry.backlog(p).set_status(a.id, "backlog", "let in by the owner", blocked="")
+    registry.backlog(p).set_status(a.id, "backlog", "let in by the owner", **backlog.unblocked())
 
 
 def cmd_cancel(a: argparse.Namespace) -> None:

@@ -16,7 +16,7 @@ from ... import util
 from ...core.project.backlog_table import Board
 from ...core.project.config import Project
 from ...core.tasks import changes, drags, ids
-from ...core.tasks.backlog import CLOSED, STATUS_KINDS, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks
+from ...core.tasks.backlog import CLOSED, STATUS_KINDS, BacklogError, Data, Local, NewTask, NoSnapshot, Task, empty, event, get, tasks, unblocked
 from ...core.tasks.issues import Issue, joined, stub, with_old_blockers, without_old_blockers
 from ...core.tasks.questions import Question
 from .api import STOP_FILE, Api
@@ -99,7 +99,7 @@ class GitHubBacklog:
                     i["status"] = d.was
                     refused.append(why)
                 else:
-                    i["blocked"] = ""
+                    i.update(unblocked())
                     lets.append(d.id)
             read = apply(w, read, before, after)
             for tid in lets:

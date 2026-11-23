@@ -29,7 +29,7 @@ def cmd_done(a: argparse.Namespace) -> None:
         print(f"{tid} is closed as {parents.finish(p, tid, a.summary)}. End your turn.")
         return
     report = {"summary": a.summary, "file": a.report or "", "confused": a.misled or "", "at": util.now()}
-    registry.backlog(p).set_status(tid, "in review", a.summary, report=report, blocked="")
+    registry.backlog(p).set_status(tid, "in review", a.summary, report=report, **backlog.unblocked())
     runs.end(p, tid, ("responsible",), "done")
     registry.backlog(p).record_misled(tid, "responsible", a.misled)
     print(f"{tid} is in review: the hunter and the reviewer read it, then the owner. End your turn.")
