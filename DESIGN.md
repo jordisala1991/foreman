@@ -114,11 +114,11 @@ on). The heartbeat is written before every step, so a long test run does not loo
    copy under a new id with today's `--settings` (PATH, guard, env), recorded as the task's session.
 4. **recover** (`foreman/steps/recover.py`, its rules pure in `foreman/core/tasks/recovery.py`): each active run (the ledger) of
    an open task that is not blocked is looked at in the runner's listing; a task waiting (an open question, a message on its
-   way) is left alone. A run is over with no outcome for one reason: its session is ENDED or GONE (`session_ended`, or
+   way) is left alone, except that a run ending its turn by design is done waiting or not (below). A run is over with no outcome for one reason: its session is ENDED or GONE (`session_ended`, or
    `runner_unavailable` when the runner's epoch changed since the last pass, kept in `state/runner.json`), it never got a session
    id within 2 minutes (`launch_failed`), or it is idle and its transcript quiet for 10 minutes (`silent_too_long`); a run that
    ends its turn by design (a parent's or chain's, idle and quiet for 60 s: `turn_over`) is done, never `silent_too_long`.
-   The run is closed as failed with its reason. The first three reasons are retried while fewer than 2 runs of that kind
+   The run is closed as failed with its reason. `session_ended`, `runner_unavailable` and `silent_too_long` are retried while fewer than 2 runs of that kind
    failed in a row: the session is resumed with a message naming the reason and how to finish (a new run of it, attempt + 1);
    when the runner cannot resume it, the task goes back through the launch path of its kind. Past that, or for `launch_failed`,
    the owner gets one need: the task is blocked with «its agent stopped without finishing (reason, attempt n); it last said: …»
