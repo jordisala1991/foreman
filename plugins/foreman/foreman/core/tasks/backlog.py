@@ -109,7 +109,7 @@ def new_id(p: Project, d: Data) -> str:
 
 
 STATUS_KINDS = {"in review": "built"}  # the kind of the event a status move writes; any other move is `other`
-KINDS = ("planned", "built", "rejected", "conflict", "failing", "review", "accepted", "merged", "other")
+KINDS = ("planned", "built", "rejected", "conflict", "failing", "review", "session", "accepted", "merged", "other")
 
 
 def event(p: Project, tid: str | None, text: str, kind: str = "other") -> None:

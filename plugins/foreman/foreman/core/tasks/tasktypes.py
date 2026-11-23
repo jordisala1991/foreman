@@ -7,6 +7,7 @@ from . import backlog, chains
 
 TYPES = ("change", "bug", "mechanical", "definition")
 DEFAULT = "change"
+SESSION = ("change", "bug")  # the types whose delivery has a session of the feature used live
 
 PARAGRAPHS = {
     "bug": "First reproduce the bug with a test that fails, and name its cause in the report.",
@@ -31,3 +32,8 @@ def section(i: Mapping[str, Any]) -> str:
     """The agents' paragraph for this task's type; empty for change, so its instructions stay as they were."""
     t = i.get("type") or DEFAULT
     return f"# Task type: {t}\n{PARAGRAPHS[t]}\n\n" if t in PARAGRAPHS else ""
+
+
+def wants_session(i: Mapping[str, Any]) -> bool:
+    """Whether the task's delivery must come with a session: a change or a bug, not a mechanical or definition task."""
+    return (i.get("type") or DEFAULT) in SESSION

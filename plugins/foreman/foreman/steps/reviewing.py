@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from ..core.project.config import Project
-from ..core.review import reviews
+from ..core.review import reviews, session
 from ..core.rules import decide
-from ..core.tasks import backlog
+from ..core.tasks import backlog, tasktypes
 from ..providers import registry
 from ..providers.runner import Rows, ref_of
 from ..services import scratch
+from ..services.agents import brief
 from ..services.agents.launch import Scope, launch_reviewer
 from ..services.agents.running import running
 from ..services.delivery import git
@@ -51,6 +52,18 @@ def apply_review(p: Project, i: dict[str, Any], head: str, step: decide.Step) ->
     elif step.do == "back":
         return_to_agent(p, i["id"], "review", step.text)
         registry.backlog(p).update(i["id"], review={**v, "returned": True})
+
+
+def session_returned(p: Project, i: dict[str, Any]) -> bool:
+    """A delivered change or bug task without a session (no file, or no command and no screenshot in it) goes back to its
+    agent before any review; true when it went back."""
+    if not tasktypes.wants_session(i):
+        return False
+    path = brief.session_file(p, i["id"])
+    why = session.gap(path.read_text() if path.is_file() else None)
+    if why:
+        return_to_agent(p, i["id"], "session", session.note(str(path), why))
+    return bool(why)
 
 
 def working(a: dict[str, Any], rows: Rows) -> bool:

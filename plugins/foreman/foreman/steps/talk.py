@@ -11,7 +11,7 @@ from ..providers.runner import Rows, State, ref_of
 from ..services.agents.launch import ended, record_run, run_kind
 from ..services.agents.running import send, update_agent
 
-EVENT_KINDS = {"rejection": "rejected", "conflict": "conflict", "failing": "failing"}  # a review return stays `other`
+EVENT_KINDS = {"rejection": "rejected", "conflict": "conflict", "failing": "failing", "session": "session"}  # a review return stays `other`
 
 
 def deliver_answers(p: Project, rows: Rows) -> None:
@@ -98,7 +98,7 @@ def return_to_agent(p: Project, tid: str, kind: str, note: str, by: str = "") ->
             i.pop("review_for", None)
         agent: dict[str, Any] = {**(i.get("agent") or {}), "started": util.now()}
         i["agent"] = agent
-        questions.message(d, i, "R", ("rejection", "conflict", "failing", "review"), kind=kind, text="review", answer=note, at=util.now())
+        questions.message(d, i, "R", ("rejection", "conflict", "failing", "review", "session"), kind=kind, text="review", answer=note, at=util.now())
     runs.end(p, tid, ("hunter", "review"), "canceled")  # a review of the old tip has nothing left to decide
     if ref := ref_of(agent):  # the same session works again: a new run of it (the last ended at `foreman done`)
         record_run(p, tid, "responsible", ref, agent)
