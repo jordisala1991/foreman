@@ -83,7 +83,7 @@ export function System({ project }: { project: Project }) {
                 <thead>
                   <tr>
                     <th>{t("m_task")}</th><th>{t("m_status")}</th><th className="num">$</th><th className="num">{t("m_min")}</th>
-                    <th className="num">{t("m_rework")}</th><th className="num">{t("m_nudges")}</th><th className="num">{t("m_asks")}</th>
+                    <th className="num">{t("m_rework")}</th><th className="num">{t("m_asks")}</th>
                     <th className="num">{t("m_stops")}</th><th>{t("m_risk")}</th>
                   </tr>
                 </thead>
@@ -95,7 +95,6 @@ export function System({ project }: { project: Project }) {
                       <td className="num">{usd2(r.usd)}</td>
                       <td className="num">{n0(r.to_done_min ?? r.to_review_min)}</td>
                       <td className="num">{r.rework}</td>
-                      <td className="num">{r.nudges}</td>
                       <td className="num">{r.questions}</td>
                       <td className="num">{r.guard_stops}</td>
                       <td>{r.risk ? <Risk risk={r.risk} /> : null}</td>

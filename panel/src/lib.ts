@@ -98,7 +98,6 @@ export interface Task {
   check?: Check;
   branch?: string;
   rework?: number;
-  nudges?: number;
   result?: string;
   commit?: string;
   source?: string;
@@ -149,7 +148,6 @@ export interface MetricRow {
   to_review_min: number | null;
   to_done_min: number | null;
   rework: number;
-  nudges: number;
   questions: number;
   guard_stops: number;
   risk: string | null;

@@ -234,7 +234,7 @@ def test_calls_per_operation(fake: FakeGh, e: Env):
     with registry.tick_scope(e.p):
         assert calls(fake, lambda: b().load()) == 1  # the pass
         assert calls(fake, lambda: b().set_status("TY-6", "ready")) == 2
-        assert calls(fake, lambda: b().update("TY-6", nudges=1)) == 0
+        assert calls(fake, lambda: b().update("TY-6", retry_count=1)) == 0
     with registry.tick_scope(e.p):
         assert calls(fake, lambda: b().load()) == 1  # an idle pass
 
