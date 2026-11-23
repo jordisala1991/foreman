@@ -6,7 +6,8 @@ exit 1; a worker's pane in `worker-show` and its `ps` row share only the part be
 SessionStart hook of the worktree's `.claude/settings.local.json`, as claude does in the chat.
 
 The test copies it with `FakeOrca(folder)` and drives it: `down()`, `restart()` (every chat ends; the next send answers a new dispatch id),
-`terminal_mode()`, `set(resumes=False)` (a send to an ended chat only queues), `set_row(dispatch, word)`, `settle(dispatch)`,
+`terminal_mode()`, `set(resumes=False)` (a send to an ended chat only queues), `set_row(dispatch, word, main=None)`
+(`main`: the turn's state, with a live child command on the row), `settle(dispatch)`,
 `chat_path(dispatch)`, `age(dispatch, path)`.
 A chat keeps the `PATH` of the worktree's settings file from when its process started (`worker-start`, or `send` to a chat
 that ended); a rewritten file reaches a running chat's hooks and env vars, not its `PATH`."""
@@ -94,9 +95,10 @@ class FakeOrca:
         """Every call of `verb` (e.g. `worktree set`) answers `selector_not_found`."""
         self.set(fail=[*self.load()["fail"], verb])
 
-    def set_row(self, dispatch: str, word: str) -> None:
+    def set_row(self, dispatch: str, word: str, main: str | None = None) -> None:
         s = self.load()
         s["workers"][dispatch]["state"] = word
+        s["workers"][dispatch]["main"] = main
         self.save(s)
 
     def settle(self, dispatch: str) -> None:
@@ -178,10 +180,13 @@ def nothing(s: State, a: list[str], n: int) -> dict[str, Any]:
 
 
 def worktree_ps(s: State, a: list[str], n: int) -> dict[str, Any]:
-    rows: dict[str, list[dict[str, str]]] = {}
+    rows: dict[str, list[dict[str, Any]]] = {}
     for w in s["workers"].values():
         if w["live"]:
-            rows.setdefault(w["worktree"], []).append({"paneKey": f"{w['chat']}:row", "state": w["state"]})
+            row: dict[str, Any] = {"paneKey": f"{w['chat']}:row", "state": w["state"]}
+            if w.get("main"):
+                row |= {"mainAgent": {"state": w["main"]}, "children": [{"state": "working", "membership": "live"}]}
+            rows.setdefault(w["worktree"], []).append(row)
     return {"worktrees": [{"path": p, "agents": agents} for p, agents in rows.items()]}
 
 

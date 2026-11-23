@@ -25,13 +25,15 @@ def session_id(pane: str) -> str:
 
 
 def states(ps: dict[str, Any]) -> dict[str, str]:
-    """Each chat's state word in a `worktree ps` answer, by `chat(paneKey)`."""
+    """Each chat's state word in a `worktree ps` answer, by `chat(paneKey)`: the state of the chat's turn (`mainAgent`), else
+    the row's own, which stays `working` while a command the chat left runs."""
     found: dict[str, str] = {}
     for w in util.json_list(ps.get("worktrees")):
         for a in util.json_list((util.json_object(w) or {}).get("agents")):
             row = util.json_object(a) or {}
             if row.get("paneKey"):
-                found[chat(str(row["paneKey"]))] = str(row.get("state") or "")
+                turn = util.json_object(row.get("mainAgent")) or {}
+                found[chat(str(row["paneKey"]))] = str(turn.get("state") or row.get("state") or "")
     return found
 
 
