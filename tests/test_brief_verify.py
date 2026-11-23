@@ -1,4 +1,4 @@
-"""A home's verify.md reaches the responsible, hunter and reviewer briefs; the responsible brief always names its session."""
+"""A home's verify.md reaches the responsible, hunter and reviewer briefs; the three always name the session (FN-426, FN-427)."""
 
 import pytest
 from helpers import Env
@@ -38,6 +38,12 @@ class TestBriefVerify:
         text = self.render("responsible")
         assert self.session in text
         assert self.recipe not in text
+
+    @pytest.mark.parametrize("kind", ("hunter", "reviewer"))
+    def test_the_hunter_and_reviewer_carry_the_session_path_without_a_recipe(self, kind: str) -> None:
+        text = self.render(kind)
+        assert self.session in text
+        assert "$session" not in text
 
     @pytest.mark.parametrize("kind", KINDS)
     def test_no_variable_is_left_unreplaced(self, kind: str) -> None:
