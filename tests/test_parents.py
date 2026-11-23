@@ -299,6 +299,46 @@ class TestClosing:
         self.done()
         assert self.e.task(self.P)["status"] == "canceled"
 
+    def closed(self) -> None:
+        registry.backlog(self.e.p).set_status(self.S1, "done")
+        registry.backlog(self.e.p).set_status(self.S2, "done")
+
+    def proposes_done(self) -> str:
+        sid = self.e.task(self.P)["agent"]["session"]
+        self.e.set_state("ty-1", "done")
+        run_as(self.e, self.P, "ty-1", "ask", "Proposal: foreman done --summary s")
+        (q,) = questions.open_questions(registry.backlog(self.e.p).load(), self.P)
+        self.sid = sid
+        return q["id"]
+
+    def delivered(self) -> str:
+        for _ in range(3):
+            tick.tick(self.e.p)
+            self.e.set_state("ty-1", "done")
+        (text,) = [c["argv"][-1] for c in resumes(self.e, self.sid) if "The owner" in c["argv"][-1]]
+        return text
+
+    def test_a_proposal_waits_as_an_open_question_in_needs(self):
+        self.closed()
+        qid = self.proposes_done()
+        (n,) = [n for n in json.loads(fm(self.e.home, "needs", "--json")) if n["task"] == self.P]
+        assert (n["kind"], n["key"], n["text"]) == ("question", f"q:{qid}", "Proposal: foreman done --summary s")
+
+    def test_an_answered_yes_runs_done(self):
+        self.closed()
+        fm(self.e.home, "answer", self.proposes_done(), "yes")
+        assert "Proposal: foreman done --summary s" in self.delivered()
+        self.done()
+        assert self.e.task(self.P)["status"] == "done"
+
+    def test_any_other_answer_runs_nothing(self):
+        self.closed()
+        fm(self.e.home, "answer", self.proposes_done(), "wait, not yet")
+        text = self.delivered()
+        assert "wait, not yet" in text
+        assert "Proposal: foreman done" not in text
+        assert self.e.task(self.P)["status"] == "backlog"
+
 
 class TestAuthority:
     @pytest.fixture(autouse=True)
@@ -369,3 +409,17 @@ class TestPure:
         assert "goal" not in subtasks.notice(a, [a, b], "P")
         assert "canceled" in subtasks.notice(c, [a, c], "P")
         assert "goal" in subtasks.notice(c, [a, c], "P")
+
+    def test_is_yes(self):
+        for a in ("yes", "Yes.", " YES! "):
+            assert questions.is_yes(a)
+        for a in ("yes, but change the summary", "no", ""):
+            assert not questions.is_yes(a)
+
+    def test_message_for_a_parent(self):
+        i = {"id": "P", "agent": {"kind": "parent"}}
+        q = {"id": "P Q1", "text": "Proposal: foreman done", "answer": "yes"}
+        assert "Proposal: foreman done" in questions.message_for(i, q)
+        text = questions.message_for(i, {**q, "answer": "not yet"})
+        assert "not yet" in text
+        assert "Proposal: foreman done" not in text

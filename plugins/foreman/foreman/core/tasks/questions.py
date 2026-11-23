@@ -50,8 +50,14 @@ def holds_slot(d: Data, i: Task) -> bool:
     return i["status"] in RUNNING and not i.get("blocked") and not waiting
 
 
+def is_yes(answer: str) -> bool:
+    """The owner's yes to a proposal: the word alone, case, spaces and a final `.` or `!` ignored."""
+    return answer.strip().rstrip(".!").strip().lower() == "yes"
+
+
 def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
     """What an agent is told about a delivered answer, by its kind."""
+    agent: Agent = i.get("agent") or {}
     if q.get("kind") in ("conflict", "edit", "failing", "review", "subtask"):
         return q["answer"]
     elif q.get("kind") == "rejection":
@@ -64,5 +70,15 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
         )
     elif q.get("kind") == "unblock":
         return f"The owner cleared the block on task {i['id']}: carry on with the task."
+    elif agent.get("kind") == "parent":
+        if is_yes(q["answer"]):
+            return (
+                f"The owner answered yes to your question {q['id']}: «{q['text']}». "
+                "If it proposed an action, run exactly that action and no other, then end your turn."
+            )
+        return (
+            f"The owner replied to your question {q['id']}: «{q['answer']}». It is not a yes: run no action because of it. "
+            "If you still need his yes for an action, propose it again with `foreman ask`."
+        )
     else:
         return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."
