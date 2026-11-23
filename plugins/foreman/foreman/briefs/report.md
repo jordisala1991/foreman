@@ -13,9 +13,9 @@
 - <at most 3 bullets: a `file:line` that needs the owner's judgement and why, in one line; "Off the plan:" for a departure from the plan or from the task's scope; a claim you did not check is marked «(inferred: what it rests on)»>
 
 **Proof**
-| Acceptance criterion | Evidence |
-|---|---|
-| <each line of the acceptance criteria, short> | <evidence that fits its kind, one line: behaviour → a test by name; UI → before and after screenshots saved in reports/ID/ and shown as `![what it shows](before-home.png)` (bare file name); CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the check command and its result. Only evidence that exists: no figure without the test or command behind it; a criterion you could not check is marked «(inferred: what it rests on)», never written as seen> |
+| Acceptance criterion | Evidence | In use |
+|---|---|---|
+| <each line of the acceptance criteria, short> | <evidence that fits its kind, one line: behaviour → a test by name; UI → before and after screenshots saved in reports/ID/ and shown as `![what it shows](before-home.png)` (bare file name); CLI or output → the command and its real short output; performance or cost → before and after numbers measured the same way; config or deploy → the check command and its result. Only evidence that exists: no figure without the test or command behind it; a criterion you could not check is marked «(inferred: what it rests on)», never written as seen> | <the step of reports/ID/session.md that shows this criterion line live (e.g. «step 3»), or «not usable live: why»> |
 
 **Risk**
 <at most 2 lines: what could break, including open review findings, or "none known">

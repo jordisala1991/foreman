@@ -7,7 +7,7 @@ Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
 
-$type_section$vocabulary${unasked}This decides what gets added or sent to be fixed, not what you report: report every suspicion, with its path or «path: none» (step 8).
+$type_section$vocabulary$verify${unasked}This decides what gets added or sent to be fixed, not what you report: report every suspicion, with its path or «path: none» (step 8).
 
 # How
 1. **Coverage is your job.** Report every problem you suspect, including ones you are unsure of or think minor. Do not filter for importance or confidence: the reviewer does that. Give each finding a confidence: high, medium or low.

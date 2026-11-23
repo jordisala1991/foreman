@@ -261,6 +261,11 @@ section in `<details>`, and the panel shows it; the loop seeds the file from `fo
 `.github/pull_request_template.md` plus a Review rounds section, when it launches) and ends with
 `foreman done --summary --report --misled`. If the review returns it or the owner rejects it, the note arrives in the same
 conversation: each finding gets the smallest change that settles it, or a one-line answer if it thinks the finding is wrong; add a `### Round N` to the report's «Review rounds» section, `foreman done` again.
+A project's home may hold `verify.md`, its recipe for using the product live in a throwaway setup; the responsible, hunter and
+reviewer briefs carry its path when it exists (`brief.verify_section`). Before the report, the responsible agent of a change or bug
+task uses the feature through it (or the product's own commands without one) and saves `<home>/reports/ID/session.md`, each
+command with its real output and each screenshot with what it shows; the report's Proof table has an «In use» column pointing
+to the session step that shows each criterion line.
 
 **Review: hunter, then reviewer** (`foreman/briefs/hunter.md`, `foreman/briefs/reviewer.md`): launched by the loop, not by the responsible agent, each as
 its own session in the branch's worktree, once per delivered tip; each counts against the slots (the hunter until its file exists, so its own reviewer can take its place). Both get the task's detail

@@ -11,7 +11,7 @@ $plan_section
 # Where
 Work in this folder, the worktree `$worktree`, on branch `$branch` (made from `$main`). Commit there with plain messages and the git identity already configured.
 
-$type_section$vocabulary${unasked}Without that path, leave the handling out.
+$type_section$vocabulary$verify${unasked}Without that path, leave the handling out.
 
 # How
 - Understand the task, then split it into steps if it helps. Use subagents (Agent tool) for independent pieces or searches; brief them as peers and pin their scope to this worktree.
@@ -23,14 +23,15 @@ $type_section$vocabulary${unasked}Without that path, leave the handling out.
 - $resources
 
 # The end
-1. Fill the report at `$report`: it already holds a template, with a hint under each heading. Replace every <hint> with your text, keep the headings, and respect each hint's limit. It is the task's description (fm puts it on the PR and in the panel; the reviewer checks the same text). About 300 words before «Review rounds». No footer: fm writes it. How to run the app and take screenshots is the project's business (its CLAUDE.md).
-2. **Reread as the reviewer**, then fix what you find and run `$test` again. The hunter will check the same three things:
+1. **Use it live** (a change or bug task; a mechanical or definition task skips this step). After `$test` passes, use the feature as its user would, in a throwaway setup, following the Verify recipe above, and save `$session` (create its folder; screenshots go beside it): each step with the command you ran and its real output (trimmed), and each screenshot with what it shows. A failure you find there is fixed, then `$test` and the session run again, before you deliver. With no Verify recipe above, use the product through its own commands, and say in the report that the project has no recipe. Each Proof row's «In use» cell names the step of `$session` that shows its criterion line, or «not usable live: why».
+2. Fill the report at `$report`: it already holds a template, with a hint under each heading. Replace every <hint> with your text, keep the headings, and respect each hint's limit. It is the task's description (fm puts it on the PR and in the panel; the reviewer checks the same text). About 300 words before «Review rounds». No footer: fm writes it. How to run the app and take screenshots is the project's business (the Verify recipe above if there is one, else its CLAUDE.md).
+3. **Reread as the reviewer**, then fix what you find and run `$test` again. The hunter will check the same three things:
    - every line of the acceptance criteria has evidence that exists at this tip (a test that passes, a command you ran, a `file:line`);
    - every claim in the report is true at this tip (a Proof row, a count, a «done»): rerun it or correct it;
    - every function, option, flag or fallback you added serves a line of the criteria or an item of the plan; otherwise remove it.
-3. Run `foreman done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task or the repo was wrong, stale or unclear and cost you time; or none"` and end your turn.
+4. Run `foreman done --summary "the result in one or two plain lines, for the owner" --report $report --misled "what in this brief, the task or the repo was wrong, stale or unclear and cost you time; or none"` and end your turn.
 
-The loop then has your branch reviewed: the hunter, then the reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Run `$test` again and update the Proof rows the fixes touched. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), reread as in step 2, and run `foreman done` again. The owner may also reject it with a note: same thing.
+The loop then has your branch reviewed: the hunter, then the reviewer. If it leaves findings open, they come back to you here with the review's path: read it whole. For each finding, make the smallest change that settles it, or answer it in one line if you think it is wrong; add nothing it does not ask for. Run `$test` again and update the Proof rows the fixes touched. Add a `### Round N` to the «Review rounds» section of your report, one line per finding (its id, fixed or answered, and how), reread as in step 3, and run `foreman done` again. The owner may also reject it with a note: same thing.
 
 If the task cannot be done, or turns out not to be one change, run `foreman block "why, and what would unblock it"`; for the second case give the proposed split (the PRs it would split into, one goal line each). Then end your turn.
 
