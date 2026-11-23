@@ -1,5 +1,6 @@
 """A `foreman/…` path or a `foreman.x.y` module named in prose (the docs, the briefs, a docstring or comment under
-foreman/) points at something in the tree: after a move, the prose that still names the old place fails (FN-178)."""
+foreman/) points at something in the tree: after a move, the prose that still names the old place fails (FN-178). A test the docs
+cite is defined under tests/ (FN-442)."""
 
 import ast
 import io
@@ -13,6 +14,8 @@ from helpers import ROOT
 # A token like a/b.py, a/b/c.md or a/b/, not part of a longer path, a home (~/), or a `ref:` path into another project.
 PATH = re.compile(r"(?<![\w./~:-])(?:[\w.-]+/)+(?:[\w.-]+\.(?:py|md)\b)?")
 DOTTED = re.compile(r"(?<![\w./-])foreman(?:\.\w+)+")
+# A test function or a test file named in prose (FN-442).
+TEST = re.compile(r"\btest_\w+(?:\.py)?")
 # The one name of that shape that is a file, not a module.
 OUTSIDE = {"foreman.toml"}
 
@@ -80,8 +83,24 @@ def stale(root: Path) -> list[str]:
     return found
 
 
+def stale_tests(root: Path) -> list[str]:
+    """Each `test_…` function or `test_….py` file the docs name that tests/ does not define."""
+    files = sorted((root / "tests").rglob("*.py"))
+    defined = {f.name for f in files} | {m for f in files for m in re.findall(r"def (test_\w+)", f.read_text())}
+    found: list[str] = []
+    for d in docs(root):
+        where = d.relative_to(root).as_posix()
+        for n, line in enumerate(d.read_text().splitlines(), 1):
+            found += [f"{where}:{n} {name}" for name in TEST.findall(line) if name not in defined]
+    return found
+
+
 def test_main_has_no_stale_name():
     assert stale(ROOT) == []
+
+
+def test_main_names_no_missing_test():
+    assert stale_tests(ROOT) == []
 
 
 def tree(root: Path, rel: str, text: str) -> None:
@@ -139,3 +158,16 @@ def test_a_live_or_outside_name_is_not_reported(tmp_path: Path):
     )
     tree(tmp_path, "plugins/foreman/foreman/services/y.py", text)
     assert stale(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("| x | y | f | `test_there`, `test_gone`, `test_a.py`, `test_b.py` |\n", ["DESIGN.md:1 test_gone", "DESIGN.md:1 test_b.py"]),
+        ("| x | y | f | `test_there`, `tests/test_a.py` |\n", []),
+    ],
+)
+def test_a_missing_test_is_reported(tmp_path: Path, text: str, expected: list[str]):
+    tree(tmp_path, "tests/test_a.py", "def test_there(): ...\n")
+    (tmp_path / "DESIGN.md").write_text(text)
+    assert stale_tests(tmp_path) == expected
