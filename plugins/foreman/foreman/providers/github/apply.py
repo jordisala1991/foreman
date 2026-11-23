@@ -157,5 +157,5 @@ def file(w: Where, read: Read, task: Task, old: str = "") -> Issue:
         return _back(w, f"#{number}", number, task, list(facets(task)))
     except Exception as e:
         why = f"#{number} was filed but not finished: close it by hand ({e})"
-        util.append_jsonl(w.files.state / "errors.jsonl", {"time": util.now(), "step": "filing", "error": why, "trace": ""})
+        util.log_error(w.files.state / "errors.jsonl", "filing", why, trace="")
         raise

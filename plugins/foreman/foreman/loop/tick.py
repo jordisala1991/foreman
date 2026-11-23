@@ -60,7 +60,7 @@ def tick(p: Project) -> None:
     try:
         rows = registry.rows(p)
     except providers.ConfigError as e:  # a bad [agents] runner: no agent step can run; health files it
-        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": "runner", "error": repr(e), "trace": ""})
+        util.log_error(p.state / "errors.jsonl", "runner", repr(e), trace="")
         steps = [("health", lambda: health.run(p, NO_ROWS))]
     else:
         steps = [
@@ -86,7 +86,7 @@ def tick(p: Project) -> None:
             try:
                 step()
             except Exception as e:  # one broken step must not stop the others, health files it
-                util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": name, "error": repr(e), "trace": traceback.format_exc()[-2000:]})
+                util.log_error(p.state / "errors.jsonl", name, repr(e), trace=traceback.format_exc()[-2000:])
 
 
 def run_pulls(p: Project) -> None:

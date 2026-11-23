@@ -38,4 +38,4 @@ def send(p: Project, cmd: str, line: str) -> None:
         detail = f"exited {r.code}: {r.err.strip()[:200]}"
     except (proc.ProcError, ValueError) as e:  # ValueError: a command that cannot be split
         detail = str(e)
-    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"notify {cmd}", "error": "notify command failed", "trace": detail})
+    util.log_error(p.state / "errors.jsonl", f"notify {cmd}", "notify command failed", trace=detail)

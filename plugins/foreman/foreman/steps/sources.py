@@ -44,7 +44,7 @@ def _recurring(p: Project) -> list[str]:
     try:
         return schedule.run(p)
     except Exception as e:
-        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": "recurring", "error": repr(e), "trace": traceback.format_exc()[-2000:]})
+        util.log_error(p.state / "errors.jsonl", "recurring", repr(e), trace=traceback.format_exc()[-2000:])
         return []
 
 
@@ -55,7 +55,7 @@ def _poll(p: Project, exe: Path) -> list[str]:
     try:
         out = runsource.lines(exe, cursor)
     except runsource.SourceError as e:
-        util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {exe.name}", "error": str(e)})
+        util.log_error(p.state / "errors.jsonl", f"source {exe.name}", str(e))
         return []
     ids = (_signal(p, exe.name, ln, cursor_file) for ln in out)
     return [tid for tid in ids if tid]
@@ -105,7 +105,7 @@ def _on_task(p: Project, name: str, s: dict[str, Any]) -> None:
 
 
 def fail(p: Project, name: str, error: str, signal: object) -> None:
-    util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": f"source {name}", "error": error, "signal": signal})
+    util.log_error(p.state / "errors.jsonl", f"source {name}", error, signal=signal)
 
 
 ACTIONS = ("note", "reject", "accept", "done", "cancel")
