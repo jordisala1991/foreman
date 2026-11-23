@@ -8,7 +8,7 @@ from ..providers import registry
 from ..services.delivery import check, mergecheck
 
 
-def guarded(p: Project, tid: str, what: str, fn: Callable[[], object], field: str = "retry") -> None:
+def guarded(p: Project, tid: str, what: str, fn: Callable[[], object], field: backlog.RetryField = "retry") -> None:
     """One task's step: a Transient failure is retried next tick (noted once per error); the 3rd in a row blocks the
     task with the last error; a success resets the count. Any other failure blocks it at once. The others go on.
     The count lives in `{field}_count` and `{field}_error`: the background check has its own, apart from the tick's."""

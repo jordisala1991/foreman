@@ -111,7 +111,7 @@ def unblock(p: Project, tid: str) -> None:
     with registry.backlog(p).edit() as d:
         i = backlog.get(d, tid)
         was_blocked = bool(i.get("blocked"))
-        i.update(blocked="", pr_error="", retry_error="", retry_count=0)
+        i.update(backlog.unblocked())
         agent: dict[str, Any] = i.get("agent") or {}
         ref = ref_of(agent)
         if not was_blocked or i["status"] not in backlog.RUNNING or ref is None:
