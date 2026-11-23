@@ -84,6 +84,11 @@ def test_ids():
     assert (number("FN", "FN-140", {"FN-140": 272}), number("FN", "FN-301", {}), number("FN", "XY-1", {})) == (272, 301, None)
 
 
+def test_id_number():
+    assert backlog.id_number("FN", "FN-301") == 301
+    assert (backlog.id_number("FN", "XY-1"), backlog.id_number("FN", "FN-1x"), backlog.id_number("F.", "FN-1")) == (None, None, None)
+
+
 TASK: dict[str, Any] = {
     "id": "FN-5", "title": "t", "status": "in progress", "blocked": "why", "detail": "d\n## sub\nmore", "priority": "high",
     "acceptance": {"goal": "g", "criteria": "c1\n\n- c2", "verdict": "accepted"}, "model": "opus", "effort": "xhigh", "type": "bug",

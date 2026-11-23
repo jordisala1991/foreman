@@ -101,10 +101,15 @@ def get(d: Data, tid: str) -> Task:
     raise BacklogError(f"no task {tid}")
 
 
+def id_number(prefix: str, tid: str) -> int | None:
+    """The number of a task id `PREFIX-<digits>`; None for any other id."""
+    m = re.fullmatch(rf"{re.escape(prefix)}-(\d+)", tid)
+    return int(m[1]) if m else None
+
+
 def new_id(p: Project, d: Data) -> str:
     prefix = p.get("project", "prefix")
-    pat = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
-    nums = [int(m.group(1)) for i in tasks(d) if (m := pat.match(i["id"]))]
+    nums = [n for i in tasks(d) if (n := id_number(prefix, i["id"])) is not None]
     return f"{prefix}-{max(nums, default=0) + 1}"
 
 
