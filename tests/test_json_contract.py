@@ -1,4 +1,4 @@
-"""The `--json` reads (`projects`, `list`, `needs`, `agents`, `runs`, `events`, `health`, `show`) are the public contract for other programs (the
+"""The `--json` reads (`projects`, `list`, `needs`, `agents`, `runs`, `events`, `reviews`, `health`, `show`) are the public contract for other programs (the
 dashboard): the shapes below are frozen by hand from the task's criteria, never read from the code. Renaming, removing or
 retyping a field fails; adding one does not."""
 
@@ -97,6 +97,7 @@ SHAPES: dict[str, Shape] = {
         "kind": frozenset({"planned", "built", "rejected", "conflict", "failing", "review", "accepted", "merged", "other"}),
         "text": str,
     },
+    "reviews": {"round": int, "tip": str, "at": str, "open": int, "text": str},
     "show": {"id": str, "title": str, "status": str, "blocked": str, "priority": str},
 }
 

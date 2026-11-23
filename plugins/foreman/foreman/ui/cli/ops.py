@@ -1,4 +1,4 @@
-"""The operator's commands: loop, health, metrics, watch, needs, agents, runs, events, guard, lock, launchd."""
+"""The operator's commands: loop, health, metrics, watch, needs, agents, runs, events, reviews, guard, lock, launchd."""
 
 import argparse
 import os
@@ -9,6 +9,7 @@ from ... import providers
 from ...core.oversight import guard
 from ...core.project import registry
 from ...core.project.config import Project
+from ...core.review import reviews
 from ...core.tasks import backlog, runs
 from ...loop import tick
 from ...providers import registry as provider_registry
@@ -91,6 +92,15 @@ def cmd_runs(a: argparse.Namespace) -> None:
 def cmd_events(a: argparse.Namespace) -> None:
     """A task's events in time order, as JSON (DESIGN.md «The JSON reads»)."""
     print_json(backlog.history(home(a), a.task))
+
+
+def cmd_reviews(a: argparse.Namespace) -> None:
+    """A task's review rounds with their text, as JSON (DESIGN.md «The JSON reads»); unknown task: `[]`."""
+    try:
+        i = provider_registry.backlog(home(a)).find(a.task)
+    except backlog.BacklogError:
+        i = {}
+    print_json(reviews.rounds(i))
 
 
 def cmd_guard(a: argparse.Namespace) -> None:

@@ -1,6 +1,7 @@
 """A task's reviews: the shape of a reviewer and of a verdict, and the pure rules on them (round, tip)."""
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 
@@ -29,3 +30,26 @@ def verdict_tip(v: Mapping[str, Any]) -> str:
 def review_round(i: Mapping[str, Any]) -> int:
     """The round the next review is: reviews since the owner last asked for a fresh one (`review_from`), plus one."""
     return len(i.get("reviews") or []) - int(i.get("review_from", 0)) + 1
+
+
+class Round(TypedDict):
+    """One review round of a task, with the text of its review file."""
+
+    round: int
+    tip: str
+    at: str
+    open: int
+    text: str
+
+
+def rounds(i: Mapping[str, Any]) -> list[Round]:
+    """The review rounds of a task with the text of each review file (`""` when the file cannot be read)."""
+    out: list[Round] = []
+    stored: list[Mapping[str, Any]] = i.get("reviews") or []
+    for v in stored:
+        try:
+            text = Path(v["file"]).read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        out.append({"round": v["round"], "tip": v["tip"], "at": v["at"], "open": v["open"], "text": text})
+    return out
