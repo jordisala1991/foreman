@@ -78,7 +78,6 @@ export function Task({ project, id }: { project: Project; id: string }) {
     ...(i.closed ? [[t("task_closed"), when(i.closed)] as [string, ReactNode]] : []),
     [t("task_cost"), t("task_cost_v", { usd: usd2(cost.usd), min: Math.round(cost.minutes) })],
     ...(i.rework ? [[t("task_rework"), String(i.rework)] as [string, ReactNode]] : []),
-    ...(i.nudges ? [[t("task_nudges"), String(i.nudges)] as [string, ReactNode]] : []),
     ...(i.commit ? [[t("task_commit"), <code key="c">{i.commit.slice(0, 9)}</code>] as [string, ReactNode]] : []),
     ...(i.source ? [[t("task_source"), i.source] as [string, ReactNode]] : []),
   ];

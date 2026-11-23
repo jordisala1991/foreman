@@ -113,20 +113,21 @@ on). The heartbeat is written before every step, so a long test run does not loo
    filled in from its short id on a later tick. `foreman relaunch` is the one resume that sends flags, on purpose: a
    copy under a new id with today's `--settings` (PATH, guard, env), recorded as the task's session.
 4. **recover** (`foreman/steps/recover.py`, its rules pure in `foreman/core/tasks/recovery.py`): each active run (the ledger) of
-   an open task that is not blocked is looked at in the runner's listing. A parent's or chain's run is one turn: done once its
-   session is alive, idle and quiet for 60 s (`turn_over`), waiting or not. Any other run of a task waiting (an open question,
-   a message on its way) is left alone; else it is over with no outcome when its session is ENDED or GONE (`session_ended`, or `runner_unavailable` when the runner's epoch
-   changed since the last pass, kept in `state/runner.json`), when it never got a session id within 2 minutes (`launch_failed`),
-   or when it is idle and its transcript quiet for 10 minutes (`silent_too_long`; never a parent, whose idle turn is done). The run is
-   closed as failed with that reason. The first three are retried while fewer than 2 runs of that kind failed in a row: the
-   session is resumed with a message naming the reason and how to finish (a new run of it, attempt + 1), or, when the runner
-   cannot resume it, started again through its kind's own launch path (a planning or responsible task goes back to `backlog` or
-   `ready`, a hunter's, reviewer's or mechanic's record is dropped so its step launches it again, a parent gets a new session
-   told where it stands, staying in backlog). Past that, or for `launch_failed`, the owner gets one need: the task is
-   blocked with «its agent stopped without finishing (reason, attempt n); it last said: …» (the last text of its transcript),
-   or a mechanic leaves its «Diagnosis missing» note. An unreadable listing does nothing; it runs right after `answers`, on a
-   listing read again (an owner's answer or unblock resumes a session first), and on a loop's first pass after a restart
-   before any launch. A hunter whose findings file is written is not judged: the queue step closes its run done.
+   an open task that is not blocked is looked at in the runner's listing; a task waiting (an open question, a message on its
+   way) is left alone, except that a run ending its turn by design is done waiting or not (below). A run is over with no outcome for one reason: its session is ENDED or GONE (`session_ended`, or
+   `runner_unavailable` when the runner's epoch changed since the last pass, kept in `state/runner.json`), it never got a session
+   id within 2 minutes (`launch_failed`), or it is idle and its transcript quiet for 10 minutes (`silent_too_long`); a run that
+   ends its turn by design (a parent's or chain's, idle and quiet for 60 s: `turn_over`) is done, never `silent_too_long`.
+   The run is closed as failed with its reason. `session_ended`, `runner_unavailable` and `silent_too_long` are retried while fewer than 2 runs of that kind
+   failed in a row: the session is resumed with a message naming the reason and how to finish (a new run of it, attempt + 1);
+   when the runner cannot resume it, the task goes back through the launch path of its kind. Past that, or for `launch_failed`,
+   the owner gets one need: the task is blocked with «its agent stopped without finishing (reason, attempt n); it last said: …»
+   (the last text of its transcript), or a mechanic leaves its «Diagnosis missing» note. An unreadable listing does nothing;
+   it runs right after `answers`, on a listing read again (an owner's answer or unblock resumes a session first), and on a
+   loop's first pass after a restart before any launch. A hunter whose findings file is written is not judged: the queue step
+   closes its run done. The launch path by kind: a planning or responsible task goes back to `backlog` or `ready`; a hunter's,
+   reviewer's or mechanic's record is dropped so its step launches it again; a parent gets a new session told where it
+   stands, staying in backlog.
 5. **queue**: accepted tasks are merged first, one at a time; with a test command, each only once its tests pass on it
    merged with main as main is at that moment (the merged check, `loop.gate_merge`: see below). Then a branch in review whose head or main's head changed is checked,
    one at a time, in the background (a tick waits for it only `BACKGROUND_WAIT_S`, so answers, launches and merges keep
@@ -640,7 +641,7 @@ One label: `needs-owner`.
 | `mechanic` {name, short, session, kind, model, effort, started, …}, `diagnosis` {at, file, missing} | local | `<home>/diagnoses/` |
 | `pr` {number, url, draft, described, commented, …}, `pr_error` | local | the PR is found by its branch; its text says `Task: #<issue>` (never `Closes`) |
 | `accepted` {by, head, at}, `merging`, `merge`, `commit`, `acceptance.verdict` | local | the owner's accept and the merge record, tied to a branch tip |
-| `nudges` (no longer written: the recover step replaced the nudge), `retry_count`, `retry_error`, `check_retry_count`, `check_retry_error`, `released` | local | the loop's counters and once-flags |
+| `retry_count`, `retry_error`, `check_retry_count`, `check_retry_error`, `released` | local | the loop's counters and once-flags |
 | `plan`, `subs`, `defined_by`, `undelivered` (as a task key) | not carried | no code reads them; `plan` and `subs` are always `[]`; they stay in the read-only old file |
 | file keys `schema_version`, `updated`, `projects`, `archive` | not carried | bookkeeping of the old file; `projects` and `archive` are empty in fm's `backlog.json` |
 | `decisions`, `decisions_resolved` | local, `<home>/state/questions.json` | open questions; answered ones and the messages for an agent (kinds `note`, `subtask`, …); ids `FN-n Qk` unchanged |
@@ -1282,7 +1283,7 @@ its splits, not a new limit (changing `pyproject.toml` is the owner's call).
 ## Watching itself
 
 Metrics per task (`foreman metrics`, the panel): the model and effort its responsible agent ran on, cost of its agents (transcripts at list prices; planning_usd of planning sessions and responsible_usd of responsible sessions, from `session_kinds`; review rounds), time to review and to
-done, rework (rejected), conflicts and failures (returns for failing tests or CI), nudges (always 0 since the recover step replaced the nudge, FN-394),
+done, rework (rejected), conflicts and failures (returns for failing tests or CI),
 questions to the owner, guard stops, risk, and what misled its agents (their `--misled` words, per agent).
 
 Health checks (`foreman/steps/health/`), each finding a triage task, deduplicated by key while open or while it persists:

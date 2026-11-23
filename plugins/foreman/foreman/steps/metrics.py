@@ -1,5 +1,5 @@
 """What the system knows about how it works, per task: cost (its agents' transcripts, list prices), time (filed →
-in review → done), rework (rejected by the owner), nudges (always 0 since the recover step replaced the nudge, FN-394), questions to the owner,
+in review → done), rework (rejected by the owner), questions to the owner,
 guard stops, and what misled its agents (their own words, from `--misled`, per agent)."""
 
 import re
@@ -101,7 +101,6 @@ def per_task(p: Project) -> list[dict[str, Any]]:
                 "rework": i.get("rework", 0),
                 "conflicts": i.get("conflicts", 0),
                 "failures": i.get("failures", 0),
-                "nudges": i.get("nudges", 0),
                 "questions": sum(
                     1 for q in d["decisions"] + d["decisions_resolved"] if q.get("task") == i["id"] and q.get("kind") in ("question", "permission")
                 ),
@@ -119,7 +118,7 @@ def per_task(p: Project) -> list[dict[str, Any]]:
 def text(rows: list[dict[str, Any]]) -> str:
     head = (
         f"{'id':8} {'status':12} {'$':>7} {'model':7} {'effort':6} {'planning$':>9} {'responsible$':>12} {'rounds':>6} {'min':>6} {'rework':>6} "
-        f"{'confl':>5} {'fail':>4} {'nudge':>5} {'ask':>3} {'stop':>4} {'risk':6}"
+        f"{'confl':>5} {'fail':>4} {'ask':>3} {'stop':>4} {'risk':6}"
     )
     lines = [head]
     for r in rows:
@@ -127,7 +126,7 @@ def text(rows: list[dict[str, Any]]) -> str:
             f"{r['id']:8} {r['status']:12} {r['usd']:7.2f} {r['model'] or '-':7} {r['effort'] or '-':6} "
             f"{r['planning_usd']:9.2f} {r['responsible_usd']:12.2f} {r['rounds']:6} "
             f"{r['to_review_min'] or 0:6.0f} {r['rework']:6} {r['conflicts']:5} {r['failures']:4} "
-            f"{r['nudges']:5} {r['questions']:3} {r['guard_stops']:4} {r['risk'] or '':6}"
+            f"{r['questions']:3} {r['guard_stops']:4} {r['risk'] or '':6}"
         )
     lines.append(f"total ${sum(r['usd'] for r in rows):.2f}")
     for r in rows:

@@ -36,6 +36,11 @@ class TestPlanVsWork:
         assert (r["failures"], r["conflicts"]) == (2, 1)
         assert "confl fail" in metrics.text([r])
 
+    def test_a_stored_nudges_value_is_ignored(self):
+        r = self.row(self.make(nudges=3))
+        assert "nudges" not in r
+        assert "nudge" not in metrics.text([r])
+
     def test_split_by_kind(self):
         tid = self.make(sessions=["A", "B", "C"], session_kinds={"A": "planning", "B": "responsible", "C": "review"}, reviews=[{}])
         r = self.row(tid)

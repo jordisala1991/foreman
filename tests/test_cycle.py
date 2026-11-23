@@ -115,5 +115,5 @@ class TestText:
 
     def test_old_columns_unchanged(self):
         head = metrics.text(self.rows()).splitlines()[0].split()
-        old = "id status $ model effort planning$ responsible$ rounds min rework confl fail nudge ask stop risk"
+        old = "id status $ model effort planning$ responsible$ rounds min rework confl fail ask stop risk"
         assert head == old.split()
