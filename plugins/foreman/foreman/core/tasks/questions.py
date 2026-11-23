@@ -77,8 +77,9 @@ def message_for(i: dict[str, Any], q: dict[str, Any]) -> str:
                 "If it proposed an action, run exactly that action and no other, then end your turn."
             )
         return (
-            f"The owner replied to your question {q['id']}: «{q['answer']}». It is not a yes: run no action because of it. "
-            "If you still need his yes for an action, propose it again with `foreman ask`."
+            f"The owner replied to your question {q['id']}: «{q['answer']}». It is not a yes to a proposed command: run no proposed command because of it. "
+            "If the question was a point to decide, carry on with his answer; "
+            "if you still need his yes for an action, propose it again with `foreman ask`."
         )
     else:
         return f"The owner answered your question {q['id']}: «{q['answer']}». Carry on with the task."

@@ -423,3 +423,10 @@ class TestPure:
         text = questions.message_for(i, {**q, "answer": "not yet"})
         assert "not yet" in text
         assert "Proposal: foreman done" not in text
+
+    def test_a_parent_answered_a_preference_carries_on_with_it(self):
+        i = {"id": "P", "agent": {"kind": "parent"}}
+        q = {"id": "P Q2", "text": "A or B?", "answer": "A"}
+        text = questions.message_for(i, q)
+        assert "«A»" in text
+        assert "carry on with his answer" in text
