@@ -82,7 +82,8 @@ def _path_reasons(rules: Mapping[str, list[str]], paths: list[str], tag: str) ->
 
 
 def score(p: Project, f: Facts) -> tuple[str, list[str]]:
-    """(risk, reasons): the higher of impact (paths, deletions) and doubt (tests, CI); a review never lowers it. Open
+    """(risk, reasons): the higher of three, impact, doubt and the plan (its declared risk, files it did not announce, size
+    over 3 times its expectation); the rule is in DESIGN «Merge: risk and autonomy». A review never lowers it. Open
     findings and a conflict with main add a reason but not a level: they are gates in decide.after_check (a conflict goes
     back to its agent only once someone wants the merge). Up to 3 reasons, a conflict first, then high ones, each ending
     with its source in brackets; with several repos a repo's rule (path, size) names it. A repo that publishes on merge is
