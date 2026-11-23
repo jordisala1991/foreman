@@ -1297,6 +1297,10 @@ limit stays: it did its job (it forced FN-157 and others to split); what failed 
 and packages by area give one. When FN-160 ends no module should pass 270 lines (a 10% margin): 270 is a target for
 its splits, not a new limit (changing `pyproject.toml` is the owner's call).
 
+A directory under `foreman/` holds at most 15 entries (`.py` modules except `__init__.py`, plus subpackages; `make size`
+fails over it). `core/tasks` is named in the `Makefile` with its count (18) as a ceiling it may not exceed. Lowering that
+ceiling when a split lands is allowed; raising it, or the 15, is the owner's call.
+
 
 ## Watching itself
 
