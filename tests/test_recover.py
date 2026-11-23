@@ -19,6 +19,7 @@ from foreman.providers import registry
 from foreman.providers.runner import NO_ROWS, State
 from foreman.services.agents.launch import launch_reviewer
 from foreman.steps import parents, recover, talk, watch
+from foreman.ui.panel import views
 
 OLD = "2000-01-01 00:00:00"
 
@@ -341,5 +342,6 @@ def test_waking_the_parent_by_an_edit_closes_the_stopped_need(e: Env, fake_runne
     tick.tick(e.p)
     assert watch.found(e.p) == []
     assert [x for x in registry.backlog(e.p).load()["decisions_resolved"] if x.get("kind") == "stopped"][0]["by"].startswith("loop")
+    assert "stopped" not in [q["kind"] for q in views.task(e.p, P)["questions"]]  # no card to answer in the panel for the closed need
     events = [x["text"] for x in util.read_jsonl(e.p.state / "events.jsonl") if x["task"] == P]
     assert "closed: parent woken" in " ".join(events) and not any("owner answered" in t for t in events)
