@@ -95,7 +95,15 @@ def noted(d: Data, tid: str, text: str, source: str) -> None:
     message(d, get(d, tid), "N", ("note",), kind="note", text="signal", answer=text, source=source)
 
 
-def delivered(d: Data, qid: str) -> None:
+def delivered(d: Data, qid: str) -> list[dict[str, Any]]:
+    """Marks a message delivered. A message delivered wakes the task's agent, so the task's open `stopped` questions (the
+    need a silent end filed) are resolved by the loop, without an answer; those it closed."""
+    closed: list[dict[str, Any]] = []
     for q in d["decisions_resolved"]:
         if q["id"] == qid:
             q["delivered"] = True
+            closed = [s for s in d["decisions"] if s.get("task") == q["task"] and s.get("kind") == "stopped"]
+    for s in closed:
+        d["decisions"].remove(s)
+        d["decisions_resolved"].append({**s, "resolved": date.today().isoformat(), "by": f"loop, {util.now()}", "delivered": True})
+    return closed

@@ -331,11 +331,15 @@ def test_answering_the_stopped_need_wakes_the_parent(e: Env, fake_runner: FakeRu
     assert any("carry on with the report" in m for _, m, _ in fake_runner.sent)
 
 
-def test_waking_the_parent_by_an_edit_closes_the_stopped_need(e: Env, fake_runner: FakeRunner):
+@pytest.mark.parametrize("session", [State.IDLE, State.ENDED])
+def test_waking_the_parent_by_an_edit_closes_the_stopped_need(e: Env, fake_runner: FakeRunner, session: State):
     P = a_parent(e, fake_runner, sub="done")
     ended_idle(e, fake_runner, P, "waiting for your yes")
+    fake_runner.states[str(task(e, P)["agent"]["session"])] = session  # ENDED: a new session is launched for the wakeup
     with registry.backlog(e.p).edit() as d:
         questions.message(d, backlog.get(d, P), "E", ("edit",), kind="edit", text="edit", answer="do the report")
     tick.tick(e.p)
-    assert any("do the report" in m for _, m, _ in fake_runner.sent)
     assert watch.found(e.p) == []
+    assert [x for x in registry.backlog(e.p).load()["decisions_resolved"] if x.get("kind") == "stopped"][0]["by"].startswith("loop")
+    events = [x["text"] for x in util.read_jsonl(e.p.state / "events.jsonl") if x["task"] == P]
+    assert "closed: parent woken" in " ".join(events) and not any("owner answered" in t for t in events)

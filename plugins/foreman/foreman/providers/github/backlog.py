@@ -239,4 +239,6 @@ class GitHubBacklog:
 
     def mark_delivered(self, qid: str) -> None:
         with self.edit() as d:
-            changes.delivered(d, qid)
+            closed = changes.delivered(d, qid)
+        for s in closed:
+            event(self.p, s["task"], f"stopped need {s['id']} closed: parent woken")
