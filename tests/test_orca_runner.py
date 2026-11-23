@@ -172,6 +172,13 @@ def test_an_answer_waits_while_the_turn_works(s: Setup):
     assert f"answer {q} delivered to ty-1" not in s.events() and "orchestration send" not in s.orca.verbs()
 
 
+def test_a_chat_waiting_on_a_permission_stays_waiting_whatever_its_turn_says(s: Setup):
+    ref = s.start()
+    s.orca.set_row(str(ref.dispatch), "waiting", main="working")
+    rows = Orca(s.p).rows()
+    assert rows is not None and rows.state(ref) is State.WAITING and rows.busy(ref)
+
+
 def test_a_restart_ends_the_chat_and_its_next_message_resumes_it(s: Setup):
     tid, ref = on_a_task(s)
     s.orca.restart()
