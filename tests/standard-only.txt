@@ -1,3 +1,0 @@
-# Test files still checked in standard mode only. A file leaves this list when it passes strict; a test file not listed is strict.
-tests/test_guard.py
-tests/test_parents.py

@@ -79,7 +79,7 @@ class TestLaunch:
 
 class TestNotices:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.P = registry.backlog(self.e.p).add("parent", status="backlog", criteria="c")
         self.S0 = fm(self.e.home, "add", "zero", "--parent", self.P, "--triage", "--criteria", "c").strip()
@@ -132,7 +132,7 @@ class TestWakeups:
     resumes the idle session with it, or starts a new session told where it stands when the old one ended."""
 
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.P = registry.backlog(env.p).add("parent", status="backlog", criteria="c")
         self.S0 = fm(env.home, "add", "zero", "--parent", self.P, "--triage", "--criteria", "c").strip()
@@ -268,7 +268,7 @@ class TestWakeups:
 
 class TestClosing:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.P = registry.backlog(self.e.p).add("parent", status="backlog", criteria="c")
         self.S1 = fm(self.e.home, "add", "one", "--parent", self.P, "--triage", "--criteria", "c").strip()
@@ -302,7 +302,7 @@ class TestClosing:
 
 class TestAuthority:
     @pytest.fixture(autouse=True)
-    def set_up(self, owner, env):
+    def set_up(self, owner: None, env: Env):
         self.e = env
         self.P = registry.backlog(self.e.p).add("parent", status="backlog", criteria="c")
         self.Q = registry.backlog(self.e.p).add("other", status="backlog", criteria="c")
@@ -339,7 +339,7 @@ class TestAuthority:
 
 
 class TestRealData:
-    def test_show_gives_each_subtasks_state(self, owner):
+    def test_show_gives_each_subtasks_state(self, owner: None):
         e = Env()
         P = registry.backlog(e.p).add("parent", status="triage", criteria="c")
         s = fm(e.home, "add", "s", "--parent", P, "--triage", "--criteria", "c").strip()
