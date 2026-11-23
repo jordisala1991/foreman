@@ -143,6 +143,42 @@ def test_the_state_is_the_row_of_the_workers_pane(s: Setup, word: str, state: St
     assert rows.state(SessionRef("x", "x")) is State.GONE
 
 
+def test_a_turn_that_ended_is_idle_though_its_command_runs(s: Setup):
+    ref = s.start()
+    s.orca.set_row(str(ref.dispatch), "working", main="done")
+    rows = Orca(s.p).rows()
+    assert rows is not None and rows.state(ref) is State.IDLE and not rows.busy(ref)
+
+
+def test_an_answer_reaches_an_agent_whose_turn_ended_with_a_command_running(s: Setup):
+    tid, ref = on_a_task(s)
+    s.orca.set_row(str(ref.dispatch), "working", main="done")
+    q = registry.backlog(s.p).ask(tid, "ty-1", "which?")
+    registry.backlog(s.p).answer(q, "this one")
+    rows = Orca(s.p).rows()
+    assert rows is not None
+    talk.deliver_answers(s.p, rows)
+    assert f"answer {q} delivered to ty-1" in s.events() and "orchestration send" in s.orca.verbs()
+
+
+def test_an_answer_waits_while_the_turn_works(s: Setup):
+    tid, ref = on_a_task(s)
+    s.orca.set_row(str(ref.dispatch), "working", main="working")
+    q = registry.backlog(s.p).ask(tid, "ty-1", "which?")
+    registry.backlog(s.p).answer(q, "this one")
+    rows = Orca(s.p).rows()
+    assert rows is not None and rows.busy(ref)
+    talk.deliver_answers(s.p, rows)
+    assert f"answer {q} delivered to ty-1" not in s.events() and "orchestration send" not in s.orca.verbs()
+
+
+def test_a_chat_waiting_on_a_permission_stays_waiting_whatever_its_turn_says(s: Setup):
+    ref = s.start()
+    s.orca.set_row(str(ref.dispatch), "waiting", main="working")
+    rows = Orca(s.p).rows()
+    assert rows is not None and rows.state(ref) is State.WAITING and rows.busy(ref)
+
+
 def test_a_restart_ends_the_chat_and_its_next_message_resumes_it(s: Setup):
     tid, ref = on_a_task(s)
     s.orca.restart()
