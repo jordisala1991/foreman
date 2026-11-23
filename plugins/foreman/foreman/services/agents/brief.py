@@ -77,6 +77,24 @@ def vocabulary_section(p: Project) -> str:
     return "# Vocabulary\nUse the terms of `GLOSSARY.md` at the repo root and never rename one: it changes only by the owner's decision.\n\n"
 
 
+def verify_file(p: Project) -> Path:
+    return p.home / "verify.md"
+
+
+def session_file(p: Project, tid: str) -> Path:
+    return p.home / "reports" / tid / "session.md"
+
+
+def verify_section(p: Project, tid: str) -> str:
+    """The Verify recipe paragraph, only for a home that has a verify.md."""
+    if not verify_file(p).is_file():
+        return ""
+    return (
+        f"# Verify recipe\nHow to use this product live in a throwaway setup: `{verify_file(p)}`. The responsible agent saves "
+        f"its use of it in `{session_file(p, tid)}`, with its screenshots beside it: the agent's claim, never evidence by itself.\n\n"
+    )
+
+
 def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None = None) -> str:
     a: dict[str, Any] = i.get("acceptance") or {}
     values = {
@@ -96,6 +114,8 @@ def brief(p: Project, i: dict[str, Any], kind: str, extra: dict[str, Any] | None
         "plan_section": plan_section(i),
         "type_section": tasktypes.section(i),
         "vocabulary": vocabulary_section(p),
+        "verify": verify_section(p, i["id"]),
+        "session": str(session_file(p, i["id"])),
         "unasked": UNASKED,
         "model_effort": f"{i.get('model') or 'project default'} / {i.get('effort') or 'project default'}",
         "round2": "",

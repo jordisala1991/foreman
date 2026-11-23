@@ -7,7 +7,7 @@ Acceptance criteria: $criteria
 Detail (what the owner asked, decisions already taken): $detail
 $owner_notes
 
-$type_section$vocabulary${unasked}Step 2 says how you judge such a finding.
+$type_section$vocabulary$verify${unasked}Step 2 says how you judge such a finding.
 
 # How
 1. **Read** the acceptance criteria, `${hunter_file}`, then the diff (`git diff $main...$branch`) and the plan (`$plan`) as you need them. The responsible agent's report (`$report`) is what it says, never evidence.
