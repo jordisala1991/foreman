@@ -4,6 +4,7 @@ foreman's costs.py and transcripts.py: a response is counted once per message id
 
 import json
 import os
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,22 @@ def family(model: str) -> str | None:
     return next((k for k in PRICES if k in (model or "").lower()), None)
 
 
+def records(f: Path) -> Iterator[dict[str, Any]]:
+    """The JSON objects, one per line, of a transcript file; none when the file cannot be read; lines that are not
+    JSON, or not an object, are skipped."""
+    try:
+        lines = f.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for ln in lines:
+        try:
+            raw = json.loads(ln)
+        except ValueError:
+            continue
+        if (r := util.json_object(raw)) is not None:
+            yield r
+
+
 def usage(files: list[Path], seen: set[str] | None = None) -> dict[str, Any]:
     """{usd, tokens, minutes} over the files. A message id already in `seen` is not
     counted again; pass one set across several calls to count each message once over all of them."""
@@ -45,16 +62,7 @@ def usage(files: list[Path], seen: set[str] | None = None) -> dict[str, Any]:
     tokens = 0
     first = last = None
     for f in files:
-        try:
-            lines = f.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for ln in lines:
-            try:
-                raw = json.loads(ln)
-            except ValueError:
-                continue
-            r = util.json_object(raw) or {}
+        for r in records(f):
             m = util.json_object(r.get("message")) or {}
             u = util.json_object(m.get("usage")) or {}
             if r.get("type") != "assistant" or not u:

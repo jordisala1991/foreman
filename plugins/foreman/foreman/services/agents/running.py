@@ -1,6 +1,5 @@
 """Which agents are running: idle time, and the tasks that hold a slot."""
 
-import json
 import time
 from contextlib import AbstractContextManager
 from pathlib import Path
@@ -83,18 +82,10 @@ def send(p: Project, i: dict[str, Any], message: str, role: str = "agent") -> bo
 
 def last_said(a: dict[str, Any], limit: int = 200) -> str:
     """The text of the last assistant message in the session's own transcript, whitespace collapsed, at most `limit`
-    characters (200 by default); "" when there is none or it cannot be read. Unreadable lines are skipped, as `costs.usage` does."""
+    characters (200 by default); "" when there is none or it cannot be read. Lines that are not JSON are skipped (`costs.records`)."""
     files = costs.files_of(a.get("session") or "")
-    try:
-        lines = files[0].read_text(encoding="utf-8").splitlines() if files else []
-    except OSError:
-        return ""
     said = ""
-    for ln in lines:
-        try:
-            r = util.json_object(json.loads(ln)) or {}
-        except ValueError:
-            continue
+    for r in costs.records(files[0]) if files else ():
         m = util.json_object(r.get("message")) or {}
         texts = [str(b.get("text") or "") for x in util.json_list(m.get("content")) if (b := util.json_object(x)) and b.get("type") == "text"]
         if r.get("type") == "assistant" and " ".join(texts).strip():
