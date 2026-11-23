@@ -66,4 +66,4 @@ def run(p: Project, rows: Rows) -> None:
             try:
                 remove_agent_folder(p, registry.repo(p.for_task(i)), folder)
             except Exception as e:  # one folder must not stop the others: next tick tries again
-                util.append_jsonl(p.state / "errors.jsonl", {"time": util.now(), "step": "folders", "error": f"{folder.name}: {e!r}", "trace": ""})
+                util.log_error(p.state / "errors.jsonl", "folders", f"{folder.name}: {e!r}", trace="")

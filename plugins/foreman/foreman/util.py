@@ -84,6 +84,11 @@ def append_jsonl(path: Path, obj: Any) -> None:
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
+def log_error(file: Path, step: str, error: str, **extra: object) -> None:
+    """One line of errors.jsonl: when, which step, what failed, plus `trace` or `signal` when the caller has one."""
+    append_jsonl(file, {"time": now(), "step": step, "error": error, **extra})
+
+
 def json_object(v: object) -> dict[str, Any] | None:
     """The JSON value as an object, or None when it is anything else: the one place untyped JSON gets its type."""
     return cast(dict[str, Any], v) if isinstance(v, dict) else None
@@ -111,7 +116,7 @@ def start_background(key: str, errors: Path, fn: Callable[[], object], *, forget
         try:
             fn()
         except Exception as e:
-            append_jsonl(errors, {"time": now(), "step": key, "error": repr(e), "trace": traceback.format_exc()[-2000:]})
+            log_error(errors, key, repr(e), trace=traceback.format_exc()[-2000:])
         finally:
             if forget:
                 BACKGROUND.pop(key, None)

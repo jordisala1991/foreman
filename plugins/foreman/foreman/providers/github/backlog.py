@@ -105,7 +105,7 @@ class GitHubBacklog:
             for tid in lets:
                 event(self.p, tid, "→ backlog: let in by the owner (dragged on the Board)")
             for why in refused:
-                util.append_jsonl(self.p.state / "errors.jsonl", {"time": util.now(), "step": "board", "error": why, "trace": ""})
+                util.log_error(self.p.state / "errors.jsonl", "board", why, trace="")
         self.files.save_snapshot({t["id"]: t["status"] for t in map(w.task, read.issues)})
         self.files.save_cards(self._cards(read))
         return read
