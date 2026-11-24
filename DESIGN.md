@@ -151,7 +151,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
-9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
+9. **mechanic**: for each triage task health filed (`source` `health:*`, except `health:flaky:*`, a flaky check on main: it gets none and is left to the owner, `mechanic.diagnosed_by_mechanic`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
    that ran over 30 minutes leaves a «Diagnosis missing» note; one that ended or went silent is the recover step's (resumed
    once, then the same note).
