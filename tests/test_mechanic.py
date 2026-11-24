@@ -60,6 +60,15 @@ class TestMechanic:
         tick.tick(e.p)
         assert e.calls() == []
 
+    def test_a_flaky_check_on_main_gets_no_mechanic(self):
+        flag = self.e.tmp / "flag"
+        e = Env(test=f"test -e {flag} || {{ touch {flag}; false; }}")
+        tick.tick(e.p)
+        tick.tick(e.p)
+        (t,) = [i for i in registry.backlog(e.p).load()["tasks"] if i["status"] == "triage"]
+        assert t["title"].startswith("Flaky check on main")
+        assert e.calls() == []
+
     def test_within_slots(self):
         e = Env(slots=1)
         a = registry.backlog(e.p).add("a", status="triage", source="health:a")
