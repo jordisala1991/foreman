@@ -151,7 +151,7 @@ on). The heartbeat is written before every step, so a long test run does not loo
    An agent waiting for the owner (open question or permission, no answer on its way) does not count against the slots;
    an answer is delivered at once, even over the slots.
    A pause stops this step, the parent agents and the mechanics; reviews, checks and merges go on.
-9. **mechanic**: for each triage task health filed (`source` `health:*`) that has none yet, one mechanic session, in the
+9. **mechanic**: for each triage task health filed (`source` `health:*`, except `health:flaky:*`, a flaky check on main: it gets none and is left to the owner, `mechanic.diagnosed_by_mechanic`) that has none yet, one mechanic session, in the
    slots launch left free (it counts as a slot while it has no diagnosis). It stops once the diagnosis is in, and a mechanic
    that ran over 30 minutes leaves a «Diagnosis missing» note; one that ended or went silent is the recover step's (resumed
    once, then the same note).
@@ -224,7 +224,7 @@ merge does, otherwise each fix passing alone would reset the count. Without one,
 | A provider call fails `Transient` | counted, the new error noted once; the 3rd in a row blocks the task | `retry_step` | `TestRetry`, `test_any_provider_call_failing_transient_three_times_blocks_with_the_error` |
 | No test command and the PR's CI has a result | the CI's result stands in for the tests in the check | `tests_or_ci` | `TestTestsOrCi`, `test_ci_replaces_the_local_test_without_a_test_command` |
 | `[merge]` names an unknown provider, pr or strategy, or a strategy its provider lacks | a clear config error naming the value | `provider_error` | `TestProviderError`, `test_each_bad_value_is_named` |
-| Main moved since its tests ran, or they ran over `ci_every_minutes` ago | runs main's tests again (in the background) | `main_tests_due` | `TestMainTestsDue`, `test_failing_main_is_one_task_until_it_passes` |
+| Main moved since its tests ran, or they ran over `ci_every_minutes` ago | runs main's tests again (in the background; a failing run is run once more on the same head: fail then pass is `flaky`, a finding of its own (`Flaky check on main: <step>`), not `Tests fail on main`) | `main_tests_due` | `TestMainTestsDue`, `test_failing_main_is_one_task_until_it_passes` |
 | An agent folder under Orca | goes once its agent's part is over (task ready, hunter's file or verdict written, diagnosis recorded) and no session of it is busy or recently active; every folder of a closed task goes when none is busy | `folder_goes` | `TestFolderGoes`, `test_a_done_parents_folder_goes_on_the_next_tick`, `test_a_busy_or_recently_active_session_keeps_the_folder` |
 
 The decision tests are in `tests/test_decide.py` and launch no program; the loop's in `tests/test_review_rules.py`. How
@@ -1086,7 +1086,7 @@ test = "make build"
 | Branch names | unchanged, `<branch_prefix><id>`: ids are unique in the project and a task has one repo, so a branch lives in one repo only |
 | PR | per repo: provider (`auto` looks at that repo's `remote`; `"none"` is `local`), `pr` mode, push to that `remote`; draft PR, description, review comments and `foreman-evidence` go to the task's repo |
 | Merge | per repo `strategy`; the local provider merges into that repo's main checkout; the merged check runs on that repo's main. Merges stay one at a time for the whole project |
-| Tests and CI | per repo `test`, in a detached tree of that repo (`state/trees/<id>`); no `test`: the PR's CI stands in and the doubt is medium, as today. Main's tests (health) run per repo that has a test command: `state/ci-<key>.json`, tree `main-<key>`, finding key `ci:<key>:<since>` (one repo keeps `ci.json` and `ci:<since>`) |
+| Tests and CI | per repo `test`, in a detached tree of that repo (`state/trees/<id>`); no `test`: the PR's CI stands in and the doubt is medium, as today. Main's tests (health) run per repo that has a test command: `state/ci-<key>.json`, tree `main-<key>`, finding key `ci:<key>:<since>` (one repo keeps `ci.json` and `ci:<since>`); `result` is `pass`, `fail`, `flaky` (failed, then passed on the same head: finding key `flaky:<step>`, nothing blocks) or `none` |
 | Risk | the repo's tables and `large_lines`. `publish_on_merge` makes the impact high with the reason `merging publishes this repo (KEY)` (a fact of the score, `publishes`), so only the owner's accept merges it. fm still never tags or releases |
 | Autonomy | the repo's, else the project's; `high` never merges alone, as today |
 | Review | unchanged: hunter and reviewer start in the task's worktree, so they are per repo by their cwd |

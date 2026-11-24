@@ -2,6 +2,7 @@
 
 import itertools
 import shutil
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -46,6 +47,17 @@ def test_main_tests_file_one_finding_per_failing_repo():
     (t,) = triage(e)
     assert t["repo"] == "api"
     assert "api" in t["title"]
+
+
+def test_a_flaky_repo_names_itself():
+    flag = Path(tempfile.mkdtemp(prefix="fmflag-")) / "flag"
+    e = several({"api": f"test -e {flag} || {{ touch {flag}; false; }}", "web": "true"})
+    health.run(e.p, NO_ROWS)
+    health.run(e.p, NO_ROWS)
+    (t,) = triage(e)
+    assert t["repo"] == "api"
+    assert "(repo api)" in t["title"]
+    assert "Flaky" in t["title"]
 
 
 def test_a_failing_episode_is_per_repo():

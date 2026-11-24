@@ -62,6 +62,11 @@ def launch(p: Project, i: dict[str, Any]) -> None:
     backlog.event(p, tid, f"launched {name} (mechanic, {model}, session {ref.short})")
 
 
+def diagnosed_by_mechanic(source: str) -> bool:
+    """A health task gets a mechanic, except a flaky check on main (`health:flaky:…`): the owner fixes that one."""
+    return source.startswith("health:") and not source.startswith("health:flaky:")
+
+
 def run(p: Project, rows: Rows) -> None:
     for i in backlog.tasks(registry.backlog(p).load()):
         if diagnosing(i) and (why := missing_why(i["mechanic"])):
@@ -73,7 +78,7 @@ def run(p: Project, rows: Rows) -> None:
     if p.paused:
         return
     free = int(p.get("agents", "slots")) - running(d)
-    health = (i for i in backlog.tasks(d) if i["status"] == "triage" and str(i.get("source", "")).startswith("health:"))
+    health = (i for i in backlog.tasks(d) if i["status"] == "triage" and diagnosed_by_mechanic(str(i.get("source", ""))))
     todo = [i for i in health if not i.get("mechanic") and not i.get("diagnosis")]
     for i in todo[: max(0, free)]:
         launch(p, i)
