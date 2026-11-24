@@ -9,7 +9,8 @@ proposes a fix.
 Checks: loop dead (heartbeat too old: seen from outside the loop, `foreman health` and the panel) · agent stuck (its
 session working but its transcript silent for `stuck_minutes`) · agent stopped (blocked by the recover step) · launch failed
 · orphan worktree (under the worktrees folder of any repo with no live task) · tests failing on main (the project's test command
-on main's head, every `ci_every_minutes`; one task per failing episode) · answer not delivered for 10 minutes · loop step errors."""
+on main's head, every `ci_every_minutes`; one task per failing episode) · a flaky check on main (failed, then passed on a
+second run of the same commit) · answer not delivered for 10 minutes · loop step errors."""
 
 import time
 from collections.abc import Callable
