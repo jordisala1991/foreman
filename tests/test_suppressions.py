@@ -1,4 +1,4 @@
-"""`make suppressions` fails on any pyright, pylint, fmt, isort or yapf directive comment, under foreman/ and tests/: the real target,
+"""`make suppressions` fails on any pyright, pylint, fmt, isort or yapf directive comment, under plugins/ and tests/: the real target,
 run in a temporary git repo."""
 
 import os
@@ -14,7 +14,7 @@ PYLINT = "py" + "lint"
 FMT = "f" + "mt"
 ISORT = "is" + "ort"
 YAPF = "ya" + "pf"
-PATHS = ["plugins/foreman/foreman/services/p.py", "tests/t.py"]
+PATHS = ["plugins/foreman/foreman/services/p.py", "plugins/foreman/hooks/h.py", "tests/t.py"]
 DIRECTIVES = [
     (PYLINT, "skip-file"),
     (PYLINT, "disable-next=C0302"),

@@ -1,6 +1,6 @@
-"""`make size` fails on a foreman/ module over 300 lines, also in a directory without `__init__.py`, and on `bin/foreman`, which
-has no `.py` suffix: the real target, run in a temporary tree. Given a package, pylint walks only its subpackages, so the tree
-needs the `__init__.py` chain to reproduce."""
+"""`make size` fails on a Python module under plugins/ over 300 lines, also in a directory without `__init__.py` or outside
+foreman/, and on `bin/foreman`, which has no `.py` suffix: the real target, run in a temporary tree. Given a package, pylint
+walks only its subpackages, so the tree needs the `__init__.py` chain to reproduce."""
 
 import os
 import shutil
@@ -13,12 +13,13 @@ from helpers import ROOT
 PACKAGE = ["plugins/foreman/foreman/__init__.py", "plugins/foreman/foreman/services/__init__.py", "plugins/foreman/foreman/services/agents/__init__.py"]
 BIG = "plugins/foreman/foreman/services/agents/nopkg/big.py"
 SCRIPT = "plugins/foreman/bin/foreman"
+HOOK = "plugins/foreman/hooks/big.py"
 
 
-def size(tmp_path: Path, lines: int, script_lines: int = 1, extra: list[str] | None = None) -> subprocess.CompletedProcess[str]:
-    for name in [*PACKAGE, "tests/t.py", BIG, *(extra or [])]:
+def size(tmp_path: Path, lines: int, script_lines: int = 1, extra: list[str] | None = None, big: str = BIG) -> subprocess.CompletedProcess[str]:
+    for name in [*PACKAGE, "tests/t.py", BIG, big, *(extra or [])]:
         (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / name).write_text("X = 1\n" * (lines if name == BIG else 1))
+        (tmp_path / name).write_text("X = 1\n" * (lines if name == big else 1))
     (tmp_path / SCRIPT).parent.mkdir(parents=True)
     (tmp_path / SCRIPT).write_text("# x\n" * script_lines)
     shutil.copy(ROOT / "pyproject.toml", tmp_path)
@@ -36,6 +37,16 @@ def test_a_module_over_the_limit_fails_in_a_directory_without_init(tmp_path: Pat
 
 def test_a_module_under_the_limit_passes(tmp_path: Path) -> None:
     assert size(tmp_path, 200).returncode == 0
+
+
+def test_a_python_file_outside_foreman_over_the_limit_fails(tmp_path: Path) -> None:
+    result = size(tmp_path, 402, big=HOOK)
+    assert result.returncode != 0
+    assert "too-many-lines" in result.stdout
+
+
+def test_a_python_file_outside_foreman_under_the_limit_passes(tmp_path: Path) -> None:
+    assert size(tmp_path, 200, big=HOOK).returncode == 0
 
 
 def test_the_script_without_a_py_suffix_over_the_limit_fails(tmp_path: Path) -> None:
