@@ -1,6 +1,7 @@
 """A way to start a program outside `foreman/proc.py` fails `make lint`: the real target, run in a temporary tree; a
 `loop.subprocess_exec` or `subprocess_shell` call, which ruff cannot see, fails
-`test_no_module_uses_a_loop_method_that_runs_a_program`."""
+`test_no_module_uses_a_loop_method_that_runs_a_program`; a call of the builtin `__import__` fails
+`test_no_module_calls_the_builtin_import`."""
 
 import ast
 from pathlib import Path
@@ -38,6 +39,9 @@ LOOP_METHODS = {"subprocess_exec", "subprocess_shell"}
         "import posix\n\nprint(posix.posix_spawn)\n",
         "import posix\n\nprint(posix.execve)\n",
         "from posix import fork\n\nprint(fork)\n",
+        'import importlib\n\nimportlib.import_module("subprocess").run(["ls"], check=False)\n',
+        "from importlib import import_module\n\nprint(import_module)\n",
+        'import runpy\n\nrunpy.run_module("subprocess")\n',
     ],
 )
 def test_a_way_to_start_a_program_fails_lint(tmp_path: Path, source: str) -> None:
@@ -48,6 +52,10 @@ def test_a_way_to_start_a_program_fails_lint(tmp_path: Path, source: str) -> Non
 
 def test_a_module_that_runs_nothing_passes_lint(tmp_path: Path) -> None:
     assert lint(tmp_path, "import os\n\nprint(os.getpid())\n").returncode == 0
+
+
+def test_reading_the_package_version_passes_lint(tmp_path: Path) -> None:
+    assert lint(tmp_path, 'import importlib.metadata\n\nprint(importlib.metadata.version("foreman"))\n').returncode == 0
 
 
 def test_threads_do_not_start_a_program(tmp_path: Path) -> None:
@@ -77,3 +85,32 @@ def test_a_module_that_calls_a_loop_method_is_named(tmp_path: Path, method: str)
     )
     (tmp_path / "services/ok.py").write_text("import asyncio\n\nprint(asyncio.run)\n")
     assert modules_using_loop_methods(tmp_path) == {"services/agents/p2.py"}
+
+
+def modules_calling_dunder_import(root: Path) -> set[str]:
+    """The modules under `root` calling `__import__` or `builtins.__import__`: ruff cannot ban a builtin by name, and
+    `__import__("subprocess")` names the module in a string."""
+    return {
+        f.relative_to(root).as_posix()
+        for f in root.rglob("*.py")
+        if any(
+            isinstance(n, ast.Call)
+            and ((isinstance(n.func, ast.Name) and n.func.id == "__import__") or (isinstance(n.func, ast.Attribute) and n.func.attr == "__import__"))
+            for n in ast.walk(ast.parse(f.read_text()))
+        )
+    }
+
+
+def test_no_module_calls_the_builtin_import() -> None:
+    assert modules_calling_dunder_import(PLUGIN / "foreman") == set()
+
+
+@pytest.mark.parametrize(
+    "source",
+    ['__import__("subprocess").run(["ls"], check=False)\n', 'import builtins\n\nbuiltins.__import__("subprocess")\n'],
+)
+def test_a_module_that_calls_the_builtin_import_is_named(tmp_path: Path, source: str) -> None:
+    (tmp_path / "services/agents").mkdir(parents=True)
+    (tmp_path / "services/agents/q7.py").write_text(source)
+    (tmp_path / "services/ok.py").write_text("import os\n\nprint(os.getpid())\n")
+    assert modules_calling_dunder_import(tmp_path) == {"services/agents/q7.py"}
