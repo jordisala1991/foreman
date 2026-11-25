@@ -2,10 +2,12 @@
 the rate limit's stop. When GitHub says the limit is spent, the reset is kept in the stop file and every call until then
 raises `RateLimited` without running gh: each foreman process obeys it, and nothing here waits or tries again (retrying
 is `loop.guarded`'s). The reset kept is the earliest of the resources whose remaining is 0 (what was spent). A secondary limit
-shows no spent resource and gh's stderr carries no Retry-After, so it, like an unreadable answer, stops for FALLBACK."""
+shows no spent resource: it stops for the wait GitHub gives (Retry-After, "wait N") or else SHORT, doubling up to LONGEST
+when another comes right after; so does a limit message with no resource at 0. The gh text that caused a stop is logged once."""
 
 import contextlib
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -16,11 +18,18 @@ from .types import PermanentError, RateLimited, TransientError, failure
 
 STOP_FILE = "github-rate-limit.json"
 GRAPHQL = ("api", "graphql", "--input", "-")
-FALLBACK = 3600  # seconds a stop lasts when no reset is known
+SHORT = 60  # seconds a stop lasts when GitHub gives no wait and no resource is spent
+LONGEST = 900  # the cap of its doubling on each new secondary limit
 
 
 def _secondary(text: str) -> bool:
     return "secondary rate limit" in text.lower()
+
+
+def _given(text: str) -> int | None:
+    """The seconds GitHub asks to wait (`Retry-After: N`, `wait N`), if the text says."""
+    m = re.search(r"(?:retry-after:?\s*|wait\s+)(\d+)", text, re.I)
+    return int(m.group(1)) if m else None
 
 
 def _reset(out: str) -> int | None:
@@ -50,9 +59,10 @@ class Api:
         """`gh <args>`; a non-zero exit is a failure with gh's error."""
         r = self._gh(args, input)
         if r.code != 0:
-            f = failure(f"gh {' '.join(args[:3])}", r.err or r.out)
+            step = f"gh {' '.join(args[:3])}"
+            f = failure(step, r.err or r.out)
             if not isinstance(f, PermanentError) and _spent(r.err):
-                raise self._limited(_secondary(r.err))
+                raise self._limited(step, r.err)
             raise f
         return r
 
@@ -65,7 +75,7 @@ class Api:
             body = None
         errors = [o for e in util.json_list((body or {}).get("errors")) if (o := util.json_object(e)) is not None]
         if _spent(r.err) or any(_spent(str(e.get("message", ""))) or e.get("type") == "RATE_LIMITED" for e in errors):
-            raise self._limited(_secondary(r.err))
+            raise self._limited("gh api graphql", (r.err or r.out).strip()[:300])
         if body is None:
             raise failure("gh api graphql", r.err or r.out)
         if any(e.get("type") != "NOT_FOUND" for e in errors):
@@ -84,15 +94,29 @@ class Api:
         except proc.ProcError as e:
             raise (TransientError if e.timed_out else PermanentError)(str(e)) from None
 
-    def _limited(self, secondary: bool = False) -> RateLimited:
-        """Reads the reset of what was spent once and keeps it in the stop file."""
+    def _limited(self, step: str, text: str) -> RateLimited:
+        """The one place a stop is decided and written, for `run` and `query`: the reset of what was spent, else the wait
+        GitHub gives, else SHORT (doubled while secondary limits follow each other). Logs the gh text once."""
+        now = int(time.time())
+        secondary = _secondary(text)
         at = None
         if not secondary:
             with contextlib.suppress(proc.ProcError):
                 at = _reset(proc.run(["gh", "api", "rate_limit"]).out)
-        at = at or int(time.time()) + FALLBACK
-        util.write_json(self.stop, {"reset": at})
-        return _until(at)
+        stop: dict[str, int] = {"reset": at} if at else {}
+        if not at:
+            wait = _given(text)
+            if wait is None:
+                old = util.json_object(util.read_json(self.stop, None)) or {}
+                before, reset = old.get("wait"), old.get("reset")
+                follows = isinstance(before, int) and isinstance(reset, int) and now < reset + before
+                wait = min(2 * before, LONGEST) if follows and isinstance(before, int) else SHORT
+                stop = {"reset": now + wait, "wait": wait}
+            else:
+                stop = {"reset": now + wait}
+        util.write_json(self.stop, stop)
+        util.log_error(self.stop.with_name("errors.jsonl"), step, text.strip()[:300], trace="")
+        return _until(stop["reset"])
 
 
 def obj(v: object, what: str) -> dict[str, Any]:

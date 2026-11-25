@@ -9,7 +9,7 @@ from helpers import Env
 
 from foreman import proc, util
 from foreman.providers import Change, registry
-from foreman.providers.github.api import STOP_FILE
+from foreman.providers.github.api import STOP_FILE, Api
 from foreman.providers.github.provider import GitHub
 from foreman.providers.github.types import PermanentError, RateLimited, TransientError
 
@@ -21,7 +21,7 @@ class Gh:
     """Stands in for `proc.run`: `gh api rate_limit` gives `resources` as GitHub's JSON; any other gh call fails with `err` or raises `boom`."""
 
     def __init__(self) -> None:
-        self.reset = int(time.time()) + 1800  # not the fallback's hour, so a fallback shows
+        self.reset = int(time.time()) + 1800  # not a short wait, so a wrong stop shows
         self.resources = {"core": (0, self.reset), "graphql": (5000, self.reset + 1800)}  # name: (remaining, reset)
         self.rate_limit_calls = 0
         self.err = SPENT
@@ -83,11 +83,21 @@ def test_provider_gh_failures_are_mapped_by_the_one_runner(gh: Gh) -> None:
         provider.view(CHANGE)
 
 
-def assert_fallback_hour(e: Env, before: int) -> None:
+SECONDARY = "You have exceeded a secondary rate limit. (HTTP 403)\n"
+
+
+def stop(e: Env) -> dict[str, int]:
+    return util.json_object(util.read_json(e.p.state / STOP_FILE, None)) or {}
+
+
+def assert_stops_for(e: Env, before: int, seconds: int) -> None:
+    reset = stop(e)["reset"]
+    assert before + seconds <= reset <= int(time.time()) + seconds
+
+
+def limited(e: Env) -> None:
     with pytest.raises(RateLimited):
         GitHub(e.p, registry.repo(e.p)).ready(CHANGE)
-    stop = util.json_object(util.read_json(e.p.state / STOP_FILE, None)) or {}
-    assert before + 3600 <= stop["reset"] <= int(time.time()) + 3600
 
 
 def test_a_core_limit_records_the_core_reset(gh: Gh) -> None:
@@ -113,17 +123,67 @@ def test_with_two_spent_resources_the_earliest_reset_is_kept(gh: Gh) -> None:
     assert util.read_json(e.p.state / STOP_FILE, None) == {"reset": gh.reset + 600}
 
 
-def test_a_secondary_limit_stops_for_the_fallback_hour(gh: Gh) -> None:
-    """gh's stderr carries no Retry-After: a secondary limit stops for one hour, and no resource is read."""
-    gh.err = "You have exceeded a secondary rate limit. (HTTP 403)\n"
-    assert_fallback_hour(Env(), int(time.time()))
+def test_a_secondary_limit_without_a_wait_stops_for_a_minute(gh: Gh) -> None:
+    gh.err = SECONDARY
+    e, before = Env(), int(time.time())
+    limited(e)
+    assert_stops_for(e, before, 60)
     assert gh.rate_limit_calls == 0
 
 
-def test_no_spent_resource_stops_for_the_fallback_hour(gh: Gh) -> None:
+@pytest.mark.parametrize(("err", "seconds"), [("secondary rate limit. Please wait 120 seconds", 120), ("secondary rate limit\nRetry-After: 45", 45)])
+def test_a_secondary_limit_stops_for_the_wait_github_gives(gh: Gh, err: str, seconds: int) -> None:
+    gh.err = err
+    e, before = Env(), int(time.time())
+    limited(e)
+    assert_stops_for(e, before, seconds)
+
+
+@pytest.mark.parametrize(("wait", "ended", "seconds"), [(60, 10, 120), (600, 10, 900), (900, 10, 900), (60, 1000, 60)])
+def test_a_new_secondary_limit_doubles_the_wait_up_to_fifteen_minutes(gh: Gh, wait: int, ended: int, seconds: int) -> None:
+    gh.err = SECONDARY
+    e = Env()
+    util.write_json(e.p.state / STOP_FILE, {"reset": int(time.time()) - ended, "wait": wait})
+    before = int(time.time())
+    limited(e)
+    assert_stops_for(e, before, seconds)
+    assert stop(e)["wait"] == seconds
+
+
+def test_no_spent_resource_stops_for_a_minute(gh: Gh) -> None:
     gh.resources = {"core": (5000, gh.reset), "graphql": (5000, gh.reset + 1800)}
-    assert_fallback_hour(Env(), int(time.time()))
+    e, before = Env(), int(time.time())
+    limited(e)
+    assert_stops_for(e, before, 60)
     assert gh.rate_limit_calls == 1
+
+
+def test_the_error_that_stopped_is_logged_once(gh: Gh) -> None:
+    gh.err = SECONDARY
+    e = Env()
+    provider = GitHub(e.p, registry.repo(e.p))
+    with pytest.raises(RateLimited):
+        provider.ready(CHANGE)
+    with pytest.raises(RateLimited):
+        provider.view(CHANGE)
+    lines = [json.loads(line) for line in (e.p.state / "errors.jsonl").read_text().splitlines()]
+    assert len(lines) == 1
+    assert lines[0]["step"].startswith("gh")
+    assert "secondary rate limit" in lines[0]["error"]
+
+
+def test_query_and_run_share_the_stop_length(gh: Gh) -> None:
+    gh.err = SECONDARY
+    e, before = Env(), int(time.time())
+    with pytest.raises(RateLimited):
+        Api(e.p.state / STOP_FILE).query("query { x }")
+    assert_stops_for(e, before, 60)
+    assert len((e.p.state / "errors.jsonl").read_text().splitlines()) == 1
+    util.write_json(e.p.state / STOP_FILE, {"reset": int(time.time()) - 10, "wait": 60})
+    before = int(time.time())
+    with pytest.raises(RateLimited):
+        Api(e.p.state / STOP_FILE).query("query { x }")
+    assert_stops_for(e, before, 120)
 
 
 def test_a_permanent_failure_that_mentions_the_limit_is_not_a_stop(gh: Gh) -> None:

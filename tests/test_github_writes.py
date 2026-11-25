@@ -42,7 +42,8 @@ def state(e: Env, name: str, default: Any = None) -> Any:
 
 
 def errors(e: Env) -> list[str]:
-    return [x["error"] for x in util.read_jsonl(e.p.state / "errors.jsonl")]
+    """The error lines, without the gh text that stopped a call (logged when the stop is written)."""
+    return [x["error"] for x in util.read_jsonl(e.p.state / "errors.jsonl") if not x["step"].startswith("gh ")]
 
 
 def tick(e: Env) -> None:
@@ -357,7 +358,7 @@ def test_a_status_whose_read_back_fails_is_no_drag(fake: FakeGh, e: Env):
     util.write_json(e.p.state / "github-rate-limit.json", {"reset": int(time.time()) - 1})
     fake.limited = False
     tick(e)
-    assert not (e.p.state / "errors.jsonl").exists() and fake.issues[3].fields == {"Status": "Ready"}
+    assert errors(e) == [] and fake.issues[3].fields == {"Status": "Ready"}
 
 
 def test_an_ask_on_a_closed_task_is_refused(fake: FakeGh, e: Env):
