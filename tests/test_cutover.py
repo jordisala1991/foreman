@@ -103,8 +103,10 @@ def test_cutover_files_every_open_task(fake: FakeGh, e: Env):
     out = fm(e.home, *CUT)
     assert "TY-3 → #272\nTY-4 → #273\nTY-5 → #274\nforeman.toml: [backlog] added; to go back, delete that table\n" in out
     assert {n: s.body.split("\n")[0] for n, s in fake.issues.items()} == {
-        272: "<!-- foreman:legacy-id=TY-3 -->", 273: "<!-- foreman:legacy-id=TY-4 -->", 274: "<!-- foreman:legacy-id=TY-5 -->"
-    }  # fmt: skip
+        272: "<!-- foreman:legacy-id=TY-3 -->",
+        273: "<!-- foreman:legacy-id=TY-4 -->",
+        274: "<!-- foreman:legacy-id=TY-5 -->",
+    }
     assert legacy(e) == {"TY-3": 272, "TY-4": 273, "TY-5": 274}
     assert {s.title for s in fake.issues.values()} == {"task 3", "task 4", "task 5"}
     assert (e.home / "backlog.json").read_bytes() == old

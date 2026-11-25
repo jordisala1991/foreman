@@ -57,17 +57,48 @@ def test_the_dates_in_fms_format():
 
 def test_every_field():
     i = Issue(
-        5, "t", "## Goal\ng\n## Acceptance criteria\n- c", "OPEN", "", "2026-11-21T08:08:03Z", "", 10, (Linked(11, "b", "OPEN", "", "", ""),),
-        {"Status": "Ready", "Model": "opus", "Effort": "xhigh", "Priority": "high", "Task type": "bug", "Repo key": "app", "Source": "s:1",
-         "Blocked": "why", "Lens": "lens", "Max steps": 3},
+        5,
+        "t",
+        "## Goal\ng\n## Acceptance criteria\n- c",
+        "OPEN",
+        "",
+        "2026-11-21T08:08:03Z",
+        "",
+        10,
+        (Linked(11, "b", "OPEN", "", "", ""),),
+        {
+            "Status": "Ready",
+            "Model": "opus",
+            "Effort": "xhigh",
+            "Priority": "high",
+            "Task type": "bug",
+            "Repo key": "app",
+            "Source": "s:1",
+            "Blocked": "why",
+            "Lens": "lens",
+            "Max steps": 3,
+        },
         True,
-    )  # fmt: skip
+    )
     t = to_task(i, "FN", {"FN-140": 10})
     assert t == {
-        "id": "FN-5", "title": "t", "status": "ready", "blocked": "why", "detail": "", "priority": "high", "created": "2026-11-21 08:08:03",
-        "acceptance": {"goal": "g", "criteria": "c"}, "model": "opus", "effort": "xhigh", "type": "bug", "repo": "app", "source": "s:1",
-        "parent": "FN-140", "blocked_by": ["FN-11"], "chain": {"lens": "lens", "max_steps": 3, "max_lines": 0},
-    }  # fmt: skip
+        "id": "FN-5",
+        "title": "t",
+        "status": "ready",
+        "blocked": "why",
+        "detail": "",
+        "priority": "high",
+        "created": "2026-11-21 08:08:03",
+        "acceptance": {"goal": "g", "criteria": "c"},
+        "model": "opus",
+        "effort": "xhigh",
+        "type": "bug",
+        "repo": "app",
+        "source": "s:1",
+        "parent": "FN-140",
+        "blocked_by": ["FN-11"],
+        "chain": {"lens": "lens", "max_steps": 3, "max_lines": 0},
+    }
 
 
 def test_a_closed_blocker_as_a_stub():
@@ -90,11 +121,24 @@ def test_id_number():
 
 
 TASK: dict[str, Any] = {
-    "id": "FN-5", "title": "t", "status": "in progress", "blocked": "why", "detail": "d\n## sub\nmore", "priority": "high",
-    "acceptance": {"goal": "g", "criteria": "c1\n\n- c2", "verdict": "accepted"}, "model": "opus", "effort": "xhigh", "type": "bug",
-    "repo": "app", "source": "s:1", "parent": "FN-1", "blocked_by": ["FN-2"], "chain": {"lens": "l", "max_steps": 3, "max_lines": 40},
-    "agent": {"name": "a"}, "plan_file": "/p.md",
-}  # fmt: skip
+    "id": "FN-5",
+    "title": "t",
+    "status": "in progress",
+    "blocked": "why",
+    "detail": "d\n## sub\nmore",
+    "priority": "high",
+    "acceptance": {"goal": "g", "criteria": "c1\n\n- c2", "verdict": "accepted"},
+    "model": "opus",
+    "effort": "xhigh",
+    "type": "bug",
+    "repo": "app",
+    "source": "s:1",
+    "parent": "FN-1",
+    "blocked_by": ["FN-2"],
+    "chain": {"lens": "l", "max_steps": 3, "max_lines": 40},
+    "agent": {"name": "a"},
+    "plan_file": "/p.md",
+}
 
 
 def test_body_of_reads_back():
@@ -105,9 +149,18 @@ def test_body_of_reads_back():
 
 def test_fields_of_reads_back():
     assert fields_of(TASK) == {
-        "Status": "In progress", "Priority": "high", "Blocked": "why", "Model": "opus", "Effort": "xhigh", "Task type": "bug", "Repo key": "app",
-        "Source": "s:1", "Lens": "l", "Max steps": 3, "Max lines": 40,
-    }  # fmt: skip
+        "Status": "In progress",
+        "Priority": "high",
+        "Blocked": "why",
+        "Model": "opus",
+        "Effort": "xhigh",
+        "Task type": "bug",
+        "Repo key": "app",
+        "Source": "s:1",
+        "Lens": "l",
+        "Max steps": 3,
+        "Max lines": 40,
+    }
     i = Issue(5, "t", "", "OPEN", "", "2026-11-21T08:08:03Z", "", None, (), fields_of(TASK), True)
     assert fields_of(to_task(i, "FN", {})) == fields_of(TASK)
     assert fields_of({"status": "triage", "priority": "none", "blocked": ""}) == {"Status": "Triage"}

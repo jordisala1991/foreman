@@ -1,4 +1,4 @@
-"""`make suppressions` fails on any pyright or pylint directive comment, under foreman/ and tests/: the real target,
+"""`make suppressions` fails on any pyright, pylint, fmt, isort or yapf directive comment, under foreman/ and tests/: the real target,
 run in a temporary git repo."""
 
 import os
@@ -11,6 +11,9 @@ from helpers import ROOT
 # Split so this file holds no directive the target would flag.
 PYRIGHT = "pyr" + "ight"
 PYLINT = "py" + "lint"
+FMT = "f" + "mt"
+ISORT = "is" + "ort"
+YAPF = "ya" + "pf"
 PATHS = ["plugins/foreman/foreman/services/p.py", "tests/t.py"]
 DIRECTIVES = [
     (PYLINT, "skip-file"),
@@ -21,6 +24,12 @@ DIRECTIVES = [
     (PYRIGHT, "ignore"),
     (PYRIGHT, "basic"),
     (PYRIGHT, "off"),
+    (FMT, "off"),
+    (FMT, "skip"),
+    (ISORT, "skip_file"),
+    (ISORT, "off"),
+    (YAPF, "disable"),
+    ("ruff: " + ISORT, "skip_file"),
 ]
 
 
