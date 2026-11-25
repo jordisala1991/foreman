@@ -1278,6 +1278,8 @@ said once:
 - **Only adapters talk to the platform**: ruff bans `urllib.request`, `http.client`, `ssl`, `ftplib`, `smtplib`,
   `imaplib`, `poplib` and `telnetlib` (TID251, same exceptions as above), so no `foreman/` module holds an HTTP or mail
   client today, an adapter included: exempting one is the owner's call (`tests/test_only_adapters_talk_to_the_platform.py`).
+  A `foreman/` module naming `curl`, `wget`, `nc`, `ncat`, `ssh`, `scp`, `sftp`, `ftp`, `telnet` or `socat`, bare or by
+  path, fails `tests/test_network_programs_only_in_adapters.py` (no allowance); a program built at run time stays the reviewer's.
   A client that needs no import of them (`asyncio.open_connection(..., ssl=True)`, `socket`) stays the reviewer's.
 - **Typed at the border**: the github adapter turns `gh`'s JSON into its own types (`PullRequest`, the check buckets)
   with a small converter per shape; a shape that does not fit is a `ProviderError`. The port's operations take a
