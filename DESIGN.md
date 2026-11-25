@@ -1272,7 +1272,10 @@ said once:
   `multiprocessing`, `ctypes` and `posix` (each starts a program or can); and `concurrent.futures.ProcessPoolExecutor`
   (and `concurrent.futures.process`), `socketserver.ForkingMixIn` and its `Forking{TCP,UDP,UnixStream,UnixDatagram}Server`,
   and the C-level modules `_posixsubprocess`, `_multiprocessing`, `_ctypes`. `loop.subprocess_exec` and `subprocess_shell`, which ruff cannot resolve, fail
-  `tests/test_one_module_runs_programs.py`.
+  `tests/test_one_module_runs_programs.py`. A `foreman/` module naming `python`, `python3`, `perl`, `ruby`, `node`,
+  `php`, `lua`, `osascript`, `awk` or `xargs`, bare or by path, fails `tests/test_script_interpreters_not_named.py`
+  (allowed: `guard.py` for `perl`, `launchd.py` for `python3`); `sys.executable` is no string constant, so `launcher.py`,
+  `providers/runner.py` and `providers/orca/settings.py` are not named.
   The only other exceptions in `per-file-ignores` (`pyproject.toml`) are the tests and `lock.py`, which needs a process
   group and signals to stop a whole job at its time limit (`start_new_session`, `killpg`).
 - **Only adapters talk to the platform**: ruff bans `urllib.request`, `http.client`, `ssl`, `ftplib`, `smtplib`,
