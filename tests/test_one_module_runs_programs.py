@@ -54,6 +54,10 @@ def test_a_module_that_runs_nothing_passes_lint(tmp_path: Path) -> None:
     assert lint(tmp_path, "import os\n\nprint(os.getpid())\n").returncode == 0
 
 
+def test_reading_the_package_version_passes_lint(tmp_path: Path) -> None:
+    assert lint(tmp_path, 'import importlib.metadata\n\nprint(importlib.metadata.version("foreman"))\n').returncode == 0
+
+
 def test_threads_do_not_start_a_program(tmp_path: Path) -> None:
     source = "from concurrent.futures import ThreadPoolExecutor\nfrom socketserver import ThreadingMixIn\n\nprint(ThreadPoolExecutor, ThreadingMixIn)\n"
     assert lint(tmp_path, source).returncode == 0

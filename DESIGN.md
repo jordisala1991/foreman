@@ -1269,8 +1269,9 @@ said once:
   program or a timeout is a `ProcError`). ruff bans `import subprocess` elsewhere (TID251), as do `os.system`,
   `os.popen`, `os.exec*` and `os.spawn*` (all but `os.execv`, which `launcher.py` uses), `os.posix_spawn*`,
   `asyncio.create_subprocess_*`, `pty.spawn`, `pty.fork`, `os.fork` and `os.forkpty`, and the modules `webbrowser`,
-  `multiprocessing`, `ctypes` and `posix` (each starts a program or can), `importlib` and `runpy` (each imports a module
-  named by a string at run time, `importlib.import_module("subprocess")`); and `concurrent.futures.ProcessPoolExecutor`
+  `multiprocessing`, `ctypes` and `posix` (each starts a program or can), `runpy`, `importlib.import_module` and
+  `importlib.__import__` (each imports a module named by a string at run time, `importlib.import_module("subprocess")`;
+  `importlib.metadata` and `importlib.resources` stay allowed); and `concurrent.futures.ProcessPoolExecutor`
   (and `concurrent.futures.process`), `socketserver.ForkingMixIn` and its `Forking{TCP,UDP,UnixStream,UnixDatagram}Server`,
   and the C-level modules `_posixsubprocess`, `_multiprocessing`, `_ctypes`. `loop.subprocess_exec` and
   `subprocess_shell`, which ruff cannot resolve, and a call of the builtin `__import__`, which ruff cannot ban, fail
