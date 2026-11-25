@@ -1285,7 +1285,7 @@ said once:
 - **`decide` runs no program and touches no file**: tach lets it import only `risk`, and `tests/test_decide.py` rejects
   any other import and any `open`/`exec`/`eval` in it. New decisions go in the core, not in `delivery` or the loop.
 - **Suppressions do not work**: `make lint` runs ruff with `--ignore-noqa`, pyright has `enableTypeIgnoreComments =
-  false`, and `make suppressions` fails on any `pyright:` or `pylint:` directive comment.
+  false`, and `make suppressions` fails on any `pyright:`, `pylint:`, `fmt:`, `isort:` or `yapf:` directive comment.
 - **Tests are type-checked**: all of `tests/` is strict, so a new test file is strict (`tests/pyright-strict.json`,
   `make types`).
 - The panel's TypeScript is outside these rules.

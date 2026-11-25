@@ -40,9 +40,17 @@ def test_list_and_show_print_each_field(fake: FakeGh):
     )
     shown = json.loads(fm(e.home, "show", "TY-20"))
     assert {k: shown[k] for k in ("title", "status", "priority", "model", "effort", "type", "parent", "blocked_by", "blocked", "waiting_for")} == {
-        "title": "the task", "status": "ready", "priority": "high", "model": "opus", "effort": "xhigh", "type": "bug", "parent": "TY-10",
-        "blocked_by": ["TY-11", "TY-12"], "blocked": "waiting on X", "waiting_for": ["TY-12"],
-    }  # fmt: skip
+        "title": "the task",
+        "status": "ready",
+        "priority": "high",
+        "model": "opus",
+        "effort": "xhigh",
+        "type": "bug",
+        "parent": "TY-10",
+        "blocked_by": ["TY-11", "TY-12"],
+        "blocked": "waiting on X",
+        "waiting_for": ["TY-12"],
+    }
     assert shown["acceptance"] == {"goal": "g", "criteria": "c1\nc2"} and shown["detail"] == "d"
 
 

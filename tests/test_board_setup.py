@@ -19,9 +19,11 @@ def fake(monkeypatch: pytest.MonkeyPatch) -> FakeGh:
 def test_setup_on_a_new_board(fake: FakeGh):
     e = board_env()
     out = fm(e.home, "backlog", "setup")
-    assert [o["name"] for o in fake.fields["Status"]["options"]] == list(board.STATUS) == [
-        "Triage", "Backlog", "Refining", "Ready", "In progress", "In review", "Done", "Canceled", "Duplicate"
-    ]  # fmt: skip
+    assert (
+        [o["name"] for o in fake.fields["Status"]["options"]]
+        == list(board.STATUS)
+        == ["Triage", "Backlog", "Refining", "Ready", "In progress", "In review", "Done", "Canceled", "Duplicate"]
+    )
     for f in board.FIELDS[1:]:
         have = fake.fields[f.name]
         assert (have["dataType"], tuple(o["name"] for o in have.get("options", []))) == (f.kind, f.options)
@@ -32,8 +34,10 @@ def test_setup_on_a_new_board(fake: FakeGh):
         "Status: options replaced",
         *(f"field {f.name} created" for f in board.FIELDS[1:]),
         "label needs-owner created",
-        "workflow Item closed deleted", "workflow Pull request merged deleted", "workflow Auto-close issue deleted",
-    ]  # fmt: skip
+        "workflow Item closed deleted",
+        "workflow Pull request merged deleted",
+        "workflow Auto-close issue deleted",
+    ]
 
 
 def test_second_setup_changes_nothing(fake: FakeGh):

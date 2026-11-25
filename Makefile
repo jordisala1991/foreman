@@ -40,9 +40,10 @@ arch:
 	uv run tach check
 
 # Suppression comments. noqa is ignored by `make lint` (--ignore-noqa) and type: ignore by pyright (enableTypeIgnoreComments = false);
-# no tool covers pyright: and pylint: directive comments, so none of any kind is allowed. A suppression is not a fix.
+# no tool covers pyright:, pylint:, fmt:, isort: and yapf: directive comments (ruff honours the last three, with or without a ruff:
+# prefix, and --ignore-noqa does not cover them), so none of any kind is allowed. A suppression is not a fix.
 suppressions:
-	@! git grep -nE '#[[:space:]]*(pyright|pylint):' -- plugins/foreman/foreman tests || { echo "suppressions: fix the cause, do not silence it"; exit 1; }
+	@! git grep -nE '#[[:space:]]*(ruff:[[:space:]]*)?(pyright|pylint|fmt|isort|yapf):' -- plugins/foreman/foreman tests || { echo "suppressions: fix the cause, do not silence it"; exit 1; }
 
 # File length: ruff has no rule for it. plugins/foreman/foreman/ 300 lines (limit in pyproject.toml), tests 600. Given a package,
 # pylint walks only its subpackages, so foreman/ goes as a file list; tests/ is no package, so pylint walks all of it.
