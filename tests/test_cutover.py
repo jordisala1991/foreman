@@ -167,8 +167,9 @@ def test_a_cut_short_filing_is_skipped_and_named(fake: FakeGh, e: Env):
     with pytest.raises(SystemExit, match="rate limit"):
         fm(e.home, *CUT)
     assert fake.issues[273].carded is False
-    errors = [x["error"] for x in util.read_jsonl(e.p.state / "errors.jsonl") if not x["step"].startswith("gh ")]
-    assert len(errors) == 1 and errors[0].startswith("#273 was filed but not finished: close it by hand")
+    errors = [x["error"] for x in util.read_jsonl(e.p.state / "errors.jsonl")]
+    assert len(errors) == 2 and errors[0] == "gh: API rate limit already exceeded for user ID 1."
+    assert errors[1].startswith("#273 was filed but not finished: close it by hand")
     fake.limited = False
     (e.p.state / "github-rate-limit.json").unlink()
     assert [i.number for i in read_open(Api(e.p.state / "x.json"), Board("o/r", "o", 1)).issues] == [272]

@@ -2,7 +2,7 @@
 the rate limit's stop. When GitHub says the limit is spent, the reset is kept in the stop file and every call until then
 raises `RateLimited` without running gh: each foreman process obeys it, and nothing here waits or tries again (retrying
 is `loop.guarded`'s). The reset kept is the earliest of the resources whose remaining is 0 (what was spent). A secondary limit
-shows no spent resource: it stops for the wait GitHub gives (Retry-After, "wait N") or else SHORT, doubling up to LONGEST
+shows no spent resource: it stops for the wait GitHub gives (Retry-After, "wait N", at most LONGEST) or else SHORT, doubling up to LONGEST
 when another comes right after; so does a limit message with no resource at 0. The gh text that caused a stop is logged once."""
 
 import contextlib
@@ -27,9 +27,9 @@ def _secondary(text: str) -> bool:
 
 
 def _given(text: str) -> int | None:
-    """The seconds GitHub asks to wait (`Retry-After: N`, `wait N`), if the text says."""
-    m = re.search(r"(?:retry-after:?\s*|wait\s+)(\d+)", text, re.I)
-    return int(m.group(1)) if m else None
+    """The seconds GitHub asks to wait (`Retry-After: N`, `wait N [minute(s)]`), at most LONGEST; None if the text gives none."""
+    m = re.search(r"(?:retry-after:?\s*|wait\s+)(\d+)(\s*minutes?)?", text, re.I)
+    return min(int(m.group(1)) * (60 if m.group(2) else 1), LONGEST) if m else None
 
 
 def _reset(out: str) -> int | None:

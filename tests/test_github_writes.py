@@ -41,9 +41,11 @@ def state(e: Env, name: str, default: Any = None) -> Any:
     return util.read_json(e.p.state / name, default)
 
 
+LIMIT = "gh: API rate limit already exceeded for user ID 1."  # the gh text a stop logs when it is written
+
+
 def errors(e: Env) -> list[str]:
-    """The error lines, without the gh text that stopped a call (logged when the stop is written)."""
-    return [x["error"] for x in util.read_jsonl(e.p.state / "errors.jsonl") if not x["step"].startswith("gh ")]
+    return [x["error"] for x in util.read_jsonl(e.p.state / "errors.jsonl")]
 
 
 def tick(e: Env) -> None:
@@ -75,7 +77,7 @@ def test_a_filing_cut_short_leaves_an_error_line(fake: FakeGh, e: Env):
     fake.hook = lambda op: setattr(fake, "limited", op == "Card")
     with pytest.raises(RateLimited):
         registry.backlog(e.p).add("t", criteria="c")
-    assert len(errors(e)) == 1 and errors(e)[0].startswith("#1 was filed but not finished: close it by hand (")
+    assert len(errors(e)) == 2 and errors(e)[0] == LIMIT and errors(e)[1].startswith("#1 was filed but not finished: close it by hand (")
 
 
 def test_go(fake: FakeGh, e: Env):
@@ -358,7 +360,7 @@ def test_a_status_whose_read_back_fails_is_no_drag(fake: FakeGh, e: Env):
     util.write_json(e.p.state / "github-rate-limit.json", {"reset": int(time.time()) - 1})
     fake.limited = False
     tick(e)
-    assert errors(e) == [] and fake.issues[3].fields == {"Status": "Ready"}
+    assert errors(e) == [LIMIT] and fake.issues[3].fields == {"Status": "Ready"}
 
 
 def test_an_ask_on_a_closed_task_is_refused(fake: FakeGh, e: Env):

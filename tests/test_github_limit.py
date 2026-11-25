@@ -131,7 +131,17 @@ def test_a_secondary_limit_without_a_wait_stops_for_a_minute(gh: Gh) -> None:
     assert gh.rate_limit_calls == 0
 
 
-@pytest.mark.parametrize(("err", "seconds"), [("secondary rate limit. Please wait 120 seconds", 120), ("secondary rate limit\nRetry-After: 45", 45)])
+@pytest.mark.parametrize(
+    ("err", "seconds"),
+    [
+        ("secondary rate limit. Please wait 120 seconds", 120),
+        ("secondary rate limit\nRetry-After: 45", 45),
+        ("secondary rate limit. Please wait 2 minutes", 120),
+        ("secondary rate limit. Please wait 1 minute", 60),
+        ("secondary rate limit\nRetry-After: 99999999", 900),
+        ("secondary rate limit. Please wait 99 minutes", 900),
+    ],
+)
 def test_a_secondary_limit_stops_for_the_wait_github_gives(gh: Gh, err: str, seconds: int) -> None:
     gh.err = err
     e, before = Env(), int(time.time())
