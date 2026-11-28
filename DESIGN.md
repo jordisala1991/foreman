@@ -248,7 +248,10 @@ are settled with the owner when the task is filed; the planning agent never writ
 the owner if one cannot be met as written. It reads the repo (read only), asks the owner only what only he can decide
 (`foreman ask`, then ends its turn), and ends with `foreman ready --detail --plan PATH` (or `--no-plan "why trivial"`). It writes a
 plan at `<home>/plans/ID.md` (files touched, steps, decisions with alternatives dropped, out of scope, risks, declared
-risk); the task gets `plan_file`, and the responsible agent follows it and `foreman ask`s when it does not hold. Its statements of scope cite their search; its questions stand alone (context, options, recommendation and why).
+risk); before that, it checks each criterion against the code and lists it in the plan's «Criteria against the code»
+(new, already done or partly done, and the function or command it goes through), and `foreman ask`s instead of planning
+around a criterion the code already meets, one that would compute again what an existing function computes, or one whose
+syntax differs from the real one; the reviewer treats a second place for that function as Wrong. The task gets `plan_file`, and the responsible agent follows it and `foreman ask`s when it does not hold. Its statements of scope cite their search; its questions stand alone (context, options, recommendation and why).
 
 `foreman done`, `foreman ready` and `foreman verdict` take `--misled`; the text (not «none») is kept on the task under `misled`, per
 agent, once; `foreman metrics` shows it.
